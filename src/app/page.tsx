@@ -79,8 +79,48 @@ export default function Home() {
       {/* Header */}
       <header className="px-6 py-4 border-b border-[#E8E2DC]">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold text-[#2D3436]">
-            supermarket<span className="text-[#E17055]">.ie</span>
+          <Link href="/" className="flex items-center gap-2.5">
+            {/* Logo Icon - Shopping bag with carrot */}
+            <div className="relative w-9 h-9">
+              <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+                {/* Shopping bag */}
+                <path 
+                  d="M8 12C8 10.8954 8.89543 10 10 10H30C31.1046 10 32 10.8954 32 12V32C32 34.2091 30.2091 36 28 36H12C9.79086 36 8 34.2091 8 32V12Z" 
+                  fill="#E17055"
+                />
+                {/* Bag handles */}
+                <path 
+                  d="M14 10V8C14 5.79086 15.7909 4 18 4H22C24.2091 4 26 5.79086 26 8V10" 
+                  stroke="#E17055" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round"
+                />
+                {/* Carrot body */}
+                <path 
+                  d="M20 17L17 30" 
+                  stroke="#FFFBF7" 
+                  strokeWidth="4" 
+                  strokeLinecap="round"
+                />
+                {/* Carrot leaves */}
+                <path 
+                  d="M18 17C18 17 19 15 20 15C21 15 22 17 22 17" 
+                  stroke="#00B894" 
+                  strokeWidth="2" 
+                  strokeLinecap="round"
+                />
+                <path 
+                  d="M20 15V13" 
+                  stroke="#00B894" 
+                  strokeWidth="2" 
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+            {/* Wordmark */}
+            <span className="text-[22px] font-bold tracking-tight text-[#2D3436]">
+              supermarket<span className="text-[#E17055]">.ie</span>
+            </span>
           </Link>
           <nav className="flex items-center gap-6">
             <a href="#how-it-works" className="text-[#636E72] hover:text-[#2D3436] transition text-sm font-medium hidden md:block">
