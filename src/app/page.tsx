@@ -1,11 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
 
 export default function Home() {
   const [familySize, setFamilySize] = useState<string>("");
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [showCookieBanner, setShowCookieBanner] = useState(false);
+
+  useEffect(() => {
+    const cookieConsent = localStorage.getItem("cookieConsent");
+    if (!cookieConsent) {
+      setShowCookieBanner(true);
+    }
+  }, []);
+
+  const acceptCookies = () => {
+    localStorage.setItem("cookieConsent", "accepted");
+    setShowCookieBanner(false);
+  };
 
   const familyOptions = [
     { value: "1", label: "Just me", icon: "👤" },
@@ -22,11 +36,36 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
+      {/* Cookie Banner */}
+      {showCookieBanner && (
+        <div className="fixed bottom-0 left-0 right-0 bg-[#1A1A1A] text-white p-4 z-50 shadow-lg">
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-gray-300">
+              We use cookies to improve your experience. By continuing to use this site, you agree to our{" "}
+              <Link href="/privacy" className="underline hover:text-white">
+                Privacy Policy
+              </Link>{" "}
+              and{" "}
+              <Link href="/terms" className="underline hover:text-white">
+                Terms of Service
+              </Link>
+              .
+            </p>
+            <button
+              onClick={acceptCookies}
+              className="bg-[#FF6B5B] text-white px-6 py-2 rounded-full text-sm font-semibold hover:bg-[#e55a4a] transition whitespace-nowrap"
+            >
+              Accept cookies
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="px-6 py-4 flex justify-between items-center max-w-6xl mx-auto">
-        <div className="text-2xl font-bold text-[#1B4D3E]">
+        <Link href="/" className="text-2xl font-bold text-[#1B4D3E]">
           supermarket<span className="text-[#FF6B5B]">.ie</span>
-        </div>
+        </Link>
         <nav className="hidden md:flex gap-8 text-gray-600">
           <a href="#how-it-works" className="hover:text-[#1B4D3E] transition">
             How it works
@@ -211,11 +250,21 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="py-12 px-6 bg-[#0f3429]">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-white font-bold text-xl">
-            supermarket<span className="text-[#FF6B5B]">.ie</span>
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+            <Link href="/" className="text-white font-bold text-xl">
+              supermarket<span className="text-[#FF6B5B]">.ie</span>
+            </Link>
+            <div className="flex gap-6 text-[#a3d9c8] text-sm">
+              <Link href="/privacy" className="hover:text-white transition">
+                Privacy Policy
+              </Link>
+              <Link href="/terms" className="hover:text-white transition">
+                Terms of Service
+              </Link>
+            </div>
           </div>
-          <div className="text-[#a3d9c8] text-sm">
+          <div className="text-center text-[#a3d9c8] text-sm">
             © 2026 supermarket.ie · Made in Ireland 🇮🇪
           </div>
         </div>
