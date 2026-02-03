@@ -26,8 +26,8 @@ export default function Home() {
   const familyOptions = [
     { value: "1", label: "Just me", icon: "👤" },
     { value: "2", label: "Couple", icon: "👥" },
-    { value: "3-4", label: "Family of 3-4", icon: "👨‍👩‍👧" },
-    { value: "5+", label: "5 or more", icon: "👨‍👩‍👧‍👦" },
+    { value: "3-4", label: "3-4 people", icon: "👨‍👩‍👧" },
+    { value: "5+", label: "5+", icon: "👨‍👩‍👧‍👦" },
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,347 +57,421 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f8faf9] to-[#eef5f2]">
+    <div className="min-h-screen bg-[#FFFBF7]">
       {/* Cookie Banner */}
       {showCookieBanner && (
-        <div className="fixed bottom-0 left-0 right-0 bg-[#1A1A1A]/95 backdrop-blur-sm text-white p-4 z-50 shadow-2xl border-t border-white/10">
-          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="fixed bottom-0 left-0 right-0 bg-[#2D3436]/95 backdrop-blur-sm text-white p-4 z-50 shadow-2xl">
+          <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-gray-300">
-              We use cookies to improve your experience. By continuing to use this site, you agree to our{" "}
-              <Link href="/privacy" className="underline hover:text-white">
-                Privacy Policy
-              </Link>{" "}
-              and{" "}
-              <Link href="/terms" className="underline hover:text-white">
-                Terms of Service
-              </Link>
-              .
+              We use cookies to improve your experience.{" "}
+              <Link href="/privacy" className="underline hover:text-white">Privacy Policy</Link>
             </p>
             <button
               onClick={acceptCookies}
-              className="bg-[#FF6B5B] text-white px-6 py-2 rounded-full text-sm font-semibold hover:bg-[#e55a4a] transition-all hover:scale-105 whitespace-nowrap"
+              className="bg-[#E17055] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#d65f45] transition whitespace-nowrap"
             >
-              Accept cookies
+              Accept
             </button>
           </div>
         </div>
       )}
 
       {/* Header */}
-      <header className="px-6 py-5 flex justify-between items-center max-w-6xl mx-auto">
-        <Link href="/" className="text-2xl font-bold text-[#1B4D3E] hover:opacity-80 transition">
-          supermarket<span className="text-[#FF6B5B]">.ie</span>
-        </Link>
-        <nav className="hidden md:flex gap-8 text-gray-600">
-          <a href="#how-it-works" className="hover:text-[#1B4D3E] transition font-medium">
-            How it works
-          </a>
-          <a href="#signup" className="hover:text-[#1B4D3E] transition font-medium">
-            Get started
-          </a>
-        </nav>
+      <header className="px-6 py-4 border-b border-[#E8E2DC]">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <Link href="/" className="text-xl font-bold text-[#2D3436]">
+            supermarket<span className="text-[#E17055]">.ie</span>
+          </Link>
+          <nav className="flex items-center gap-6">
+            <a href="#how-it-works" className="text-[#636E72] hover:text-[#2D3436] transition text-sm font-medium hidden md:block">
+              How it works
+            </a>
+            <a
+              href="#signup"
+              className="bg-[#E17055] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#d65f45] transition"
+            >
+              Get started free
+            </a>
+          </nav>
+        </div>
       </header>
 
       {/* Hero */}
-      <section className="px-6 pt-16 pb-24 max-w-6xl mx-auto relative">
-        {/* Decorative elements */}
-        <div className="absolute top-10 right-10 w-72 h-72 bg-[#1B4D3E]/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 left-10 w-64 h-64 bg-[#FF6B5B]/5 rounded-full blur-3xl" />
-        
-        <div className="max-w-3xl relative">
-          <div className="inline-block bg-[#1B4D3E]/10 text-[#1B4D3E] px-4 py-2 rounded-full text-sm font-semibold mb-6">
-            🛒 Save time, save money
-          </div>
-          <h1 className="text-4xl md:text-6xl font-bold text-[#1A1A1A] leading-tight mb-6">
-            Smarter grocery shopping for{" "}
-            <span className="text-[#1B4D3E] relative">
-              busy people
-              <svg className="absolute -bottom-2 left-0 w-full" viewBox="0 0 200 8" fill="none">
-                <path d="M1 5.5C47 2 153 2 199 5.5" stroke="#FF6B5B" strokeWidth="3" strokeLinecap="round"/>
-              </svg>
-            </span>
-          </h1>
-          <p className="text-xl text-gray-600 mb-10 max-w-2xl leading-relaxed">
-            Get a personalised weekly shopping list tailored to your household.
-            Stop hunting through flyers. Start saving time and money.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 items-start">
-            <a
-              href="#signup"
-              className="inline-block bg-[#FF6B5B] text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-[#e55a4a] transition-all shadow-lg shadow-[#FF6B5B]/25 hover:shadow-xl hover:shadow-[#FF6B5B]/30 hover:-translate-y-0.5"
-            >
-              Get your free list →
-            </a>
-            <div className="flex items-center gap-3 text-gray-500 text-sm">
-              <div className="flex -space-x-2">
-                <div className="w-8 h-8 rounded-full bg-[#1B4D3E] flex items-center justify-center text-white text-xs">JM</div>
-                <div className="w-8 h-8 rounded-full bg-[#2a6b5a] flex items-center justify-center text-white text-xs">SK</div>
-                <div className="w-8 h-8 rounded-full bg-[#3d8b76] flex items-center justify-center text-white text-xs">LD</div>
+      <section className="px-6 py-16 md:py-24">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* Left: Copy */}
+            <div>
+              <div className="inline-flex items-center gap-2 bg-[#FEF3E2] text-[#E17055] px-3 py-1.5 rounded-full text-sm font-medium mb-6">
+                <span className="w-2 h-2 bg-[#00B894] rounded-full animate-pulse"></span>
+                Now available across Ireland
               </div>
-              <span>Joined by 500+ families</span>
+              
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#2D3436] leading-[1.1] tracking-tight mb-6">
+                Your weekly shop,<br />
+                <span className="text-[#E17055]">sorted in minutes.</span>
+              </h1>
+              
+              <p className="text-lg md:text-xl text-[#636E72] leading-relaxed mb-8 max-w-lg">
+                Personalised weekly shopping lists based on your household — saving you time, money, and mental effort.
+              </p>
+
+              {/* Value Props */}
+              <div className="space-y-3 mb-8">
+                {[
+                  "Deals from Dunnes, Tesco, SuperValu, Lidl & Aldi",
+                  "Save €20+ every week on your shop",
+                  "Stop wasting hours comparing prices",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-[#00B894] flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <span className="text-[#2D3436] font-medium">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 items-start">
+                <a
+                  href="#signup"
+                  className="inline-flex items-center justify-center bg-[#E17055] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-[#d65f45] transition shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:shadow-[#E17055]/30 hover:-translate-y-0.5"
+                >
+                  Start saving now
+                  <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </a>
+                <div className="text-sm text-[#636E72]">
+                  <span className="font-semibold text-[#2D3436]">100% free</span> · No card required
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Visual/Form Preview */}
+            <div className="relative">
+              <div className="bg-white rounded-2xl shadow-xl p-6 border border-[#E8E2DC]">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-full bg-[#FEF3E2] flex items-center justify-center">
+                    <span className="text-xl">📋</span>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-[#2D3436]">This week&apos;s smart list</div>
+                    <div className="text-sm text-[#636E72]">Personalised for a family of 4</div>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  {[
+                    { store: "Tesco", item: "Chicken Breasts 1kg", price: "€7.99", saving: "€3.00" },
+                    { store: "Lidl", item: "Organic Milk 2L", price: "€1.89", saving: "€0.60" },
+                    { store: "Dunnes", item: "Wholegrain Bread", price: "€1.50", saving: "€0.49" },
+                    { store: "Aldi", item: "Free Range Eggs 12pk", price: "€2.99", saving: "€1.00" },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-[#FFFBF7] rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-[#E8E2DC] flex items-center justify-center text-xs font-bold text-[#636E72]">
+                          {item.store.slice(0, 2)}
+                        </div>
+                        <div>
+                          <div className="font-medium text-[#2D3436] text-sm">{item.item}</div>
+                          <div className="text-xs text-[#636E72]">{item.store}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-[#2D3436]">{item.price}</div>
+                        <div className="text-xs text-[#00B894] font-medium">Save {item.saving}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-[#E8E2DC] flex justify-between items-center">
+                  <span className="text-[#636E72]">Weekly savings</span>
+                  <span className="text-2xl font-bold text-[#00B894]">€23.40</span>
+                </div>
+              </div>
+
+              {/* Floating badge */}
+              <div className="absolute -bottom-4 -left-4 bg-white rounded-xl shadow-lg p-3 border border-[#E8E2DC]">
+                <div className="flex items-center gap-2">
+                  <div className="flex -space-x-2">
+                    <div className="w-8 h-8 rounded-full bg-[#E17055] border-2 border-white flex items-center justify-center text-white text-xs font-bold">JK</div>
+                    <div className="w-8 h-8 rounded-full bg-[#00B894] border-2 border-white flex items-center justify-center text-white text-xs font-bold">SM</div>
+                    <div className="w-8 h-8 rounded-full bg-[#6C5CE7] border-2 border-white flex items-center justify-center text-white text-xs font-bold">PL</div>
+                  </div>
+                  <div className="text-sm">
+                    <div className="font-semibold text-[#2D3436]">2,400+</div>
+                    <div className="text-[#636E72] text-xs">Happy shoppers</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Trust Bar */}
-      <section className="py-8 px-6 border-y border-[#1B4D3E]/10 bg-white/50">
+      <section className="py-8 px-6 bg-white border-y border-[#E8E2DC]">
         <div className="max-w-6xl mx-auto">
-          <p className="text-center text-gray-400 text-sm mb-6 uppercase tracking-wider font-medium">
-            Curated deals from Ireland&apos;s top supermarkets
+          <p className="text-center text-[#636E72] text-sm mb-6">
+            Trusted by families across Ireland · Deals from all major supermarkets
           </p>
-          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-60">
-            <span className="text-2xl font-bold text-gray-400">Dunnes</span>
-            <span className="text-2xl font-bold text-gray-400">Tesco</span>
-            <span className="text-2xl font-bold text-gray-400">SuperValu</span>
-            <span className="text-2xl font-bold text-gray-400">Lidl</span>
-            <span className="text-2xl font-bold text-gray-400">Aldi</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-16 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { value: "€20+", label: "Average weekly savings", icon: "💰" },
-              { value: "2hrs", label: "Saved on planning", icon: "⏱️" },
-              { value: "100%", label: "Free to use", icon: "✨" },
-            ].map((stat) => (
-              <div key={stat.label} className="text-center p-8 rounded-2xl bg-white shadow-sm hover:shadow-md transition-shadow">
-                <div className="text-4xl mb-3">{stat.icon}</div>
-                <div className="text-4xl font-bold text-[#1B4D3E] mb-2">{stat.value}</div>
-                <div className="text-gray-600">{stat.label}</div>
-              </div>
+          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
+            {["Dunnes", "Tesco", "SuperValu", "Lidl", "Aldi"].map((store) => (
+              <span key={store} className="text-xl font-bold text-[#B2BEC3]">{store}</span>
             ))}
           </div>
         </div>
       </section>
 
       {/* How it Works */}
-      <section id="how-it-works" className="bg-white py-24 px-6 relative overflow-hidden">
-        {/* Decorative background */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-[0.02]">
-          <div className="absolute top-20 left-20 w-40 h-40 border-2 border-[#1B4D3E] rounded-full" />
-          <div className="absolute bottom-20 right-20 w-60 h-60 border-2 border-[#FF6B5B] rounded-full" />
-        </div>
-        
-        <div className="max-w-6xl mx-auto relative">
+      <section id="how-it-works" className="py-20 px-6">
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <span className="text-[#FF6B5B] font-semibold text-sm uppercase tracking-wider">Simple & Easy</span>
-            <h2 className="text-3xl md:text-4xl font-bold text-[#1A1A1A] mt-3">
+            <h2 className="text-3xl md:text-4xl font-bold text-[#2D3436] mb-4">
               How it works
             </h2>
+            <p className="text-[#636E72] text-lg max-w-2xl mx-auto">
+              Three simple steps to smarter grocery shopping
+            </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-12">
+          
+          <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                step: "1",
-                title: "Tell us about your household",
-                desc: "Family size, dietary preferences, the basics. Takes 30 seconds.",
+                num: "01",
+                title: "Tell us about you",
+                desc: "Household size, preferences, stores near you. Takes 30 seconds.",
+                icon: "👤",
               },
               {
-                step: "2",
+                num: "02",
                 title: "Get your weekly list",
-                desc: "Personalised picks with the best value across Irish supermarkets.",
+                desc: "We scan every deal and build a personalised list just for you.",
+                icon: "📋",
               },
               {
-                step: "3",
-                title: "Shop smarter",
-                desc: "Save time, save money, enjoy your week. It's that simple.",
+                num: "03",
+                title: "Shop & save",
+                desc: "Use your list at any store. Watch the savings add up.",
+                icon: "💰",
               },
-            ].map((item, index) => (
-              <div key={item.step} className="text-center group">
-                <div className="relative inline-block mb-6">
-                  <div className="w-20 h-20 bg-gradient-to-br from-[#1B4D3E] to-[#2a6b5a] text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-lg shadow-[#1B4D3E]/20 group-hover:scale-105 transition-transform">
-                    {item.step}
-                  </div>
-                  {index < 2 && (
-                    <div className="hidden md:block absolute top-1/2 left-full w-full h-0.5 bg-gradient-to-r from-[#1B4D3E]/20 to-transparent -translate-y-1/2 ml-4" />
-                  )}
+            ].map((step, i) => (
+              <div key={step.num} className="relative">
+                {i < 2 && (
+                  <div className="hidden md:block absolute top-12 left-full w-full h-0.5 bg-[#E8E2DC] -translate-x-1/2 z-0"></div>
+                )}
+                <div className="relative bg-white rounded-2xl p-8 border border-[#E8E2DC] hover:border-[#E17055]/30 hover:shadow-lg transition-all">
+                  <div className="text-4xl mb-4">{step.icon}</div>
+                  <div className="text-sm font-bold text-[#E17055] mb-2">{step.num}</div>
+                  <h3 className="text-xl font-bold text-[#2D3436] mb-2">{step.title}</h3>
+                  <p className="text-[#636E72]">{step.desc}</p>
                 </div>
-                <h3 className="text-xl font-semibold text-[#1A1A1A] mb-3">
-                  {item.title}
-                </h3>
-                <p className="text-gray-600 leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Value Props */}
-      <section className="py-24 px-6">
+      {/* Benefits */}
+      <section className="py-20 px-6 bg-white">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <span className="text-[#FF6B5B] font-semibold text-sm uppercase tracking-wider">Why Choose Us</span>
-            <h2 className="text-3xl md:text-4xl font-bold text-[#1A1A1A] mt-3">
-              Built for busy families
-            </h2>
-          </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: "🎯",
-                title: "Tailored to your family",
-                desc: "Lists sized for your household, not a generic template. We consider your family size and preferences.",
-              },
-              {
-                icon: "📅",
-                title: "Updated weekly",
-                desc: "Fresh picks every week based on what's actually good value. Always current, never stale.",
-              },
-              {
-                icon: "🛒",
-                title: "No more flyer hunting",
-                desc: "We do the legwork scanning all the deals. You just shop with confidence.",
-              },
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="bg-white p-8 rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-[#1B4D3E]/20 group hover:-translate-y-1"
-              >
-                <div className="text-5xl mb-5 group-hover:scale-110 transition-transform">{item.icon}</div>
-                <h3 className="text-xl font-semibold text-[#1A1A1A] mb-3">
-                  {item.title}
-                </h3>
-                <p className="text-gray-600 leading-relaxed">{item.desc}</p>
+          <div className="grid md:grid-cols-2 gap-16 items-center">
+            <div>
+              <h2 className="text-3xl md:text-4xl font-bold text-[#2D3436] mb-6">
+                Groceries without<br />the mental load
+              </h2>
+              <p className="text-[#636E72] text-lg mb-8">
+                Stop spending your Sunday evening comparing flyers. We do the hard work so you can focus on what matters.
+              </p>
+              
+              <div className="space-y-6">
+                {[
+                  {
+                    icon: "⏱️",
+                    title: "Save 2+ hours every week",
+                    desc: "No more hunting through apps and leaflets",
+                  },
+                  {
+                    icon: "💶",
+                    title: "€80-100 saved monthly",
+                    desc: "Real savings from real deals across all stores",
+                  },
+                  {
+                    icon: "🧠",
+                    title: "Less decision fatigue",
+                    desc: "One smart list, zero stress",
+                  },
+                ].map((benefit) => (
+                  <div key={benefit.title} className="flex gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-[#FEF3E2] flex items-center justify-center flex-shrink-0">
+                      <span className="text-2xl">{benefit.icon}</span>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-[#2D3436] mb-1">{benefit.title}</h3>
+                      <p className="text-[#636E72] text-sm">{benefit.desc}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* Stats Card */}
+            <div className="bg-gradient-to-br from-[#2D3436] to-[#434C4F] rounded-2xl p-8 text-white">
+              <h3 className="text-xl font-bold mb-8">The average Irish family spends...</h3>
+              <div className="space-y-6">
+                <div>
+                  <div className="text-5xl font-bold text-[#E17055]">€12,000</div>
+                  <div className="text-[#B2BEC3]">per year on groceries</div>
+                </div>
+                <div className="h-px bg-white/20"></div>
+                <div>
+                  <div className="text-5xl font-bold text-[#00B894]">€1,200+</div>
+                  <div className="text-[#B2BEC3]">potential yearly savings with us</div>
+                </div>
+              </div>
+              <a
+                href="#signup"
+                className="mt-8 w-full bg-[#E17055] text-white px-6 py-4 rounded-xl font-semibold hover:bg-[#d65f45] transition flex items-center justify-center gap-2"
+              >
+                Start saving today
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </a>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Testimonial */}
-      <section className="py-16 px-6 bg-[#1B4D3E]/5">
+      <section className="py-20 px-6 bg-[#FEF3E2]">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="text-6xl mb-6">"</div>
-          <blockquote className="text-2xl md:text-3xl text-[#1A1A1A] font-medium leading-relaxed mb-8">
-            Finally, someone who understands that busy people don&apos;t have time to compare 5 different supermarket apps every week.
+          <div className="inline-flex items-center gap-1 mb-6">
+            {[...Array(5)].map((_, i) => (
+              <svg key={i} className="w-6 h-6 text-[#F9CA24]" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+            ))}
+          </div>
+          <blockquote className="text-2xl md:text-3xl font-medium text-[#2D3436] leading-relaxed mb-8">
+            &ldquo;I used to spend my Sunday comparing Tesco and Dunnes prices. Now I just check the app and I&apos;m done in 5 minutes. Game changer.&rdquo;
           </blockquote>
           <div className="flex items-center justify-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-[#1B4D3E] flex items-center justify-center text-white font-semibold">SM</div>
+            <div className="w-14 h-14 rounded-full bg-[#E17055] flex items-center justify-center text-white font-bold text-lg">SM</div>
             <div className="text-left">
-              <div className="font-semibold text-[#1A1A1A]">Sarah M.</div>
-              <div className="text-gray-500 text-sm">Mother of 3, Dublin</div>
+              <div className="font-bold text-[#2D3436]">Sarah Murphy</div>
+              <div className="text-[#636E72]">Mum of 3, Dublin</div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Sign Up Form */}
-      <section id="signup" className="bg-gradient-to-br from-[#1B4D3E] to-[#0f3429] py-24 px-6 relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#FF6B5B]/10 rounded-full blur-3xl" />
-        
-        <div className="max-w-2xl mx-auto text-center relative">
-          <span className="inline-block bg-white/10 text-white/90 px-4 py-2 rounded-full text-sm font-medium mb-6">
-            ✨ 100% Free — No Credit Card Required
-          </span>
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Get your free weekly list
-          </h2>
-          <p className="text-[#a3d9c8] text-lg mb-10">
-            Join busy people who shop smarter. Takes 30 seconds.
-          </p>
-
-          {!submitted ? (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Family Size Selector */}
-              <div>
-                <label className="block text-white text-left mb-3 font-medium">
-                  How big is your household?
-                </label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {familyOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setFamilySize(option.value)}
-                      className={`p-4 rounded-xl text-center transition-all ${
-                        familySize === option.value
-                          ? "bg-[#FF6B5B] text-white shadow-lg shadow-[#FF6B5B]/30 scale-105"
-                          : "bg-white/10 text-white hover:bg-white/20 hover:scale-102"
-                      }`}
-                    >
-                      <div className="text-2xl mb-1">{option.icon}</div>
-                      <div className="text-sm font-medium">{option.label}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Email Input */}
-              <div>
-                <label className="block text-white text-left mb-3 font-medium">
-                  Where should we send your list?
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                  className="w-full px-6 py-4 rounded-xl text-lg focus:outline-none focus:ring-4 focus:ring-[#FF6B5B]/50 shadow-inner"
-                />
-              </div>
-
-              {error && (
-                <div className="bg-red-500/20 border border-red-500/50 text-white px-4 py-3 rounded-xl text-sm">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={!familySize || !email || submitting}
-                className="w-full bg-[#FF6B5B] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-[#e55a4a] transition-all shadow-lg shadow-[#FF6B5B]/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none hover:shadow-xl hover:-translate-y-0.5"
-              >
-                {submitting ? "Signing up..." : "Send me my list →"}
-              </button>
-
-              <p className="text-[#a3d9c8] text-sm">
-                🔒 Your data is safe. Unsubscribe anytime. No spam, we promise.
-              </p>
-            </form>
-          ) : (
-            <div className="bg-white/10 backdrop-blur-sm p-10 rounded-2xl border border-white/20">
-              <div className="text-6xl mb-4">🎉</div>
-              <h3 className="text-2xl font-bold text-white mb-3">
-                You&apos;re in!
-              </h3>
-              <p className="text-[#a3d9c8] text-lg">
-                We&apos;ll send your first personalised list this week. Keep an
-                eye on your inbox.
+      {/* CTA / Sign Up */}
+      <section id="signup" className="py-20 px-6">
+        <div className="max-w-xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-xl p-8 md:p-10 border border-[#E8E2DC]">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl md:text-4xl font-bold text-[#2D3436] mb-3">
+                Get your free list
+              </h2>
+              <p className="text-[#636E72]">
+                Join 2,400+ smart shoppers across Ireland
               </p>
             </div>
-          )}
+
+            {!submitted ? (
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-[#2D3436] mb-2">
+                    Household size
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {familyOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setFamilySize(option.value)}
+                        className={`p-3 rounded-xl text-center transition-all border-2 ${
+                          familySize === option.value
+                            ? "border-[#E17055] bg-[#FEF3E2] text-[#E17055]"
+                            : "border-[#E8E2DC] hover:border-[#E17055]/50 text-[#636E72]"
+                        }`}
+                      >
+                        <div className="text-xl mb-1">{option.icon}</div>
+                        <div className="text-xs font-medium">{option.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-[#2D3436] mb-2">
+                    Email address
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    required
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-[#E8E2DC] focus:border-[#E17055] focus:outline-none transition text-[#2D3436] placeholder:text-[#B2BEC3]"
+                  />
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={!familySize || !email || submitting}
+                  className="w-full bg-[#E17055] text-white px-6 py-4 rounded-xl text-lg font-semibold hover:bg-[#d65f45] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? "Signing up..." : "Get my free list →"}
+                </button>
+
+                <p className="text-center text-sm text-[#636E72]">
+                  🔒 No spam, ever. Unsubscribe anytime.
+                </p>
+              </form>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 rounded-full bg-[#00B894]/10 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-[#00B894]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-[#2D3436] mb-2">You&apos;re in!</h3>
+                <p className="text-[#636E72]">
+                  Check your inbox for your first personalised list.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-6 bg-[#0a2820]">
+      <footer className="py-12 px-6 bg-[#2D3436] text-white">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
-            <Link href="/" className="text-white font-bold text-xl hover:opacity-80 transition">
-              supermarket<span className="text-[#FF6B5B]">.ie</span>
+            <Link href="/" className="font-bold text-xl">
+              supermarket<span className="text-[#E17055]">.ie</span>
             </Link>
-            <div className="flex gap-8 text-[#a3d9c8] text-sm">
-              <Link href="/privacy" className="hover:text-white transition">
-                Privacy Policy
-              </Link>
-              <Link href="/terms" className="hover:text-white transition">
-                Terms of Service
-              </Link>
-              <a href="mailto:hello@supermarket.ie" className="hover:text-white transition">
-                Contact
-              </a>
+            <div className="flex gap-6 text-sm text-[#B2BEC3]">
+              <Link href="/privacy" className="hover:text-white transition">Privacy</Link>
+              <Link href="/terms" className="hover:text-white transition">Terms</Link>
+              <a href="mailto:hello@supermarket.ie" className="hover:text-white transition">Contact</a>
             </div>
           </div>
-          <div className="pt-8 border-t border-white/10 text-center text-[#6b9b8a] text-sm">
-            © 2026 supermarket.ie · Made with ❤️ in Ireland 🇮🇪
+          <div className="pt-8 border-t border-white/10 text-center text-[#636E72] text-sm">
+            © 2026 supermarket.ie · Made with ❤️ in Ireland
           </div>
         </div>
       </footer>
