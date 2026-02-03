@@ -5,3 +5,4 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // Server-side client with service role (bypasses RLS)
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+// trigger redeploy Tue Feb  3 23:18:26 UTC 2026
