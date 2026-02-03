@@ -84,7 +84,7 @@ export default function Home() {
             <span className="text-[#1B4D3E]">Irish families</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl">
-            Get a personalized weekly shopping list tailored to your household.
+            Get a personalised weekly shopping list tailored to your household.
             Stop hunting through flyers. Start saving time and money.
           </p>
           <a
@@ -240,7 +240,7 @@ export default function Home() {
                 You&apos;re in!
               </h3>
               <p className="text-[#a3d9c8]">
-                We&apos;ll send your first personalized list this week. Keep an
+                We&apos;ll send your first personalised list this week. Keep an
                 eye on your inbox.
               </p>
             </div>

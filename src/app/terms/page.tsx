@@ -32,7 +32,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-2xl font-semibold text-[#1A1A1A] mb-4">2. Description of Service</h2>
             <p>
-              supermarket.ie provides personalized weekly shopping lists designed to help Irish families shop smarter. 
+              supermarket.ie provides personalised weekly shopping lists designed to help Irish families shop smarter. 
               Our service aggregates grocery information and provides recommendations based on your household preferences.
             </p>
             <p className="mt-4">

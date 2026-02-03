@@ -33,7 +33,7 @@ export default function PrivacyPolicy() {
             <h2 className="text-2xl font-semibold text-[#1A1A1A] mb-4">2. Information We Collect</h2>
             <p>We collect the following types of information:</p>
             <ul className="list-disc pl-6 mt-4 space-y-2">
-              <li><strong>Email address:</strong> To send you your personalized shopping lists and service updates.</li>
+              <li><strong>Email address:</strong> To send you your personalised shopping lists and service updates.</li>
               <li><strong>Household size:</strong> To customize your shopping recommendations.</li>
               <li><strong>Usage data:</strong> Anonymous analytics to improve our service.</li>
               <li><strong>Cookies:</strong> To remember your preferences and improve site functionality.</li>
@@ -44,7 +44,7 @@ export default function PrivacyPolicy() {
             <h2 className="text-2xl font-semibold text-[#1A1A1A] mb-4">3. How We Use Your Information</h2>
             <p>We use your information to:</p>
             <ul className="list-disc pl-6 mt-4 space-y-2">
-              <li>Send you weekly personalized shopping lists</li>
+              <li>Send you weekly personalised shopping lists</li>
               <li>Improve and personalize our service</li>
               <li>Communicate important updates about our service</li>
               <li>Analyze usage patterns to enhance user experience</li>
