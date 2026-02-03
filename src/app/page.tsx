@@ -89,7 +89,7 @@ export default function Home() {
           <h1 className="text-4xl md:text-6xl font-bold text-[#1A1A1A] leading-tight mb-6">
             Smarter grocery shopping for{" "}
             <span className="text-[#1B4D3E] relative">
-              Irish families
+              families in Ireland
               <svg className="absolute -bottom-2 left-0 w-full" viewBox="0 0 200 8" fill="none">
                 <path d="M1 5.5C47 2 153 2 199 5.5" stroke="#FF6B5B" strokeWidth="3" strokeLinecap="round"/>
               </svg>
@@ -252,7 +252,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto text-center">
           <div className="text-6xl mb-6">"</div>
           <blockquote className="text-2xl md:text-3xl text-[#1A1A1A] font-medium leading-relaxed mb-8">
-            Finally, someone who understands that Irish families don&apos;t have time to compare 5 different supermarket apps every week.
+            Finally, someone who understands that families in Ireland don&apos;t have time to compare 5 different supermarket apps every week.
           </blockquote>
           <div className="flex items-center justify-center gap-4">
             <div className="w-12 h-12 rounded-full bg-[#1B4D3E] flex items-center justify-center text-white font-semibold">SM</div>
@@ -278,7 +278,7 @@ export default function Home() {
             Get your free weekly list
           </h2>
           <p className="text-[#a3d9c8] text-lg mb-10">
-            Join Irish families who shop smarter. Takes 30 seconds.
+            Join families in Ireland who shop smarter. Takes 30 seconds.
           </p>
 
           {!submitted ? (
