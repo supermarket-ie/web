@@ -7,6 +7,8 @@ export default function Home() {
   const [familySize, setFamilySize] = useState<string>("");
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const [showCookieBanner, setShowCookieBanner] = useState(false);
 
   useEffect(() => {
@@ -28,10 +30,30 @@ export default function Home() {
     { value: "5+", label: "5 or more", icon: "👨‍👩‍👧‍👦" },
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Connect to Supabase
-    setSubmitted(true);
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, familySize }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Something went wrong");
+      }
+
+      setSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -322,12 +344,18 @@ export default function Home() {
                 />
               </div>
 
+              {error && (
+                <div className="bg-red-500/20 border border-red-500/50 text-white px-4 py-3 rounded-xl text-sm">
+                  {error}
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={!familySize || !email}
+                disabled={!familySize || !email || submitting}
                 className="w-full bg-[#FF6B5B] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-[#e55a4a] transition-all shadow-lg shadow-[#FF6B5B]/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none hover:shadow-xl hover:-translate-y-0.5"
               >
-                Send me my list →
+                {submitting ? "Signing up..." : "Send me my list →"}
               </button>
 
               <p className="text-[#a3d9c8] text-sm">
