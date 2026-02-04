@@ -118,17 +118,17 @@ export default function Home() {
               </svg>
             </div>
             {/* Wordmark */}
-            <span className="text-[22px] font-bold tracking-tight text-[#2D3436]">
-              supermarket<span className="text-[#E17055]">.ie</span>
+            <span className="text-[22px] font-bold tracking-tight text-[#1D2324]">
+              supermarket<span className="text-[#1D2324]">.ie</span>
             </span>
           </Link>
           <nav className="flex items-center gap-6">
-            <a href="#how-it-works" className="text-[#636E72] hover:text-[#2D3436] transition text-sm font-medium hidden md:block">
+            <a href="#how-it-works" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
               How it works
             </a>
             <a
               href="#signup"
-              className="bg-[#E17055] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#d65f45] transition"
+              className="bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all shadow-sm"
             >
               Get started free
             </a>
@@ -142,14 +142,14 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             {/* Left: Copy */}
             <div>
-              <div className="inline-flex items-center gap-2 bg-[#FEF3E2] text-[#E17055] px-3 py-1.5 rounded-full text-sm font-medium mb-6">
-                <span className="w-2 h-2 bg-[#00B894] rounded-full animate-pulse"></span>
+              <div className="inline-flex items-center gap-2 bg-[#F5F0EB] text-[#1D2324] px-3 py-1.5 rounded-full text-sm font-medium mb-6">
+                <span className="w-2 h-2 bg-[#5D9B8F] rounded-full animate-pulse"></span>
                 Now available across Ireland
               </div>
               
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#2D3436] leading-[1.1] tracking-tight mb-6">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#1D2324] leading-[1.1] tracking-tight mb-6">
                 Your weekly shop,<br />
-                <span className="text-[#E17055]">sorted in minutes.</span>
+                <span className="bg-gradient-to-r from-[#E17055] to-[#D4604A] bg-clip-text text-transparent">sorted in minutes.</span>
               </h1>
               
               <p className="text-lg md:text-xl text-[#636E72] leading-relaxed mb-8 max-w-lg">
@@ -164,12 +164,12 @@ export default function Home() {
                   "Stop wasting hours comparing prices",
                 ].map((item) => (
                   <div key={item} className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-[#00B894] flex items-center justify-center flex-shrink-0">
+                    <div className="w-5 h-5 rounded-full bg-[#5D9B8F] flex items-center justify-center flex-shrink-0">
                       <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
-                    <span className="text-[#2D3436] font-medium">{item}</span>
+                    <span className="text-[#1D2324] font-medium">{item}</span>
                   </div>
                 ))}
               </div>
@@ -177,7 +177,7 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row gap-4 items-start">
                 <a
                   href="#signup"
-                  className="inline-flex items-center justify-center bg-[#E17055] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-[#d65f45] transition shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:shadow-[#E17055]/30 hover:-translate-y-0.5"
+                  className="inline-flex items-center justify-center bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:shadow-[#E17055]/30 hover:-translate-y-0.5"
                 >
                   Start saving now
                   <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -185,7 +185,7 @@ export default function Home() {
                   </svg>
                 </a>
                 <div className="text-sm text-[#636E72]">
-                  <span className="font-semibold text-[#2D3436]">100% free</span> · No card required
+                  <span className="font-semibold text-[#1D2324]">100% free</span> · No card required
                 </div>
               </div>
             </div>
@@ -194,11 +194,11 @@ export default function Home() {
             <div className="relative">
               <div className="bg-white rounded-2xl shadow-xl p-6 border border-[#E8E2DC]">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-full bg-[#FEF3E2] flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full bg-[#F5F0EB] flex items-center justify-center">
                     <span className="text-xl">📋</span>
                   </div>
                   <div>
-                    <div className="font-semibold text-[#2D3436]">This week&apos;s smart list</div>
+                    <div className="font-semibold text-[#1D2324]">This week&apos;s smart list</div>
                     <div className="text-sm text-[#636E72]">Personalised for a family of 4</div>
                   </div>
                 </div>
@@ -216,13 +216,13 @@ export default function Home() {
                           {item.store.slice(0, 2)}
                         </div>
                         <div>
-                          <div className="font-medium text-[#2D3436] text-sm">{item.item}</div>
+                          <div className="font-medium text-[#1D2324] text-sm">{item.item}</div>
                           <div className="text-xs text-[#636E72]">{item.store}</div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold text-[#2D3436]">{item.price}</div>
-                        <div className="text-xs text-[#00B894] font-medium">Save {item.saving}</div>
+                        <div className="font-semibold text-[#1D2324]">{item.price}</div>
+                        <div className="text-xs text-[#5D9B8F] font-medium">Save {item.saving}</div>
                       </div>
                     </div>
                   ))}
@@ -230,7 +230,7 @@ export default function Home() {
 
                 <div className="mt-4 pt-4 border-t border-[#E8E2DC] flex justify-between items-center">
                   <span className="text-[#636E72]">Weekly savings</span>
-                  <span className="text-2xl font-bold text-[#00B894]">€23.40</span>
+                  <span className="text-2xl font-bold text-[#5D9B8F]">€23.40</span>
                 </div>
               </div>
 
@@ -238,12 +238,12 @@ export default function Home() {
               <div className="absolute -bottom-4 -left-4 bg-white rounded-xl shadow-lg p-3 border border-[#E8E2DC]">
                 <div className="flex items-center gap-2">
                   <div className="flex -space-x-2">
-                    <div className="w-8 h-8 rounded-full bg-[#E17055] border-2 border-white flex items-center justify-center text-white text-xs font-bold">JK</div>
-                    <div className="w-8 h-8 rounded-full bg-[#00B894] border-2 border-white flex items-center justify-center text-white text-xs font-bold">SM</div>
-                    <div className="w-8 h-8 rounded-full bg-[#6C5CE7] border-2 border-white flex items-center justify-center text-white text-xs font-bold">PL</div>
+                    <div className="w-8 h-8 rounded-full bg-[#5D9B8F] border-2 border-white flex items-center justify-center text-white text-xs font-bold">JK</div>
+                    <div className="w-8 h-8 rounded-full bg-[#7B8A8E] border-2 border-white flex items-center justify-center text-white text-xs font-bold">SM</div>
+                    <div className="w-8 h-8 rounded-full bg-[#9B8574] border-2 border-white flex items-center justify-center text-white text-xs font-bold">PL</div>
                   </div>
                   <div className="text-sm">
-                    <div className="font-semibold text-[#2D3436]">2,400+</div>
+                    <div className="font-semibold text-[#1D2324]">2,400+</div>
                     <div className="text-[#636E72] text-xs">Happy shoppers</div>
                   </div>
                 </div>
@@ -271,7 +271,7 @@ export default function Home() {
       <section id="how-it-works" className="py-20 px-6">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-[#2D3436] mb-4">
+            <h2 className="text-3xl md:text-4xl font-bold text-[#1D2324] mb-4">
               How it works
             </h2>
             <p className="text-[#636E72] text-lg max-w-2xl mx-auto">
@@ -304,10 +304,10 @@ export default function Home() {
                 {i < 2 && (
                   <div className="hidden md:block absolute top-12 left-full w-full h-0.5 bg-[#E8E2DC] -translate-x-1/2 z-0"></div>
                 )}
-                <div className="relative bg-white rounded-2xl p-8 border border-[#E8E2DC] hover:border-[#E17055]/30 hover:shadow-lg transition-all">
+                <div className="relative bg-white rounded-2xl p-8 border border-[#E8E2DC] hover:border-[#5D9B8F]/40 hover:shadow-lg transition-all">
                   <div className="text-4xl mb-4">{step.icon}</div>
-                  <div className="text-sm font-bold text-[#E17055] mb-2">{step.num}</div>
-                  <h3 className="text-xl font-bold text-[#2D3436] mb-2">{step.title}</h3>
+                  <div className="text-sm font-bold text-[#5D9B8F] mb-2">{step.num}</div>
+                  <h3 className="text-xl font-bold text-[#1D2324] mb-2">{step.title}</h3>
                   <p className="text-[#636E72]">{step.desc}</p>
                 </div>
               </div>
@@ -321,7 +321,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-2 gap-16 items-center">
             <div>
-              <h2 className="text-3xl md:text-4xl font-bold text-[#2D3436] mb-6">
+              <h2 className="text-3xl md:text-4xl font-bold text-[#1D2324] mb-6">
                 Groceries without<br />the mental load
               </h2>
               <p className="text-[#636E72] text-lg mb-8">
@@ -347,11 +347,11 @@ export default function Home() {
                   },
                 ].map((benefit) => (
                   <div key={benefit.title} className="flex gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#FEF3E2] flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-[#F5F0EB] flex items-center justify-center flex-shrink-0">
                       <span className="text-2xl">{benefit.icon}</span>
                     </div>
                     <div>
-                      <h3 className="font-bold text-[#2D3436] mb-1">{benefit.title}</h3>
+                      <h3 className="font-bold text-[#1D2324] mb-1">{benefit.title}</h3>
                       <p className="text-[#636E72] text-sm">{benefit.desc}</p>
                     </div>
                   </div>
@@ -360,22 +360,22 @@ export default function Home() {
             </div>
 
             {/* Stats Card */}
-            <div className="bg-gradient-to-br from-[#2D3436] to-[#434C4F] rounded-2xl p-8 text-white">
+            <div className="bg-gradient-to-br from-[#1D2324] to-[#2D3436] rounded-2xl p-8 text-white">
               <h3 className="text-xl font-bold mb-8">The average Irish family spends...</h3>
               <div className="space-y-6">
                 <div>
-                  <div className="text-5xl font-bold text-[#E17055]">€12,000</div>
-                  <div className="text-[#B2BEC3]">per year on groceries</div>
+                  <div className="text-5xl font-bold text-[#E8A090]">€12,000</div>
+                  <div className="text-[#9BA3A7]">per year on groceries</div>
                 </div>
-                <div className="h-px bg-white/20"></div>
+                <div className="h-px bg-white/10"></div>
                 <div>
-                  <div className="text-5xl font-bold text-[#00B894]">€1,200+</div>
-                  <div className="text-[#B2BEC3]">potential yearly savings with us</div>
+                  <div className="text-5xl font-bold text-[#7ABFB3]">€1,200+</div>
+                  <div className="text-[#9BA3A7]">potential yearly savings with us</div>
                 </div>
               </div>
               <a
                 href="#signup"
-                className="mt-8 w-full bg-[#E17055] text-white px-6 py-4 rounded-xl font-semibold hover:bg-[#d65f45] transition flex items-center justify-center gap-2"
+                className="mt-8 w-full bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-6 py-4 rounded-xl font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all flex items-center justify-center gap-2"
               >
                 Start saving today
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -388,7 +388,7 @@ export default function Home() {
       </section>
 
       {/* Testimonial */}
-      <section className="py-20 px-6 bg-[#FEF3E2]">
+      <section className="py-20 px-6 bg-[#F5F0EB]">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-1 mb-6">
             {[...Array(5)].map((_, i) => (
@@ -397,13 +397,13 @@ export default function Home() {
               </svg>
             ))}
           </div>
-          <blockquote className="text-2xl md:text-3xl font-medium text-[#2D3436] leading-relaxed mb-8">
+          <blockquote className="text-2xl md:text-3xl font-medium text-[#1D2324] leading-relaxed mb-8">
             &ldquo;I used to spend my Sunday comparing Tesco and Dunnes prices. Now I just check the app and I&apos;m done in 5 minutes. Game changer.&rdquo;
           </blockquote>
           <div className="flex items-center justify-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-[#E17055] flex items-center justify-center text-white font-bold text-lg">SM</div>
+            <div className="w-14 h-14 rounded-full bg-[#5D9B8F] flex items-center justify-center text-white font-bold text-lg">SM</div>
             <div className="text-left">
-              <div className="font-bold text-[#2D3436]">Sarah Murphy</div>
+              <div className="font-bold text-[#1D2324]">Sarah Murphy</div>
               <div className="text-[#636E72]">Mum of 3, Dublin</div>
             </div>
           </div>
@@ -415,7 +415,7 @@ export default function Home() {
         <div className="max-w-xl mx-auto">
           <div className="bg-white rounded-2xl shadow-xl p-8 md:p-10 border border-[#E8E2DC]">
             <div className="text-center mb-8">
-              <h2 className="text-3xl md:text-4xl font-bold text-[#2D3436] mb-3">
+              <h2 className="text-3xl md:text-4xl font-bold text-[#1D2324] mb-3">
                 Get your free list
               </h2>
               <p className="text-[#636E72]">
@@ -426,7 +426,7 @@ export default function Home() {
             {!submitted ? (
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-semibold text-[#2D3436] mb-2">
+                  <label className="block text-sm font-semibold text-[#1D2324] mb-2">
                     Household size
                   </label>
                   <div className="grid grid-cols-4 gap-2">
@@ -449,7 +449,7 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-[#2D3436] mb-2">
+                  <label className="block text-sm font-semibold text-[#1D2324] mb-2">
                     Email address
                   </label>
                   <input
@@ -458,7 +458,7 @@ export default function Home() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
                     required
-                    className="w-full px-4 py-3.5 rounded-xl border-2 border-[#E8E2DC] focus:border-[#E17055] focus:outline-none transition text-[#2D3436] placeholder:text-[#B2BEC3]"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-[#E8E2DC] focus:border-[#5D9B8F] focus:outline-none transition text-[#1D2324] placeholder:text-[#B2BEC3]"
                   />
                 </div>
 
@@ -471,7 +471,7 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={!familySize || !email || submitting}
-                  className="w-full bg-[#E17055] text-white px-6 py-4 rounded-xl text-lg font-semibold hover:bg-[#d65f45] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-6 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:from-[#E17055] disabled:to-[#D4604A]"
                 >
                   {submitting ? "Signing up..." : "Get my free list →"}
                 </button>
@@ -482,12 +482,12 @@ export default function Home() {
               </form>
             ) : (
               <div className="text-center py-8">
-                <div className="w-16 h-16 rounded-full bg-[#00B894]/10 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-[#00B894]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <div className="w-16 h-16 rounded-full bg-[#5D9B8F]/10 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-[#5D9B8F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h3 className="text-2xl font-bold text-[#2D3436] mb-2">You&apos;re in!</h3>
+                <h3 className="text-2xl font-bold text-[#1D2324] mb-2">You&apos;re in!</h3>
                 <p className="text-[#636E72]">
                   Check your inbox for your first personalised list.
                 </p>
@@ -498,11 +498,11 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-6 bg-[#2D3436] text-white">
+      <footer className="py-12 px-6 bg-[#1D2324] text-white">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
             <Link href="/" className="font-bold text-xl">
-              supermarket<span className="text-[#E17055]">.ie</span>
+              supermarket<span className="text-white/60">.ie</span>
             </Link>
             <div className="flex gap-6 text-sm text-[#B2BEC3]">
               <Link href="/privacy" className="hover:text-white transition">Privacy</Link>
@@ -510,7 +510,7 @@ export default function Home() {
               <a href="mailto:hello@supermarket.ie" className="hover:text-white transition">Contact</a>
             </div>
           </div>
-          <div className="pt-8 border-t border-white/10 text-center text-[#636E72] text-sm">
+          <div className="pt-8 border-t border-white/10 text-center text-white/40 text-sm">
             © 2026 supermarket.ie · Made with ❤️ in Ireland
           </div>
         </div>
