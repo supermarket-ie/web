@@ -39,7 +39,7 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"
+              "value": "YOUR_SUPABASE_SERVICE_KEY"
             }
           ]
         },
@@ -65,7 +65,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://chrome.browserless.io/chromium/bql?token=2TuuzibwrqehVXH57f5d0e3318139ae2c459efca12b04fe10",
+        "url": "https://chrome.browserless.io/chromium/bql?token=YOUR_BROWSERLESS_API_KEY",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ query: 'mutation { goto(url: \"' + ($json.store === 'tesco' ? 'https://www.tesco.ie/groceries/en-IE/search?query=' : 'https://shop.supervalu.ie/shopping/search?query=') + encodeURIComponent($json.store_product_name) + '\", waitUntil: networkIdle) { status } text { text } }' }) }}",
@@ -131,7 +131,7 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"
+              "value": "YOUR_SUPABASE_SERVICE_KEY"
             },
             {
               "name": "Content-Type",

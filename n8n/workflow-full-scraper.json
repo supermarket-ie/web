@@ -27,7 +27,7 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"}
+            {"name": "apikey", "value": "YOUR_SUPABASE_SERVICE_KEY"}
           ]
         }
       },
@@ -58,7 +58,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://chrome.browserless.io/chromium/bql?token=2TuuzibwrqehVXH57f5d0e3318139ae2c459efca12b04fe10",
+        "url": "https://chrome.browserless.io/chromium/bql?token=YOUR_BROWSERLESS_API_KEY",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ query: $json.bql_query }) }}",
@@ -104,7 +104,7 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"},
+            {"name": "apikey", "value": "YOUR_SUPABASE_SERVICE_KEY"},
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Prefer", "value": "return=minimal"}
           ]
@@ -140,7 +140,7 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"},
+            {"name": "apikey", "value": "YOUR_SUPABASE_SERVICE_KEY"},
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Prefer", "value": "return=minimal"}
           ]
