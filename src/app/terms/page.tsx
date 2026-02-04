@@ -150,20 +150,20 @@ export default function TermsOfService() {
             </p>
             <p className="mt-4">
               <strong>Email:</strong> legal@supermarket.ie<br />
-              <strong>Address:</strong> supermarket.ie, Ireland
+              <strong>Company:</strong> Superdata Ltd, Ireland
             </p>
           </section>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="py-12 px-6 bg-[#0f3429]">
+      <footer className="py-12 px-6 bg-[#1D2324]">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
             <Link href="/" className="text-white font-bold text-xl">
-              supermarket<span className="text-[#FF6B5B]">.ie</span>
+              supermarket<span className="text-white/60">.ie</span>
             </Link>
-            <div className="flex gap-6 text-[#a3d9c8] text-sm">
+            <div className="flex gap-6 text-white/60 text-sm">
               <Link href="/privacy" className="hover:text-white transition">
                 Privacy Policy
               </Link>
@@ -172,8 +172,8 @@ export default function TermsOfService() {
               </Link>
             </div>
           </div>
-          <div className="text-center text-[#a3d9c8] text-sm">
-            © 2026 supermarket.ie · Made in Ireland 🇮🇪
+          <div className="text-center text-white/40 text-sm">
+            © 2026 Superdata Ltd · supermarket.ie · Made in Ireland 🇮🇪
           </div>
         </div>
       </footer>

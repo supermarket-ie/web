@@ -511,7 +511,7 @@ export default function Home() {
             </div>
           </div>
           <div className="pt-8 border-t border-white/10 text-center text-white/40 text-sm">
-            © 2026 supermarket.ie · Made with ❤️ in Ireland
+            © 2026 Superdata Ltd · supermarket.ie · Made with ❤️ in Ireland
           </div>
         </div>
       </footer>
