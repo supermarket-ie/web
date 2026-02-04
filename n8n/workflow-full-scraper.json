@@ -1,0 +1,177 @@
+{
+  "name": "Supermarket Price Scraper (Full)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"triggerAtHour": 7}]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 7am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ytyzwiqnobxehdqrnzhx.supabase.co/rest/v1/store_products",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {"name": "select", "value": "id,store,store_product_name,product_id,products(canonical_name,category)"},
+            {"name": "store", "value": "in.(tesco,supervalu,dunnes,lidl)"}
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"}
+          ]
+        }
+      },
+      "id": "get-products",
+      "name": "Get Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {"batchSize": 1},
+      "id": "loop-products",
+      "name": "Loop Products",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build BQL query based on store\nconst item = $input.first().json;\nconst store = item.store;\nconst productName = item.store_product_name;\n\nlet url, query;\n\nswitch(store) {\n  case 'tesco':\n    url = `https://www.tesco.ie/groceries/en-IE/search?query=${encodeURIComponent(productName)}`;\n    query = `mutation { goto(url: \"${url}\", waitUntil: networkIdle) { status } text { text } }`;\n    break;\n  case 'supervalu':\n    url = `https://shop.supervalu.ie/shopping/search?query=${encodeURIComponent(productName)}`;\n    query = `mutation { goto(url: \"${url}\", waitUntil: networkIdle) { status } text { text } }`;\n    break;\n  case 'dunnes':\n    url = `https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/results?q=${encodeURIComponent(productName)}`;\n    query = `mutation { goto(url: \"${url}\", waitUntil: networkIdle, timeout: 60000) { status } solve { solved } waitForTimeout(time: 8000) { time } text { text } }`;\n    break;\n  case 'lidl':\n    // Lidl uses category pages - search within the page text\n    const lidlCategories = {\n      'Dairy': 'https://www.lidl.ie/h/cheese-dairy/h10071017',\n      'Dairy Alternatives': 'https://www.lidl.ie/h/drinks/h10071022',\n      'Bakery': 'https://www.lidl.ie/h/bakery-bread-baked-goods/h10071015',\n      'Breakfast': 'https://www.lidl.ie/h/eggs-staple-foods/h10071045',\n      'Spreads': 'https://www.lidl.ie/h/preserves-spreads/h10071684',\n      'Pasta & Rice': 'https://www.lidl.ie/h/oils-tinned-food/h10071681',\n      'Tinned': 'https://www.lidl.ie/h/oils-tinned-food/h10071681',\n      'Condiments': 'https://www.lidl.ie/h/spices-mustard-sauces/h10071682',\n      'Oils': 'https://www.lidl.ie/h/oils-tinned-food/h10071681',\n      'Baking': 'https://www.lidl.ie/h/eggs-staple-foods/h10071045',\n      'Stock': 'https://www.lidl.ie/h/spices-mustard-sauces/h10071682',\n      'Seasoning': 'https://www.lidl.ie/h/spices-mustard-sauces/h10071682',\n      'Meat': 'https://www.lidl.ie/h/fresh-meat-poultry/h10071016',\n      'Fish': 'https://www.lidl.ie/h/fish-seafood/h10071050',\n      'Vegetables': 'https://www.lidl.ie/h/fresh-fruit-vegetables/h10071012',\n      'Fruit': 'https://www.lidl.ie/h/fresh-fruit-vegetables/h10071012',\n      'Frozen': 'https://www.lidl.ie/h/frozen-food/h10071049'\n    };\n    const category = item.products?.category || 'Dairy';\n    url = lidlCategories[category] || 'https://www.lidl.ie/h/cheese-dairy/h10071017';\n    query = `mutation { goto(url: \"${url}\", waitUntil: networkIdle) { status } text { text } }`;\n    break;\n  default:\n    throw new Error(`Unknown store: ${store}`);\n}\n\nreturn {\n  ...item,\n  bql_query: query,\n  search_url: url\n};"
+      },
+      "id": "build-query",
+      "name": "Build BQL Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chrome.browserless.io/chromium/bql?token=2TuuzibwrqehVXH57f5d0e3318139ae2c459efca12b04fe10",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.bql_query }) }}",
+        "options": {"timeout": 120000}
+      },
+      "id": "bql-scrape",
+      "name": "BrowserQL Scrape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse scraped data from all stores\nconst item = $('Build BQL Query').first().json;\nconst scrapeResult = $input.first().json;\nconst pageText = scrapeResult?.data?.text?.text || '';\nconst store = item.store;\n\nlet price = null;\nlet wasPrice = null;\nlet onPromotion = false;\nlet pricePerUnit = null;\nlet unit = null;\nlet nutrition = {};\n\nconst lines = pageText.split('\\n');\nconst productName = item.store_product_name.toLowerCase();\nconst firstWord = productName.split(' ')[0].toLowerCase();\n\n// Different parsing per store\nif (store === 'dunnes') {\n  // Dunnes format: ProductName\\nOpen Product Description\\n€X.XX\\n€X.XX/unit\n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i].toLowerCase();\n    if (line.includes(firstWord)) {\n      for (let j = i; j < Math.min(i + 10, lines.length); j++) {\n        const checkLine = lines[j];\n        const priceMatch = checkLine.match(/^€(\\d+\\.\\d{2})$/);\n        if (priceMatch && !price) {\n          price = parseFloat(priceMatch[1]);\n        }\n        const perUnitMatch = checkLine.match(/€(\\d+\\.\\d{2})\\/(l|kg|100g|100ml)/i);\n        if (perUnitMatch) {\n          pricePerUnit = parseFloat(perUnitMatch[1]);\n          unit = perUnitMatch[2];\n        }\n      }\n      if (price) break;\n    }\n  }\n  \n  // Parse nutrition from Dunnes HTML-style text\n  const energyMatch = pageText.match(/Energy[^<]*?(\\d+)\\s*kcal/i);\n  const proteinMatch = pageText.match(/Protein[^<]*?(\\d+\\.?\\d*)\\s*g/i);\n  const carbsMatch = pageText.match(/Carbohydrate[^<]*?(\\d+\\.?\\d*)\\s*g/i);\n  const fatMatch = pageText.match(/Fat[^<]*?(\\d+\\.?\\d*)\\s*g/i);\n  const sugarMatch = pageText.match(/Sugars?[^<]*?(\\d+\\.?\\d*)\\s*g/i);\n  const saltMatch = pageText.match(/Salt[^<]*?(\\d+\\.?\\d*)\\s*g/i);\n  \n  if (energyMatch) nutrition.calories = parseFloat(energyMatch[1]);\n  if (proteinMatch) nutrition.protein = parseFloat(proteinMatch[1]);\n  if (carbsMatch) nutrition.carbs = parseFloat(carbsMatch[1]);\n  if (fatMatch) nutrition.fat = parseFloat(fatMatch[1]);\n  if (sugarMatch) nutrition.sugar = parseFloat(sugarMatch[1]);\n  if (saltMatch) nutrition.salt = parseFloat(saltMatch[1]);\n  \n} else if (store === 'supervalu') {\n  // SuperValu format with \"was\" prices\n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i].toLowerCase();\n    if (line.includes(firstWord)) {\n      for (let j = i; j < Math.min(i + 15, lines.length); j++) {\n        const checkLine = lines[j];\n        const priceMatch = checkLine.match(/^€(\\d+\\.\\d{2})$/);\n        if (priceMatch && !price) {\n          price = parseFloat(priceMatch[1]);\n        }\n        const wasMatch = checkLine.match(/was €(\\d+\\.\\d{2})/i);\n        if (wasMatch) {\n          wasPrice = parseFloat(wasMatch[1]);\n          onPromotion = true;\n        }\n        const perUnitMatch = checkLine.match(/€(\\d+\\.\\d{2})\\/(l|kg|100g|100ml)/i);\n        if (perUnitMatch) {\n          pricePerUnit = parseFloat(perUnitMatch[1]);\n          unit = perUnitMatch[2];\n        }\n      }\n      if (price) break;\n    }\n  }\n  \n} else if (store === 'tesco') {\n  // Tesco format\n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i].toLowerCase();\n    if (line.includes(firstWord)) {\n      for (let j = i; j < Math.min(i + 10, lines.length); j++) {\n        const checkLine = lines[j];\n        const priceMatch = checkLine.match(/€(\\d+\\.\\d{2})/);\n        if (priceMatch && !price) {\n          price = parseFloat(priceMatch[1]);\n        }\n        const perUnitMatch = checkLine.match(/€(\\d+\\.\\d{2})\\/(litre|kg|100g|100ml)/i);\n        if (perUnitMatch) {\n          pricePerUnit = parseFloat(perUnitMatch[1]);\n          unit = perUnitMatch[2] === 'litre' ? 'l' : perUnitMatch[2];\n        }\n      }\n      if (price) break;\n    }\n  }\n} else if (store === 'lidl') {\n  // Lidl format from category pages: Brand\\nProduct\\n€X.XX\\nweight\\n1kg = X.XX\n  // Also handles Lidl Plus prices: € X.XX\\nWith Lidl Plus\\n-XX%\\n€X.XX\n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i].toLowerCase();\n    if (line.includes(firstWord)) {\n      let foundLidlPlus = false;\n      for (let j = i; j < Math.min(i + 15, lines.length); j++) {\n        const checkLine = lines[j];\n        \n        // Check for Lidl Plus discount\n        if (checkLine.includes('With Lidl Plus')) {\n          foundLidlPlus = true;\n          // Look for the discounted price after\n          for (let k = j + 1; k < Math.min(j + 4, lines.length); k++) {\n            const discountLine = lines[k];\n            const discountMatch = discountLine.match(/^€(\\d+\\.\\d{2})$/);\n            if (discountMatch) {\n              price = parseFloat(discountMatch[1]);\n              onPromotion = true;\n              break;\n            }\n          }\n        }\n        \n        // Regular price (before Lidl Plus section)\n        if (!foundLidlPlus) {\n          const priceMatch = checkLine.match(/^€\\s?(\\d+\\.\\d{2})$/);\n          if (priceMatch && !wasPrice) {\n            wasPrice = parseFloat(priceMatch[1]); // This becomes was_price if Lidl Plus exists\n          }\n        }\n        \n        // Price per unit: 1kg = X.XX or 1l = X.XX\n        const perUnitMatch = checkLine.match(/1(kg|l)\\s*=\\s*(\\d+\\.\\d{2})/i);\n        if (perUnitMatch) {\n          pricePerUnit = parseFloat(perUnitMatch[2]);\n          unit = perUnitMatch[1];\n        }\n      }\n      \n      // If no Lidl Plus price found, use the regular price\n      if (!price && wasPrice) {\n        price = wasPrice;\n        wasPrice = null;\n      }\n      \n      if (price) break;\n    }\n  }\n}\n\nreturn {\n  store_product_id: item.id,\n  store: item.store,\n  product_name: item.store_product_name,\n  price,\n  was_price: wasPrice,\n  on_promotion: onPromotion,\n  price_per_unit: pricePerUnit,\n  unit_for_comparison: unit,\n  nutrition,\n  scraped_at: new Date().toISOString()\n};"
+      },
+      "id": "parse-results",
+      "name": "Parse All Stores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [{"id": "price-exists", "leftValue": "={{ $json.price }}", "rightValue": "", "operator": {"type": "number", "operation": "exists", "singleValue": true}}],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-valid",
+      "name": "Has Price?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ytyzwiqnobxehdqrnzhx.supabase.co/rest/v1/price_observations",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ store_product_id: $json.store_product_id, price: $json.price, was_price: $json.was_price, on_promotion: $json.on_promotion, price_per_unit: $json.price_per_unit, unit_for_comparison: $json.unit_for_comparison }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"},
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Prefer", "value": "return=minimal"}
+          ]
+        }
+      },
+      "id": "save-price",
+      "name": "Save Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [{"id": "has-nutrition", "leftValue": "={{ Object.keys($json.nutrition || {}).length }}", "rightValue": "0", "operator": {"type": "number", "operation": "gt"}}],
+          "combinator": "and"
+        }
+      },
+      "id": "has-nutrition",
+      "name": "Has Nutrition?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://ytyzwiqnobxehdqrnzhx.supabase.co/rest/v1/store_products?id=eq.{{ $json.store_product_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ calories_per_100: $json.nutrition.calories || null, protein_per_100: $json.nutrition.protein || null, carbs_per_100: $json.nutrition.carbs || null, fat_per_100: $json.nutrition.fat || null, sugar_per_100: $json.nutrition.sugar || null, salt_per_100: $json.nutrition.salt || null, nutrition_updated_at: new Date().toISOString() }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"},
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Prefer", "value": "return=minimal"}
+          ]
+        }
+      },
+      "id": "save-nutrition",
+      "name": "Save Nutrition",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1540, 200]
+    },
+    {
+      "parameters": {"amount": 3, "unit": "seconds"},
+      "id": "wait",
+      "name": "Wait 3s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1760, 0]
+    }
+  ],
+  "connections": {
+    "Daily 7am": {"main": [[{"node": "Get Products", "type": "main", "index": 0}]]},
+    "Get Products": {"main": [[{"node": "Loop Products", "type": "main", "index": 0}]]},
+    "Loop Products": {"main": [[{"node": "Build BQL Query", "type": "main", "index": 0}], []]},
+    "Build BQL Query": {"main": [[{"node": "BrowserQL Scrape", "type": "main", "index": 0}]]},
+    "BrowserQL Scrape": {"main": [[{"node": "Parse All Stores", "type": "main", "index": 0}]]},
+    "Parse All Stores": {"main": [[{"node": "Has Price?", "type": "main", "index": 0}, {"node": "Has Nutrition?", "type": "main", "index": 0}]]},
+    "Has Price?": {"main": [[{"node": "Save Price", "type": "main", "index": 0}]]},
+    "Has Nutrition?": {"main": [[{"node": "Save Nutrition", "type": "main", "index": 0}]]},
+    "Save Price": {"main": [[{"node": "Wait 3s", "type": "main", "index": 0}]]},
+    "Wait 3s": {"main": [[{"node": "Loop Products", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

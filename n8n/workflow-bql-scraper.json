@@ -1,0 +1,195 @@
+{
+  "name": "Supermarket Price Scraper (BQL)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 7am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ytyzwiqnobxehdqrnzhx.supabase.co/rest/v1/store_products",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "id,store,store_product_name,product_id,products(canonical_name,category)"
+            },
+            {
+              "name": "store",
+              "value": "in.(tesco,supervalu)"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-products",
+      "name": "Get Products from Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-products",
+      "name": "Loop Products",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chrome.browserless.io/chromium/bql?token=2TuuzibwrqehVXH57f5d0e3318139ae2c459efca12b04fe10",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation { goto(url: \"' + ($json.store === 'tesco' ? 'https://www.tesco.ie/groceries/en-IE/search?query=' : 'https://shop.supervalu.ie/shopping/search?query=') + encodeURIComponent($json.store_product_name) + '\", waitUntil: networkIdle) { status } text { text } }' }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "bql-scrape",
+      "name": "BrowserQL Scrape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse scraped data\nconst item = $('Loop Products').first().json;\nconst scrapeResult = $input.first().json;\nconst pageText = scrapeResult?.data?.text?.text || '';\n\nlet price = null;\nlet wasPrice = null;\nlet onPromotion = false;\nlet pricePerUnit = null;\nlet unit = null;\n\n// Extract prices from text\nconst lines = pageText.split('\\n');\nconst productName = item.store_product_name.toLowerCase();\n\nfor (let i = 0; i < lines.length; i++) {\n  const line = lines[i].toLowerCase();\n  \n  // Find line containing our product (first word match)\n  if (line.includes(productName.split(' ')[0].toLowerCase())) {\n    // Look for prices in next few lines\n    for (let j = i; j < Math.min(i + 15, lines.length); j++) {\n      const checkLine = lines[j];\n      \n      // Price pattern\n      const priceMatch = checkLine.match(/€(\\d+\\.\\d{2})/);\n      if (priceMatch && !price) {\n        price = parseFloat(priceMatch[1]);\n      }\n      \n      // Was price (SuperValu format)\n      const wasMatch = checkLine.match(/was €(\\d+\\.\\d{2})/i);\n      if (wasMatch) {\n        wasPrice = parseFloat(wasMatch[1]);\n        onPromotion = true;\n      }\n      \n      // Price per unit\n      const perUnitMatch = checkLine.match(/€(\\d+\\.\\d{2})\\/(litre|kg|100g|100ml|l)/i);\n      if (perUnitMatch) {\n        pricePerUnit = parseFloat(perUnitMatch[1]);\n        unit = perUnitMatch[2];\n      }\n    }\n    \n    if (price) break;\n  }\n}\n\nreturn {\n  store_product_id: item.id,\n  store: item.store,\n  product_name: item.store_product_name,\n  price,\n  was_price: wasPrice,\n  on_promotion: onPromotion,\n  price_per_unit: pricePerUnit,\n  unit_for_comparison: unit,\n  scraped_at: new Date().toISOString(),\n  raw_text_length: pageText.length\n};"
+      },
+      "id": "parse-results",
+      "name": "Parse Price Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "price-exists",
+              "leftValue": "={{ $json.price }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-valid",
+      "name": "Has Price?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ytyzwiqnobxehdqrnzhx.supabase.co/rest/v1/price_observations",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ store_product_id: $json.store_product_id, price: $json.price, was_price: $json.was_price, on_promotion: $json.on_promotion, price_per_unit: $json.price_per_unit, unit_for_comparison: $json.unit_for_comparison }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0eXp3aXFub2J4ZWhkcXJuemh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDE1NDA4MiwiZXhwIjoyMDg1NzMwMDgyfQ.Ajw0bGq3EWTkhoyexA2TzCWIZjbmX0kbl2CWN3BSIs0"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-price",
+      "name": "Save to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "wait-rate-limit",
+      "name": "Wait 3s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1540, 0]
+    }
+  ],
+  "connections": {
+    "Daily 7am": {
+      "main": [[{"node": "Get Products from Supabase", "type": "main", "index": 0}]]
+    },
+    "Get Products from Supabase": {
+      "main": [[{"node": "Loop Products", "type": "main", "index": 0}]]
+    },
+    "Loop Products": {
+      "main": [[{"node": "BrowserQL Scrape", "type": "main", "index": 0}], []]
+    },
+    "BrowserQL Scrape": {
+      "main": [[{"node": "Parse Price Data", "type": "main", "index": 0}]]
+    },
+    "Parse Price Data": {
+      "main": [[{"node": "Has Price?", "type": "main", "index": 0}]]
+    },
+    "Has Price?": {
+      "main": [[{"node": "Save to Supabase", "type": "main", "index": 0}]]
+    },
+    "Save to Supabase": {
+      "main": [[{"node": "Wait 3s", "type": "main", "index": 0}]]
+    },
+    "Wait 3s": {
+      "main": [[{"node": "Loop Products", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
