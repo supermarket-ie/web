@@ -142,8 +142,8 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             {/* Left: Copy */}
             <div>
-              <div className="inline-flex items-center gap-2 bg-[#F5F0EB] text-[#1D2324] px-3 py-1.5 rounded-full text-sm font-medium mb-6">
-                <span className="w-2 h-2 bg-[#5D9B8F] rounded-full animate-pulse"></span>
+              <div className="inline-flex items-center gap-2 bg-[#FEF3E2] text-[#E17055] px-3 py-1.5 rounded-full text-sm font-medium mb-6">
+                <span className="w-2 h-2 bg-[#00B894] rounded-full animate-pulse"></span>
                 Now available across Ireland
               </div>
               
