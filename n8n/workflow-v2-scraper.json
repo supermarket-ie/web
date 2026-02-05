@@ -1,0 +1,143 @@
+{
+  "name": "Supermarket Price Scraper V2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"triggerAtHour": 7}]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 7am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ytyzwiqnobxehdqrnzhx.supabase.co/rest/v1/store_products",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {"name": "select", "value": "id,store,store_product_name,product_id,products(canonical_name,category,search_profile)"},
+            {"name": "store", "value": "in.(tesco,supervalu,dunnes,lidl)"}
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "apikey", "value": "YOUR_SUPABASE_SERVICE_KEY"}
+          ]
+        }
+      },
+      "id": "get-products",
+      "name": "Get Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {"batchSize": 1},
+      "id": "loop-products",
+      "name": "Loop Products",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build BQL query using search_profile\nconst item = $input.first().json;\nconst store = item.store;\nconst profile = item.products?.search_profile || {};\n\n// Use search_terms from profile, fallback to canonical name\nconst searchTerms = profile.search_terms || [item.products?.canonical_name || 'milk'];\nconst searchQuery = searchTerms.join(' ');\n\nlet query;\n\nswitch(store) {\n  case 'tesco':\n    query = `mutation { goto(url: \"https://www.tesco.ie/groceries/en-IE/\", waitUntil: networkIdle) { status } type(text: \"${searchQuery.replace(/\"/g, '\\\\\"')}\\\\n\", selector: \"input[type=search]\") { selector } waitForNavigation(waitUntil: networkIdle, timeout: 15000) { url } text { text } }`;\n    break;\n  case 'supervalu':\n    query = `mutation { goto(url: \"https://shop.supervalu.ie/\", waitUntil: networkIdle) { status } type(text: \"${searchQuery.replace(/\"/g, '\\\\\"')}\\\\n\", selector: \"input[type=search]\") { selector } waitForNavigation(waitUntil: networkIdle, timeout: 15000) { url } text { text } }`;\n    break;\n  case 'dunnes':\n    const dunnesUrl = `https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/results?q=${encodeURIComponent(searchQuery)}`;\n    query = `mutation { goto(url: \"${dunnesUrl}\", waitUntil: networkIdle, timeout: 60000) { status } solve { solved } waitForTimeout(time: 8000) { time } text { text } }`;\n    break;\n  case 'lidl':\n    const lidlCategories = {\n      'Dairy': 'https://www.lidl.ie/h/cheese-dairy/h10071017',\n      'Dairy Alternatives': 'https://www.lidl.ie/h/drinks/h10071022',\n      'Bakery': 'https://www.lidl.ie/h/bakery-bread-baked-goods/h10071015',\n      'Breakfast': 'https://www.lidl.ie/h/eggs-staple-foods/h10071045',\n      'Spreads': 'https://www.lidl.ie/h/preserves-spreads/h10071684',\n      'Pasta & Rice': 'https://www.lidl.ie/h/oils-tinned-food/h10071681',\n      'Tinned': 'https://www.lidl.ie/h/oils-tinned-food/h10071681',\n      'Condiments': 'https://www.lidl.ie/h/spices-mustard-sauces/h10071682',\n      'Oils': 'https://www.lidl.ie/h/oils-tinned-food/h10071681',\n      'Baking': 'https://www.lidl.ie/h/eggs-staple-foods/h10071045',\n      'Stock': 'https://www.lidl.ie/h/spices-mustard-sauces/h10071682',\n      'Seasoning': 'https://www.lidl.ie/h/spices-mustard-sauces/h10071682',\n      'Meat': 'https://www.lidl.ie/h/fresh-meat-poultry/h10071016',\n      'Fish': 'https://www.lidl.ie/h/fish-seafood/h10071050',\n      'Vegetables': 'https://www.lidl.ie/h/fresh-fruit-vegetables/h10071012',\n      'Fruit': 'https://www.lidl.ie/h/fresh-fruit-vegetables/h10071012',\n      'Frozen': 'https://www.lidl.ie/h/frozen-food/h10071049'\n    };\n    const category = item.products?.category || 'Dairy';\n    const lidlUrl = lidlCategories[category] || 'https://www.lidl.ie/h/cheese-dairy/h10071017';\n    query = `mutation { goto(url: \"${lidlUrl}\", waitUntil: networkIdle) { status } text { text } }`;\n    break;\n  default:\n    throw new Error(`Unknown store: ${store}`);\n}\n\nreturn {\n  ...item,\n  bql_query: query,\n  search_query: searchQuery,\n  search_profile: profile\n};"
+      },
+      "id": "build-query",
+      "name": "Build BQL Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chrome.browserless.io/chromium/bql?token=YOUR_BROWSERLESS_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.bql_query }) }}",
+        "options": {"timeout": 120000}
+      },
+      "id": "bql-scrape",
+      "name": "BrowserQL Scrape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// V2: Parse and score candidates using search_profile\nconst item = $('Build BQL Query').first().json;\nconst scrapeResult = $input.first().json;\nconst pageText = scrapeResult?.data?.text?.text || '';\nconst store = item.store;\nconst profile = item.search_profile || {};\n\n// Parse candidates from page\nfunction parseProducts(text, store) {\n  const lines = text.split('\\n').map(l => l.trim()).filter(l => l);\n  const products = [];\n  \n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i];\n    \n    // Look for price pattern\n    const priceMatch = line.match(/^€(\\d+\\.\\d{2})$/);\n    if (priceMatch) {\n      // Look backwards for product name\n      let title = '';\n      for (let j = i - 1; j >= Math.max(0, i - 5); j--) {\n        const prevLine = lines[j];\n        // Skip UI elements\n        if (prevLine.includes('Add') || prevLine.includes('Trolley') || prevLine.includes('Cart') || prevLine.match(/^\\d+$/)) continue;\n        // Found product name\n        if (prevLine.length > 5 && !prevLine.match(/^€/)) {\n          title = prevLine;\n          break;\n        }\n      }\n      \n      // Look forward for price per unit\n      let pricePerUnit = null;\n      let unit = null;\n      let size = null;\n      \n      for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {\n        const nextLine = lines[j];\n        const perUnitMatch = nextLine.match(/€(\\d+\\.\\d{2})\\/(l|litre|kg|100g|100ml)/i);\n        if (perUnitMatch) {\n          pricePerUnit = parseFloat(perUnitMatch[1]);\n          unit = perUnitMatch[2].toLowerCase();\n          if (unit === 'litre') unit = 'l';\n        }\n        \n        // Size extraction\n        const sizeMatch = nextLine.match(/(\\d+\\.?\\d*)\\s*(l|L|litre|ml|kg|g|pack)/i) || title.match(/(\\d+\\.?\\d*)\\s*(l|L|litre|ml|kg|g|pack)/i);\n        if (sizeMatch && !size) {\n          size = { value: parseFloat(sizeMatch[1]), unit: sizeMatch[2].toLowerCase() };\n        }\n      }\n      \n      if (title && title.length > 3) {\n        products.push({\n          title: title,\n          price: parseFloat(priceMatch[1]),\n          pricePerUnit,\n          unit,\n          size\n        });\n      }\n    }\n  }\n  \n  return products;\n}\n\n// Score a candidate against profile\nfunction scoreCandidate(product, profile) {\n  const title = product.title.toLowerCase();\n  let score = 0;\n  \n  // Required tokens (must have all)\n  const required = profile.required_tokens || [];\n  for (const token of required) {\n    if (!title.includes(token.toLowerCase())) {\n      return -1000; // Disqualify\n    }\n    score += 10;\n  }\n  \n  // Exclude tokens (must not have any)\n  const exclude = profile.exclude_tokens || [];\n  for (const token of exclude) {\n    if (title.includes(token.toLowerCase())) {\n      return -1000; // Disqualify\n    }\n  }\n  \n  // Preferred tokens (bonus)\n  const preferred = profile.preferred_tokens || [];\n  for (const token of preferred) {\n    if (title.includes(token.toLowerCase())) {\n      score += 5;\n    }\n  }\n  \n  // Size matching\n  if (profile.size_value && product.size) {\n    const targetSize = profile.size_value;\n    const tolerance = profile.size_tolerance || 0.2;\n    let productSize = product.size.value;\n    \n    // Normalize units\n    if (product.size.unit === 'ml' && profile.size_unit === 'l') {\n      productSize = productSize / 1000;\n    } else if (product.size.unit === 'g' && profile.size_unit === 'kg') {\n      productSize = productSize / 1000;\n    }\n    \n    const diff = Math.abs(productSize - targetSize);\n    if (diff <= tolerance) {\n      score += 20; // Good size match\n    } else if (diff <= tolerance * 2) {\n      score += 5; // Acceptable\n    } else {\n      score -= 10; // Wrong size\n    }\n  }\n  \n  return score;\n}\n\n// Parse and find best match\nconst candidates = parseProducts(pageText, store);\nlet bestMatch = null;\nlet bestScore = -Infinity;\n\nfor (const candidate of candidates) {\n  const score = scoreCandidate(candidate, profile);\n  if (score > bestScore) {\n    bestScore = score;\n    bestMatch = candidate;\n  }\n}\n\n// Output\nreturn {\n  store_product_id: item.id,\n  store: item.store,\n  product_name: item.store_product_name,\n  canonical_name: item.products?.canonical_name,\n  matched_title: bestMatch?.title || null,\n  price: bestMatch?.price || null,\n  was_price: null,\n  on_promotion: false,\n  price_per_unit: bestMatch?.pricePerUnit || null,\n  unit_for_comparison: bestMatch?.unit || null,\n  match_score: bestScore,\n  candidates_found: candidates.length,\n  scraped_at: new Date().toISOString()\n};"
+      },
+      "id": "parse-results",
+      "name": "Parse & Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [
+            {"id": "price-exists", "leftValue": "={{ $json.price }}", "rightValue": "", "operator": {"type": "number", "operation": "exists", "singleValue": true}},
+            {"id": "good-score", "leftValue": "={{ $json.match_score }}", "rightValue": "0", "operator": {"type": "number", "operation": "gte"}}
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-valid",
+      "name": "Valid Match?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ytyzwiqnobxehdqrnzhx.supabase.co/rest/v1/price_observations",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ store_product_id: $json.store_product_id, price: $json.price, was_price: $json.was_price, on_promotion: $json.on_promotion, price_per_unit: $json.price_per_unit, unit_for_comparison: $json.unit_for_comparison }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "apikey", "value": "YOUR_SUPABASE_SERVICE_KEY"},
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Prefer", "value": "return=minimal"}
+          ]
+        }
+      },
+      "id": "save-price",
+      "name": "Save Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {"amount": 3, "unit": "seconds"},
+      "id": "wait",
+      "name": "Wait 3s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1760, 0]
+    }
+  ],
+  "connections": {
+    "Daily 7am": {"main": [[{"node": "Get Products", "type": "main", "index": 0}]]},
+    "Get Products": {"main": [[{"node": "Loop Products", "type": "main", "index": 0}]]},
+    "Loop Products": {"main": [[{"node": "Build BQL Query", "type": "main", "index": 0}], []]},
+    "Build BQL Query": {"main": [[{"node": "BrowserQL Scrape", "type": "main", "index": 0}]]},
+    "BrowserQL Scrape": {"main": [[{"node": "Parse & Score", "type": "main", "index": 0}]]},
+    "Parse & Score": {"main": [[{"node": "Valid Match?", "type": "main", "index": 0}]]},
+    "Valid Match?": {"main": [[{"node": "Save Price", "type": "main", "index": 0}]]},
+    "Save Price": {"main": [[{"node": "Wait 3s", "type": "main", "index": 0}]]},
+    "Wait 3s": {"main": [[{"node": "Loop Products", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}
