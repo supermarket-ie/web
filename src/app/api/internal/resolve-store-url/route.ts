@@ -29,9 +29,9 @@ function validatePayload(
 // --- Route Handler ---
 
 export async function POST(request: NextRequest) {
-  // 1. Validate internal secret
-  const secret = request.headers.get('X-Internal-Secret');
-  if (!secret || secret !== process.env.INTERNAL_API_SECRET) {
+  // 1. Validate webhook secret
+  const secret = request.headers.get('x-n8n-secret');
+  if (!secret || secret !== process.env.N8N_WEBHOOK_SECRET) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
