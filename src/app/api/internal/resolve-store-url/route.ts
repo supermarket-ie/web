@@ -90,8 +90,9 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin
         .from('store_products')
         .update({
-          url_status: 'failed',
+          url_status: 'error',
           url_last_error: resolveError instanceof Error ? resolveError.message : 'Unknown resolver error',
+          url_last_checked_at: new Date().toISOString(),
         })
         .eq('id', store_product_id);
 
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
         success: false,
         store_product_id,
         store,
-        url_status: 'failed',
+        url_status: 'error',
         url_last_error: resolveError instanceof Error ? resolveError.message : 'Unknown resolver error',
       });
     }
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
         store_sku: result.store_sku ?? null,
         url_status: 'resolved',
         url_last_error: null,
+        url_last_checked_at: new Date().toISOString(),
       })
       .eq('id', store_product_id);
 
