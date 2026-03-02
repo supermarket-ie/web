@@ -92,16 +92,13 @@ export async function POST(request: NextRequest) {
     const result = extractor.extract({ source_url, html, text });
 
     if (!result) {
-      console.log(`[extract-price] Extraction failed — no price data found`);
-      return Response.json(
-        {
-          success: false,
-          store,
-          store_product_id,
-          error: 'Could not extract price data from the provided content',
-        },
-        { status: 422 }
-      );
+      console.log(`[extract-price] No price found — returning price=null`);
+      return Response.json({
+        success: true,
+        store,
+        store_product_id,
+        data: null,
+      });
     }
 
     console.log(`[extract-price] Extracted: ${result.product_name} @ €${result.price}`);
