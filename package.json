@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.94.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "jsonwebtoken": "^9.0.3",
     "next": "16.1.6",
+    "playwright": "^1.58.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "resend": "^6.9.1"

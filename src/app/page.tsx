@@ -488,9 +488,15 @@ export default function Home() {
                   </svg>
                 </div>
                 <h3 className="text-2xl font-bold text-[#1D2324] mb-2">You&apos;re in!</h3>
-                <p className="text-[#636E72]">
-                  Check your inbox for your first personalised list.
+                <p className="text-[#636E72] mb-4">
+                  Check your inbox — your personalised list is on its way.
                 </p>
+                <Link
+                  href="/list/request"
+                  className="text-sm text-[#E17055] font-medium hover:underline"
+                >
+                  Already have a list? Sign in →
+                </Link>
               </div>
             )}
           </div>
