@@ -1,8 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import jwt from 'jsonwebtoken';
 import { generateList, type SmartList, type FamilySize } from '@/lib/list-generator';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ShoppingList } from '@/components/ShoppingList';
+
+export const metadata: Metadata = {
+  title: 'Your weekly shopping list',
+  description: 'Your personalised weekly grocery list with the best prices across Irish supermarkets.',
+  robots: { index: false, follow: false }, // personal page — not for indexing
+};
 
 const SECRET = process.env.MAGIC_LINK_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const VALID_FAMILY_SIZES = new Set<FamilySize>(['1', '2', '3-4', '5+']);
@@ -131,7 +138,52 @@ export default async function ListPage({
 
   const grouped = groupByCategory(list.items);
 
+  // Build JSON-LD structured data for AI / search engines
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `Weekly grocery list for ${familySizeLabel(familySize)} — ${formatDate(list.generated_at)}`,
+    description: `Best-value weekly shopping list across Tesco, Dunnes Stores and SuperValu in Ireland for a household of ${familySizeLabel(familySize)}.`,
+    numberOfItems: list.items.length,
+    itemListElement: list.items.map((item, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      item: {
+        '@type': 'Product',
+        name: item.canonical_name,
+        description: item.best_store_product_name ?? item.canonical_name,
+        offers: item.all_prices.map(sp => ({
+          '@type': 'Offer',
+          seller: { '@type': 'GroceryStore', name: storeDisplayName(sp.store), areaServed: 'IE' },
+          price: sp.price.toFixed(2),
+          priceCurrency: 'EUR',
+          url: sp.store_url ?? undefined,
+          availability: 'https://schema.org/InStock',
+          priceValidUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        })),
+        ...(item.nutrition ? {
+          nutrition: {
+            '@type': 'NutritionInformation',
+            servingSize: '100g',
+            calories: `${item.nutrition.calories} kcal`,
+            proteinContent: `${item.nutrition.protein}g`,
+            carbohydrateContent: `${item.nutrition.carbs}g`,
+            fatContent: `${item.nutrition.fat}g`,
+            sugarContent: `${item.nutrition.sugar}g`,
+            ...(item.nutrition.fibre != null ? { fiberContent: `${item.nutrition.fibre}g` } : {}),
+            ...(item.nutrition.salt != null ? { sodiumContent: `${item.nutrition.salt}g` } : {}),
+          },
+        } : {}),
+      },
+    })),
+  };
+
   return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
     <div className="min-h-screen bg-[#FFFBF7]">
 
       {/* Sticky header */}
@@ -246,5 +298,6 @@ export default async function ListPage({
         </div>
       </footer>
     </div>
+    </>
   );
 }
