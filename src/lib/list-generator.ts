@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabase';
+import { NUTRITION, type NutritionData } from './nutrition-data';
 
 export type FamilySize = '1' | '2' | '3-4' | '5+';
 
@@ -20,6 +21,7 @@ export interface ListItem {
   best_store_product_name: string;
   best_store_url: string | null;
   all_prices: StorePrice[];
+  nutrition: NutritionData | null;
 }
 
 export interface SmartList {
@@ -136,7 +138,8 @@ export async function generateList(familySize: FamilySize): Promise<SmartList> {
       best_price_total: Math.round(bestPrice * quantity * 100) / 100,
       best_store_product_name: best.store_product_name,
       best_store_url: best.store_url,
-      all_prices: allPrices
+      all_prices: allPrices,
+      nutrition: NUTRITION[canonical_name] ?? null,
     });
   }
 

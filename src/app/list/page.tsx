@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import jwt from 'jsonwebtoken';
-import { generateList, type SmartList, type FamilySize, type ListItem } from '@/lib/list-generator';
+import { generateList, type SmartList, type FamilySize } from '@/lib/list-generator';
 import { supabaseAdmin } from '@/lib/supabase';
+import { ShoppingList } from '@/components/ShoppingList';
 
 const SECRET = process.env.MAGIC_LINK_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const VALID_FAMILY_SIZES = new Set<FamilySize>(['1', '2', '3-4', '5+']);
 
-// ── helpers ────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(price: number) {
   return `€${price.toFixed(2)}`;
@@ -36,7 +37,7 @@ function storeDisplayName(store: string) {
   return store;
 }
 
-function storeStyle(store: string): { bg: string; text: string; border: string; light: string } {
+function storeStyle(store: string) {
   const s = store.toLowerCase();
   if (s.includes('tesco'))     return { bg: '#003A8C', text: '#fff', border: '#003A8C', light: '#EEF3FB' };
   if (s.includes('dunnes'))    return { bg: '#7B0017', text: '#fff', border: '#7B0017', light: '#FAEAEC' };
@@ -44,8 +45,8 @@ function storeStyle(store: string): { bg: string; text: string; border: string; 
   return { bg: '#636E72', text: '#fff', border: '#636E72', light: '#F5F5F5' };
 }
 
-function groupByCategory(items: ListItem[]): [string, ListItem[]][] {
-  const groups = new Map<string, ListItem[]>();
+function groupByCategory(items: SmartList['items']): [string, SmartList['items']][] {
+  const groups = new Map<string, SmartList['items']>();
   for (const item of items) {
     const cat = item.category ?? 'Other';
     if (!groups.has(cat)) groups.set(cat, []);
@@ -54,7 +55,7 @@ function groupByCategory(items: ListItem[]): [string, ListItem[]][] {
   return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
 }
 
-// ── sub-components ─────────────────────────────────────────────────────────
+// ── sub-components ────────────────────────────────────────────────────────────
 
 function ExpiredPage() {
   return (
@@ -79,69 +80,13 @@ function ExpiredPage() {
   );
 }
 
-function StoreBadge({ store, small = false }: { store: string; small?: boolean }) {
-  const style = storeStyle(store);
-  return (
-    <span
-      className={`inline-block font-semibold rounded-md ${small ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'}`}
-      style={{ background: style.bg, color: style.text }}
-    >
-      {storeDisplayName(store)}
-    </span>
-  );
-}
-
-function ProductRow({ item }: { item: ListItem }) {
-  return (
-    <div className="py-3 border-b border-[#F0ECE8] last:border-0">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <span className="font-medium text-[#1D2324] text-sm leading-snug">
-            {item.canonical_name}
-            {item.quantity > 1 && (
-              <span className="text-[#636E72] font-normal ml-1">×{item.quantity}</span>
-            )}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <StoreBadge store={item.best_store} small />
-          <span className="font-semibold text-[#1D2324] text-sm">
-            {item.quantity > 1
-              ? `${fmt(item.best_price_total)} (${fmt(item.best_price)} ea)`
-              : fmt(item.best_price)}
-          </span>
-        </div>
-      </div>
-      {item.all_prices.length > 1 && (
-        <div className="mt-1.5 flex flex-wrap gap-2">
-          {item.all_prices.map((sp) => {
-              const name = storeDisplayName(sp.store);
-              const abbr = name === 'SuperValu' ? 'SV' : name.slice(0, 1);
-              return (
-                <span key={sp.store} className="text-[11px] text-[#636E72]">
-                  <span className="font-medium" style={{ color: storeStyle(sp.store).bg }}>
-                    {abbr}
-                  </span>
-                  {' '}{fmt(sp.price)}
-                  {sp.store === item.best_store && (
-                    <span className="text-[#5D9B8F] ml-0.5">✓</span>
-                  )}
-                </span>
-              );
-            })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── main page ──────────────────────────────────────────────────────────────
-
 interface MagicLinkPayload {
   email: string;
   subscriberId: string;
   familySize: string;
 }
+
+// ── main page ─────────────────────────────────────────────────────────────────
 
 export default async function ListPage({
   searchParams,
@@ -150,7 +95,6 @@ export default async function ListPage({
 }) {
   const { token } = await searchParams;
 
-  // Verify JWT
   let payload: MagicLinkPayload | null = null;
   if (token) {
     try {
@@ -160,15 +104,12 @@ export default async function ListPage({
     }
   }
 
-  if (!payload) {
-    return <ExpiredPage />;
-  }
+  if (!payload) return <ExpiredPage />;
 
   const familySize = VALID_FAMILY_SIZES.has(payload.familySize as FamilySize)
     ? (payload.familySize as FamilySize)
     : '2';
 
-  // Fetch list data + subscriber unsubscribe token in parallel
   const [list, { data: sub }] = await Promise.all([
     generateList(familySize),
     supabaseAdmin
@@ -182,18 +123,19 @@ export default async function ListPage({
     ? `/unsubscribe?token=${sub.unsubscribe_token}`
     : '/';
 
-  const cheapest = list.store_totals[0];
-  const mostExpensive = list.store_totals[list.store_totals.length - 1];
-  const saving = mostExpensive && cheapest
-    ? Math.round((mostExpensive.total - cheapest.total) * 100) / 100
+  const cheapest  = list.store_totals[0];
+  const priciest  = list.store_totals[list.store_totals.length - 1];
+  const saving    = (priciest && cheapest)
+    ? Math.round((priciest.total - cheapest.total) * 100) / 100
     : 0;
 
   const grouped = groupByCategory(list.items);
 
   return (
     <div className="min-h-screen bg-[#FFFBF7]">
-      {/* Header */}
-      <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10">
+
+      {/* Sticky header */}
+      <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <Link href="/" className="font-bold text-lg text-[#1D2324]">
             supermarket<span className="text-[#E17055]">.ie</span>
@@ -203,6 +145,7 @@ export default async function ListPage({
       </header>
 
       <main className="max-w-2xl mx-auto px-4 pb-16">
+
         {/* Title */}
         <div className="pt-8 pb-6">
           <h1 className="text-2xl font-bold text-[#1D2324] mb-1">Your weekly shop</h1>
@@ -219,10 +162,10 @@ export default async function ListPage({
           </div>
         ) : (
           <>
-            {/* Recommended store banner */}
+            {/* Best value banner */}
             {cheapest && (
               <div
-                className="rounded-2xl p-5 mb-6 text-white"
+                className="rounded-2xl p-5 mb-5 text-white"
                 style={{ background: storeStyle(cheapest.store).bg }}
               >
                 <p className="text-sm font-medium opacity-80 mb-1">Best value this week</p>
@@ -257,7 +200,7 @@ export default async function ListPage({
                       className="rounded-xl p-3 border-2 text-center"
                       style={{
                         borderColor: isCheapest ? style.border : '#E8E2DC',
-                        background: isCheapest ? style.light : '#fff',
+                        background:  isCheapest ? style.light  : '#fff',
                       }}
                     >
                       <div
@@ -286,26 +229,8 @@ export default async function ListPage({
               </div>
             )}
 
-            {/* Product list by category */}
-            <div className="space-y-6">
-              {grouped.map(([category, items]) => (
-                <div key={category}>
-                  <h3 className="text-xs font-bold text-[#636E72] uppercase tracking-wider mb-2">
-                    {category}
-                  </h3>
-                  <div className="bg-white rounded-xl border border-[#E8E2DC] px-4">
-                    {items.map((item) => (
-                      <ProductRow key={item.product_id} item={item} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Item count */}
-            <p className="text-center text-xs text-[#B2BEC3] mt-6">
-              {list.items.length} items across {list.store_totals.length} stores
-            </p>
+            {/* Shopping list — client component handles interactivity */}
+            <ShoppingList items={list.items} grouped={grouped} />
           </>
         )}
       </main>
