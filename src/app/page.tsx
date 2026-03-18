@@ -129,6 +129,12 @@ export default function Home() {
             <Link href="/browse" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
               Browse list
             </Link>
+            <Link
+              href="/browse"
+              className="text-[#E17055] hover:text-[#D4604A] transition text-sm font-semibold md:hidden"
+            >
+              Browse
+            </Link>
             <a
               href="#signup"
               className="bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all shadow-sm"
