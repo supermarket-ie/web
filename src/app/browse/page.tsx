@@ -49,7 +49,8 @@ async function getProducts(): Promise<Product[]> {
   // Aggregate by product
   const map = new Map<string, { id: string; canonical_name: string; category: string | null; stores: Set<string> }>();
   for (const row of data) {
-    const p = row.products as { id: string; canonical_name: string; category: string | null } | null;
+    const raw = row.products;
+    const p = (Array.isArray(raw) ? raw[0] : raw) as { id: string; canonical_name: string; category: string | null } | null;
     if (!p) continue;
     if (!map.has(p.id)) {
       map.set(p.id, { id: p.id, canonical_name: p.canonical_name, category: p.category, stores: new Set() });
