@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { generateList, getAllProducts, type SmartList, type FamilySize } from '@/lib/list-generator';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ShoppingList } from '@/components/ShoppingList';
+import { TokenPersist } from '@/components/TokenPersist';
 
 export const metadata: Metadata = {
   title: 'Your weekly shopping list',
@@ -186,6 +187,7 @@ export default async function ListPage({
 
   return (
     <>
+      <TokenPersist token={token!} familySize={familySize} email={payload.email} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

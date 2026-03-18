@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { HomeNav } from "@/components/HomeNav";
+import { loadSession } from "@/lib/session";
 
 export default function Home() {
   const [familySize, setFamilySize] = useState<string>("");
@@ -10,12 +12,13 @@ export default function Home() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [showCookieBanner, setShowCookieBanner] = useState(false);
+  const [listUrl, setListUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const cookieConsent = localStorage.getItem("cookieConsent");
-    if (!cookieConsent) {
-      setShowCookieBanner(true);
-    }
+    if (!cookieConsent) setShowCookieBanner(true);
+    const session = loadSession();
+    if (session?.token) setListUrl(`/list?token=${session.token}`);
   }, []);
 
   const acceptCookies = () => {
@@ -135,12 +138,7 @@ export default function Home() {
             >
               Browse
             </Link>
-            <a
-              href="#signup"
-              className="bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all shadow-sm"
-            >
-              Get started free
-            </a>
+            <HomeNav />
           </nav>
         </div>
       </header>
@@ -184,15 +182,27 @@ export default function Home() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 items-start">
-                <a
-                  href="#signup"
-                  className="inline-flex items-center justify-center bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:shadow-[#E17055]/30 hover:-translate-y-0.5"
-                >
-                  Start saving now
-                  <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </a>
+                {listUrl ? (
+                  <Link
+                    href={listUrl}
+                    className="inline-flex items-center justify-center bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:-translate-y-0.5"
+                  >
+                    View my list
+                    <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </Link>
+                ) : (
+                  <a
+                    href="#signup"
+                    className="inline-flex items-center justify-center bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:shadow-[#E17055]/30 hover:-translate-y-0.5"
+                  >
+                    Start saving now
+                    <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </a>
+                )}
                 <Link
                   href="/browse"
                   className="inline-flex items-center justify-center border-2 border-[#E8E2DC] text-[#636E72] px-8 py-4 rounded-xl text-lg font-semibold hover:border-[#1D2324] hover:text-[#1D2324] transition-all"
