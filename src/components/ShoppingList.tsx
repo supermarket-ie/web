@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import type { ListItem } from '@/lib/list-generator';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { ListItem, FamilySize } from '@/lib/list-generator';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,11 +37,18 @@ function loadRemoved(): Set<string> {
   }
 }
 
-function saveRemoved(ids: Set<string>) {
+function saveRemovedLocal(ids: Set<string>) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
   } catch { /* noop */ }
 }
+
+const FAMILY_OPTIONS = [
+  { value: '1',   label: 'Just me',    icon: '👤' },
+  { value: '2',   label: 'Couple',     icon: '👥' },
+  { value: '3-4', label: '3–4 people', icon: '👨‍👩‍👧' },
+  { value: '5+',  label: '5+ people',  icon: '👨‍👩‍👧‍👦' },
+];
 
 // ── sub-components ────────────────────────────────────────────────────────────
 
@@ -87,9 +94,7 @@ function ProductCard({
 
   return (
     <div className="py-3 border-b border-[#F0ECE8] last:border-0">
-      {/* Main row */}
       <div className="flex items-start gap-2">
-        {/* Remove button */}
         <button
           onClick={() => onRemove(item.product_id)}
           className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 border-[#DDD8D2] hover:border-[#E17055] hover:bg-[#FFF0EE] transition flex items-center justify-center group"
@@ -101,7 +106,6 @@ function ProductCard({
         </button>
 
         <div className="flex-1 min-w-0">
-          {/* Product name */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-[#1D2324] text-sm leading-snug">
@@ -110,7 +114,6 @@ function ProductCard({
                   <span className="text-[#636E72] font-normal ml-1">×{item.quantity}</span>
                 )}
               </p>
-              {/* Store product name (actual product at cheapest store) */}
               {item.best_store_product_name && item.best_store_product_name !== item.canonical_name && (
                 <p className="text-[11px] text-[#B2BEC3] mt-0.5 leading-snug truncate">
                   {item.best_store_product_name}
@@ -125,14 +128,11 @@ function ProductCard({
                 {storeDisplayName(item.best_store)}
               </span>
               <span className="font-bold text-[#1D2324] text-sm">
-                {item.quantity > 1
-                  ? `${fmt(item.best_price_total)}`
-                  : fmt(item.best_price)}
+                {item.quantity > 1 ? fmt(item.best_price_total) : fmt(item.best_price)}
               </span>
             </div>
           </div>
 
-          {/* Price comparison row */}
           {item.all_prices.length > 1 && (
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
               {item.all_prices.map((sp) => {
@@ -144,13 +144,7 @@ function ProductCard({
                   <span key={sp.store} className="text-[11px] text-[#636E72] flex items-center gap-0.5">
                     <span className="font-semibold" style={{ color: spStyle.bg }}>{abbr}</span>
                     {sp.store_url ? (
-                      <a
-                        href={sp.store_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:underline"
-                        title={sp.store_product_name}
-                      >
+                      <a href={sp.store_url} target="_blank" rel="noopener noreferrer" className="hover:underline" title={sp.store_product_name}>
                         {fmt(sp.price)}
                       </a>
                     ) : (
@@ -163,7 +157,6 @@ function ProductCard({
             </div>
           )}
 
-          {/* Nutrition toggle + panel */}
           {item.nutrition && (
             <div className="mt-2">
               <button
@@ -180,12 +173,8 @@ function ProductCard({
                   <NutritionPill label="Carbs" value={item.nutrition.carbs} unit="g" />
                   <NutritionPill label="Fat" value={item.nutrition.fat} unit="g" />
                   <NutritionPill label="Sugar" value={item.nutrition.sugar} unit="g" />
-                  {item.nutrition.fibre != null && (
-                    <NutritionPill label="Fibre" value={item.nutrition.fibre} unit="g" />
-                  )}
-                  {item.nutrition.salt != null && item.nutrition.salt < 20 && (
-                    <NutritionPill label="Salt" value={item.nutrition.salt} unit="g" />
-                  )}
+                  {item.nutrition.fibre != null && <NutritionPill label="Fibre" value={item.nutrition.fibre} unit="g" />}
+                  {item.nutrition.salt != null && item.nutrition.salt < 20 && <NutritionPill label="Salt" value={item.nutrition.salt} unit="g" />}
                 </div>
               )}
             </div>
@@ -196,50 +185,173 @@ function ProductCard({
   );
 }
 
+// ── preferences panel ─────────────────────────────────────────────────────────
+
+function PreferencesPanel({
+  token,
+  currentFamilySize,
+  onClose,
+  onSaved,
+}: {
+  token: string;
+  currentFamilySize: FamilySize;
+  onClose: () => void;
+  onSaved: (newSize: FamilySize) => void;
+}) {
+  const [selected, setSelected] = useState<FamilySize>(currentFamilySize);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function handleSave() {
+    if (selected === currentFamilySize) { onClose(); return; }
+    setSaving(true);
+    try {
+      await fetch('/api/list/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, familySize: selected }),
+      });
+      setSaved(true);
+      setTimeout(() => {
+        onSaved(selected);
+        // Reload the page so the new list generates with the new family size
+        window.location.reload();
+      }, 800);
+    } catch {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Panel */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-[#1D2324]">Your household</h2>
+          <button onClick={onClose} className="text-[#B2BEC3] hover:text-[#636E72] transition">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-[#636E72] mb-4">
+          Update your household size to regenerate your list with the right quantities.
+        </p>
+
+        <div className="grid grid-cols-2 gap-2 mb-5">
+          {FAMILY_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setSelected(opt.value as FamilySize)}
+              className={`p-3 rounded-xl text-center transition-all border-2 ${
+                selected === opt.value
+                  ? 'border-[#E17055] bg-[#FEF3E2]'
+                  : 'border-[#E8E2DC] hover:border-[#E17055]/50'
+              }`}
+            >
+              <div className="text-2xl mb-1">{opt.icon}</div>
+              <div className={`text-xs font-semibold ${selected === opt.value ? 'text-[#E17055]' : 'text-[#636E72]'}`}>
+                {opt.label}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={saving || saved}
+          className="w-full bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white py-3 rounded-xl font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all disabled:opacity-70"
+        >
+          {saved ? '✓ Saved! Reloading…' : saving ? 'Saving…' : selected === currentFamilySize ? 'Close' : 'Save & update list'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── main export ───────────────────────────────────────────────────────────────
 
 export function ShoppingList({
   items,
   grouped,
+  token,
+  familySize,
+  savedRemovedItems,
 }: {
   items: ListItem[];
   grouped: [string, ListItem[]][];
+  token?: string;
+  familySize?: FamilySize;
+  savedRemovedItems?: string[];
 }) {
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [hydrated, setHydrated] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load removed state from localStorage on mount
+  // Initialise: DB-saved removes take priority over localStorage
   useEffect(() => {
-    setRemoved(loadRemoved());
+    if (savedRemovedItems && savedRemovedItems.length > 0) {
+      const merged = new Set([...savedRemovedItems, ...loadRemoved()]);
+      setRemoved(merged);
+      saveRemovedLocal(merged);
+    } else {
+      setRemoved(loadRemoved());
+    }
     setHydrated(true);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced sync to DB whenever removed set changes
+  const syncToDb = useCallback((ids: Set<string>) => {
+    if (!token) return;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(async () => {
+      try {
+        await fetch('/api/list/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, removedItems: [...ids] }),
+        });
+      } catch { /* noop — localStorage is the fallback */ }
+    }, 1500);
+  }, [token]);
 
   const handleRemove = useCallback((id: string) => {
     setRemoved(prev => {
       const next = new Set(prev);
       next.add(id);
-      saveRemoved(next);
+      saveRemovedLocal(next);
+      syncToDb(next);
       return next;
     });
-  }, []);
+  }, [syncToDb]);
 
   const handleRestore = useCallback((id: string) => {
     setRemoved(prev => {
       const next = new Set(prev);
       next.delete(id);
-      saveRemoved(next);
+      saveRemovedLocal(next);
+      syncToDb(next);
       return next;
     });
-  }, []);
+  }, [syncToDb]);
+
+  const handleRestoreAll = useCallback(() => {
+    const next = new Set<string>();
+    setRemoved(next);
+    saveRemovedLocal(next);
+    syncToDb(next);
+  }, [syncToDb]);
 
   const removedCount = removed.size;
   const activeItems = items.filter(i => !removed.has(i.product_id));
-
-  // Category jump nav
   const categories = grouped.map(([cat]) => cat);
 
   if (!hydrated) {
-    // SSR skeleton — just render static
     return (
       <div className="space-y-6">
         {grouped.map(([category, catItems]) => (
@@ -247,13 +359,7 @@ export function ShoppingList({
             <h3 className="text-xs font-bold text-[#636E72] uppercase tracking-wider mb-2">{category}</h3>
             <div className="bg-white rounded-xl border border-[#E8E2DC] px-4">
               {catItems.map(item => (
-                <ProductCard
-                  key={item.product_id}
-                  item={item}
-                  removed={false}
-                  onRemove={() => {}}
-                  onRestore={() => {}}
-                />
+                <ProductCard key={item.product_id} item={item} removed={false} onRemove={() => {}} onRestore={() => {}} />
               ))}
             </div>
           </div>
@@ -264,9 +370,19 @@ export function ShoppingList({
 
   return (
     <>
-      {/* Category jump nav */}
-      {categories.length > 1 && (
-        <div className="flex gap-2 flex-wrap mb-5">
+      {/* Preferences modal */}
+      {showPreferences && token && familySize && (
+        <PreferencesPanel
+          token={token}
+          currentFamilySize={familySize}
+          onClose={() => setShowPreferences(false)}
+          onSaved={() => setShowPreferences(false)}
+        />
+      )}
+
+      {/* Edit list toolbar */}
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <div className="flex gap-2 flex-wrap">
           {categories.map(cat => (
             <a
               key={cat}
@@ -277,7 +393,20 @@ export function ShoppingList({
             </a>
           ))}
         </div>
-      )}
+        {token && familySize && (
+          <button
+            onClick={() => setShowPreferences(true)}
+            className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold text-[#636E72] hover:text-[#1D2324] transition px-3 py-1.5 rounded-full bg-white border border-[#E8E2DC] hover:border-[#1D2324]"
+            title="Edit household size"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Edit household
+          </button>
+        )}
+      </div>
 
       {/* Removed items notice */}
       {removedCount > 0 && (
@@ -286,10 +415,7 @@ export function ShoppingList({
             {removedCount} item{removedCount > 1 ? 's' : ''} removed from your list
           </p>
           <button
-            onClick={() => {
-              setRemoved(new Set());
-              saveRemoved(new Set());
-            }}
+            onClick={handleRestoreAll}
             className="text-xs text-[#E17055] font-semibold hover:underline flex-shrink-0"
           >
             Restore all
@@ -322,7 +448,6 @@ export function ShoppingList({
         ))}
       </div>
 
-      {/* Item count */}
       <p className="text-center text-xs text-[#B2BEC3] mt-6">
         {activeItems.length} of {items.length} items · {grouped.length} categories
       </p>

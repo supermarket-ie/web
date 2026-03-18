@@ -32,4 +32,5 @@ export interface Subscriber {
   family_size: string | null;
   subscribed: boolean;
   unsubscribe_token: string | null;
+  removed_items: string[] | null;
 }

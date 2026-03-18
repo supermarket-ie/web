@@ -121,7 +121,7 @@ export default async function ListPage({
     generateList(familySize),
     supabaseAdmin
       .from('subscribers')
-      .select('unsubscribe_token')
+      .select('unsubscribe_token, removed_items, family_size')
       .eq('id', payload.subscriberId)
       .single(),
   ]);
@@ -192,7 +192,9 @@ export default async function ListPage({
           <Link href="/" className="font-bold text-lg text-[#1D2324]">
             supermarket<span className="text-[#E17055]">.ie</span>
           </Link>
-          <span className="text-xs text-[#636E72]">Updated {formatDate(list.generated_at)}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-[#636E72]">Updated {formatDate(list.generated_at)}</span>
+          </div>
         </div>
       </header>
 
@@ -282,7 +284,13 @@ export default async function ListPage({
             )}
 
             {/* Shopping list — client component handles interactivity */}
-            <ShoppingList items={list.items} grouped={grouped} />
+            <ShoppingList
+              items={list.items}
+              grouped={grouped}
+              token={token}
+              familySize={familySize}
+              savedRemovedItems={(sub?.removed_items as string[] | null) ?? []}
+            />
           </>
         )}
       </main>
