@@ -126,6 +126,9 @@ export default function Home() {
             <a href="#how-it-works" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
               How it works
             </a>
+            <Link href="/browse" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
+              Browse list
+            </Link>
             <a
               href="#signup"
               className="bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all shadow-sm"
@@ -184,9 +187,15 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </a>
-                <div className="text-sm text-[#636E72]">
-                  <span className="font-semibold text-[#1D2324]">100% free</span> · No card required
-                </div>
+                <Link
+                  href="/browse"
+                  className="inline-flex items-center justify-center border-2 border-[#E8E2DC] text-[#636E72] px-8 py-4 rounded-xl text-lg font-semibold hover:border-[#1D2324] hover:text-[#1D2324] transition-all"
+                >
+                  Browse the list
+                </Link>
+              </div>
+              <div className="text-sm text-[#636E72]">
+                <span className="font-semibold text-[#1D2324]">100% free</span> · No card required
               </div>
             </div>
 
