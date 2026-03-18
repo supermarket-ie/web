@@ -2,19 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { CATEGORY_CONFIG, type Product } from './page';
+import { type CATEGORY_CONFIG, type BrowseProduct } from '@/lib/category-config';
 import { loadSession } from '@/lib/session';
 
-function groupByCategory(products: Product[]) {
-  const groups = new Map<string, Product[]>();
+type CategoryConfig = typeof CATEGORY_CONFIG;
+
+function groupByCategory(products: BrowseProduct[], cfg: CategoryConfig) {
+  const groups = new Map<string, BrowseProduct[]>();
   for (const p of products) {
     const cat = p.category ?? 'Other';
     if (!groups.has(cat)) groups.set(cat, []);
     groups.get(cat)!.push(p);
   }
   return Array.from(groups.entries()).sort(([a], [b]) => {
-    const oa = CATEGORY_CONFIG[a]?.order ?? 99;
-    const ob = CATEGORY_CONFIG[b]?.order ?? 99;
+    const oa = cfg[a]?.order ?? 99;
+    const ob = cfg[b]?.order ?? 99;
     return oa !== ob ? oa - ob : a.localeCompare(b);
   });
 }
@@ -29,8 +31,8 @@ const Logo = () => (
   </svg>
 );
 
-export function BrowseClient({ products }: { products: Product[] }) {
-  const grouped = groupByCategory(products);
+export function BrowseClient({ products, categoryConfig }: { products: BrowseProduct[]; categoryConfig: CategoryConfig }) {
+  const grouped = groupByCategory(products, categoryConfig);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [listUrl, setListUrl] = useState<string | null>(null);
 
@@ -72,42 +74,32 @@ export function BrowseClient({ products }: { products: Product[] }) {
 
       {/* ── Instacart-style category icon strip ── */}
       <div className="px-4 md:px-6 py-5 max-w-5xl mx-auto">
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
-          {/* All button */}
-          <button
-            onClick={() => setActiveCategory(null)}
-            className={`flex-shrink-0 flex flex-col items-center gap-1.5 w-[72px] transition-all`}
-          >
+        <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+          {/* All */}
+          <button onClick={() => setActiveCategory(null)}
+            className="flex-shrink-0 flex flex-col items-center gap-1.5 w-[68px]">
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl transition-all ${
               activeCategory === null
-                ? 'bg-[#E17055] shadow-md shadow-[#E17055]/30 scale-105'
-                : 'bg-white border-2 border-[#E8E2DC] hover:border-[#E17055]/40 hover:scale-105'
-            }`}>
+                ? 'shadow-md scale-105 ring-2 ring-[#E17055]'
+                : 'bg-white border-2 border-[#E8E2DC] hover:scale-105'
+            }`} style={{ background: activeCategory === null ? '#FEF3E2' : undefined }}>
               🛒
             </div>
-            <span className={`text-[11px] font-medium text-center leading-tight ${activeCategory === null ? 'text-[#E17055]' : 'text-[#636E72]'}`}>
-              All
-            </span>
+            <span className={`text-[11px] font-semibold text-center leading-tight ${activeCategory === null ? 'text-[#E17055]' : 'text-[#636E72]'}`}>All</span>
           </button>
 
-          {grouped.map(([cat, items]) => {
-            const cfg = CATEGORY_CONFIG[cat] ?? { emoji: '🛒', color: '#F5F0EB', order: 99 };
+          {grouped.map(([cat]) => {
+            const cfg = categoryConfig[cat] ?? { emoji: '🛒', color: '#F5F0EB', order: 99 };
             const isActive = activeCategory === cat;
             return (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(isActive ? null : cat)}
-                className="flex-shrink-0 flex flex-col items-center gap-1.5 w-[72px] transition-all"
-              >
+              <button key={cat} onClick={() => setActiveCategory(isActive ? null : cat)}
+                className="flex-shrink-0 flex flex-col items-center gap-1.5 w-[68px]">
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl transition-all ${
-                  isActive
-                    ? 'bg-[#E17055] shadow-md shadow-[#E17055]/30 scale-105'
-                    : 'bg-white border-2 border-[#E8E2DC] hover:border-[#E17055]/40 hover:scale-105'
-                }`}
-                style={{ background: isActive ? '#E17055' : cfg.color }}>
+                  isActive ? 'shadow-md scale-105 ring-2 ring-[#E17055]' : 'border-2 border-[#E8E2DC] hover:scale-105'
+                }`} style={{ background: isActive ? '#FEF3E2' : cfg.color }}>
                   {cfg.emoji}
                 </div>
-                <span className={`text-[11px] font-medium text-center leading-tight line-clamp-2 ${isActive ? 'text-[#E17055]' : 'text-[#636E72]'}`}>
+                <span className={`text-[11px] font-semibold text-center leading-tight line-clamp-2 ${isActive ? 'text-[#E17055]' : 'text-[#636E72]'}`}>
                   {cat}
                 </span>
               </button>
@@ -116,17 +108,16 @@ export function BrowseClient({ products }: { products: Product[] }) {
         </div>
       </div>
 
-      {/* Price unlock banner — only for logged-out users */}
+      {/* Price unlock banner — logged-out only */}
       {!listUrl && (
-        <div className="mx-4 md:mx-6 mb-4 max-w-5xl md:mx-auto">
+        <div className="px-4 md:px-6 mb-4 max-w-5xl mx-auto">
           <div className="bg-white border border-[#E8E2DC] rounded-xl px-4 py-3 flex items-center gap-3">
             <span className="text-xl flex-shrink-0">🔒</span>
             <div className="flex-1 min-w-0">
               <span className="text-sm font-semibold text-[#1D2324]">Prices hidden · </span>
               <span className="text-sm text-[#636E72]">Sign in free to see live prices from all 5 stores</span>
             </div>
-            <Link href="/list/request"
-              className="flex-shrink-0 text-sm font-semibold text-[#E17055] hover:underline whitespace-nowrap">
+            <Link href="/list/request" className="flex-shrink-0 text-sm font-semibold text-[#E17055] hover:underline whitespace-nowrap">
               Unlock →
             </Link>
           </div>
@@ -136,14 +127,12 @@ export function BrowseClient({ products }: { products: Product[] }) {
       {/* Product sections */}
       <main className="px-4 md:px-6 pb-16 max-w-5xl mx-auto space-y-8">
         {displayedGroups.map(([cat, items]) => {
-          const cfg = CATEGORY_CONFIG[cat] ?? { emoji: '🛒', color: '#F5F0EB', order: 99 };
+          const cfg = categoryConfig[cat] ?? { emoji: '🛒', color: '#F5F0EB', order: 99 };
           const catId = `cat-${cat.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`;
           return (
             <section key={cat} id={catId} className="scroll-mt-20">
-              {/* Section header */}
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                  style={{ background: cfg.color }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0" style={{ background: cfg.color }}>
                   {cfg.emoji}
                 </div>
                 <div className="flex-1 flex items-baseline justify-between">
@@ -152,21 +141,16 @@ export function BrowseClient({ products }: { products: Product[] }) {
                 </div>
               </div>
 
-              {/* Product list */}
               <div className="bg-white rounded-2xl border border-[#E8E2DC] divide-y divide-[#F5F0EB]">
                 {items.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)).map(product => (
                   <div key={product.id} className="flex items-center gap-3 px-4 py-3.5">
-                    {/* Category colour dot */}
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0"
-                      style={{ background: cfg.color }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0" style={{ background: cfg.color }}>
                       {cfg.emoji}
                     </div>
-
-                    {/* Name + nutrition */}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-[#1D2324] leading-snug">{product.canonical_name}</div>
                       {product.nutrition && (
-                        <div className="flex gap-2 mt-1">
+                        <div className="flex gap-2 mt-0.5">
                           <span className="text-[10px] text-[#B2BEC3]">{product.nutrition.calories} kcal</span>
                           <span className="text-[10px] text-[#B2BEC3]">P {product.nutrition.protein}g</span>
                           <span className="text-[10px] text-[#B2BEC3]">C {product.nutrition.carbs}g</span>
@@ -175,14 +159,9 @@ export function BrowseClient({ products }: { products: Product[] }) {
                       )}
                       <div className="text-[10px] text-[#B2BEC3] mt-0.5">{product.storeCount} store{product.storeCount !== 1 ? 's' : ''}</div>
                     </div>
-
-                    {/* Price — blurred if not logged in, real if session exists */}
-                    <div className="flex-shrink-0 text-right">
+                    <div className="flex-shrink-0">
                       {listUrl ? (
-                        <Link href={listUrl}
-                          className="text-sm font-bold text-[#E17055] hover:underline">
-                          View →
-                        </Link>
+                        <Link href={listUrl} className="text-sm font-bold text-[#E17055] hover:underline">View →</Link>
                       ) : (
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-bold text-[#1D2324] blur-sm select-none">€0.00</span>
@@ -200,7 +179,7 @@ export function BrowseClient({ products }: { products: Product[] }) {
         })}
       </main>
 
-      {/* Bottom CTA */}
+      {/* Bottom CTA — logged-out only */}
       {!listUrl && (
         <section className="px-4 md:px-6 py-12 bg-gradient-to-b from-[#FFFBF7] to-[#F5F0EB] border-t border-[#E8E2DC]">
           <div className="max-w-md mx-auto text-center">
