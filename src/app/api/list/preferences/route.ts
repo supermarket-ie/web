@@ -13,7 +13,7 @@ interface MagicLinkPayload {
 
 export async function POST(request: NextRequest) {
   try {
-    const { token, familySize, removedItems } = await request.json();
+    const { token, familySize, removedItems, addedItems, storeOverrides } = await request.json();
 
     if (!token) {
       return NextResponse.json({ error: 'Token required' }, { status: 400 });
@@ -31,9 +31,14 @@ export async function POST(request: NextRequest) {
     if (familySize && VALID_FAMILY_SIZES.has(familySize)) {
       update.family_size = familySize;
     }
-
     if (Array.isArray(removedItems)) {
       update.removed_items = removedItems;
+    }
+    if (Array.isArray(addedItems)) {
+      update.added_items = addedItems;
+    }
+    if (storeOverrides && typeof storeOverrides === 'object' && !Array.isArray(storeOverrides)) {
+      update.store_overrides = storeOverrides;
     }
 
     const { error } = await supabaseAdmin
@@ -42,7 +47,6 @@ export async function POST(request: NextRequest) {
       .eq('id', payload.subscriberId);
 
     if (error) {
-      // Column may not exist yet — not fatal
       console.error('Preferences update error:', error.message);
       return NextResponse.json({ success: true, warning: error.message });
     }

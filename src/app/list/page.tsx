@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import jwt from 'jsonwebtoken';
-import { generateList, type SmartList, type FamilySize } from '@/lib/list-generator';
+import { generateList, getAllProducts, type SmartList, type FamilySize } from '@/lib/list-generator';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ShoppingList } from '@/components/ShoppingList';
 
@@ -117,14 +117,20 @@ export default async function ListPage({
     ? (payload.familySize as FamilySize)
     : '2';
 
-  const [list, { data: sub }] = await Promise.all([
-    generateList(familySize),
+  const [{ data: sub }, allProducts] = await Promise.all([
     supabaseAdmin
       .from('subscribers')
-      .select('unsubscribe_token, removed_items, family_size')
+      .select('unsubscribe_token, removed_items, family_size, added_items, store_overrides')
       .eq('id', payload.subscriberId)
       .single(),
+    getAllProducts(),
   ]);
+
+  const removedItems  = (sub?.removed_items  as string[] | null)              ?? [];
+  const addedItems    = (sub?.added_items     as string[] | null)              ?? [];
+  const storeOverrides = (sub?.store_overrides as Record<string,string> | null) ?? {};
+
+  const list = await generateList(familySize, { removedItems, addedItems, storeOverrides });
 
   const unsubscribeUrl = sub?.unsubscribe_token
     ? `/unsubscribe?token=${sub.unsubscribe_token}`
@@ -289,7 +295,10 @@ export default async function ListPage({
               grouped={grouped}
               token={token}
               familySize={familySize}
-              savedRemovedItems={(sub?.removed_items as string[] | null) ?? []}
+              savedRemovedItems={removedItems}
+              savedAddedItems={addedItems}
+              savedStoreOverrides={storeOverrides}
+              allProducts={allProducts}
             />
           </>
         )}
