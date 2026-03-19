@@ -72,9 +72,23 @@ const FALLBACK_CATALOGUE = `
 `.trim();
 
 export async function POST(req: Request) {
-  const { meals, householdSize = 2 } = await req.json();
+  const body = await req.json();
+  const householdSize: number = body.householdSize ?? 2;
 
-  if (!meals?.trim()) {
+  // useChat sends { messages: [{role, content}...] }
+  // We also support direct { meals: string } for testing
+  let userMessage: string;
+  if (body.meals?.trim()) {
+    userMessage = body.meals.trim();
+  } else if (Array.isArray(body.messages) && body.messages.length > 0) {
+    // Get the last user message
+    const last = [...body.messages].reverse().find((m: { role: string; content: string }) => m.role === 'user');
+    userMessage = last?.content?.trim() ?? '';
+  } else {
+    userMessage = '';
+  }
+
+  if (!userMessage) {
     return new Response('Meals required', { status: 400 });
   }
 
@@ -124,7 +138,7 @@ Use this structure exactly:
     messages: [
       {
         role: 'user',
-        content: `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${meals}\n\nBuild me a shopping list.`,
+        content: `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${userMessage}\n\nBuild me a shopping list.`,
       },
     ],
   });
