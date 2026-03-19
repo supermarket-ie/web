@@ -204,7 +204,7 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
           <div className="flex gap-5 text-sm text-[#B2BEC3]">
             <Link href="/privacy" className="hover:text-white transition">Privacy</Link>
             <Link href="/terms" className="hover:text-white transition">Terms</Link>
-            <a href="mailto:hello@supermarket.ie" className="hover:text-white transition">Contact</a>
+            <Link href="/contact" className="hover:text-white transition">Contact</Link>
           </div>
         </div>
       </footer>

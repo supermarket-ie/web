@@ -538,7 +538,7 @@ export default function Home() {
             <div className="flex gap-6 text-sm text-[#B2BEC3]">
               <Link href="/privacy" className="hover:text-white transition">Privacy</Link>
               <Link href="/terms" className="hover:text-white transition">Terms</Link>
-              <a href="mailto:hello@supermarket.ie" className="hover:text-white transition">Contact</a>
+              <Link href="/contact" className="hover:text-white transition">Contact</Link>
             </div>
           </div>
           <div className="pt-8 border-t border-white/10 text-center text-white/40 text-sm">
