@@ -39,11 +39,13 @@ HEADERS = {
 
 STORES = ["tesco", "supervalu", "dunnes"]
 
-# --- ScrapingBee credits used per call type ---
-# render_js=true, premium_proxy=true  = 25 credits
-# render_js=true, premium_proxy=false = 5 credits
-# render_js=false                     = 1 credit
-CREDITS_PER_CALL = 25  # conservative estimate
+# Credits per call:
+#   render_js=false, premium_proxy=false = 1 credit  (Tesco — works)
+#   render_js=true,  premium_proxy=false = 5 credits  (SuperValu — still blocked)
+#   render_js=true,  premium_proxy=true  = 25 credits (Dunnes — 500 error, needs Browserless)
+# Only Tesco is currently functional via ScrapingBee.
+CREDITS_PER_CALL = 1   # search/resolve pages: render_js=false
+CREDITS_PER_PRICE = 5  # product detail pages: render_js=true (needs JS for JSON-LD)
 
 
 # ============================================================
@@ -95,8 +97,11 @@ def supabase_count(table, params=""):
 # SCRAPINGBEE FETCH
 # ============================================================
 
-def sb_fetch(url, render_js=True, premium_proxy=True, timeout=90):
-    """Fetch a URL via ScrapingBee. Returns requests.Response."""
+def sb_fetch(url, render_js=False, premium_proxy=False, timeout=90):
+    """Fetch a URL via ScrapingBee.
+    - render_js=False (1 credit): use for search/listing pages
+    - render_js=True  (5 credits): use for product detail pages (JSON-LD needs JS)
+    """
     params = {
         "api_key": SBKEY,
         "url": url,
@@ -125,8 +130,9 @@ def check_credits():
         resp = requests.get(f"https://app.scrapingbee.com/api/v1/usage?api_key={SBKEY}", timeout=10)
         if resp.ok:
             usage = resp.json()
-            used = usage.get("used_api_credits", 0)
-            total = usage.get("max_api_credits", 0)
+            # API returns max_api_credit / used_api_credit (singular)
+            used = usage.get("used_api_credit", usage.get("used_api_credits", 0))
+            total = usage.get("max_api_credit", usage.get("max_api_credits", 0))
             remaining = total - used
             return remaining, total
     except Exception:
@@ -206,7 +212,7 @@ def resolve_tesco_url(search_url, product_name):
 
 
 def extract_tesco_price(product_url):
-    resp = sb_fetch(product_url)
+    resp = sb_fetch(product_url, render_js=True)  # needs JS for JSON-LD
     if resp.status_code != 200:
         return None, None, f"HTTP {resp.status_code}"
 
@@ -266,7 +272,7 @@ def resolve_supervalu_url(search_url, product_name):
 
 
 def extract_supervalu_price(product_url):
-    resp = sb_fetch(product_url)
+    resp = sb_fetch(product_url, render_js=True)  # needs JS for JSON-LD
     if resp.status_code != 200:
         return None, None, f"HTTP {resp.status_code}"
 
@@ -327,7 +333,7 @@ def resolve_dunnes_url(search_url, product_name):
 
 
 def extract_dunnes_price(product_url):
-    resp = sb_fetch(product_url)
+    resp = sb_fetch(product_url, render_js=True)  # needs JS for JSON-LD
     if resp.status_code != 200:
         return None, None, f"HTTP {resp.status_code}"
 
@@ -528,11 +534,11 @@ def main():
             for s in stores
         )
         if args.full:
-            est = (pending_count * 2 + resolved_count) * CREDITS_PER_CALL
+            est = (pending_count * 2 * CREDITS_PER_CALL) + (pending_count * CREDITS_PER_PRICE) + (resolved_count * CREDITS_PER_PRICE)
         elif args.resolve:
             est = pending_count * 2 * CREDITS_PER_CALL
         else:
-            est = resolved_count * CREDITS_PER_CALL
+            est = resolved_count * CREDITS_PER_PRICE
         if limit:
             est = min(est, len(stores) * limit * 2 * CREDITS_PER_CALL)
         print(f"    Pending to resolve: {pending_count} ({pending_count*2} SB calls)")
