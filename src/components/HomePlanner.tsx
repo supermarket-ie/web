@@ -143,8 +143,9 @@ export function HomePlanner() {
         }
       }
 
-      // Show signup gate after first result
-      if (!session && !gateDone) {
+      // Show signup gate only when Claude actually produced a shopping list
+      const isList = assistantContent.includes('🛒') || assistantContent.includes('Store totals') || assistantContent.includes('Best value split');
+      if (!session && !gateDone && isList) {
         setTimeout(() => setShowGate(true), 500);
       }
     } catch (err) {
