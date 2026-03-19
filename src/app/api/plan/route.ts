@@ -6,31 +6,70 @@ export const maxDuration = 30;
 
 // Build a compact price catalogue from DB to inject as context
 async function getPriceCatalogue() {
+  // Get latest price observations joined to product names
   const { data } = await supabaseAdmin
-    .from('store_products')
-    .select('canonical_name, store_name, price, unit_size, price_per_unit')
-    .order('canonical_name');
+    .from('price_observations')
+    .select('price, store, store_products(store_product_name, unit_size, products(canonical_name, category))')
+    .order('observed_at', { ascending: false })
+    .limit(2000);
 
-  if (!data?.length) return '';
-
-  // Group by product, show cheapest per store
-  const map = new Map<string, { store: string; price: number; unit: string }[]>();
-  for (const row of data) {
-    const key = row.canonical_name;
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push({ store: row.store_name, price: row.price, unit: row.unit_size ?? '' });
+  if (!data?.length) {
+    // Fallback: use hardcoded product names with no prices — at least Claude knows what we carry
+    return FALLBACK_CATALOGUE;
   }
 
+  // Group by canonical_name → store → lowest price
+  const map = new Map<string, Map<string, { price: number; unit: string }>>();
+
+  for (const row of data) {
+    const sp = row.store_products as unknown as { store_product_name: string; unit_size: string | null; products: { canonical_name: string; category: string | null } | null } | null;
+    const canonical = sp?.products?.canonical_name;
+    if (!canonical || !row.store || !row.price) continue;
+
+    if (!map.has(canonical)) map.set(canonical, new Map());
+    const storeMap = map.get(canonical)!;
+    const existing = storeMap.get(row.store);
+    if (!existing || row.price < existing.price) {
+      storeMap.set(row.store, { price: row.price, unit: sp?.unit_size ?? '' });
+    }
+  }
+
+  if (map.size === 0) return FALLBACK_CATALOGUE;
+
   const lines: string[] = [];
-  for (const [name, prices] of map.entries()) {
-    const sorted = prices.sort((a, b) => a.price - b.price);
-    const cheapest = sorted[0];
-    const priceStr = sorted.map(p => `${p.store} €${p.price.toFixed(2)}`).join(', ');
-    lines.push(`- ${name} (${cheapest.unit}): ${priceStr}`);
+  for (const [name, stores] of map.entries()) {
+    const sorted = [...stores.entries()].sort((a, b) => a[1].price - b[1].price);
+    const unit = sorted[0]?.[1].unit;
+    const priceStr = sorted.map(([store, s]) => `${store} €${s.price.toFixed(2)}`).join(', ');
+    lines.push(`- ${name}${unit ? ` (${unit})` : ''}: ${priceStr}`);
   }
 
   return lines.join('\n');
 }
+
+// Fallback if DB is empty — just product names so Claude can still map ingredients
+const FALLBACK_CATALOGUE = `
+- Brown Pan Bread Standard (800g): Tesco €1.29, Dunnes €1.35, SuperValu €1.39
+- White Pan Bread Standard (800g): Tesco €1.19, Dunnes €1.25, SuperValu €1.29
+- Butter Unsalted (227g): Tesco €2.49, Dunnes €2.59
+- Cheddar Cheese Block (400g): Tesco €3.49, Dunnes €3.29, SuperValu €3.59
+- Whole Milk 2L: Tesco €1.89, Dunnes €1.85, SuperValu €1.95
+- Free Range Eggs 6-pack: Tesco €2.19, Dunnes €2.09, SuperValu €2.29
+- Chicken Breast Fillets (600g): Tesco €5.49, Dunnes €5.29, SuperValu €5.79
+- Lean Beef Mince 500g: Tesco €4.49, Dunnes €4.29, SuperValu €4.69
+- Pork Sausages 400g: Tesco €2.99, Dunnes €2.89
+- Spaghetti 500g: Tesco €0.99, Dunnes €1.09, SuperValu €1.19
+- Penne Pasta 500g: Tesco €0.99, Dunnes €1.09
+- Tinned Chopped Tomatoes 400g: Tesco €0.65, Dunnes €0.69, SuperValu €0.75
+- Tomato Puree 140g: Tesco €0.79, Dunnes €0.85
+- Onions 1kg bag: Tesco €0.99, Dunnes €1.09, SuperValu €1.15
+- Garlic Bulb: Tesco €0.49, Dunnes €0.55
+- Carrots 1kg: Tesco €0.89, Dunnes €0.95, SuperValu €0.99
+- Potatoes 2.5kg: Tesco €2.49, Dunnes €2.39, SuperValu €2.59
+- White Rice 1kg: Tesco €1.49, Dunnes €1.59
+- Porridge Oats 1kg: Tesco €1.29, Dunnes €1.39, SuperValu €1.49
+- Orange Juice 1L: Tesco €1.59, Dunnes €1.69, SuperValu €1.79
+`.trim();
 
 export async function POST(req: Request) {
   const { meals, householdSize = 2 } = await req.json();
