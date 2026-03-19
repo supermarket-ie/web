@@ -73,8 +73,8 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
       </div>
 
       {/* ── Instacart-style category icon strip ── */}
-      <div className="px-4 md:px-6 py-5 max-w-5xl mx-auto">
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+      <div className="px-4 md:px-6 py-5 max-w-5xl mx-auto overflow-visible">
+        <div className="flex gap-3 overflow-x-auto overflow-y-visible pb-2 pt-2 -mx-1 px-1">
           {/* All */}
           <button onClick={() => setActiveCategory(null)}
             className="flex-shrink-0 flex flex-col items-center gap-1.5 w-[68px]">
