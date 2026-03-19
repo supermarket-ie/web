@@ -95,7 +95,7 @@ export async function POST(req: Request) {
   const catalogue = await getPriceCatalogue();
 
   const result = await streamText({
-    model: anthropic('claude-3-5-haiku-latest'),
+    model: anthropic('claude-haiku-4-5'),
     system: `You are an AI grocery assistant for supermarket.ie — Ireland's smartest grocery planning platform.
 
 Your job: take a list of meals the user wants to cook this week and return a complete, priced shopping list using products from our catalogue.
