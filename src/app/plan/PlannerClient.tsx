@@ -22,9 +22,10 @@ export function PlannerClient() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, input, setInput, handleSubmit, isLoading, stop } = useChat({
+  const { messages, input, setInput, handleInputChange, handleSubmit, isLoading, stop } = useChat({
     api: '/api/plan',
     body: { householdSize },
+    streamProtocol: 'data',
     onFinish: () => {
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     },
@@ -48,7 +49,7 @@ export function PlannerClient() {
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
     setStarted(true);
     handleSubmit(e);
   }
@@ -208,7 +209,7 @@ export function PlannerClient() {
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit(e as unknown as React.FormEvent); } }}
               placeholder={started ? "Ask me to adjust, add a meal, or plan another week…" : "e.g. Spaghetti bolognese Monday, chicken curry Wednesday, fish on Friday…"}
               rows={3}
