@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { HomeNav } from "@/components/HomeNav";
+import { HomePlanner } from "@/components/HomePlanner";
 import { loadSession } from "@/lib/session";
 
 export default function Home() {
@@ -212,47 +213,21 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right: Visual/Form Preview */}
+            {/* Right: Live AI Planner */}
             <div className="relative">
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-[#E8E2DC]">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-full bg-[#F5F0EB] flex items-center justify-center">
-                    <span className="text-xl">📋</span>
-                  </div>
+              <div className="bg-white rounded-2xl shadow-xl p-5 border border-[#E8E2DC] min-h-[380px] flex flex-col">
+                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#F5F0EB]">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#E17055] to-[#D4604A] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">S</div>
                   <div>
-                    <div className="font-semibold text-[#1D2324]">This week&apos;s smart list</div>
-                    <div className="text-sm text-[#636E72]">Personalised for a family of 4</div>
+                    <div className="font-semibold text-[#1D2324] text-sm">supermarket.ie AI</div>
+                    <div className="flex items-center gap-1.5 text-xs text-[#5D9B8F]">
+                      <span className="w-1.5 h-1.5 bg-[#5D9B8F] rounded-full animate-pulse inline-block"/>
+                      Online · Prices updated today
+                    </div>
                   </div>
                 </div>
-                
-                <div className="space-y-3">
-                  {[
-                    { store: "Tesco", item: "Chicken Breasts 1kg", price: "€7.99", saving: "€3.00" },
-                    { store: "Lidl", item: "Organic Milk 2L", price: "€1.89", saving: "€0.60" },
-                    { store: "Dunnes", item: "Wholegrain Bread", price: "€1.50", saving: "€0.49" },
-                    { store: "Aldi", item: "Free Range Eggs 12pk", price: "€2.99", saving: "€1.00" },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-[#FFFBF7] rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[#E8E2DC] flex items-center justify-center text-xs font-bold text-[#636E72]">
-                          {item.store.slice(0, 2)}
-                        </div>
-                        <div>
-                          <div className="font-medium text-[#1D2324] text-sm">{item.item}</div>
-                          <div className="text-xs text-[#636E72]">{item.store}</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-[#1D2324]">{item.price}</div>
-                        <div className="text-xs text-[#5D9B8F] font-medium">Save {item.saving}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-[#E8E2DC] flex justify-between items-center">
-                  <span className="text-[#636E72]">Weekly savings</span>
-                  <span className="text-2xl font-bold text-[#5D9B8F]">€23.40</span>
+                <div className="flex-1">
+                  <HomePlanner />
                 </div>
               </div>
 
