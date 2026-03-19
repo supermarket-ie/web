@@ -208,8 +208,8 @@ export function HomePlanner() {
         </div>
       )}
 
-      {/* Input */}
-      <div>
+      {/* Input — hidden while signup gate is showing */}
+      {!showGate && <div>
         {!started && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {EXAMPLES.map(e => (
@@ -249,7 +249,7 @@ export function HomePlanner() {
           </button>
         </form>
         <p className="text-[11px] text-[#B2BEC3] mt-1.5 text-center">Prices from Tesco, Dunnes &amp; SuperValu · Free to use</p>
-      </div>
+      </div>}
     </div>
   );
 }
