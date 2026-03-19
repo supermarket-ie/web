@@ -111,6 +111,7 @@ Your job: take a list of meals the user wants to cook this week and return a com
 - Keep it concise. No waffle. Just the list.
 - Use € prices. This is Ireland.
 - If an ingredient isn't in our catalogue, skip it silently (don't mention it)
+- If the user asks to update or modify their list, use the full conversation history to understand what was already planned and produce a complete updated list
 
 ## Our product catalogue (name | stores with prices)
 ${catalogue}
@@ -135,12 +136,14 @@ Use this structure exactly:
 
 💡 **Best value split:** [1-2 sentence recommendation on how to split the shop]`,
 
-    messages: [
-      {
-        role: 'user',
-        content: `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${userMessage}\n\nBuild me a shopping list.`,
-      },
-    ],
+    messages: Array.isArray(body.messages) && body.messages.length > 0
+      ? body.messages.map((m: { role: string; content: string }) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.role === 'user' && m === body.messages[0]
+            ? `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${m.content}\n\nBuild me a shopping list.`
+            : m.content,
+        }))
+      : [{ role: 'user' as const, content: `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${userMessage}\n\nBuild me a shopping list.` }],
   });
 
   return result.toDataStreamResponse({ sendUsage: false });
