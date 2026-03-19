@@ -149,18 +149,18 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             {/* Left: Copy */}
             <div>
-              <div className="inline-flex items-center gap-2 bg-[#FEF3E2] text-[#E17055] px-3 py-1.5 rounded-full text-sm font-medium mb-6">
-                <span className="w-2 h-2 bg-[#00B894] rounded-full animate-pulse"></span>
-                Now available across Ireland
+              <div className="inline-flex items-center gap-2 bg-[#F0FAF7] text-[#5D9B8F] px-3 py-1.5 rounded-full text-sm font-semibold mb-6">
+                <span className="text-base">✨</span>
+                Ireland&apos;s first AI grocery planner
               </div>
               
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#1D2324] leading-[1.1] tracking-tight mb-6">
-                Your weekly shop,<br />
-                <span className="bg-gradient-to-r from-[#E17055] to-[#D4604A] bg-clip-text text-transparent">sorted in minutes.</span>
+                Tell us what you&apos;re cooking.<br />
+                <span className="bg-gradient-to-r from-[#E17055] to-[#D4604A] bg-clip-text text-transparent">We&apos;ll handle the rest.</span>
               </h1>
               
               <p className="text-lg md:text-xl text-[#636E72] leading-relaxed mb-8 max-w-lg">
-                Personalised weekly shopping lists based on your household — saving you time, money, and mental effort.
+                Our AI builds your weekly shopping list and finds the best prices across Tesco, Dunnes and SuperValu — in seconds.
               </p>
 
               {/* Value Props */}
@@ -182,36 +182,33 @@ export default function Home() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 items-start">
+                <Link
+                  href="/plan"
+                  className="inline-flex items-center justify-center bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:-translate-y-0.5"
+                >
+                  ✨ Plan my week
+                  <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </Link>
                 {listUrl ? (
                   <Link
                     href={listUrl}
-                    className="inline-flex items-center justify-center bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:-translate-y-0.5"
+                    className="inline-flex items-center justify-center border-2 border-[#E8E2DC] text-[#636E72] px-8 py-4 rounded-xl text-lg font-semibold hover:border-[#1D2324] hover:text-[#1D2324] transition-all"
                   >
-                    View my list
-                    <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
+                    My list
                   </Link>
                 ) : (
-                  <a
-                    href="#signup"
-                    className="inline-flex items-center justify-center bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:shadow-[#E17055]/30 hover:-translate-y-0.5"
+                  <Link
+                    href="/browse"
+                    className="inline-flex items-center justify-center border-2 border-[#E8E2DC] text-[#636E72] px-8 py-4 rounded-xl text-lg font-semibold hover:border-[#1D2324] hover:text-[#1D2324] transition-all"
                   >
-                    Start saving now
-                    <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
-                  </a>
+                    Browse prices
+                  </Link>
                 )}
-                <Link
-                  href="/browse"
-                  className="inline-flex items-center justify-center border-2 border-[#E8E2DC] text-[#636E72] px-8 py-4 rounded-xl text-lg font-semibold hover:border-[#1D2324] hover:text-[#1D2324] transition-all"
-                >
-                  Browse the list
-                </Link>
               </div>
               <div className="text-sm text-[#636E72]">
-                <span className="font-semibold text-[#1D2324]">100% free</span> · No card required
+                <span className="font-semibold text-[#1D2324]">100% free</span> · No signup needed to try
               </div>
             </div>
 
