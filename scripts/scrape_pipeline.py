@@ -168,6 +168,50 @@ def extract_json_ld_price(html):
     return None, None
 
 
+def extract_tesco_promo(html):
+    """Extract Tesco promotion signals. Returns (was_price, on_promotion, promo_label)."""
+    # Check promotions array in embedded JSON
+    promos = re.findall(r'"promotions"\s*:\s*(\[[^\]]{0,500}\])', html)
+    for p in promos:
+        try:
+            arr = json.loads(p)
+            if arr:
+                label = arr[0].get("promotionText", arr[0].get("description", ""))
+                return None, True, label or "Offer"
+        except Exception:
+            pass
+    # Check for Clubcard price (separate price displayed for card holders)
+    clubcard = re.search(r'clubcard[^€]{0,200}€\s*(\d+\.\d{2})', html, re.IGNORECASE)
+    if clubcard:
+        try:
+            return None, True, f"Clubcard Price €{clubcard.group(1)}"
+        except Exception:
+            pass
+    # Was price pattern
+    was = re.search(r'[Ww]as\s*€\s*(\d+\.\d{2})', html)
+    if was:
+        try:
+            return float(was.group(1)), True, f"Was €{was.group(1)}"
+        except Exception:
+            pass
+    return None, False, None
+
+
+def extract_supervalu_promo(html):
+    """Extract SuperValu wasPrice from embedded JSON. Returns (was_price, on_promotion, promo_label)."""
+    # SuperValu embeds product data as JSON — wasPrice is "€X.XX" when on offer, "0" when not
+    was_matches = re.findall(r'"wasPrice"\s*:\s*"(€[\d\.]+)"', html)
+    if was_matches:
+        try:
+            was_str = was_matches[0].replace("€", "").strip()
+            was = float(was_str)
+            if was > 0:
+                return was, True, f"Was €{was_str}"
+        except Exception:
+            pass
+    return None, False, None
+
+
 def extract_og_title(html):
     m = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]+)"', html, re.IGNORECASE)
     return m.group(1).strip() if m else ""
@@ -220,7 +264,8 @@ def extract_tesco_price(product_url):
     html = resp.text
     price, name = extract_json_ld_price(html)
     if price:
-        return price, name or extract_og_title(html), None
+        was_price, on_promotion, promo_label = extract_tesco_promo(html)
+        return price, name or extract_og_title(html), None, was_price, on_promotion, promo_label
 
     patterns = [
         r'data-auto="price-per-sellable-unit"[^>]*>\s*[£€](\d+\.?\d*)',
@@ -233,15 +278,17 @@ def extract_tesco_price(product_url):
             try:
                 p = float(f"{m.group(1)}.{m.group(2)}") if len(m.groups()) == 2 else float(m.group(1))
                 if p > 0:
-                    return p, extract_og_title(html), None
+                    was_price, on_promotion, promo_label = extract_tesco_promo(html)
+                    return p, extract_og_title(html), None, was_price, on_promotion, promo_label
             except Exception:
                 pass
 
     p = extract_euro_price_fallback(html)
     if p:
-        return p, extract_og_title(html), None
+        was_price, on_promotion, promo_label = extract_tesco_promo(html)
+        return p, extract_og_title(html), None, was_price, on_promotion, promo_label
 
-    return None, None, "No price found"
+    return None, None, "No price found", None, False, None
 
 
 # ============================================================
@@ -285,11 +332,12 @@ def extract_supervalu_price(product_url):
             price = float(euros[0])
             if price > 0:
                 name = extract_og_title(html)
-                return price, name, None
+                was_price, on_promotion, promo_label = extract_supervalu_promo(html)
+                return price, name, None, was_price, on_promotion, promo_label
         except Exception:
             pass
 
-    return None, None, "No price found"
+    return None, None, "No price found", None, False, None
 
 
 # ============================================================
@@ -350,15 +398,18 @@ def extract_dunnes_price(product_url):
         )
         data = json.loads(result.stdout.strip())
         if 'error' in data:
-            return None, None, data['error']
+            return None, None, data['error'], None, False, None
         price = data.get('priceNumeric')
         name = data.get('name', '')
+        on_promotion = data.get('onPromotion', False)
+        was_price = data.get('wasPrice')
+        promo_label = data.get('promotionLabel')
         if price and float(price) > 0:
-            return float(price), name, None
+            return float(price), name, None, was_price, on_promotion, promo_label
     except Exception as e:
         pass
 
-    return None, None, "Price extraction failed"
+    return None, None, "Price extraction failed", None, False, None
 
 
 # ============================================================
@@ -381,14 +432,17 @@ EXTRACTORS = {
 # INSERT PRICE OBSERVATION
 # ============================================================
 
-def insert_price_observation(store_product_id, price, product_name, source_url):
+def insert_price_observation(store_product_id, price, product_name, source_url, was_price=None, on_promotion=False, promo_label=None):
     ok, status, resp = supabase_post("price_observations", {
         "store_product_id": store_product_id,
         "price": price,
-        "was_price": None,
-        "on_promotion": False,
+        "was_price": was_price,
+        "on_promotion": bool(on_promotion),
         "observed_at": datetime.now(timezone.utc).isoformat(),
     })
+    if on_promotion:
+        label = promo_label or "Offer"
+        print(f"    🏷️  On offer: {product_name} — {label}" + (f" (was €{was_price:.2f})" if was_price else ""))
     return ok
 
 
@@ -441,7 +495,10 @@ def run_resolve(stores, limit, stats):
                     # Also insert price while we have it
                     price = data.get('priceNumeric')
                     if price and float(price) > 0:
-                        insert_price_observation(sp_id, float(price), data.get('name', name), product_url)
+                        on_promotion = data.get('onPromotion', False)
+                        was_price = data.get('wasPrice')
+                        promo_label = data.get('promotionLabel')
+                        insert_price_observation(sp_id, float(price), data.get('name', name), product_url, was_price, on_promotion, promo_label)
                         print(f"      💰 Price inserted: €{float(price):.2f}")
                 time.sleep(1)
                 continue
@@ -506,11 +563,14 @@ def run_refresh(stores, limit, stats):
                 else:
                     price = data.get('priceNumeric')
                     scraped_name = data.get('name', name)
+                    on_promotion = data.get('onPromotion', False)
+                    was_price = data.get('wasPrice')
+                    promo_label = data.get('promotionLabel')
                     if price and float(price) > 0:
                         print(f"    ✓ {name[:50]} → €{float(price):.2f}")
                         s["prices"] += 1
                         s["total"] += 1
-                        ok = insert_price_observation(sp_id, float(price), scraped_name, data.get('url', product_url))
+                        ok = insert_price_observation(sp_id, float(price), scraped_name, data.get('url', product_url), was_price, on_promotion, promo_label)
                         if not ok:
                             print(f"      ⚠ DB insert failed")
                     else:
@@ -520,7 +580,7 @@ def run_refresh(stores, limit, stats):
                 continue
 
             s["total"] += 1
-            price, scraped_name, err = extract_fn(product_url)
+            price, scraped_name, err, was_price, on_promotion, promo_label = extract_fn(product_url)
 
             if err or price is None:
                 print(f"    ✗ {name[:50]} → {err}")
@@ -528,7 +588,7 @@ def run_refresh(stores, limit, stats):
             else:
                 print(f"    ✓ {name[:50]} → €{price:.2f}")
                 s["prices"] += 1
-                ok = insert_price_observation(sp_id, price, scraped_name or name, product_url)
+                ok = insert_price_observation(sp_id, price, scraped_name or name, product_url, was_price, on_promotion, promo_label)
                 if not ok:
                     print(f"      ⚠ DB insert failed")
 

@@ -149,37 +149,39 @@ async function getCategoryProducts(category: string) {
 
   const { data: priceRows } = await supabaseAdmin
     .from('price_observations')
-    .select('store_product_id, price, observed_at')
+    .select('store_product_id, price, on_promotion, was_price, observed_at')
     .order('observed_at', { ascending: false })
     .limit(3000);
 
   if (!spRows || !priceRows) return null;
 
   // Latest price per store_product
-  const latestPrice = new Map<string, number>();
+  const latestPrice = new Map<string, { price: number; on_promotion: boolean; was_price: number | null }>();
   for (const row of priceRows) {
     if (!latestPrice.has(row.store_product_id)) {
-      latestPrice.set(row.store_product_id, row.price);
+      latestPrice.set(row.store_product_id, { price: row.price, on_promotion: row.on_promotion, was_price: row.was_price });
     }
   }
 
   // Group by canonical product, filter to category
-  const byProduct = new Map<string, { canonical: string; stores: Map<string, { price: number; name: string; url: string | null }> }>();
+  const byProduct = new Map<string, { canonical: string; stores: Map<string, { price: number; name: string; url: string | null; on_promotion: boolean; was_price: number | null }> }>();
 
   for (const sp of spRows) {
     const p = sp.products as unknown as { canonical_name: string; category: string } | null;
     if (!p) continue;
     if (p.category.toLowerCase() !== category.toLowerCase()) continue;
-    const price = latestPrice.get(sp.id);
-    if (!price) continue;
+    const obs = latestPrice.get(sp.id);
+    if (!obs) continue;
 
     if (!byProduct.has(p.canonical_name)) {
       byProduct.set(p.canonical_name, { canonical: p.canonical_name, stores: new Map() });
     }
     byProduct.get(p.canonical_name)!.stores.set(sp.store, {
-      price,
+      price: obs.price,
       name: sp.store_product_name,
       url: sp.store_url,
+      on_promotion: obs.on_promotion ?? false,
+      was_price: obs.was_price ?? null,
     });
   }
 
@@ -295,22 +297,33 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
                   <div key={canonical} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-[#1D2324]">{canonical}</div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="text-sm font-medium text-[#1D2324]">{canonical}</div>
+                          {best && best[1].on_promotion && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide bg-[#E17055] text-white px-1.5 py-0.5 rounded-md">🏷️ Offer</span>
+                          )}
+                        </div>
                         {best && (
                           <div className="text-xs text-[#636E72] mt-0.5">
                             Best: <span style={{ color: STORE_INFO[best[0] as keyof typeof STORE_INFO]?.color }}>{STORE_INFO[best[0] as keyof typeof STORE_INFO]?.name}</span>
                           </div>
                         )}
                       </div>
-                      {best && (
-                        <div className="text-sm font-bold text-[#1D2324] flex-shrink-0">{fmt(best[1].price)}</div>
-                      )}
+                      <div className="text-right flex-shrink-0">
+                        {best && (
+                          <div className="text-sm font-bold text-[#1D2324]">{fmt(best[1].price)}</div>
+                        )}
+                        {best && best[1].was_price && (
+                          <div className="text-xs text-[#B2BEC3] line-through">{fmt(best[1].was_price)}</div>
+                        )}
+                      </div>
                     </div>
                     {sorted.length > 1 && (
                       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                        {sorted.map(([store, { price }]) => (
+                        {sorted.map(([store, { price, on_promotion }]) => (
                           <span key={store} className="text-xs text-[#B2BEC3]">
                             {STORE_INFO[store as keyof typeof STORE_INFO]?.name.split(' ')[0]} {fmt(price)}
+                            {on_promotion && <span className="ml-0.5 text-[#E17055]">🏷️</span>}
                           </span>
                         ))}
                       </div>

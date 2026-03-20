@@ -62,6 +62,21 @@ async function searchProducts(query, take = 5) {
 
   // Return the first available product
   const item = result.data.items.find(i => i.available !== false) || result.data.items[0];
+
+  // Detect promotion via tprPrice (Temporary Price Reduction)
+  const activeTpr = (item.tprPrice || []).find(t => t.active === true);
+  const onPromotion = !!activeTpr;
+  // For Dunnes, tprPrice.markdown IS the sale price — we need the regular price.
+  // The regular price isn't directly exposed when on TPR, but wholePrice = promo price when active.
+  // Best signal: if tprPrice has an upcoming inactive entry with a higher price, use that.
+  // Otherwise mark as on_promotion=true with was_price=null (we just know it's a deal).
+  let wasPrice = null;
+  if (activeTpr) {
+    // Look for a future/past tprPrice entry to infer regular price — not reliable.
+    // Instead flag it and leave was_price null; pipeline will handle.
+    wasPrice = null;
+  }
+
   return {
     sku: item.sku,
     name: item.name,
@@ -70,6 +85,9 @@ async function searchProducts(query, take = 5) {
     priceNumeric: item.priceNumeric,
     pricePerUnit: item.pricePerUnit || '',
     available: item.available,
+    onPromotion,
+    wasPrice,
+    promotionLabel: activeTpr ? activeTpr.label : null,
     url: `${SITE_URL}/sm/delivery/rsid/${STORE_ID}/product/details/${encodeURIComponent((item.name || '').toLowerCase().replace(/\s+/g, '-'))}/${item.sku}`,
   };
 }
