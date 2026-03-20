@@ -248,57 +248,45 @@ def extract_tesco_price(product_url):
 # ============================================================
 
 def resolve_supervalu_url(search_url, product_name):
-    if "/search-results?" not in search_url:
-        query = urllib.parse.quote(product_name)
-        url = f"https://shop.supervalu.ie/shopping/search-results?q={query}"
-    else:
-        url = search_url
+    # SuperValu uses rsid/5550 path, search at /sm/delivery/rsid/5550/results?q=
+    query = urllib.parse.quote(product_name)
+    url = f"https://shop.supervalu.ie/sm/delivery/rsid/5550/results?q={query}"
 
-    resp = sb_fetch(url)
+    resp = sb_fetch(url, render_js=True)  # SPA needs JS to render product slugs
     if resp.status_code != 200:
         return None, None, f"HTTP {resp.status_code}"
 
     html = resp.text
-    links = re.findall(r'href="(/shopping/product/([a-zA-Z0-9\-]+))"', html)
-    if not links:
-        links = re.findall(r'"(/shopping/product/([^"]+))"', html)
-    if not links:
-        return None, None, "No product links found"
+    # Product slugs appear in JSON data as: /product/[slug]-id-[id]
+    slugs = re.findall(r'/product/([a-z0-9\-]+-id-\d+)', html)
+    if not slugs:
+        return None, None, "No product slugs found"
 
-    path, slug = links[0]
-    sku_m = re.search(r'-(\d+)$', slug)
+    slug = slugs[0]
+    sku_m = re.search(r'-id-(\d+)$', slug)
     sku = sku_m.group(1) if sku_m else slug
-    return f"https://shop.supervalu.ie{path}", sku, None
+    product_url = f"https://shop.supervalu.ie/sm/delivery/rsid/5550/product/{slug}"
+    return product_url, sku, None
 
 
 def extract_supervalu_price(product_url):
-    resp = sb_fetch(product_url, render_js=True)  # needs JS for JSON-LD
+    resp = sb_fetch(product_url, render_js=True)  # needs JS to render price
     if resp.status_code != 200:
         return None, None, f"HTTP {resp.status_code}"
 
     html = resp.text
-    price, name = extract_json_ld_price(html)
-    if price:
-        return price, name or extract_og_title(html), None
 
-    patterns = [
-        r'class="[^"]*selling[^"]*price[^"]*"[^>]*>\s*[€£]?\s*(\d+\.?\d*)',
-        r'class="[^"]*current[^"]*price[^"]*"[^>]*>\s*[€£]?\s*(\d+\.?\d*)',
-        r'"price"[^:]*:\s*"?([0-9]+\.?[0-9]*)"?',
-    ]
-    for pat in patterns:
-        m = re.search(pat, html, re.IGNORECASE)
-        if m:
-            try:
-                p = float(m.group(1))
-                if p > 0:
-                    return p, extract_og_title(html), None
-            except Exception:
-                pass
-
-    p = extract_euro_price_fallback(html)
-    if p:
-        return p, extract_og_title(html), None
+    # SuperValu doesn't put price in JSON-LD — extract first euro price from HTML
+    # The current price appears as €X.XX multiple times; first occurrence is the product price
+    euros = re.findall(r'€(\d+\.\d{2})', html)
+    if euros:
+        try:
+            price = float(euros[0])
+            if price > 0:
+                name = extract_og_title(html)
+                return price, name, None
+        except Exception:
+            pass
 
     return None, None, "No price found"
 
