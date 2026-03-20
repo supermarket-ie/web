@@ -21,6 +21,67 @@ export type Section =
 
 export const POSTS: BlogPost[] = [
   {
+    slug: 'is-it-worth-shopping-at-multiple-supermarkets-ireland',
+    title: 'Is It Worth Shopping at Multiple Supermarkets in Ireland?',
+    description: 'Our price data across 300+ products shows you can save up to €12.10 per week by shopping at the right store — and even more by splitting your shop.',
+    date: '2026-03-20',
+    category: 'Saving Money',
+    readingTime: '4 min read',
+    content: [
+      {
+        type: 'intro',
+        text: 'Most Irish shoppers pick one supermarket and stick to it. Convenient, yes — but our live price data across 300+ products suggests that loyalty to a single store could be costing you more than you think.',
+      },
+      { type: 'h2', text: 'What the data shows' },
+      {
+        type: 'p',
+        text: 'We track prices twice weekly across Tesco, Dunnes Stores and SuperValu. Looking at a standard weekly basket of 80+ products, the difference between the cheapest and most expensive store is consistently €10–€15. Our latest data puts the saving at up to €12.10 per week — or over €600 a year.',
+      },
+      { type: 'h2', text: 'Splitting your shop by category' },
+      {
+        type: 'p',
+        text: 'The bigger opportunity isn\'t just picking the cheapest store overall — it\'s splitting your shop by category. No single supermarket wins across every aisle. Based on our data:',
+      },
+      {
+        type: 'ul',
+        items: [
+          'Dairy: Dunnes own-brand milk, butter and cheese tend to undercut both Tesco and SuperValu',
+          'Meat: Tesco and Dunnes are competitive on packaged cuts; SuperValu wins on quality but not always price',
+          'Fresh veg & fruit: prices are close across all three, but SuperValu often has better variety',
+          'Bakery: Dunnes own-brand bread is consistently among the cheapest options',
+          'Household & toiletries: Tesco Clubcard prices can be 20–40% cheaper on specific products',
+        ],
+      },
+      { type: 'h2', text: 'Is the hassle worth it?' },
+      {
+        type: 'p',
+        text: 'Shopping at two stores adds time — but it doesn\'t have to mean two full shops. A practical split is doing your main shop (meat, dairy, bakery, staples) at whichever store is cheapest that week, then picking up fresh produce wherever is most convenient. That alone can save €5–8 per week with minimal extra effort.',
+      },
+      {
+        type: 'tip',
+        heading: 'The smart way to split',
+        text: 'Use our AI planner to generate your weekly list — it shows live prices from all three stores side by side, so you can see at a glance where each item is cheapest and decide whether to split.',
+      },
+      { type: 'h2', text: 'What about Lidl and Aldi?' },
+      {
+        type: 'p',
+        text: 'Lidl and Aldi are widely regarded as cheapest overall in Ireland, but they don\'t offer online grocery shopping, so we can\'t track their prices systematically. Anecdotally, adding a Lidl or Aldi run for basics (tinned goods, cereals, household) on top of a Dunnes or Tesco shop for fresh items is one of the most effective strategies for cutting your weekly bill.',
+      },
+      { type: 'h2', text: 'How much could you actually save?' },
+      {
+        type: 'p',
+        text: 'Based on our current data: switching from the most expensive store to the cheapest saves up to €12.10 per week. That\'s €630 per year for a household of four. Splitting your shop by category — buying each item at its cheapest store — could save more again. The exact number depends on what you buy, but the direction is clear: loyalty to one store without checking prices is costing you money.',
+      },
+      {
+        type: 'cta',
+        heading: 'See which store is cheapest for your shop',
+        text: 'Our AI planner shows live prices for every item on your list across Tesco, Dunnes and SuperValu — so you can make the call yourself.',
+        link: '/',
+        linkText: 'Build my list free →',
+      },
+    ],
+  },
+  {
     slug: 'cheapest-supermarket-ireland-2026',
     title: 'Cheapest Supermarket in Ireland 2026: Tesco vs Dunnes vs SuperValu',
     description: 'We tracked prices on 300+ products across Ireland\'s three main supermarkets. Here\'s which one is cheapest — and where you should be buying each category.',
