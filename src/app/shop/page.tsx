@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { SiteHeader } from '@/components/SiteHeader';
 
 export const metadata: Metadata = {
   title: 'Shop by Category — Grocery Prices Ireland | supermarket.ie',
@@ -30,16 +31,9 @@ const CATEGORIES = [
 export default function ShopPage() {
   return (
     <div className="min-h-screen bg-[#FFFBF7]">
-      <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <Link href="/" className="font-bold text-lg text-[#1D2324]">supermarket<span className="text-[#E17055]">.ie</span></Link>
-          <Link href="/" className="text-xs bg-[#E17055] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#D4604A] transition">
-            Build my list →
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
 
-      <main className="max-w-3xl mx-auto px-4 pb-16">
+      <main className="max-w-6xl mx-auto px-6 pb-16">
         <div className="pt-10 pb-8">
           <h1 className="text-3xl font-bold text-[#1D2324] mb-3">Shop by category</h1>
           <p className="text-[#636E72]">
@@ -48,7 +42,7 @@ export default function ShopPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {CATEGORIES.map(cat => (
             <Link key={cat.slug} href={`/shop/${cat.slug}`}
               className="bg-white rounded-2xl border border-[#E8E2DC] p-4 hover:border-[#E17055]/40 hover:shadow-sm transition group">
@@ -68,7 +62,7 @@ export default function ShopPage() {
         </div>
       </main>
 
-      <footer className="border-t border-[#E8E2DC] py-6 px-4 text-center text-xs text-[#B2BEC3]">
+      <footer className="border-t border-[#E8E2DC] py-6 px-6 text-center text-xs text-[#B2BEC3]">
         <Link href="/" className="hover:text-[#636E72]">supermarket.ie</Link>
         {' · '}
         <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="hover:text-[#636E72]">Store comparison</Link>

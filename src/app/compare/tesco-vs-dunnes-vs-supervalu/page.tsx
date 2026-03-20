@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase';
+import { SiteHeader } from '@/components/SiteHeader';
 
 export const revalidate = 86400; // Revalidate daily
 
@@ -104,18 +105,9 @@ export default async function ComparePage() {
 
   return (
     <div className="min-h-screen bg-[#FFFBF7]">
-      <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <Link href="/" className="font-bold text-lg text-[#1D2324]">
-            supermarket<span className="text-[#E17055]">.ie</span>
-          </Link>
-          <Link href="/" className="text-xs bg-[#E17055] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#D4604A] transition">
-            Build my list →
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
 
-      <main className="max-w-3xl mx-auto px-4 pb-16">
+      <main className="max-w-6xl mx-auto px-6 pb-16">
         {/* Hero */}
         <div className="pt-10 pb-8">
           <div className="text-xs font-semibold text-[#E17055] uppercase tracking-widest mb-3">Live Price Comparison · Ireland 2026</div>
@@ -125,7 +117,6 @@ export default async function ComparePage() {
           </h1>
           <p className="text-[#636E72] text-base max-w-xl">
             We track live prices across {overallCount}+ products at Ireland's three main supermarkets.
-            Prices updated twice weekly — last updated today.
           </p>
         </div>
 
@@ -269,9 +260,9 @@ export default async function ComparePage() {
         </div>
       </main>
 
-      <footer className="border-t border-[#E8E2DC] py-6 px-4 text-center text-xs text-[#B2BEC3]">
-        <Link href="/" className="hover:text-[#636E72]">supermarket.ie</Link>
-        {' · '}Prices updated twice weekly · Ireland grocery comparison
+      <footer className="border-t border-[#E8E2DC] py-6 px-6 text-center text-xs text-[#B2BEC3] max-w-6xl mx-auto">
+        <a href="/" className="hover:text-[#636E72]">supermarket.ie</a>
+        {' · '}Ireland grocery price comparison
       </footer>
     </div>
   );

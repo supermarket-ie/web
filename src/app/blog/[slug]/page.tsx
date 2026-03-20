@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { SiteHeader } from '@/components/SiteHeader';
 import { notFound } from 'next/navigation';
 import { POSTS, getPost, type Section } from '@/lib/blog';
 
@@ -89,16 +90,9 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
   return (
     <div className="min-h-screen bg-[#FFFBF7]">
-      <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <Link href="/" className="font-bold text-lg text-[#1D2324]">supermarket<span className="text-[#E17055]">.ie</span></Link>
-          <Link href="/" className="text-xs bg-[#E17055] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#D4604A] transition">
-            Build my list →
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
 
-      <main className="max-w-2xl mx-auto px-4 pb-16">
+      <main className="max-w-3xl mx-auto px-6 pb-16">
         {/* Breadcrumb */}
         <nav className="pt-6 pb-2 text-xs text-[#B2BEC3]">
           <Link href="/" className="hover:text-[#636E72]">Home</Link>
@@ -150,7 +144,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         )}
       </main>
 
-      <footer className="border-t border-[#E8E2DC] py-6 px-4 text-center text-xs text-[#B2BEC3]">
+      <footer className="border-t border-[#E8E2DC] py-6 px-6 text-center text-xs text-[#B2BEC3]">
         <Link href="/" className="hover:text-[#636E72]">supermarket.ie</Link>
         {' · '}
         <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="hover:text-[#636E72]">Price comparison</Link>
