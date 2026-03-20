@@ -9,7 +9,7 @@ async function getPriceCatalogue() {
   // Get latest price observations joined to product names
   const { data } = await supabaseAdmin
     .from('price_observations')
-    .select('price, store, store_products(store_product_name, unit_size, products(canonical_name, category))')
+    .select('price, store_products(store, store_product_name, products(canonical_name, category))')
     .order('observed_at', { ascending: false })
     .limit(2000);
 
@@ -22,15 +22,16 @@ async function getPriceCatalogue() {
   const map = new Map<string, Map<string, { price: number; unit: string }>>();
 
   for (const row of data) {
-    const sp = row.store_products as unknown as { store_product_name: string; unit_size: string | null; products: { canonical_name: string; category: string | null } | null } | null;
+    const sp = row.store_products as unknown as { store: string; store_product_name: string; products: { canonical_name: string; category: string | null } | null } | null;
     const canonical = sp?.products?.canonical_name;
-    if (!canonical || !row.store || !row.price) continue;
+    const store = sp?.store;
+    if (!canonical || !store || !row.price) continue;
 
     if (!map.has(canonical)) map.set(canonical, new Map());
     const storeMap = map.get(canonical)!;
-    const existing = storeMap.get(row.store);
+    const existing = storeMap.get(store);
     if (!existing || row.price < existing.price) {
-      storeMap.set(row.store, { price: row.price, unit: sp?.unit_size ?? '' });
+      storeMap.set(store, { price: row.price, unit: '' });
     }
   }
 
