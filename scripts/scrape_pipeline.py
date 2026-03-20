@@ -21,6 +21,7 @@ import sys
 import json
 import time
 import argparse
+import subprocess
 import urllib.parse
 import requests
 from datetime import datetime, timezone
@@ -295,63 +296,69 @@ def extract_supervalu_price(product_url):
 # DUNNES
 # ============================================================
 
+# ============================================================
+# DUNNES — uses Playwright via Node.js subprocess
+# Calls dunnes_scraper.js which hits the Instacart Storefront API
+# No ScrapingBee credits used for Dunnes
+# ============================================================
+
+DUNNES_SCRAPER = os.path.join(os.path.dirname(__file__), 'dunnes_scraper.js')
+
+def dunnes_search(product_name):
+    """Call dunnes_scraper.js and return parsed JSON result."""
+    try:
+        result = subprocess.run(
+            ['node', DUNNES_SCRAPER, product_name],
+            capture_output=True, text=True, timeout=60,
+            cwd=os.path.dirname(DUNNES_SCRAPER)
+        )
+        if result.returncode != 0 and not result.stdout.strip():
+            return None, f"node error: {result.stderr[:200]}"
+        data = json.loads(result.stdout.strip())
+        if 'error' in data:
+            return None, data['error']
+        return data, None
+    except subprocess.TimeoutExpired:
+        return None, "Timeout"
+    except Exception as e:
+        return None, str(e)
+
+
 def resolve_dunnes_url(search_url, product_name):
-    if "/search?" not in search_url:
-        query = urllib.parse.quote(product_name)
-        url = f"https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/search?q={query}"
-    else:
-        url = search_url
-
-    resp = sb_fetch(url)
-    if resp.status_code != 200:
-        return None, None, f"HTTP {resp.status_code}"
-
-    html = resp.text
-    if len(html) < 5000 or "access denied" in html.lower() or "are you human" in html.lower():
-        return None, None, "Blocked by bot detection"
-
-    links = re.findall(r'href="(/sm/delivery/rsid/258/product/([^"?]+))"', html)
-    if not links:
-        links = re.findall(r'"(/sm/delivery/rsid/258/product/([^"]+))"', html)
-    if not links:
-        return None, None, f"No product links found (html_len={len(html)})"
-
-    path, slug = links[0]
-    return f"https://www.dunnesstoresgrocery.com{path}", slug, None
+    """Resolve Dunnes product URL via the gateway API."""
+    data, err = dunnes_search(product_name)
+    if err or not data:
+        return None, None, err or "No result"
+    return data['url'], data['sku'], None
 
 
 def extract_dunnes_price(product_url):
-    resp = sb_fetch(product_url, render_js=True)  # needs JS for JSON-LD
-    if resp.status_code != 200:
-        return None, None, f"HTTP {resp.status_code}"
+    """For Dunnes we already have the price from the search API — re-search by name."""
+    # Extract product name from URL for re-search
+    # URL pattern: /product/details/[name-slug]/[sku]
+    m = re.search(r'/product/details/([^/]+)/(\d+)$', product_url)
+    if not m:
+        return None, None, "Cannot parse product URL"
 
-    html = resp.text
-    if len(html) < 5000:
-        return None, None, "Blocked by bot detection"
+    sku = m.group(2)
 
-    price, name = extract_json_ld_price(html)
-    if price:
-        return price, name or extract_og_title(html), None
+    # Re-search using the SKU to get fresh price
+    try:
+        result = subprocess.run(
+            ['node', DUNNES_SCRAPER, sku],
+            capture_output=True, text=True, timeout=60
+        )
+        data = json.loads(result.stdout.strip())
+        if 'error' in data:
+            return None, None, data['error']
+        price = data.get('priceNumeric')
+        name = data.get('name', '')
+        if price and float(price) > 0:
+            return float(price), name, None
+    except Exception as e:
+        pass
 
-    patterns = [
-        r'class="[^"]*price[^"]*"[^>]*>\s*[€£]?\s*(\d+\.?\d*)',
-        r'"price":\s*"?([0-9]+\.?[0-9]*)"?',
-    ]
-    for pat in patterns:
-        m = re.search(pat, html, re.IGNORECASE)
-        if m:
-            try:
-                p = float(m.group(1))
-                if p > 0:
-                    return p, extract_og_title(html), None
-            except Exception:
-                pass
-
-    p = extract_euro_price_fallback(html)
-    if p:
-        return p, extract_og_title(html), None
-
-    return None, None, "No price found"
+    return None, None, "Price extraction failed"
 
 
 # ============================================================
@@ -413,6 +420,32 @@ def run_resolve(stores, limit, stats):
             name = sp["store_product_name"]
             search_url = sp.get("store_url") or ""
 
+            # Dunnes: resolve + price in one API call, no ScrapingBee
+            if store == "dunnes":
+                data, err = dunnes_search(name)
+                if err or not data:
+                    print(f"    ✗ {name[:50]} → {err}")
+                    s["errors"].append(f"resolve|{name}|{err}")
+                    supabase_patch("store_products", sp_id, {"url_status": "failed"})
+                else:
+                    product_url = data['url']
+                    sku = data['sku']
+                    print(f"    ✓ {name[:50]} → {product_url[:60]}")
+                    s["resolved"] += 1
+                    s["total"] += 1
+                    supabase_patch("store_products", sp_id, {
+                        "store_url": product_url,
+                        "store_sku": str(sku),
+                        "url_status": "resolved",
+                    })
+                    # Also insert price while we have it
+                    price = data.get('priceNumeric')
+                    if price and float(price) > 0:
+                        insert_price_observation(sp_id, float(price), data.get('name', name), product_url)
+                        print(f"      💰 Price inserted: €{float(price):.2f}")
+                time.sleep(1)
+                continue
+
             s["total"] += 1
             product_url, sku, err = resolve_fn(search_url, name)
 
@@ -462,6 +495,28 @@ def run_refresh(stores, limit, stats):
 
             if not product_url or "/search?" in product_url or "/search-results?" in product_url:
                 print(f"    ⚠ {name[:50]} — still has search URL, skipping")
+                continue
+
+            # Dunnes: bypass ScrapingBee entirely, use Playwright API directly
+            if store == "dunnes":
+                data, err = dunnes_search(name)
+                if err or not data:
+                    print(f"    ✗ {name[:50]} → {err}")
+                    s["errors"].append(f"price|{name}|{err}")
+                else:
+                    price = data.get('priceNumeric')
+                    scraped_name = data.get('name', name)
+                    if price and float(price) > 0:
+                        print(f"    ✓ {name[:50]} → €{float(price):.2f}")
+                        s["prices"] += 1
+                        s["total"] += 1
+                        ok = insert_price_observation(sp_id, float(price), scraped_name, data.get('url', product_url))
+                        if not ok:
+                            print(f"      ⚠ DB insert failed")
+                    else:
+                        print(f"    ✗ {name[:50]} → No price in response")
+                        s["errors"].append(f"price|{name}|no price")
+                time.sleep(1)
                 continue
 
             s["total"] += 1
