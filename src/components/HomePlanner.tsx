@@ -114,6 +114,13 @@ export function HomePlanner() {
 
     abortRef.current = new AbortController();
 
+    // Track chat usage (best-effort, don't await)
+    fetch('/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'plan_requested', properties: { household_size: householdSize } }),
+    }).catch(() => {});
+
     try {
       const res = await fetch('/api/plan', {
         method: 'POST',

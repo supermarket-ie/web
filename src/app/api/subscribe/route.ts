@@ -3,6 +3,19 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { resend } from '@/lib/resend';
 import crypto from 'crypto';
 
+async function notifyTelegram(text: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    });
+  } catch {}
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { email, familySize } = await request.json();
@@ -57,6 +70,20 @@ export async function POST(request: NextRequest) {
 
       if (insertError) throw insertError;
     }
+
+    // Count total subscribers
+    const { count } = await supabaseAdmin
+      .from('subscribers')
+      .select('*', { count: 'exact', head: true })
+      .eq('subscribed', true);
+
+    // Notify via Telegram
+    const isNew = !existing;
+    const label = isNew ? '🆕 New subscriber' : '🔄 Re-subscribed';
+    const familyLabel: Record<string, string> = { '1': '1 person', '2': '2 people', '3-4': '3–4 people', '5+': '5+ people' };
+    await notifyTelegram(
+      `${label} on supermarket.ie!\n\n📧 ${email}\n👥 ${familyLabel[familySize] ?? familySize}\n📊 Total subscribers: ${count ?? '?'}`
+    );
 
     // Send welcome email
     const unsubscribeUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`;
