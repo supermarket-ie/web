@@ -5,6 +5,7 @@ import { generateList, getAllProducts, type SmartList, type FamilySize } from '@
 import { supabaseAdmin } from '@/lib/supabase';
 import { ShoppingList } from '@/components/ShoppingList';
 import { TokenPersist } from '@/components/TokenPersist';
+import { SavedListsPanel } from '@/components/SavedListsPanel';
 
 export const metadata: Metadata = {
   title: 'Your weekly shopping list',
@@ -216,6 +217,9 @@ export default async function ListPage({
             <strong className="text-[#1D2324]">{familySizeLabel(familySize)}</strong>
           </p>
         </div>
+
+        {/* Saved lists */}
+        <SavedListsPanel token={token!} />
 
         {list.items.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#E8E2DC] p-8 text-center text-[#636E72]">

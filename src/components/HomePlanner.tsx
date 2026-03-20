@@ -82,6 +82,10 @@ export function HomePlanner() {
   const [gateDone, setGateDone] = useState(false);
   const [session, setSession] = useState<{ token: string } | null>(null);
   const [exampleOffset, setExampleOffset] = useState(0);
+  const [lastPrompt, setLastPrompt] = useState('');
+  const [lastItems, setLastItems] = useState<unknown[]>([]);
+  const [lastStoreTotals, setLastStoreTotals] = useState<unknown[]>([]);
+  const [listSaved, setListSaved] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -105,12 +109,14 @@ export function HomePlanner() {
     if (!userText.trim() || isLoading) return;
     setStarted(true);
     setShowGate(false);
+    setListSaved(false);
 
     const newMessages: Message[] = [...messages, { role: 'user', content: userText }];
     setMessages(newMessages);
     setInput('');
     setIsLoading(true);
-    shouldScrollRef.current = true; // scroll to show user message + typing indicator
+    setLastPrompt(prev => messages.length === 0 ? userText : prev); // only set on first message
+    shouldScrollRef.current = true;
 
     abortRef.current = new AbortController();
 
@@ -169,6 +175,23 @@ export function HomePlanner() {
       if (!session && !gateDone && isList) {
         setTimeout(() => setShowGate(true), 500);
       }
+
+      // If already logged in and got a list, auto-save it
+      if (session && isList) {
+        fetch('/api/lists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: session.token,
+            name: lastPrompt.slice(0, 60) || 'My list',
+            meals_prompt: lastPrompt,
+            family_size: String(householdSize),
+            items: [],       // items snapshot not available here — saved on list page
+            store_totals: [],
+            is_default: false,
+          }),
+        }).then(r => r.json()).then(d => { if (d.list) setListSaved(true); }).catch(() => {});
+      }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
@@ -223,9 +246,10 @@ export function HomePlanner() {
 
       {/* Logged-in save link */}
       {session && messages.some(m => m.role === 'assistant' && m.content) && !isLoading && (
-        <div className="mb-2 text-xs text-[#5D9B8F] font-semibold flex items-center gap-1">
+        <div className="mb-2 text-xs text-[#5D9B8F] font-semibold flex items-center gap-2">
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
           <a href={`/list?token=${session.token}`} className="underline hover:text-[#4A8A7E]">View my saved list →</a>
+          {listSaved && <span className="text-[#B2BEC3] font-normal">· list saved ✓</span>}
         </div>
       )}
 
