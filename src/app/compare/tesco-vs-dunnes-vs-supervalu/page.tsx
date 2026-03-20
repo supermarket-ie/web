@@ -1,0 +1,278 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { supabaseAdmin } from '@/lib/supabase';
+
+export const revalidate = 86400; // Revalidate daily
+
+export const metadata: Metadata = {
+  title: 'Tesco vs Dunnes Stores vs SuperValu — Price Comparison Ireland 2026',
+  description: 'Compare grocery prices across Tesco, Dunnes Stores and SuperValu in Ireland. See which supermarket is cheapest for your weekly shop with live price data updated twice weekly.',
+  keywords: ['Tesco vs Dunnes Ireland', 'cheapest supermarket Ireland 2026', 'SuperValu price comparison', 'Irish supermarket prices', 'grocery comparison Ireland'],
+  openGraph: {
+    title: 'Tesco vs Dunnes vs SuperValu — Which is Cheapest in Ireland?',
+    description: 'Live price comparison across Ireland\'s three main supermarkets. Updated twice weekly with real prices.',
+  },
+};
+
+function fmt(n: number) { return `€${n.toFixed(2)}`; }
+
+const STORE_INFO = {
+  tesco:     { name: 'Tesco',          color: '#003A8C', light: '#EEF3FB', tagline: 'Largest range' },
+  dunnes:    { name: 'Dunnes Stores',  color: '#7B0017', light: '#FAEAEC', tagline: 'Strong on own-brand' },
+  supervalu: { name: 'SuperValu',      color: '#D4400F', light: '#FEF0E8', tagline: 'Premium fresh range' },
+};
+
+const BASKET_CATEGORIES = [
+  'Dairy', 'Bakery', 'Meat', 'Fruit', 'Vegetables',
+  'Breakfast', 'Pasta & Rice', 'Tinned', 'Beverages', 'Snacks',
+];
+
+async function getComparisonData() {
+  const { data: priceRows } = await supabaseAdmin
+    .from('price_observations')
+    .select('price, store_products(store, products(canonical_name, category))')
+    .order('observed_at', { ascending: false })
+    .limit(3000);
+
+  if (!priceRows) return null;
+
+  // latest price per product per store
+  const latest = new Map<string, number>(); // "productId:store" → price
+  const byProduct = new Map<string, { category: string; stores: Map<string, number> }>();
+
+  for (const row of priceRows) {
+    const sp = row.store_products as unknown as { store: string; products: { canonical_name: string; category: string } | null } | null;
+    const name = sp?.products?.canonical_name;
+    const store = sp?.store;
+    const category = sp?.products?.category;
+    if (!name || !store || !row.price) continue;
+    const key = `${name}:${store}`;
+    if (latest.has(key)) continue;
+    latest.set(key, row.price);
+    if (!byProduct.has(name)) byProduct.set(name, { category: category ?? 'Other', stores: new Map() });
+    byProduct.get(name)!.stores.set(store, row.price);
+  }
+
+  // Category totals per store (products available in all 3 stores)
+  const categoryTotals: Record<string, Record<string, number>> = {};
+  const categoryCount: Record<string, number> = {};
+  let overallTotals: Record<string, number> = { tesco: 0, dunnes: 0, supervalu: 0 };
+  let overallCount = 0;
+
+  for (const [, { category, stores }] of byProduct) {
+    if (stores.size < 3) continue; // only products in all 3 stores
+    if (!BASKET_CATEGORIES.includes(category)) continue;
+
+    if (!categoryTotals[category]) {
+      categoryTotals[category] = { tesco: 0, dunnes: 0, supervalu: 0 };
+      categoryCount[category] = 0;
+    }
+
+    for (const [store, price] of stores) {
+      categoryTotals[category][store] = (categoryTotals[category][store] ?? 0) + price;
+      overallTotals[store] = (overallTotals[store] ?? 0) + price;
+    }
+    categoryCount[category]++;
+    overallCount++;
+  }
+
+  // Sample products per category for the table
+  const samples: Record<string, { name: string; prices: Record<string, number> }[]> = {};
+  for (const [name, { category, stores }] of byProduct) {
+    if (stores.size < 2) continue;
+    if (!BASKET_CATEGORIES.includes(category)) continue;
+    if (!samples[category]) samples[category] = [];
+    if (samples[category].length < 5) {
+      samples[category].push({ name, prices: Object.fromEntries(stores) });
+    }
+  }
+
+  return { categoryTotals, categoryCount, overallTotals, overallCount, samples };
+}
+
+export default async function ComparePage() {
+  const data = await getComparisonData();
+  if (!data) return <div>Loading...</div>;
+
+  const { categoryTotals, overallTotals, overallCount, samples } = data;
+  const stores = ['tesco', 'dunnes', 'supervalu'] as const;
+
+  // Rank stores by overall total
+  const ranked = [...stores].sort((a, b) => (overallTotals[a] ?? 0) - (overallTotals[b] ?? 0));
+  const cheapest = ranked[0];
+  const saving = (overallTotals[ranked[ranked.length - 1]] ?? 0) - (overallTotals[cheapest] ?? 0);
+
+  return (
+    <div className="min-h-screen bg-[#FFFBF7]">
+      <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
+          <Link href="/" className="font-bold text-lg text-[#1D2324]">
+            supermarket<span className="text-[#E17055]">.ie</span>
+          </Link>
+          <Link href="/" className="text-xs bg-[#E17055] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#D4604A] transition">
+            Build my list →
+          </Link>
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-4 pb-16">
+        {/* Hero */}
+        <div className="pt-10 pb-8">
+          <div className="text-xs font-semibold text-[#E17055] uppercase tracking-widest mb-3">Live Price Comparison · Ireland 2026</div>
+          <h1 className="text-3xl font-bold text-[#1D2324] mb-3 leading-tight">
+            Tesco vs Dunnes Stores vs SuperValu<br/>
+            <span className="text-[#E17055]">Which is cheapest in Ireland?</span>
+          </h1>
+          <p className="text-[#636E72] text-base max-w-xl">
+            We track live prices across {overallCount}+ products at Ireland's three main supermarkets.
+            Prices updated twice weekly — last updated today.
+          </p>
+        </div>
+
+        {/* Winner banner */}
+        <div
+          className="rounded-2xl p-6 mb-8 text-white"
+          style={{ background: STORE_INFO[cheapest].color }}
+        >
+          <div className="text-sm opacity-80 mb-1 font-medium">Cheapest overall basket</div>
+          <div className="text-3xl font-bold mb-1">{STORE_INFO[cheapest].name}</div>
+          <div className="text-lg opacity-90">
+            {fmt(overallTotals[cheapest])} for a standard weekly basket
+          </div>
+          {saving > 0.01 && (
+            <div className="mt-3 inline-block bg-white/20 rounded-xl px-4 py-2">
+              <span className="font-bold">{fmt(saving)} cheaper</span> than the most expensive option
+            </div>
+          )}
+        </div>
+
+        {/* Store totals grid */}
+        <div className="grid grid-cols-3 gap-3 mb-10">
+          {ranked.map((store, i) => {
+            const info = STORE_INFO[store];
+            const isCheapest = i === 0;
+            return (
+              <div key={store} className="rounded-2xl p-4 border-2 text-center"
+                style={{ borderColor: isCheapest ? info.color : '#E8E2DC', background: isCheapest ? info.light : '#fff' }}>
+                <div className="font-bold text-sm mb-2" style={{ color: isCheapest ? info.color : '#1D2324' }}>{info.name}</div>
+                <div className="text-2xl font-bold mb-1" style={{ color: isCheapest ? info.color : '#1D2324' }}>
+                  {fmt(overallTotals[store] ?? 0)}
+                </div>
+                <div className="text-xs text-[#636E72]">{info.tagline}</div>
+                {isCheapest && (
+                  <div className="mt-2 text-[10px] font-bold uppercase rounded-full px-2 py-0.5 inline-block text-white" style={{ background: info.color }}>
+                    Cheapest ✓
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Category breakdown */}
+        <h2 className="text-xl font-bold text-[#1D2324] mb-4">Price comparison by category</h2>
+        <div className="space-y-3 mb-10">
+          {BASKET_CATEGORIES.filter(cat => categoryTotals[cat]).map(cat => {
+            const totals = categoryTotals[cat];
+            const catRanked = [...stores].sort((a, b) => (totals[a] ?? 0) - (totals[b] ?? 0));
+            const catCheapest = catRanked[0];
+            return (
+              <div key={cat} className="bg-white rounded-2xl border border-[#E8E2DC] p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-[#1D2324]">{cat}</h3>
+                  <span className="text-xs text-[#5D9B8F] font-semibold">
+                    Best: {STORE_INFO[catCheapest].name} {fmt(totals[catCheapest] ?? 0)}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {catRanked.map((store, i) => {
+                    const info = STORE_INFO[store];
+                    const isBest = i === 0;
+                    return (
+                      <div key={store} className="flex-1 text-center rounded-xl py-2 px-1"
+                        style={{ background: isBest ? info.light : '#F9F7F5' }}>
+                        <div className="text-[11px] font-medium mb-0.5" style={{ color: isBest ? info.color : '#636E72' }}>
+                          {info.name.split(' ')[0]}
+                        </div>
+                        <div className="text-sm font-bold" style={{ color: isBest ? info.color : '#1D2324' }}>
+                          {fmt(totals[store] ?? 0)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Sample products */}
+                {samples[cat] && (
+                  <div className="mt-3 pt-3 border-t border-[#F0ECE8] space-y-1.5">
+                    {samples[cat].slice(0, 3).map(p => (
+                      <div key={p.name} className="flex items-center justify-between text-xs">
+                        <span className="text-[#636E72] truncate flex-1">{p.name}</span>
+                        <div className="flex gap-2 flex-shrink-0 ml-2">
+                          {stores.filter(s => p.prices[s]).map(s => (
+                            <span key={s} className="text-[#1D2324]">
+                              <span className="text-[#B2BEC3]">{STORE_INFO[s].name.split(' ')[0]} </span>
+                              {fmt(p.prices[s])}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* CTA */}
+        <div className="bg-gradient-to-br from-[#FEF3E2] to-[#FFFBF7] border-2 border-[#E17055]/20 rounded-2xl p-8 text-center">
+          <div className="text-3xl mb-3">🛒</div>
+          <h2 className="text-xl font-bold text-[#1D2324] mb-2">Get a personalised price comparison</h2>
+          <p className="text-[#636E72] mb-5 max-w-md mx-auto">
+            Tell our AI what you want to cook this week and get a shopping list with live prices from all three stores — so you know exactly where to shop.
+          </p>
+          <Link href="/"
+            className="inline-block bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-3.5 rounded-xl font-semibold text-base hover:from-[#D4604A] hover:to-[#C5533D] transition">
+            Build my weekly list free →
+          </Link>
+          <p className="text-xs text-[#B2BEC3] mt-3">No signup required to get started</p>
+        </div>
+
+        {/* FAQ for SEO */}
+        <div className="mt-12">
+          <h2 className="text-xl font-bold text-[#1D2324] mb-6">Frequently asked questions</h2>
+          <div className="space-y-4">
+            {[
+              {
+                q: 'Which supermarket is cheapest in Ireland?',
+                a: `Based on our live price tracking across ${overallCount}+ products, ${STORE_INFO[cheapest].name} currently offers the cheapest overall weekly basket at ${fmt(overallTotals[cheapest])}. However, prices vary by category — it often pays to split your shop between stores.`,
+              },
+              {
+                q: 'How often are prices updated?',
+                a: 'We scrape prices directly from Tesco, Dunnes Stores and SuperValu twice weekly (Monday and Thursday mornings). Prices reflect what you\'d pay in store on those days.',
+              },
+              {
+                q: 'Is it worth shopping at multiple supermarkets?',
+                a: `Our data shows you can save up to ${fmt(saving)} per week by shopping at the cheapest store overall. Splitting your shop (e.g. meat at one store, dairy at another) can save even more. Use our AI planner to find the best split for your specific list.`,
+              },
+              {
+                q: 'Does this include Lidl and Aldi?',
+                a: 'Currently we track Tesco, Dunnes Stores and SuperValu. Lidl and Aldi do not offer online grocery shopping in Ireland, making live price tracking difficult. We\'re working on adding them.',
+              },
+            ].map(({ q, a }) => (
+              <div key={q} className="bg-white rounded-xl border border-[#E8E2DC] p-5">
+                <h3 className="font-semibold text-[#1D2324] mb-2">{q}</h3>
+                <p className="text-sm text-[#636E72] leading-relaxed">{a}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
+
+      <footer className="border-t border-[#E8E2DC] py-6 px-4 text-center text-xs text-[#B2BEC3]">
+        <Link href="/" className="hover:text-[#636E72]">supermarket.ie</Link>
+        {' · '}Prices updated twice weekly · Ireland grocery comparison
+      </footer>
+    </div>
+  );
+}
