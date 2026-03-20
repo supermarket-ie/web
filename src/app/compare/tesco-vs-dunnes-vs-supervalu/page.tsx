@@ -233,35 +233,6 @@ export default async function ComparePage() {
           <p className="text-xs text-[#B2BEC3] mt-3">No signup required to get started</p>
         </div>
 
-        {/* FAQ for SEO */}
-        <div className="mt-12">
-          <h2 className="text-xl font-bold text-[#1D2324] mb-6">Frequently asked questions</h2>
-          <div className="space-y-4">
-            {[
-              {
-                q: 'Which supermarket is cheapest in Ireland?',
-                a: `Based on our live price tracking across ${overallCount}+ products, ${STORE_INFO[cheapest].name} currently offers the cheapest overall weekly basket at ${fmt(overallTotals[cheapest])}. However, prices vary by category — it often pays to split your shop between stores.`,
-              },
-              {
-                q: 'How often are prices updated?',
-                a: 'We scrape prices directly from Tesco, Dunnes Stores and SuperValu twice weekly (Monday and Thursday mornings). Prices reflect what you\'d pay in store on those days.',
-              },
-              {
-                q: 'Is it worth shopping at multiple supermarkets?',
-                a: `Our data shows you can save up to ${fmt(saving)} per week by shopping at the cheapest store overall. Splitting your shop (e.g. meat at one store, dairy at another) can save even more. Use our AI planner to find the best split for your specific list.`,
-              },
-              {
-                q: 'Does this include Lidl and Aldi?',
-                a: 'Currently we track Tesco, Dunnes Stores and SuperValu. Lidl and Aldi do not offer online grocery shopping in Ireland, making live price tracking difficult. We\'re working on adding them.',
-              },
-            ].map(({ q, a }) => (
-              <div key={q} className="bg-white rounded-xl border border-[#E8E2DC] p-5">
-                <h3 className="font-semibold text-[#1D2324] mb-2">{q}</h3>
-                <p className="text-sm text-[#636E72] leading-relaxed">{a}</p>
-              </div>
-            ))}
-          </div>
-        </div>
       </main>
 
       <footer className="border-t border-[#E8E2DC] py-6 px-6 text-center text-xs text-[#B2BEC3] max-w-6xl mx-auto">
