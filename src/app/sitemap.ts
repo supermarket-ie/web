@@ -2,6 +2,13 @@ import { MetadataRoute } from 'next';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://supermarket.ie';
 
+const BLOG_SLUGS = [
+  'cheapest-supermarket-ireland-2026',
+  'save-money-weekly-shop-ireland',
+  'spaghetti-bolognese-ireland-cheapest',
+  'tesco-clubcard-ireland-guide',
+];
+
 const CATEGORY_SLUGS = [
   'dairy', 'meat', 'vegetables', 'fruit', 'bakery', 'breakfast',
   'pasta-&-rice', 'tinned', 'condiments', 'beverages', 'snacks',
@@ -13,6 +20,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: BASE_URL, lastModified: new Date(), changeFrequency: 'weekly', priority: 1.0 },
     { url: `${BASE_URL}/compare/tesco-vs-dunnes-vs-supervalu`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${BASE_URL}/blog`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
+    ...BLOG_SLUGS.map(slug => ({
+      url: `${BASE_URL}/blog/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    })),
     { url: `${BASE_URL}/shop`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.9 },
     ...CATEGORY_SLUGS.map(slug => ({
       url: `${BASE_URL}/shop/${slug}`,
