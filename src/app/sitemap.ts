@@ -3,7 +3,6 @@ import { MetadataRoute } from 'next';
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://supermarket.ie';
 
 const BLOG_SLUGS = [
-  'is-it-worth-shopping-at-multiple-supermarkets-ireland',
   'cheapest-supermarket-ireland-2026',
   'save-money-weekly-shop-ireland',
   'spaghetti-bolognese-ireland-cheapest',
