@@ -74,8 +74,10 @@ export function HomePlanner() {
   const [gateDone, setGateDone] = useState(false);
   const [session, setSession] = useState<{ token: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const shouldScrollRef = useRef(false);
 
   useEffect(() => {
     const s = loadSession();
@@ -83,8 +85,10 @@ export function HomePlanner() {
   }, []);
 
   useEffect(() => {
-    if (messages.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Only scroll the chat container, and only when we explicitly want to
+    if (shouldScrollRef.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      shouldScrollRef.current = false;
     }
   }, [messages]);
 
@@ -97,6 +101,7 @@ export function HomePlanner() {
     setMessages(newMessages);
     setInput('');
     setIsLoading(true);
+    shouldScrollRef.current = true; // scroll to show user message + typing indicator
 
     abortRef.current = new AbortController();
 
@@ -166,7 +171,7 @@ export function HomePlanner() {
     <div className="flex flex-col h-full">
       {/* Messages */}
       {messages.length > 0 && (
-        <div className="flex-1 space-y-3 mb-3 max-h-72 overflow-y-auto pr-1">
+      <div ref={scrollRef} className="flex-1 space-y-3 mb-3 max-h-72 overflow-y-auto pr-1">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {m.role === 'assistant' && (
