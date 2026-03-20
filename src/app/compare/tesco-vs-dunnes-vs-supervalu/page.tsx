@@ -3,12 +3,12 @@ import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase';
 import { SiteHeader } from '@/components/SiteHeader';
 
-export const revalidate = 86400; // Revalidate daily
+export const revalidate = 43200; // Revalidate every 12 hours — data updates twice weekly
 
 export const metadata: Metadata = {
-  title: 'Tesco vs Dunnes Stores vs SuperValu — Price Comparison Ireland 2026',
+  title: 'Tesco vs Dunnes Stores vs SuperValu — Price Comparison Ireland',
   description: 'Compare grocery prices across Tesco, Dunnes Stores and SuperValu in Ireland. See which supermarket is cheapest for your weekly shop with live price data updated twice weekly.',
-  keywords: ['Tesco vs Dunnes Ireland', 'cheapest supermarket Ireland 2026', 'SuperValu price comparison', 'Irish supermarket prices', 'grocery comparison Ireland'],
+  keywords: ['Tesco vs Dunnes Ireland', 'cheapest supermarket Ireland', 'SuperValu price comparison', 'Irish supermarket prices', 'grocery comparison Ireland'],
   openGraph: {
     title: 'Tesco vs Dunnes vs SuperValu — Which is Cheapest in Ireland?',
     description: 'Live price comparison across Ireland\'s three main supermarkets. Updated twice weekly with real prices.',
@@ -103,6 +103,9 @@ export default async function ComparePage() {
   const cheapest = ranked[0];
   const saving = (overallTotals[ranked[ranked.length - 1]] ?? 0) - (overallTotals[cheapest] ?? 0);
 
+  const now = new Date();
+  const updatedLabel = now.toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' });
+
   return (
     <div className="min-h-screen bg-[#FFFBF7]">
       <SiteHeader />
@@ -110,13 +113,14 @@ export default async function ComparePage() {
       <main className="max-w-6xl mx-auto px-6 pb-16">
         {/* Hero */}
         <div className="pt-10 pb-8">
-          <div className="text-xs font-semibold text-[#E17055] uppercase tracking-widest mb-3">Live Price Comparison · Ireland 2026</div>
+          <div className="text-xs font-semibold text-[#E17055] uppercase tracking-widest mb-3">Live Price Comparison · Ireland</div>
           <h1 className="text-3xl font-bold text-[#1D2324] mb-3 leading-tight">
             Tesco vs Dunnes Stores vs SuperValu<br/>
             <span className="text-[#E17055]">Which is cheapest in Ireland?</span>
           </h1>
           <p className="text-[#636E72] text-base max-w-xl">
             We track live prices across {overallCount}+ products at Ireland's three main supermarkets.
+            Last updated {updatedLabel}.
           </p>
         </div>
 

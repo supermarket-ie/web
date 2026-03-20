@@ -4,7 +4,7 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 
-export const revalidate = 86400;
+export const revalidate = 43200; // 12 hours — matches scrape frequency
 
 // Category metadata for SEO + display
 const CATEGORY_META: Record<string, {
