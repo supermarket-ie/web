@@ -28,7 +28,7 @@ export function SiteHeader() {
           <Link href="/shop" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">Prices</Link>
           <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">Compare</Link>
           <Link href="/blog" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">Blog</Link>
-          <Link href="/" className="bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-sm">
+          <Link href="/" className="hidden md:block bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-sm whitespace-nowrap">
             Get started free
           </Link>
           {/* Hamburger — mobile only */}
@@ -50,6 +50,9 @@ export function SiteHeader() {
           <Link href="/shop" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Prices</Link>
           <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Compare</Link>
           <Link href="/blog" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Blog</Link>
+          <Link href="/" className="mt-1 bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-4 py-3 rounded-xl text-sm font-semibold text-center" onClick={() => setMenuOpen(false)}>
+            Get started free
+          </Link>
         </div>
       )}
     </header>
