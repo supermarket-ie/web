@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useChat } from '@ai-sdk/react';
 import { loadSession } from '@/lib/session';
+import { SiteHeader } from '@/components/SiteHeader';
 
 const EXAMPLE_PROMPTS = [
   "Spaghetti bolognese, chicken stir fry, and packed lunches for the week",
@@ -74,27 +75,7 @@ export function PlannerClient() {
 
   return (
     <div className="min-h-screen bg-[#FFFBF7] flex flex-col">
-      {/* Header */}
-      <header className="px-6 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <Link href="/" className="text-base font-bold text-[#1D2324]">
-            supermarket<span className="text-[#E17055]">.ie</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            {session ? (
-              <Link href={`/list?token=${session.token}`}
-                className="text-sm font-semibold text-[#5D9B8F] hover:text-[#4A8A7E] transition">
-                My list →
-              </Link>
-            ) : (
-              <Link href="/"
-                className="text-sm font-semibold text-[#636E72] hover:text-[#1D2324] transition">
-                Sign in
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8 flex flex-col gap-6">
 

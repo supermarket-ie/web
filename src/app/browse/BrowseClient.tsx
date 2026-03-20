@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { type CATEGORY_CONFIG, type BrowseProduct } from '@/lib/category-config';
+import { SiteHeader } from '@/components/SiteHeader';
 import { loadSession } from '@/lib/session';
 
 type CategoryConfig = typeof CATEGORY_CONFIG;
@@ -50,21 +51,7 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
 
   return (
     <div className="min-h-screen bg-[#FFFBF7]">
-      {/* Header */}
-      <header className="px-4 md:px-6 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-30 shadow-sm">
-        <div className="max-w-5xl mx-auto flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8"><Logo /></div>
-            <span className="text-[18px] font-bold tracking-tight text-[#1D2324]">
-              supermarket<span className="text-[#1D2324]">.ie</span>
-            </span>
-          </Link>
-          <Link href={signInHref}
-            className="bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-sm whitespace-nowrap">
-            {signInLabel}
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* Page title */}
       <div className="px-4 md:px-6 pt-6 pb-2 max-w-5xl mx-auto">
