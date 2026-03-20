@@ -702,6 +702,26 @@ def main():
         json.dump(report, f, indent=2)
     print(f"\n  Results saved to {report_path}")
 
+    # Trigger Vercel cache revalidation so pages show fresh prices immediately
+    if total_prices > 0:
+        revalidate_secret = os.environ.get("REVALIDATE_SECRET")
+        if revalidate_secret:
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    "https://supermarket.ie/api/revalidate",
+                    data=json.dumps({"secret": revalidate_secret}).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=15) as res:
+                    body = json.loads(res.read())
+                    print(f"\n  🔄 Cache revalidated: {body.get('paths')} pages purged")
+            except Exception as e:
+                print(f"\n  ⚠️  Cache revalidation failed: {e}")
+        else:
+            print("\n  ℹ️  REVALIDATE_SECRET not set — skipping cache purge")
+
 
 if __name__ == "__main__":
     main()
