@@ -127,17 +127,14 @@ export default function Home() {
             </span>
           </Link>
           <nav className="flex items-center gap-6">
-            <a href="#how-it-works" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
-              How it works
-            </a>
-            <Link href="/browse" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
-              Browse list
+            <Link href="/shop" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
+              Prices
             </Link>
-            <Link
-              href="/browse"
-              className="text-[#E17055] hover:text-[#D4604A] transition text-sm font-semibold md:hidden"
-            >
-              Browse
+            <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
+              Compare
+            </Link>
+            <Link href="/blog" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
+              Blog
             </Link>
             <HomeNav />
           </nav>
