@@ -20,7 +20,7 @@ INSERT INTO products (canonical_name, category, default_unit, default_quantity) 
 ('Sour Cream', 'Dairy', 'g', '200g'),
 ('Double Cream', 'Dairy', 'ml', '300ml'),
 ('Single Cream', 'Dairy', 'ml', '200ml'),
-('Crème Fraîche', 'Dairy', 'g', '200g'),
+('Creme Fraiche', 'Dairy', 'g', '200g'),
 ('Natural Yogurt Plain', 'Dairy', 'g', '500g'),
 ('Strawberry Yogurt', 'Dairy', 'g', '125g'),
 ('Free Range Eggs 6', 'Dairy', 'pack', '6'),
@@ -358,7 +358,7 @@ ON CONFLICT (canonical_name) DO NOTHING;
 -- store_url = search URL (scraper will resolve to product page)
 -- ============================================================
 
--- Insert store_products for all NEW products × 3 stores
+-- Insert store_products for all NEW products x 3 stores
 -- Skips any product already having a row for that store (safe to re-run)
 INSERT INTO store_products (product_id, store, store_product_name, store_url, url_status)
 SELECT
