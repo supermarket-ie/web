@@ -301,6 +301,8 @@ export default async function ListPage({
               savedAddedItems={addedItems}
               savedStoreOverrides={storeOverrides}
               allProducts={allProducts}
+              storeTotals={list.store_totals}
+              generatedAt={list.generated_at}
             />
           </>
         )}

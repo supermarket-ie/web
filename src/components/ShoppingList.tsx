@@ -277,7 +277,7 @@ function PreferencesPanel({ token, currentFamilySize, onClose }: {
 
 // ── Main Export ───────────────────────────────────────────────────────────────
 export function ShoppingList({
-  items, grouped, token, familySize, savedRemovedItems, savedAddedItems, savedStoreOverrides, allProducts,
+  items, grouped, token, familySize, savedRemovedItems, savedAddedItems, savedStoreOverrides, allProducts, storeTotals, generatedAt,
 }: {
   items: ListItem[];
   grouped: [string, ListItem[]][];
@@ -287,6 +287,8 @@ export function ShoppingList({
   savedAddedItems?: string[];
   savedStoreOverrides?: Record<string, string>;
   allProducts?: { product_id: string; canonical_name: string; category: string | null }[];
+  storeTotals?: { store: string; total: number }[];
+  generatedAt?: string;
 }) {
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<string[]>([]);
@@ -294,6 +296,8 @@ export function ShoppingList({
   const [hydrated, setHydrated] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [showAddItems, setShowAddItems] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -353,8 +357,39 @@ export function ShoppingList({
     });
   }, [syncToDb]);
 
-  const handleStoreSwap = useCallback((productId: string, store: string) => {
-    setStoreOverrides(prev => {
+  const handleShare = useCallback(async () => {
+    if (shareUrl) {
+      await navigator.clipboard.writeText(window.location.origin + shareUrl).catch(() => {});
+      return;
+    }
+    setSharing(true);
+    try {
+      const res = await fetch('/api/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: items.map(i => ({
+            canonical_name: i.canonical_name,
+            category: i.category,
+            best_store: i.best_store,
+            best_price: i.best_price,
+            all_prices: i.all_prices,
+          })),
+          store_totals: storeTotals ?? [],
+          family_size: familySize ?? '2',
+          generated_at: generatedAt,
+        }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        setShareUrl(data.url);
+        await navigator.clipboard.writeText(window.location.origin + data.url).catch(() => {});
+      }
+    } catch {}
+    setSharing(false);
+  }, [items, storeTotals, familySize, generatedAt, shareUrl]);
+
+  const handleStoreSwap = useCallback((productId: string, store: string) => {    setStoreOverrides(prev => {
       // If swapping back to cheapest, remove override
       const item = items.find(i => i.product_id === productId);
       const cheapest = item?.all_prices[0]?.store;
@@ -425,6 +460,22 @@ export function ShoppingList({
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             Add
+          </button>
+          {/* Share list */}
+          <button onClick={handleShare} disabled={sharing}
+            className={`flex items-center gap-1.5 text-xs font-semibold transition px-3 py-1.5 rounded-full border ${
+              shareUrl
+                ? 'text-[#5D9B8F] border-[#5D9B8F] bg-[#F0FAF8]'
+                : 'text-[#636E72] border-[#E8E2DC] bg-white hover:border-[#E17055] hover:text-[#E17055]'
+            }`}
+            title={shareUrl ? 'Link copied!' : 'Share this list'}>
+            {shareUrl ? (
+              <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Copied!</>
+            ) : sharing ? (
+              <>Sharing…</>
+            ) : (
+              <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>Share</>
+            )}
           </button>
           {/* Edit household */}
           {token && familySize && (
