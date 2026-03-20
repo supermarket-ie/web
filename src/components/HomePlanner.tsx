@@ -237,9 +237,9 @@ export function HomePlanner() {
             <button
               type="button"
               onClick={() => setExampleOffset(o => (o + 4) % EXAMPLES.length)}
-              className="text-[11px] text-[#B2BEC3] hover:text-[#E17055] transition flex items-center gap-1"
+              className="text-xs text-[#636E72] hover:text-[#E17055] transition flex items-center gap-1 mt-0.5 font-medium"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               More ideas
             </button>
           </div>
