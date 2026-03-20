@@ -7,6 +7,14 @@ const EXAMPLES = [
   "Sunday roast, midweek pasta, fish on Friday",
   "Healthy week — salads, grilled chicken, overnight oats",
   "Quick & easy — stir fries, soup, toasties",
+  "Vegetarian week — curries, pasta, veggie burgers",
+  "Kids' favourites — fish fingers, pasta bake, homemade pizza",
+  "Batch cooking — big chilli, soups, meal prep for work lunches",
+  "Low carb — grilled meats, salads, stir fries without rice",
+  "Irish classics — stew, shepherd's pie, sausage casserole",
+  "Budget week — eggs, beans, lentils, simple pasta dishes",
+  "Date night in — steak, salmon fillet, homemade curry",
+  "BBQ weekend — burgers, chicken wings, coleslaw, potato salad",
 ];
 
 interface Message { role: 'user' | 'assistant'; content: string; }
@@ -73,6 +81,7 @@ export function HomePlanner() {
   const [showGate, setShowGate] = useState(false);
   const [gateDone, setGateDone] = useState(false);
   const [session, setSession] = useState<{ token: string } | null>(null);
+  const [exampleOffset, setExampleOffset] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -216,13 +225,23 @@ export function HomePlanner() {
       {/* Input — hidden while signup gate is showing */}
       {!showGate && <div>
         {!started && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {EXAMPLES.map(e => (
-              <button key={e} type="button" onClick={() => { setInput(e); inputRef.current?.focus(); }}
-                className="text-xs bg-[#F5F0EB] text-[#636E72] px-2.5 py-1.5 rounded-full hover:bg-[#E17055]/10 hover:text-[#E17055] transition-all border border-transparent hover:border-[#E17055]/20">
-                {e.length > 38 ? e.slice(0, 38) + '…' : e}
-              </button>
-            ))}
+          <div className="mb-2">
+            <div className="flex flex-wrap gap-1.5 mb-1.5">
+              {EXAMPLES.slice(exampleOffset, exampleOffset + 4).map(e => (
+                <button key={e} type="button" onClick={() => { setInput(e); inputRef.current?.focus(); }}
+                  className="text-xs bg-[#F5F0EB] text-[#636E72] px-2.5 py-1.5 rounded-full hover:bg-[#E17055]/10 hover:text-[#E17055] transition-all border border-transparent hover:border-[#E17055]/20">
+                  {e.length > 38 ? e.slice(0, 38) + '…' : e}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setExampleOffset(o => (o + 4) % EXAMPLES.length)}
+              className="text-[11px] text-[#B2BEC3] hover:text-[#E17055] transition flex items-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              More ideas
+            </button>
           </div>
         )}
 
