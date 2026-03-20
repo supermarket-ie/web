@@ -35,11 +35,19 @@ async function getPriceCatalogue() {
 
   if (map.size === 0) return FALLBACK_CATALOGUE;
 
+  const storeLabel: Record<string, string> = {
+    tesco: 'Tesco',
+    dunnes: 'Dunnes Stores',
+    supervalu: 'SuperValu',
+    lidl: 'Lidl',
+    aldi: 'Aldi',
+  };
+
   // Group products by category
   const byCategory = new Map<string, string[]>();
   for (const [name, { category, stores }] of map.entries()) {
     const sorted = [...stores.entries()].sort((a, b) => a[1] - b[1]);
-    const priceStr = sorted.map(([store, price]) => `${store} €${price.toFixed(2)}`).join(', ');
+    const priceStr = sorted.map(([store, price]) => `${storeLabel[store] ?? store} €${price.toFixed(2)}`).join(', ');
     const line = `  - ${name}: ${priceStr}`;
     if (!byCategory.has(category)) byCategory.set(category, []);
     byCategory.get(category)!.push(line);
