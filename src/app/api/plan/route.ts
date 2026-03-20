@@ -4,22 +4,18 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 export const maxDuration = 30;
 
-// Build a compact price catalogue from DB to inject as context
+// Build a compact price catalogue from DB to inject as context, grouped by category
 async function getPriceCatalogue() {
-  // Get latest price observations joined to product names
   const { data } = await supabaseAdmin
     .from('price_observations')
     .select('price, store_products(store, store_product_name, products(canonical_name, category))')
     .order('observed_at', { ascending: false })
     .limit(2000);
 
-  if (!data?.length) {
-    // Fallback: use hardcoded product names with no prices — at least Claude knows what we carry
-    return FALLBACK_CATALOGUE;
-  }
+  if (!data?.length) return FALLBACK_CATALOGUE;
 
-  // Group by canonical_name → store → lowest price
-  const map = new Map<string, Map<string, { price: number; unit: string }>>();
+  // Group by canonical_name → store → lowest price, also track category
+  const map = new Map<string, { category: string; stores: Map<string, number> }>();
 
   for (const row of data) {
     const sp = row.store_products as unknown as { store: string; store_product_name: string; products: { canonical_name: string; category: string | null } | null } | null;
@@ -27,25 +23,34 @@ async function getPriceCatalogue() {
     const store = sp?.store;
     if (!canonical || !store || !row.price) continue;
 
-    if (!map.has(canonical)) map.set(canonical, new Map());
-    const storeMap = map.get(canonical)!;
-    const existing = storeMap.get(store);
-    if (!existing || row.price < existing.price) {
-      storeMap.set(store, { price: row.price, unit: '' });
+    if (!map.has(canonical)) {
+      map.set(canonical, { category: sp?.products?.category ?? 'Other', stores: new Map() });
+    }
+    const entry = map.get(canonical)!;
+    const existing = entry.stores.get(store);
+    if (!existing || row.price < existing) {
+      entry.stores.set(store, row.price);
     }
   }
 
   if (map.size === 0) return FALLBACK_CATALOGUE;
 
-  const lines: string[] = [];
-  for (const [name, stores] of map.entries()) {
-    const sorted = [...stores.entries()].sort((a, b) => a[1].price - b[1].price);
-    const unit = sorted[0]?.[1].unit;
-    const priceStr = sorted.map(([store, s]) => `${store} €${s.price.toFixed(2)}`).join(', ');
-    lines.push(`- ${name}${unit ? ` (${unit})` : ''}: ${priceStr}`);
+  // Group products by category
+  const byCategory = new Map<string, string[]>();
+  for (const [name, { category, stores }] of map.entries()) {
+    const sorted = [...stores.entries()].sort((a, b) => a[1] - b[1]);
+    const priceStr = sorted.map(([store, price]) => `${store} €${price.toFixed(2)}`).join(', ');
+    const line = `  - ${name}: ${priceStr}`;
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category)!.push(line);
   }
 
-  return lines.join('\n');
+  const sections: string[] = [];
+  for (const [category, lines] of [...byCategory.entries()].sort()) {
+    sections.push(`${category}:\n${lines.sort().join('\n')}`);
+  }
+
+  return sections.join('\n\n');
 }
 
 // Fallback if DB is empty — just product names so Claude can still map ingredients
@@ -117,8 +122,15 @@ Your job: take a description of what the user wants to cook or eat this week and
 - If an ingredient isn't in our catalogue, skip it silently (don't mention it)
 - If the user asks to update or modify their list, use the full conversation history to understand what was already planned and produce a complete updated list
 
-## Our product catalogue (name | stores with prices)
+## Our product catalogue (grouped by category, stores sorted cheapest first)
 ${catalogue}
+
+## Ingredient mapping rules
+- Match ingredients to the **closest product in the catalogue** using the category as a guide
+- e.g. "mozzarella" → look in Dairy for the closest cheese product
+- e.g. "pasta sheets" → look in the same category as other pasta products
+- If multiple products could match, pick the most specific one
+- If nothing in the catalogue is a reasonable match, skip the ingredient silently
 
 ## Output format
 Use this structure exactly:
