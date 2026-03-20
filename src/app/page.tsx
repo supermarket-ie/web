@@ -27,6 +27,8 @@ export default function Home() {
     setShowCookieBanner(false);
   };
 
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const familyOptions = [
     { value: "1", label: "Just me", icon: "👤" },
     { value: "2", label: "Couple", icon: "👥" },
@@ -81,7 +83,7 @@ export default function Home() {
       )}
 
       {/* Header */}
-      <header className="px-6 py-4 border-b border-[#E8E2DC]">
+      <header className="px-6 py-4 border-b border-[#E8E2DC] bg-[#FFFBF7] relative z-20">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2.5">
             {/* Logo Icon - Shopping bag with carrot */}
@@ -137,8 +139,26 @@ export default function Home() {
               Blog
             </Link>
             <HomeNav />
+            {/* Hamburger — mobile only */}
+            <button
+              className="md:hidden flex flex-col gap-1.5 p-1 ml-1"
+              onClick={() => setMenuOpen(o => !o)}
+              aria-label="Menu"
+            >
+              <span className={`block w-5 h-0.5 bg-[#1D2324] transition-all duration-200 origin-center ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+              <span className={`block w-5 h-0.5 bg-[#1D2324] transition-all duration-200 ${menuOpen ? 'opacity-0' : ''}`} />
+              <span className={`block w-5 h-0.5 bg-[#1D2324] transition-all duration-200 origin-center ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+            </button>
           </nav>
         </div>
+        {/* Mobile menu dropdown */}
+        {menuOpen && (
+          <div className="md:hidden absolute top-full left-0 right-0 bg-white border-b border-[#E8E2DC] shadow-lg px-6 py-4 flex flex-col gap-4 z-20">
+            <Link href="/shop" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Prices</Link>
+            <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Compare</Link>
+            <Link href="/blog" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Blog</Link>
+          </div>
+        )}
       </header>
 
       {/* Hero */}
