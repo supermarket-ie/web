@@ -5,12 +5,14 @@ import Link from "next/link";
 import { HomeNav } from "@/components/HomeNav";
 import { HomePlanner } from "@/components/HomePlannerGreen";
 import { SiteFooter } from "@/components/SiteFooter";
-import { loadSession } from "@/lib/session";
+import { loadSession, clearSession } from "@/lib/session";
 
 export default function Home() {
   const [showCookieBanner, setShowCookieBanner] = useState(false);
   const [listUrl, setListUrl] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  function signOut() { clearSession(); window.location.href = '/'; }
 
   useEffect(() => {
     if (!localStorage.getItem("cookieConsent")) setShowCookieBanner(true);
@@ -78,9 +80,21 @@ export default function Home() {
             <Link href="/shop" className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Prices</Link>
             <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Compare</Link>
             <Link href="/blog" className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Blog</Link>
-            <Link href="/list/request" className="btn-primary mt-1 px-4 py-3 text-sm text-center" onClick={() => setMenuOpen(false)}>
-              Get started free
-            </Link>
+            {listUrl ? (
+              <>
+                <Link href={listUrl} className="btn-primary mt-1 px-4 py-3 text-sm text-center" onClick={() => setMenuOpen(false)}>
+                  View my list →
+                </Link>
+                <button onClick={signOut} className="text-sm text-center font-medium"
+                  style={{ color: 'var(--on-surface-variant)' }}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Link href="/list/request" className="btn-primary mt-1 px-4 py-3 text-sm text-center" onClick={() => setMenuOpen(false)}>
+                Get started free
+              </Link>
+            )}
           </div>
         )}
       </header>
