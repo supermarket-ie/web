@@ -13,11 +13,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name and email are required' }, { status: 400 });
     }
 
-    // Check existing
+    // Check existing — return success to prevent email enumeration
     const { data: existing } = await supabaseAdmin
       .from('vendors').select('id').eq('email', email.toLowerCase().trim()).single();
     if (existing) {
-      return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
+      return NextResponse.json({ success: true });
     }
 
     // Generate unique slug

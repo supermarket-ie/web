@@ -241,7 +241,10 @@ function PreferencesPanel({ token, currentFamilySize, onClose }: {
       });
       setSaved(true);
       setTimeout(() => window.location.reload(), 800);
-    } catch { setSaving(false); }
+    } catch (err) {
+      console.error('[PreferencesPanel] Failed to save preferences:', err);
+      setSaving(false);
+    }
   }
 
   return (
@@ -316,7 +319,9 @@ export function ShoppingList({
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token, ...patch }),
         });
-      } catch {}
+      } catch (err) {
+        console.error('[ShoppingList] Failed to sync preferences:', err);
+      }
     }, 1500);
   }, [token]);
 
@@ -385,7 +390,9 @@ export function ShoppingList({
         setShareUrl(data.url);
         await navigator.clipboard.writeText(window.location.origin + data.url).catch(() => {});
       }
-    } catch {}
+    } catch (err) {
+      console.error('[ShoppingList] Failed to create share link:', err);
+    }
     setSharing(false);
   }, [items, storeTotals, familySize, generatedAt, shareUrl]);
 

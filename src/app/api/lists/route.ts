@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import jwt from 'jsonwebtoken';
 
-const SECRET = process.env.MAGIC_LINK_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const SECRET = process.env.MAGIC_LINK_SECRET;
+if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
 
 function getSubscriberId(token: string): string | null {
   try {

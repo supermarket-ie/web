@@ -14,7 +14,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false }, // personal page — not for indexing
 };
 
-const SECRET = process.env.MAGIC_LINK_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const SECRET = process.env.MAGIC_LINK_SECRET;
+if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
 const VALID_FAMILY_SIZES = new Set<FamilySize>(['1', '2', '3-4', '5+']);
 
 // ── helpers ───────────────────────────────────────────────────────────────────

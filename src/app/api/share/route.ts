@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-function randomId(len = 8) {
+// 16 chars × 5 bits (32-char alphabet) = 80 bits of entropy
+function randomId(len = 16) {
   const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
   let id = '';
-  // Use crypto for randomness
   const arr = new Uint8Array(len);
   crypto.getRandomValues(arr);
   for (const b of arr) id += chars[b % chars.length];
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const id = randomId(8);
+    const id = randomId();
 
     const { error } = await supabaseAdmin
       .from('shared_lists')

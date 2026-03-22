@@ -2,7 +2,8 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { supabaseAdmin } from './supabase';
 
-const SECRET = process.env.VENDOR_MAGIC_LINK_SECRET ?? process.env.MAGIC_LINK_SECRET!;
+const SECRET = process.env.VENDOR_MAGIC_LINK_SECRET ?? process.env.MAGIC_LINK_SECRET;
+if (!SECRET) throw new Error('VENDOR_MAGIC_LINK_SECRET or MAGIC_LINK_SECRET environment variable is required');
 
 export interface VendorTokenPayload {
   vendorId: string;

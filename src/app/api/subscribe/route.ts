@@ -13,7 +13,9 @@ async function notifyTelegram(text: string) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
     });
-  } catch {}
+  } catch (err) {
+    console.error('[subscribe] Telegram notification failed:', err);
+  }
 }
 
 export async function POST(request: NextRequest) {
