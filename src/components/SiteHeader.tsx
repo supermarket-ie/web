@@ -6,9 +6,11 @@ import { loadSession, clearSession } from '@/lib/session';
 
 export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [listUrl, setListUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     const s = loadSession();
     if (s?.token) setListUrl(`/list?token=${s.token}`);
   }, []);
@@ -40,20 +42,22 @@ export function SiteHeader() {
           <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Compare</Link>
           <Link href="/blog"    className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Blog</Link>
 
-          {listUrl ? (
-            <>
-              <Link href={listUrl} className="btn-primary hidden md:inline-flex px-4 py-2 text-sm">
-                View my list →
+          {mounted && (
+            listUrl ? (
+              <>
+                <Link href={listUrl} className="btn-primary hidden md:inline-flex px-4 py-2 text-sm">
+                  View my list →
+                </Link>
+                <button onClick={signOut} className="hidden md:inline-flex text-sm font-medium transition-colors"
+                  style={{ color: 'var(--on-background)' }}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Link href="/list/request" className="btn-primary hidden md:inline-flex px-4 py-2 text-sm">
+                Sign in
               </Link>
-              <button onClick={signOut} className="hidden md:block text-sm font-medium transition-colors"
-                style={{ color: 'var(--on-surface-variant)' }}>
-                Sign out
-              </button>
-            </>
-          ) : (
-            <Link href="/list/request" className="btn-primary hidden md:inline-flex px-4 py-2 text-sm">
-              Sign in
-            </Link>
+            )
           )}
 
           {/* Hamburger — mobile only */}
@@ -78,7 +82,7 @@ export function SiteHeader() {
                 View my list →
               </Link>
               <button onClick={signOut} className="text-sm text-center font-medium"
-                style={{ color: 'var(--on-surface-variant)' }}>
+                style={{ color: 'var(--on-background)' }}>
                 Sign out
               </button>
             </>
