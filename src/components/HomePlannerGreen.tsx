@@ -153,12 +153,13 @@ export function HomePlanner() {
         const lines = chunk.split('\n');
 
         for (const line of lines) {
-          // Data stream format: 0:"text chunk"
-          const match = line.match(/^0:"(.*)"$/);
-          if (match) {
-            // Unescape the JSON string content
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          // Data stream format: 0:"text chunk" — use slice to avoid regex newline issues
+          if (trimmed.startsWith('0:"') && trimmed.endsWith('"')) {
             try {
-              const text = JSON.parse(`"${match[1]}"`);
+              const jsonStr = trimmed.slice(2); // strip leading '0:'
+              const text = JSON.parse(jsonStr); // parse the quoted string including escaped \n
               assistantContent += text;
               setMessages(prev => {
                 const updated = [...prev];
