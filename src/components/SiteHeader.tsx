@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { loadSession } from '@/lib/session';
+import { loadSession, clearSession } from '@/lib/session';
 
 export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -12,6 +12,11 @@ export function SiteHeader() {
     const s = loadSession();
     if (s?.token) setListUrl(`/list?token=${s.token}`);
   }, []);
+
+  function signOut() {
+    clearSession();
+    window.location.href = '/';
+  }
 
   return (
     <header className="glass px-6 py-4 sticky top-0 z-20">
@@ -34,13 +39,20 @@ export function SiteHeader() {
           <Link href="/shop"    className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Prices</Link>
           <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Compare</Link>
           <Link href="/blog"    className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Blog</Link>
+
           {listUrl ? (
-            <Link href={listUrl} className="btn-primary hidden md:inline-flex px-4 py-2 text-sm">
-              View my list →
-            </Link>
+            <>
+              <Link href={listUrl} className="btn-primary hidden md:inline-flex px-4 py-2 text-sm">
+                View my list →
+              </Link>
+              <button onClick={signOut} className="hidden md:block text-sm font-medium transition-colors"
+                style={{ color: 'var(--on-surface-variant)' }}>
+                Sign out
+              </button>
+            </>
           ) : (
             <Link href="/list/request" className="btn-primary hidden md:inline-flex px-4 py-2 text-sm">
-              Get my list
+              Sign in
             </Link>
           )}
 
@@ -59,13 +71,20 @@ export function SiteHeader() {
           <Link href="/shop"    className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Prices</Link>
           <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Compare</Link>
           <Link href="/blog"    className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Blog</Link>
+
           {listUrl ? (
-            <Link href={listUrl} className="btn-primary mt-1 px-4 py-3 text-sm text-center" onClick={() => setMenuOpen(false)}>
-              View my list →
-            </Link>
+            <>
+              <Link href={listUrl} className="btn-primary mt-1 px-4 py-3 text-sm text-center" onClick={() => setMenuOpen(false)}>
+                View my list →
+              </Link>
+              <button onClick={signOut} className="text-sm text-center font-medium"
+                style={{ color: 'var(--on-surface-variant)' }}>
+                Sign out
+              </button>
+            </>
           ) : (
             <Link href="/list/request" className="btn-primary mt-1 px-4 py-3 text-sm text-center" onClick={() => setMenuOpen(false)}>
-              Get my list
+              Sign in
             </Link>
           )}
         </div>
