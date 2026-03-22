@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase';
 import { SiteHeader } from '@/components/SiteHeader';
+import { SiteFooter } from '@/components/SiteFooter';
 
 export const revalidate = 43200; // Revalidate every 12 hours — data updates twice weekly
 
@@ -236,10 +237,7 @@ export default async function ComparePage() {
 
       </main>
 
-      <footer className="py-6 px-6 text-center text-xs max-w-6xl mx-auto" style={{ borderTop: '1px solid rgba(175,173,172,0.2)', color: 'rgba(175,173,172,0.8)' }}>
-        <a href="/" className="hover:text-[#5c5b5b]">supermarket.ie</a>
-        {' · '}Ireland grocery price comparison
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

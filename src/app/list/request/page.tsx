@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { SiteFooter } from '@/components/SiteFooter';
 
 export default function RequestLinkPage() {
   const [email, setEmail] = useState("");
@@ -27,7 +28,8 @@ export default function RequestLinkPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16" style={{ background: '#F9F6F5' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: '#F9F6F5' }}>
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16">
       <Link href="/" className="text-2xl font-bold text-[#2F2F2E] mb-10 inline-block">
         supermarket<span className="text-[#006A35]">.ie</span>
       </Link>
@@ -88,6 +90,8 @@ export default function RequestLinkPage() {
           Get started free →
         </Link>
       </p>
+      </div>
+      <SiteFooter />
     </div>
   );
 }

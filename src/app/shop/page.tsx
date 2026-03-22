@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
+import { SiteFooter } from '@/components/SiteFooter';
 
 export const metadata: Metadata = {
   title: 'Shop by Category — Grocery Prices Ireland | supermarket.ie',
@@ -62,11 +63,7 @@ export default function ShopPage() {
         </div>
       </main>
 
-      <footer className="py-6 px-6 text-center text-xs text-[#5c5b5b]" style={{ borderTop: '1px solid rgba(175,173,172,0.2)' }}>
-        <Link href="/" className="hover:text-[#636E72]">supermarket.ie</Link>
-        {' · '}
-        <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="hover:text-[#636E72]">Store comparison</Link>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
+import { SiteFooter } from '@/components/SiteFooter';
 
 function fmt(price: number) { return `€${price.toFixed(2)}`; }
 
@@ -216,10 +217,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
         </div>
       </main>
 
-      <footer className="border-t border-[#E8E2DC] py-6 px-4 text-center text-xs text-[#B2BEC3]">
-        <Link href="/" className="hover:text-[#636E72]">supermarket.ie</Link>
-        {' · '}Prices updated daily from Tesco, Dunnes Stores &amp; SuperValu
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

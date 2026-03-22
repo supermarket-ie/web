@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { ShoppingList } from '@/components/ShoppingList';
 import { TokenPersist } from '@/components/TokenPersist';
 import { SavedListsPanel } from '@/components/SavedListsPanel';
+import { SiteFooter } from '@/components/SiteFooter';
 
 export const metadata: Metadata = {
   title: 'Your weekly shopping list',
@@ -312,16 +313,7 @@ export default async function ListPage({
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-[#E8E2DC] py-6 px-4">
-        <div className="max-w-2xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#B2BEC3]">
-          <span>Prices updated {formatDate(list.generated_at)}</span>
-          <div className="flex items-center gap-4">
-            <Link href="/" className="hover:text-[#636E72] transition">supermarket.ie</Link>
-            <Link href={unsubscribeUrl} className="hover:text-[#636E72] transition">Unsubscribe</Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
     </>
   );

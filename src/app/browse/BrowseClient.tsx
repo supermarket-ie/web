@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { type CATEGORY_CONFIG, type BrowseProduct } from '@/lib/category-config';
 import { SiteHeader } from '@/components/SiteHeader';
+import { SiteFooter } from '@/components/SiteFooter';
 import { loadSession } from '@/lib/session';
 
 type CategoryConfig = typeof CATEGORY_CONFIG;
@@ -190,16 +191,7 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
         </section>
       )}
 
-      <footer className="py-6 px-4 bg-[#1D2324] text-white">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
-          <Link href="/" className="font-bold text-base">supermarket<span className="text-white/50">.ie</span></Link>
-          <div className="flex gap-5 text-sm text-[#B2BEC3]">
-            <Link href="/privacy" className="hover:text-white transition">Privacy</Link>
-            <Link href="/terms" className="hover:text-white transition">Terms</Link>
-            <Link href="/contact" className="hover:text-white transition">Contact</Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

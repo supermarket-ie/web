@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
+import { SiteFooter } from '@/components/SiteFooter';
 import { notFound } from 'next/navigation';
 import { POSTS, getPost, type Section } from '@/lib/blog';
 
@@ -145,13 +146,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         )}
       </main>
 
-      <footer className="py-6 px-6 text-center text-xs" style={{ borderTop: '1px solid rgba(175,173,172,0.2)', color: 'rgba(175,173,172,0.8)' }}>
-        <Link href="/" className="hover:text-[#636E72]">supermarket.ie</Link>
-        {' · '}
-        <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="hover:text-[#636E72]">Price comparison</Link>
-        {' · '}
-        <Link href="/shop" className="hover:text-[#636E72]">Browse categories</Link>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

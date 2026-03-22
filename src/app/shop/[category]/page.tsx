@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
+import { SiteFooter } from '@/components/SiteFooter';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 
@@ -370,13 +371,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
         </div>
       </main>
 
-      <footer className="py-6 px-6 text-center text-xs" style={{ borderTop: '1px solid rgba(175,173,172,0.2)', color: 'rgba(175,173,172,0.8)' }}>
-        <Link href="/" className="hover:text-[#5c5b5b]">supermarket.ie</Link>
-        {' · '}
-        <Link href="/shop" className="hover:text-[#5c5b5b]">All categories</Link>
-        {' · '}
-        <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="hover:text-[#5c5b5b]">Store comparison</Link>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
