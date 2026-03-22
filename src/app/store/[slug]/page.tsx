@@ -40,10 +40,10 @@ export default async function StorePage({ params }: { params: Promise<{ slug: st
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFBF7]">
+    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       <header className="px-6 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <Link href="/" className="text-base font-bold text-[#1D2324]">supermarket<span className="text-[#E17055]">.ie</span></Link>
+          <Link href="/" className="text-base font-bold text-[#1D2324]">supermarket<span className="text-[#006A35]">.ie</span></Link>
           <Link href="/browse" className="text-sm text-[#636E72] hover:text-[#1D2324] transition">Browse all →</Link>
         </div>
       </header>
@@ -55,7 +55,7 @@ export default async function StorePage({ params }: { params: Promise<{ slug: st
             {vendor.logo_url ? (
               <img src={vendor.logo_url} alt={vendor.name} className="w-16 h-16 rounded-2xl object-cover border border-[#E8E2DC] flex-shrink-0"/>
             ) : (
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#E17055] to-[#D4604A] flex items-center justify-center text-2xl text-white font-bold flex-shrink-0">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl text-[#004a23] font-bold flex-shrink-0" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
                 {vendor.name.charAt(0)}
               </div>
             )}

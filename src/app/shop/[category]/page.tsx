@@ -228,26 +228,26 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
   const cheapest = rankedStores[0];
 
   return (
-    <div className="min-h-screen bg-[#FFFBF7]">
+    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
         {/* Breadcrumb */}
         <nav className="pt-6 pb-2 text-xs text-[#B2BEC3]">
-          <Link href="/" className="hover:text-[#636E72]">Home</Link>
+          <Link href="/" className="hover:text-[#5c5b5b]">Home</Link>
           {' · '}
-          <Link href="/shop" className="hover:text-[#636E72]">Shop by category</Link>
+          <Link href="/shop" className="hover:text-[#5c5b5b]">Shop by category</Link>
           {' · '}
-          <span className="text-[#636E72]">{categoryName}</span>
+          <span className="text-[#5c5b5b]">{categoryName}</span>
         </nav>
 
         {/* Hero */}
         <div className="pt-4 pb-6">
           <div className="text-4xl mb-3">{meta?.emoji ?? '🛒'}</div>
-          <h1 className="text-3xl font-bold text-[#1D2324] mb-2">
+          <h1 className="text-3xl font-bold text-[#2F2F2E] mb-2">
             {categoryName} prices in Ireland
           </h1>
-          <p className="text-[#636E72]">
+          <p className="text-[#5c5b5b]">
             {meta?.description ?? `Live ${categoryName.toLowerCase()} prices from Tesco, Dunnes Stores and SuperValu. Updated twice weekly.`}
           </p>
         </div>
@@ -271,11 +271,11 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
               const isBest = i === 0;
               return (
                 <div key={store} className="rounded-xl p-3 border-2 text-center"
-                  style={{ borderColor: isBest ? info.color : '#E8E2DC', background: isBest ? info.light : '#fff' }}>
-                  <div className="text-xs font-bold mb-1" style={{ color: isBest ? info.color : '#1D2324' }}>
+                  style={{ borderColor: isBest ? info.color : 'rgba(175,173,172,0.2)', background: isBest ? info.light : '#fff' }}>
+                  <div className="text-xs font-bold mb-1" style={{ color: isBest ? info.color : '#2F2F2E' }}>
                     {info.name.split(' ')[0]}
                   </div>
-                  <div className="text-lg font-bold" style={{ color: isBest ? info.color : '#1D2324' }}>
+                  <div className="text-lg font-bold" style={{ color: isBest ? info.color : '#2F2F2E' }}>
                     {fmt(storeTotals[store])}
                   </div>
                   {isBest && <div className="text-[10px] font-bold text-white rounded-full px-2 py-0.5 mt-1 inline-block" style={{ background: info.color }}>Cheapest ✓</div>}
@@ -288,8 +288,8 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
         {/* Product list */}
         {hasProducts ? (
           <>
-            <h2 className="text-lg font-bold text-[#1D2324] mb-3">{products.length} {categoryName.toLowerCase()} products</h2>
-            <div className="bg-white rounded-2xl border border-[#E8E2DC] divide-y divide-[#F5F0EB] mb-8">
+            <h2 className="text-lg font-bold text-[#2F2F2E] mb-3">{products.length} {categoryName.toLowerCase()} products</h2>
+            <div className="bg-white rounded-2xl divide-y divide-[#F3F0EF] mb-8" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
               {products.map(({ canonical, stores }) => {
                 const sorted = [...stores.entries()].sort((a, b) => a[1].price - b[1].price);
                 const best = sorted[0];
@@ -298,20 +298,20 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <div className="text-sm font-medium text-[#1D2324]">{canonical}</div>
+                          <div className="text-sm font-medium text-[#2F2F2E]">{canonical}</div>
                           {best && best[1].on_promotion && (
-                            <span className="text-[10px] font-bold uppercase tracking-wide bg-[#E17055] text-white px-1.5 py-0.5 rounded-md">🏷️ Offer</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-[#004a23] px-1.5 py-0.5 rounded-md" style={{ background: '#6BFE9C' }}>🏷️ Offer</span>
                           )}
                         </div>
                         {best && (
-                          <div className="text-xs text-[#636E72] mt-0.5">
+                          <div className="text-xs text-[#5c5b5b] mt-0.5">
                             Best: <span style={{ color: STORE_INFO[best[0] as keyof typeof STORE_INFO]?.color }}>{STORE_INFO[best[0] as keyof typeof STORE_INFO]?.name}</span>
                           </div>
                         )}
                       </div>
                       <div className="text-right flex-shrink-0">
                         {best && (
-                          <div className="text-sm font-bold text-[#1D2324]">{fmt(best[1].price)}</div>
+                          <div className="text-sm font-bold text-[#2F2F2E]">{fmt(best[1].price)}</div>
                         )}
                         {best && best[1].was_price && (
                           <div className="text-xs text-[#B2BEC3] line-through">{fmt(best[1].was_price)}</div>
@@ -323,7 +323,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
                         {sorted.map(([store, { price, on_promotion }]) => (
                           <span key={store} className="text-xs text-[#B2BEC3]">
                             {STORE_INFO[store as keyof typeof STORE_INFO]?.name.split(' ')[0]} {fmt(price)}
-                            {on_promotion && <span className="ml-0.5 text-[#E17055]">🏷️</span>}
+                            {on_promotion && <span className="ml-0.5 text-[#006A35]">🏷️</span>}
                           </span>
                         ))}
                       </div>
@@ -334,47 +334,48 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
             </div>
           </>
         ) : (
-          <div className="bg-white rounded-2xl border border-[#E8E2DC] p-8 text-center text-[#636E72] mb-8">
+          <div className="bg-white rounded-2xl p-8 text-center text-[#5c5b5b] mb-8" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
             <p className="text-lg mb-2">Prices coming soon</p>
             <p className="text-sm">We're adding {categoryName.toLowerCase()} products — check back shortly.</p>
           </div>
         )}
 
         {/* CTA */}
-        <div className="bg-gradient-to-br from-[#FEF3E2] to-[#FFFBF7] border-2 border-[#E17055]/20 rounded-2xl p-6 text-center mb-10">
+        <div className="rounded-2xl p-6 text-center mb-10" style={{ background: '#EAE7E7' }}>
           <div className="text-2xl mb-2">{meta?.emoji ?? '🛒'}</div>
-          <h3 className="font-bold text-[#1D2324] mb-1">Build your full weekly list</h3>
-          <p className="text-sm text-[#636E72] mb-4">
+          <h3 className="font-bold text-[#2F2F2E] mb-1">Build your full weekly list</h3>
+          <p className="text-sm text-[#5c5b5b] mb-4">
             Tell our AI what you want to cook and get a complete shopping list with live prices across all three stores.
           </p>
           <Link href="/"
-            className="inline-block bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-6 py-3 rounded-xl font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition">
+            className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]"
+            style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
             Try the AI planner free →
           </Link>
         </div>
 
         {/* Other categories */}
-        <h2 className="text-lg font-bold text-[#1D2324] mb-4">Browse other categories</h2>
+        <h2 className="text-lg font-bold text-[#2F2F2E] mb-4">Browse other categories</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {Object.entries(CATEGORY_META)
             .filter(([slug]) => slug !== category)
             .slice(0, 9)
             .map(([slug, m]) => (
               <Link key={slug} href={`/shop/${slug}`}
-                className="bg-white rounded-xl border border-[#E8E2DC] p-3 flex items-center gap-2 hover:border-[#E17055]/40 transition">
+                className="bg-white rounded-xl p-3 flex items-center gap-2 transition hover:shadow-sm" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
                 <span className="text-xl">{m.emoji}</span>
-                <span className="text-sm font-medium text-[#1D2324]">{slugToCategory(slug)}</span>
+                <span className="text-sm font-medium text-[#2F2F2E]">{slugToCategory(slug)}</span>
               </Link>
             ))}
         </div>
       </main>
 
-      <footer className="border-t border-[#E8E2DC] py-6 px-6 text-center text-xs text-[#B2BEC3]">
-        <Link href="/" className="hover:text-[#636E72]">supermarket.ie</Link>
+      <footer className="py-6 px-6 text-center text-xs" style={{ borderTop: '1px solid rgba(175,173,172,0.2)', color: 'rgba(175,173,172,0.8)' }}>
+        <Link href="/" className="hover:text-[#5c5b5b]">supermarket.ie</Link>
         {' · '}
-        <Link href="/shop" className="hover:text-[#636E72]">All categories</Link>
+        <Link href="/shop" className="hover:text-[#5c5b5b]">All categories</Link>
         {' · '}
-        <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="hover:text-[#636E72]">Store comparison</Link>
+        <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="hover:text-[#5c5b5b]">Store comparison</Link>
       </footer>
     </div>
   );

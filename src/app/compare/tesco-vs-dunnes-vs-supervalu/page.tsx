@@ -107,18 +107,18 @@ export default async function ComparePage() {
   const updatedLabel = now.toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
-    <div className="min-h-screen bg-[#FFFBF7]">
+    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
         {/* Hero */}
         <div className="pt-10 pb-8">
-          <div className="text-xs font-semibold text-[#E17055] uppercase tracking-widest mb-3">Live Price Comparison · Ireland</div>
-          <h1 className="text-3xl font-bold text-[#1D2324] mb-3 leading-tight">
+          <div className="text-xs font-semibold text-[#006A35] uppercase tracking-widest mb-3">Live Price Comparison · Ireland</div>
+          <h1 className="text-3xl font-bold text-[#2F2F2E] mb-3 leading-tight">
             Tesco vs Dunnes Stores vs SuperValu<br/>
-            <span className="text-[#E17055]">Which is cheapest in Ireland?</span>
+            <span className="text-[#006A35]">Which is cheapest in Ireland?</span>
           </h1>
-          <p className="text-[#636E72] text-base max-w-xl">
+          <p className="text-[#5c5b5b] text-base max-w-xl">
             We track live prices across {overallCount}+ products at Ireland's three main supermarkets.
             Last updated {updatedLabel}.
           </p>
@@ -153,7 +153,7 @@ export default async function ComparePage() {
                 <div className="text-2xl font-bold mb-1" style={{ color: isCheapest ? info.color : '#1D2324' }}>
                   {fmt(overallTotals[store] ?? 0)}
                 </div>
-                <div className="text-xs text-[#636E72]">{info.tagline}</div>
+                <div className="text-xs text-[#5c5b5b]">{info.tagline}</div>
                 {isCheapest && (
                   <div className="mt-2 text-[10px] font-bold uppercase rounded-full px-2 py-0.5 inline-block text-white" style={{ background: info.color }}>
                     Cheapest ✓
@@ -165,17 +165,17 @@ export default async function ComparePage() {
         </div>
 
         {/* Category breakdown */}
-        <h2 className="text-xl font-bold text-[#1D2324] mb-4">Price comparison by category</h2>
+        <h2 className="text-xl font-bold text-[#2F2F2E] mb-4">Price comparison by category</h2>
         <div className="space-y-3 mb-10">
           {BASKET_CATEGORIES.filter(cat => categoryTotals[cat]).map(cat => {
             const totals = categoryTotals[cat];
             const catRanked = [...stores].sort((a, b) => (totals[a] ?? 0) - (totals[b] ?? 0));
             const catCheapest = catRanked[0];
             return (
-              <div key={cat} className="bg-white rounded-2xl border border-[#E8E2DC] p-4">
+              <div key={cat} className="bg-white rounded-2xl border border-[rgba(175,173,172,0.2)] p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-[#1D2324]">{cat}</h3>
-                  <span className="text-xs text-[#5D9B8F] font-semibold">
+                  <h3 className="font-semibold text-[#2F2F2E]">{cat}</h3>
+                  <span className="text-xs text-[#006A35] font-semibold">
                     Best: {STORE_INFO[catCheapest].name} {fmt(totals[catCheapest] ?? 0)}
                   </span>
                 </div>
@@ -201,10 +201,10 @@ export default async function ComparePage() {
                   <div className="mt-3 pt-3 border-t border-[#F0ECE8] space-y-1.5">
                     {samples[cat].slice(0, 3).map(p => (
                       <div key={p.name} className="flex items-center justify-between text-xs">
-                        <span className="text-[#636E72] truncate flex-1">{p.name}</span>
+                        <span className="text-[#5c5b5b] truncate flex-1">{p.name}</span>
                         <div className="flex gap-2 flex-shrink-0 ml-2">
                           {stores.filter(s => p.prices[s]).map(s => (
-                            <span key={s} className="text-[#1D2324]">
+                            <span key={s} className="text-[#2F2F2E]">
                               <span className="text-[#B2BEC3]">{STORE_INFO[s].name.split(' ')[0]} </span>
                               {fmt(p.prices[s])}
                             </span>
@@ -220,23 +220,24 @@ export default async function ComparePage() {
         </div>
 
         {/* CTA */}
-        <div className="bg-gradient-to-br from-[#FEF3E2] to-[#FFFBF7] border-2 border-[#E17055]/20 rounded-2xl p-8 text-center">
+        <div className="rounded-2xl p-8 text-center" style={{ background: '#EAE7E7' }}>
           <div className="text-3xl mb-3">🛒</div>
-          <h2 className="text-xl font-bold text-[#1D2324] mb-2">Get a personalised price comparison</h2>
-          <p className="text-[#636E72] mb-5 max-w-md mx-auto">
+          <h2 className="text-xl font-bold text-[#2F2F2E] mb-2">Get a personalised price comparison</h2>
+          <p className="text-[#5c5b5b] mb-5 max-w-md mx-auto">
             Tell our AI what you want to cook this week and get a shopping list with live prices from all three stores — so you know exactly where to shop.
           </p>
           <Link href="/"
-            className="inline-block bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-3.5 rounded-xl font-semibold text-base hover:from-[#D4604A] hover:to-[#C5533D] transition">
+            className="inline-block px-8 py-3.5 rounded-full font-semibold text-base transition text-[#004a23]"
+            style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
             Build my weekly list free →
           </Link>
-          <p className="text-xs text-[#B2BEC3] mt-3">No signup required to get started</p>
+          <p className="text-xs mt-3" style={{ color: 'rgba(175,173,172,0.8)' }}>No signup required to get started</p>
         </div>
 
       </main>
 
-      <footer className="border-t border-[#E8E2DC] py-6 px-6 text-center text-xs text-[#B2BEC3] max-w-6xl mx-auto">
-        <a href="/" className="hover:text-[#636E72]">supermarket.ie</a>
+      <footer className="py-6 px-6 text-center text-xs max-w-6xl mx-auto" style={{ borderTop: '1px solid rgba(175,173,172,0.2)', color: 'rgba(175,173,172,0.8)' }}>
+        <a href="/" className="hover:text-[#5c5b5b]">supermarket.ie</a>
         {' · '}Ireland grocery price comparison
       </footer>
     </div>

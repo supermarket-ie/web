@@ -97,16 +97,16 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
   const grouped = groupByCategory(items);
 
   return (
-    <div className="min-h-screen bg-[#FFFBF7]">
+    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       {/* Header */}
       <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <Link href="/" className="font-bold text-lg text-[#1D2324]">
-            supermarket<span className="text-[#E17055]">.ie</span>
+            supermarket<span className="text-[#006A35]">.ie</span>
           </Link>
           <Link
             href="/"
-            className="text-xs bg-[#E17055] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#D4604A] transition"
+            className="text-xs px-3 py-1.5 rounded-full font-semibold transition text-[#004a23]" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
           >
             Build my list →
           </Link>
@@ -202,13 +202,14 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* CTA */}
-        <div className="mt-8 bg-gradient-to-br from-[#FEF3E2] to-[#FFFBF7] border-2 border-[#E17055]/20 rounded-2xl p-6 text-center">
+        <div className="mt-8 rounded-2xl p-6 text-center" style={{ background: '#EAE7E7' }}>
           <div className="text-2xl mb-2">🛒</div>
-          <h3 className="font-bold text-[#1D2324] mb-1">Build your own list</h3>
-          <p className="text-sm text-[#636E72] mb-4">Tell our AI what you want to cook and get a personalised list with live prices from Tesco, Dunnes &amp; SuperValu.</p>
+          <h3 className="font-bold text-[#2F2F2E] mb-1">Build your own list</h3>
+          <p className="text-sm text-[#5c5b5b] mb-4">Tell our AI what you want to cook and get a personalised list with live prices from Tesco, Dunnes &amp; SuperValu.</p>
           <Link
             href="/"
-            className="inline-block bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-6 py-3 rounded-xl font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition"
+            className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]"
+            style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
           >
             Try supermarket.ie free →
           </Link>

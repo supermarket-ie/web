@@ -65,7 +65,7 @@ function ProductCard({
       <div className="py-3 border-b border-[#F0ECE8] last:border-0 opacity-50">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm text-[#636E72] line-through">{item.canonical_name}</span>
-          <button onClick={() => onRestore(item.product_id)} className="text-xs text-[#E17055] font-semibold hover:underline flex-shrink-0">Restore</button>
+          <button onClick={() => onRestore(item.product_id)} className="text-xs text-[#006A35] font-semibold hover:underline flex-shrink-0">Restore</button>
         </div>
       </div>
     );
@@ -75,8 +75,8 @@ function ProductCard({
     <div className="py-3 border-b border-[#F0ECE8] last:border-0">
       <div className="flex items-start gap-2">
         <button onClick={() => onRemove(item.product_id)}
-          className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 border-[#DDD8D2] hover:border-[#E17055] hover:bg-[#FFF0EE] transition flex items-center justify-center group" title="Remove">
-          <svg className="w-2.5 h-2.5 text-[#DDD8D2] group-hover:text-[#E17055]" fill="none" viewBox="0 0 10 10">
+          className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 border-[#DDD8D2] hover:border-[#006A35] hover:bg-[#EAE7E7] transition flex items-center justify-center group" title="Remove">
+          <svg className="w-2.5 h-2.5 text-[#DDD8D2] group-hover:text-[#006A35]" fill="none" viewBox="0 0 10 10">
             <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
         </button>
@@ -208,7 +208,7 @@ function AddItemsPanel({
                   </div>
                   {onList
                     ? <span className="text-[11px] text-[#5D9B8F] font-semibold flex-shrink-0">On list ✓</span>
-                    : <span className="text-[#E17055] flex-shrink-0">
+                    : <span className="text-[#006A35] flex-shrink-0">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                         </svg>
@@ -260,14 +260,14 @@ function PreferencesPanel({ token, currentFamilySize, onClose }: {
         <div className="grid grid-cols-2 gap-2 mb-5">
           {FAMILY_OPTIONS.map(opt => (
             <button key={opt.value} onClick={() => setSelected(opt.value as FamilySize)}
-              className={`p-3 rounded-xl text-center transition-all border-2 ${selected === opt.value ? 'border-[#E17055] bg-[#FEF3E2]' : 'border-[#E8E2DC] hover:border-[#E17055]/50'}`}>
+              className={`p-3 rounded-xl text-center transition-all border-2 ${selected === opt.value ? 'border-[#006A35] bg-[#EAE7E7]' : 'border-[rgba(175,173,172,0.3)]'}`}>
               <div className="text-2xl mb-1">{opt.icon}</div>
-              <div className={`text-xs font-semibold ${selected === opt.value ? 'text-[#E17055]' : 'text-[#636E72]'}`}>{opt.label}</div>
+              <div className={`text-xs font-semibold ${selected === opt.value ? 'text-[#006A35]' : 'text-[#636E72]'}`}>{opt.label}</div>
             </button>
           ))}
         </div>
         <button onClick={handleSave} disabled={saving || saved}
-          className="w-full bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white py-3 rounded-xl font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all disabled:opacity-70">
+          className="w-full py-3 rounded-xl font-semibold transition-all disabled:opacity-70 text-[#004a23]" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
           {saved ? '✓ Saved! Reloading…' : saving ? 'Saving…' : selected === currentFamilySize ? 'Close' : 'Save & update list'}
         </button>
       </div>
@@ -446,7 +446,7 @@ export function ShoppingList({
         <div className="flex gap-2 flex-wrap flex-1">
           {categories.map(cat => (
             <a key={cat} href={`#cat-${cat.replace(/\s+/g, '-').toLowerCase()}`}
-              className="text-xs font-medium px-3 py-1.5 rounded-full bg-white border border-[#E8E2DC] text-[#636E72] hover:border-[#E17055] hover:text-[#E17055] transition">
+              className="text-xs font-medium px-3 py-1.5 rounded-full bg-white border border-[#E8E2DC] text-[#636E72] hover:border-[#006A35] hover:text-[#006A35] transition">
               {cat}
             </a>
           ))}
@@ -466,7 +466,7 @@ export function ShoppingList({
             className={`flex items-center gap-1.5 text-xs font-semibold transition px-3 py-1.5 rounded-full border ${
               shareUrl
                 ? 'text-[#5D9B8F] border-[#5D9B8F] bg-[#F0FAF8]'
-                : 'text-[#636E72] border-[#E8E2DC] bg-white hover:border-[#E17055] hover:text-[#E17055]'
+                : 'text-[#636E72] border-[#E8E2DC] bg-white hover:border-[#006A35] hover:text-[#006A35]'
             }`}
             title={shareUrl ? 'Link copied!' : 'Share this list'}>
             {shareUrl ? (
@@ -495,7 +495,7 @@ export function ShoppingList({
       {removedCount > 0 && (
         <div className="mb-4 bg-[#FFF8F6] border border-[#FDDDD8] rounded-xl px-4 py-3 flex items-center justify-between gap-3">
           <p className="text-sm text-[#636E72]">{removedCount} item{removedCount > 1 ? 's' : ''} removed</p>
-          <button onClick={handleRestoreAll} className="text-xs text-[#E17055] font-semibold hover:underline flex-shrink-0">Restore all</button>
+          <button onClick={handleRestoreAll} className="text-xs text-[#006A35] font-semibold hover:underline flex-shrink-0">Restore all</button>
         </div>
       )}
 

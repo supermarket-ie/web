@@ -68,9 +68,9 @@ function groupByCategory(items: SmartList['items']): [string, SmartList['items']
 
 function ExpiredPage() {
   return (
-    <div className="min-h-screen bg-[#FFFBF7] flex flex-col items-center justify-center px-6 py-16">
+    <div className="min-h-screen bg-[#F9F6F5] flex flex-col items-center justify-center px-6 py-16">
       <Link href="/" className="text-2xl font-bold text-[#1D2324] mb-10 inline-block">
-        supermarket<span className="text-[#E17055]">.ie</span>
+        supermarket<span className="text-[#006A35]">.ie</span>
       </Link>
       <div className="bg-white rounded-2xl shadow-sm border border-[#E8E2DC] max-w-md w-full p-8 text-center">
         <div className="text-5xl mb-4">🔗</div>
@@ -80,7 +80,7 @@ function ExpiredPage() {
         </p>
         <Link
           href="/list/request"
-          className="inline-block bg-[#E17055] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#D4604A] transition"
+          className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
         >
           Get a new link →
         </Link>
@@ -193,13 +193,13 @@ export default async function ListPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-    <div className="min-h-screen bg-[#FFFBF7]">
+    <div className="min-h-screen bg-[#F9F6F5]">
 
       {/* Sticky header */}
       <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <Link href="/" className="font-bold text-lg text-[#1D2324]">
-            supermarket<span className="text-[#E17055]">.ie</span>
+            supermarket<span className="text-[#006A35]">.ie</span>
           </Link>
           <div className="flex items-center gap-3">
             <span className="text-xs text-[#636E72]">Updated {formatDate(list.generated_at)}</span>

@@ -3,15 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { HomeNav } from "@/components/HomeNav";
-import { HomePlanner } from "@/components/HomePlanner";
+import { HomePlanner } from "@/components/HomePlannerGreen";
 import { loadSession } from "@/lib/session";
 
 export default function Home() {
   const [familySize, setFamilySize] = useState<string>("");
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
   const [showCookieBanner, setShowCookieBanner] = useState(false);
   const [listUrl, setListUrl] = useState<string | null>(null);
 
@@ -36,37 +32,11 @@ export default function Home() {
     { value: "5+", label: "5+", icon: "👨‍👩‍👧‍👦" },
   ];
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, familySize }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Something went wrong");
-      }
-
-      setSubmitted(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#FFFBF7]">
+    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       {/* Cookie Banner */}
       {showCookieBanner && (
-        <div className="fixed bottom-0 left-0 right-0 bg-[#2D3436]/95 backdrop-blur-sm text-white p-4 z-50 shadow-2xl">
+        <div className="fixed bottom-0 left-0 right-0 text-white p-4 z-50 shadow-2xl" style={{ background: 'rgba(14,14,14,0.92)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
           <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-gray-300">
               We use cookies to improve your experience.{" "}
@@ -74,7 +44,8 @@ export default function Home() {
             </p>
             <button
               onClick={acceptCookies}
-              className="bg-[#E17055] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#d65f45] transition whitespace-nowrap"
+              className="px-5 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap text-[#004a23] font-semibold"
+              style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
             >
               Accept
             </button>
@@ -83,59 +54,42 @@ export default function Home() {
       )}
 
       {/* Header */}
-      <header className="px-6 py-4 border-b border-[#E8E2DC] bg-[#FFFBF7] relative z-20">
+      <header className="px-6 py-4 relative z-20 sticky top-0" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2.5">
-            {/* Logo Icon - Shopping bag with carrot */}
             <div className="relative w-9 h-9">
               <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                {/* Shopping bag */}
-                <path 
-                  d="M8 12C8 10.8954 8.89543 10 10 10H30C31.1046 10 32 10.8954 32 12V32C32 34.2091 30.2091 36 28 36H12C9.79086 36 8 34.2091 8 32V12Z" 
-                  fill="#E17055"
+                <defs>
+                  <linearGradient id="homeBagGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#006A35"/>
+                    <stop offset="100%" stopColor="#6BFE9C"/>
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M8 12C8 10.8954 8.89543 10 10 10H30C31.1046 10 32 10.8954 32 12V32C32 34.2091 30.2091 36 28 36H12C9.79086 36 8 34.2091 8 32V12Z"
+                  fill="url(#homeBagGrad)"
                 />
-                {/* Bag handles */}
-                <path 
-                  d="M14 10V8C14 5.79086 15.7909 4 18 4H22C24.2091 4 26 5.79086 26 8V10" 
-                  stroke="#E17055" 
-                  strokeWidth="2.5" 
+                <path
+                  d="M14 10V8C14 5.79086 15.7909 4 18 4H22C24.2091 4 26 5.79086 26 8V10"
+                  stroke="#004a23"
+                  strokeWidth="2.5"
                   strokeLinecap="round"
                 />
-                {/* Carrot body */}
-                <path 
-                  d="M20 17L17 30" 
-                  stroke="#FFFBF7" 
-                  strokeWidth="4" 
-                  strokeLinecap="round"
-                />
-                {/* Carrot leaves */}
-                <path 
-                  d="M18 17C18 17 19 15 20 15C21 15 22 17 22 17" 
-                  stroke="#00B894" 
-                  strokeWidth="2" 
-                  strokeLinecap="round"
-                />
-                <path 
-                  d="M20 15V13" 
-                  stroke="#00B894" 
-                  strokeWidth="2" 
-                  strokeLinecap="round"
-                />
+                <path d="M14 22h12M20 17v10" stroke="#004a23" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </div>
-            {/* Wordmark */}
-            <span className="text-[22px] font-bold tracking-tight text-[#1D2324]">
-              supermarket<span className="text-[#1D2324]">.ie</span>
+            <span className="text-[22px] font-bold tracking-tight text-[#2F2F2E]">
+              supermarket<span className="text-[#006A35]">.ie</span>
             </span>
           </Link>
           <nav className="flex items-center gap-6">
-            <Link href="/shop" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
+            <Link href="/shop" className="text-[#5c5b5b] hover:text-[#006A35] transition text-sm font-medium hidden md:block">
               Prices
             </Link>
-            <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
+            <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-[#5c5b5b] hover:text-[#006A35] transition text-sm font-medium hidden md:block">
               Compare
             </Link>
-            <Link href="/blog" className="text-[#636E72] hover:text-[#1D2324] transition text-sm font-medium hidden md:block">
+            <Link href="/blog" className="text-[#5c5b5b] hover:text-[#006A35] transition text-sm font-medium hidden md:block">
               Blog
             </Link>
             <HomeNav />
@@ -145,19 +99,19 @@ export default function Home() {
               onClick={() => setMenuOpen(o => !o)}
               aria-label="Menu"
             >
-              <span className={`block w-5 h-0.5 bg-[#1D2324] transition-all duration-200 origin-center ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
-              <span className={`block w-5 h-0.5 bg-[#1D2324] transition-all duration-200 ${menuOpen ? 'opacity-0' : ''}`} />
-              <span className={`block w-5 h-0.5 bg-[#1D2324] transition-all duration-200 origin-center ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+              <span className={`block w-5 h-0.5 bg-[#2F2F2E] transition-all duration-200 origin-center ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+              <span className={`block w-5 h-0.5 bg-[#2F2F2E] transition-all duration-200 ${menuOpen ? 'opacity-0' : ''}`} />
+              <span className={`block w-5 h-0.5 bg-[#2F2F2E] transition-all duration-200 origin-center ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
             </button>
           </nav>
         </div>
         {/* Mobile menu dropdown */}
         {menuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-white border-b border-[#E8E2DC] shadow-lg px-6 py-4 flex flex-col gap-4 z-20">
-            <Link href="/shop" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Prices</Link>
-            <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Compare</Link>
-            <Link href="/blog" className="text-[#1D2324] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Blog</Link>
-            <a href="/list/request" className="mt-1 bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-4 py-3 rounded-xl text-sm font-semibold text-center" onClick={() => setMenuOpen(false)}>Get started free</a>
+          <div className="md:hidden absolute top-full left-0 right-0 shadow-lg px-6 py-4 flex flex-col gap-4 z-20" style={{ background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+            <Link href="/shop" className="text-[#2F2F2E] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Prices</Link>
+            <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-[#2F2F2E] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Compare</Link>
+            <Link href="/blog" className="text-[#2F2F2E] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Blog</Link>
+            <Link href="/list/request" className="mt-1 px-4 py-3 rounded-xl text-sm font-semibold text-center text-[#004a23]" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }} onClick={() => setMenuOpen(false)}>Get started free</Link>
           </div>
         )}
       </header>
@@ -168,17 +122,17 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             {/* Left: Copy */}
             <div>
-              <div className="inline-flex items-center gap-2 bg-[#F0FAF7] text-[#5D9B8F] px-3 py-1.5 rounded-full text-sm font-semibold mb-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold mb-6" style={{ background: '#EAE7E7', color: '#006A35' }}>
                 <span className="text-base">✨</span>
                 Ireland&apos;s first AI grocery planner
               </div>
-              
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#1D2324] leading-[1.1] tracking-tight mb-6">
+
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-[#2F2F2E] leading-[1.1] mb-6" style={{ letterSpacing: '-0.02em' }}>
                 Tell us what you&apos;re cooking.<br />
-                <span className="bg-gradient-to-r from-[#E17055] to-[#D4604A] bg-clip-text text-transparent">We&apos;ll handle the rest.</span>
+                <span style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>We&apos;ll handle the rest.</span>
               </h1>
-              
-              <p className="text-lg md:text-xl text-[#636E72] leading-relaxed mb-8 max-w-lg">
+
+              <p className="text-lg md:text-xl text-[#5c5b5b] leading-relaxed mb-8 max-w-lg">
                 Our AI builds your weekly shopping list and finds the best prices across Tesco, Dunnes and SuperValu — in seconds.
               </p>
 
@@ -190,20 +144,21 @@ export default function Home() {
                   "Stop wasting hours comparing prices",
                 ].map((item) => (
                   <div key={item} className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-[#5D9B8F] flex items-center justify-center flex-shrink-0">
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#6BFE9C' }}>
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="#004a23" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
-                    <span className="text-[#1D2324] font-medium">{item}</span>
+                    <span className="text-[#2F2F2E] font-medium">{item}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 items-start">
+              <div className="flex flex-col sm:flex-row gap-4 items-start mb-3">
                 <Link
                   href="/plan"
-                  className="inline-flex items-center justify-center bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-lg shadow-[#E17055]/20 hover:shadow-xl hover:-translate-y-0.5"
+                  className="inline-flex items-center justify-center px-8 py-4 rounded-full text-lg font-semibold transition-all hover:-translate-y-0.5 text-[#004a23]"
+                  style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)', boxShadow: '0 4px 20px rgba(0,106,53,0.25)' }}
                 >
                   ✨ Plan my week
                   <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -213,33 +168,35 @@ export default function Home() {
                 {listUrl ? (
                   <Link
                     href={listUrl}
-                    className="inline-flex items-center justify-center border-2 border-[#E8E2DC] text-[#636E72] px-8 py-4 rounded-xl text-lg font-semibold hover:border-[#1D2324] hover:text-[#1D2324] transition-all"
+                    className="inline-flex items-center justify-center px-8 py-4 rounded-full text-lg font-semibold transition-all text-[#2F2F2E]"
+                    style={{ background: '#EAE7E7' }}
                   >
                     My list
                   </Link>
                 ) : (
                   <Link
                     href="/browse"
-                    className="inline-flex items-center justify-center border-2 border-[#E8E2DC] text-[#636E72] px-8 py-4 rounded-xl text-lg font-semibold hover:border-[#1D2324] hover:text-[#1D2324] transition-all"
+                    className="inline-flex items-center justify-center px-8 py-4 rounded-full text-lg font-semibold transition-all text-[#2F2F2E]"
+                    style={{ background: '#EAE7E7' }}
                   >
                     Browse prices
                   </Link>
                 )}
               </div>
-              <div className="text-sm text-[#636E72]">
-                <span className="font-semibold text-[#1D2324]">100% free</span> · No signup needed to try
+              <div className="text-sm text-[#5c5b5b]">
+                <span className="font-semibold text-[#2F2F2E]">100% free</span> · No signup needed to try
               </div>
             </div>
 
             {/* Right: Live AI Planner */}
             <div className="relative">
-              <div className="bg-white rounded-2xl shadow-xl p-5 border border-[#E8E2DC] min-h-[380px] flex flex-col">
-                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#F5F0EB]">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#E17055] to-[#D4604A] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">S</div>
+              <div className="bg-white rounded-2xl shadow-xl p-5 min-h-[380px] flex flex-col" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
+                <div className="flex items-center gap-3 mb-4 pb-4" style={{ borderBottom: '1px solid #F3F0EF' }}>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-[#004a23] text-sm font-bold flex-shrink-0" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>S</div>
                   <div>
-                    <div className="font-semibold text-[#1D2324] text-sm">supermarket.ie AI</div>
-                    <div className="flex items-center gap-1.5 text-xs text-[#5D9B8F]">
-                      <span className="w-1.5 h-1.5 bg-[#5D9B8F] rounded-full animate-pulse inline-block"/>
+                    <div className="font-semibold text-[#2F2F2E] text-sm">supermarket.ie AI</div>
+                    <div className="flex items-center gap-1.5 text-xs text-[#006A35]">
+                      <span className="w-1.5 h-1.5 rounded-full animate-pulse inline-block" style={{ background: '#6BFE9C' }}/>
                       Online · Prices updated today
                     </div>
                   </div>
@@ -250,16 +207,16 @@ export default function Home() {
               </div>
 
               {/* Floating badge */}
-              <div className="absolute -bottom-4 -left-4 bg-white rounded-xl shadow-lg p-3 border border-[#E8E2DC]">
+              <div className="absolute -bottom-4 -left-4 bg-white rounded-xl shadow-lg p-3" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
                 <div className="flex items-center gap-2">
                   <div className="flex -space-x-2">
-                    <div className="w-8 h-8 rounded-full bg-[#5D9B8F] border-2 border-white flex items-center justify-center text-white text-xs font-bold">JK</div>
-                    <div className="w-8 h-8 rounded-full bg-[#7B8A8E] border-2 border-white flex items-center justify-center text-white text-xs font-bold">SM</div>
-                    <div className="w-8 h-8 rounded-full bg-[#9B8574] border-2 border-white flex items-center justify-center text-white text-xs font-bold">PL</div>
+                    <div className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold" style={{ background: '#006A35' }}>JK</div>
+                    <div className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold" style={{ background: '#5c5b5b' }}>SM</div>
+                    <div className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold" style={{ background: '#004a23' }}>PL</div>
                   </div>
                   <div className="text-sm">
-                    <div className="font-semibold text-[#1D2324]">2,400+</div>
-                    <div className="text-[#636E72] text-xs">Happy shoppers</div>
+                    <div className="font-semibold text-[#2F2F2E]">2,400+</div>
+                    <div className="text-[#5c5b5b] text-xs">Happy shoppers</div>
                   </div>
                 </div>
               </div>
@@ -269,62 +226,67 @@ export default function Home() {
       </section>
 
       {/* Trust Bar */}
-      <section className="py-8 px-6 bg-white border-y border-[#E8E2DC]">
+      <section className="py-8 px-6" style={{ background: '#F3F0EF' }}>
         <div className="max-w-6xl mx-auto">
-          <p className="text-center text-[#636E72] text-sm mb-6">
+          <p className="text-center text-[#5c5b5b] text-sm mb-6">
             Trusted by families across Ireland · Deals from all major supermarkets
           </p>
           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
             {["Dunnes", "Tesco", "SuperValu", "Lidl", "Aldi"].map((store) => (
-              <span key={store} className="text-xl font-bold text-[#B2BEC3]">{store}</span>
+              <span key={store} className="text-xl font-bold" style={{ color: 'rgba(175,173,172,0.8)' }}>{store}</span>
             ))}
           </div>
         </div>
       </section>
 
       {/* How it Works */}
-      <section id="how-it-works" className="py-20 px-6">
+      <section id="how-it-works" className="py-20 px-6" style={{ background: '#F9F6F5' }}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-[#1D2324] mb-4">
+            <h2 className="text-3xl md:text-4xl font-extrabold text-[#2F2F2E] mb-4" style={{ letterSpacing: '-0.02em' }}>
               How it works
             </h2>
-            <p className="text-[#636E72] text-lg max-w-2xl mx-auto">
+            <p className="text-[#5c5b5b] text-lg max-w-2xl mx-auto">
               Three simple steps to smarter grocery shopping
             </p>
           </div>
-          
-          <div className="grid md:grid-cols-3 gap-8">
+
+          <div className="grid md:grid-cols-3 gap-6">
             {[
               {
                 num: "01",
                 title: "Tell us about you",
                 desc: "Household size, preferences, stores near you. Takes 30 seconds.",
                 icon: "👤",
+                dark: false,
               },
               {
                 num: "02",
                 title: "Get your weekly list",
                 desc: "We scan every deal and build a personalised list just for you.",
                 icon: "📋",
+                dark: true,
               },
               {
                 num: "03",
                 title: "Shop & save",
                 desc: "Use your list at any store. Watch the savings add up.",
                 icon: "💰",
+                dark: false,
               },
-            ].map((step, i) => (
-              <div key={step.num} className="relative">
-                {i < 2 && (
-                  <div className="hidden md:block absolute top-12 left-full w-full h-0.5 bg-[#E8E2DC] -translate-x-1/2 z-0"></div>
-                )}
-                <div className="relative bg-white rounded-2xl p-8 border border-[#E8E2DC] hover:border-[#5D9B8F]/40 hover:shadow-lg transition-all">
-                  <div className="text-4xl mb-4">{step.icon}</div>
-                  <div className="text-sm font-bold text-[#5D9B8F] mb-2">{step.num}</div>
-                  <h3 className="text-xl font-bold text-[#1D2324] mb-2">{step.title}</h3>
-                  <p className="text-[#636E72]">{step.desc}</p>
-                </div>
+            ].map((step) => (
+              <div
+                key={step.num}
+                className="rounded-2xl p-8"
+                style={step.dark
+                  ? { background: '#006A35', color: '#fff' }
+                  : { background: '#fff', border: '1px solid rgba(175,173,172,0.2)' }
+                }
+              >
+                <div className="text-4xl mb-4">{step.icon}</div>
+                <div className="text-sm font-bold mb-2" style={{ color: step.dark ? '#6BFE9C' : '#006A35' }}>{step.num}</div>
+                <h3 className="text-xl font-bold mb-2" style={{ color: step.dark ? '#fff' : '#2F2F2E' }}>{step.title}</h3>
+                <p style={{ color: step.dark ? 'rgba(255,255,255,0.75)' : '#5c5b5b' }}>{step.desc}</p>
               </div>
             ))}
           </div>
@@ -336,13 +298,13 @@ export default function Home() {
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-2 gap-16 items-center">
             <div>
-              <h2 className="text-3xl md:text-4xl font-bold text-[#1D2324] mb-6">
+              <h2 className="text-3xl md:text-4xl font-extrabold text-[#2F2F2E] mb-6" style={{ letterSpacing: '-0.02em' }}>
                 Groceries without<br />the mental load
               </h2>
-              <p className="text-[#636E72] text-lg mb-8">
+              <p className="text-[#5c5b5b] text-lg mb-8">
                 Stop spending your Sunday evening comparing flyers. We do the hard work so you can focus on what matters.
               </p>
-              
+
               <div className="space-y-6">
                 {[
                   {
@@ -362,12 +324,12 @@ export default function Home() {
                   },
                 ].map((benefit) => (
                   <div key={benefit.title} className="flex gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#F5F0EB] flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#EAE7E7' }}>
                       <span className="text-2xl">{benefit.icon}</span>
                     </div>
                     <div>
-                      <h3 className="font-bold text-[#1D2324] mb-1">{benefit.title}</h3>
-                      <p className="text-[#636E72] text-sm">{benefit.desc}</p>
+                      <h3 className="font-bold text-[#2F2F2E] mb-1">{benefit.title}</h3>
+                      <p className="text-[#5c5b5b] text-sm">{benefit.desc}</p>
                     </div>
                   </div>
                 ))}
@@ -375,22 +337,23 @@ export default function Home() {
             </div>
 
             {/* Stats Card */}
-            <div className="bg-gradient-to-br from-[#1D2324] to-[#2D3436] rounded-2xl p-8 text-white">
+            <div className="rounded-2xl p-8 text-white" style={{ background: '#0E0E0E' }}>
               <h3 className="text-xl font-bold mb-8">The average Irish family spends...</h3>
               <div className="space-y-6">
                 <div>
-                  <div className="text-5xl font-bold text-[#E8A090]">€12,000</div>
-                  <div className="text-[#9BA3A7]">per year on groceries</div>
+                  <div className="text-5xl font-bold" style={{ color: '#6BFE9C' }}>€12,000</div>
+                  <div style={{ color: 'rgba(255,255,255,0.5)' }}>per year on groceries</div>
                 </div>
-                <div className="h-px bg-white/10"></div>
+                <div className="h-px" style={{ background: 'rgba(255,255,255,0.1)' }}></div>
                 <div>
-                  <div className="text-5xl font-bold text-[#7ABFB3]">€1,200+</div>
-                  <div className="text-[#9BA3A7]">potential yearly savings with us</div>
+                  <div className="text-5xl font-bold" style={{ color: '#00DCFF' }}>€1,200+</div>
+                  <div style={{ color: 'rgba(255,255,255,0.5)' }}>potential yearly savings with us</div>
                 </div>
               </div>
               <a
                 href="#signup"
-                className="mt-8 w-full bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-6 py-4 rounded-xl font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all flex items-center justify-center gap-2"
+                className="mt-8 w-full px-6 py-4 rounded-xl font-semibold flex items-center justify-center gap-2 text-[#004a23]"
+                style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
               >
                 Start saving today
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -403,135 +366,95 @@ export default function Home() {
       </section>
 
       {/* Testimonial */}
-      <section className="py-20 px-6 bg-[#F5F0EB]">
+      <section className="py-20 px-6" style={{ background: '#F3F0EF' }}>
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-1 mb-6">
             {[...Array(5)].map((_, i) => (
-              <svg key={i} className="w-6 h-6 text-[#F9CA24]" fill="currentColor" viewBox="0 0 20 20">
+              <svg key={i} className="w-6 h-6" fill="#006A35" viewBox="0 0 20 20">
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
               </svg>
             ))}
           </div>
-          <blockquote className="text-2xl md:text-3xl font-medium text-[#1D2324] leading-relaxed mb-8">
+          <blockquote className="text-2xl md:text-3xl font-medium text-[#2F2F2E] leading-relaxed mb-8">
             &ldquo;I used to spend my Sunday comparing Tesco and Dunnes prices. Now I just check the app and I&apos;m done in 5 minutes. Game changer.&rdquo;
           </blockquote>
           <div className="flex items-center justify-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-[#5D9B8F] flex items-center justify-center text-white font-bold text-lg">SM</div>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center text-[#004a23] font-bold text-lg" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>SM</div>
             <div className="text-left">
-              <div className="font-bold text-[#1D2324]">Sarah Murphy</div>
-              <div className="text-[#636E72]">Mum of 3, Dublin</div>
+              <div className="font-bold text-[#2F2F2E]">Sarah Murphy</div>
+              <div className="text-[#5c5b5b]">Mum of 3, Dublin</div>
             </div>
           </div>
         </div>
       </section>
 
       {/* CTA / Sign Up */}
-      <section id="signup" className="py-20 px-6">
+      <section id="signup" className="py-20 px-6" style={{ background: '#F9F6F5' }}>
         <div className="max-w-xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-xl p-8 md:p-10 border border-[#E8E2DC]">
+          <div className="bg-white rounded-2xl shadow-xl p-8 md:p-10" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
             <div className="text-center mb-8">
-              <h2 className="text-3xl md:text-4xl font-bold text-[#1D2324] mb-3">
+              <h2 className="text-3xl md:text-4xl font-extrabold text-[#2F2F2E] mb-3" style={{ letterSpacing: '-0.02em' }}>
                 Get your free list
               </h2>
-              <p className="text-[#636E72]">
+              <p className="text-[#5c5b5b]">
                 Join 2,400+ smart shoppers across Ireland
               </p>
             </div>
 
-            {!submitted ? (
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label className="block text-sm font-semibold text-[#1D2324] mb-2">
-                    Household size
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {familyOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setFamilySize(option.value)}
-                        className={`p-3 rounded-xl text-center transition-all border-2 ${
-                          familySize === option.value
-                            ? "border-[#E17055] bg-[#FEF3E2] text-[#E17055]"
-                            : "border-[#E8E2DC] hover:border-[#E17055]/50 text-[#636E72]"
-                        }`}
-                      >
-                        <div className="text-xl mb-1">{option.icon}</div>
-                        <div className="text-xs font-medium">{option.label}</div>
-                      </button>
-                    ))}
-                  </div>
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-[#2F2F2E] mb-2">
+                  Household size
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {familyOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setFamilySize(option.value)}
+                      className="p-3 rounded-xl text-center transition-all"
+                      style={familySize === option.value
+                        ? { border: '2px solid #006A35', background: '#EAE7E7', color: '#006A35' }
+                        : { border: '2px solid rgba(175,173,172,0.3)', color: '#5c5b5b' }
+                      }
+                    >
+                      <div className="text-xl mb-1">{option.icon}</div>
+                      <div className="text-xs font-medium">{option.label}</div>
+                    </button>
+                  ))}
                 </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-[#1D2324] mb-2">
-                    Email address
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
-                    className="w-full px-4 py-3.5 rounded-xl border-2 border-[#E8E2DC] focus:border-[#5D9B8F] focus:outline-none transition text-[#1D2324] placeholder:text-[#B2BEC3]"
-                  />
-                </div>
-
-                {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
-                    {error}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={!familySize || !email || submitting}
-                  className="w-full bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-6 py-4 rounded-xl text-lg font-semibold hover:from-[#D4604A] hover:to-[#C5533D] active:from-[#C5533D] active:to-[#B84736] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:from-[#E17055] disabled:to-[#D4604A]"
-                >
-                  {submitting ? "Signing up..." : "Get my free list →"}
-                </button>
-
-                <p className="text-center text-sm text-[#636E72]">
-                  🔒 No spam, ever. Unsubscribe anytime.
-                </p>
-              </form>
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 rounded-full bg-[#5D9B8F]/10 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-[#5D9B8F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h3 className="text-2xl font-bold text-[#1D2324] mb-2">You&apos;re in!</h3>
-                <p className="text-[#636E72] mb-4">
-                  Check your inbox — your personalised list is on its way.
-                </p>
-                <Link
-                  href="/list/request"
-                  className="text-sm text-[#E17055] font-medium hover:underline"
-                >
-                  Already have a list? Sign in →
-                </Link>
               </div>
-            )}
+
+              <Link
+                href={`/list/request${familySize ? `?size=${familySize}` : ''}`}
+                className="w-full block text-center px-6 py-4 rounded-full text-lg font-semibold transition-all text-[#004a23]"
+                style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
+              >
+                Get my free list →
+              </Link>
+
+              <p className="text-center text-sm text-[#5c5b5b]">
+                🔒 No spam, ever. Unsubscribe anytime.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-6 bg-[#1D2324] text-white">
+      <footer className="py-12 px-6 text-white" style={{ background: '#0E0E0E' }}>
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
             <Link href="/" className="font-bold text-xl">
-              supermarket<span className="text-white/60">.ie</span>
+              supermarket<span style={{ color: '#6BFE9C' }}>.ie</span>
             </Link>
-            <div className="flex gap-6 text-sm text-[#B2BEC3]">
+            <div className="flex gap-6 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
               <Link href="/privacy" className="hover:text-white transition">Privacy</Link>
               <Link href="/terms" className="hover:text-white transition">Terms</Link>
               <Link href="/contact" className="hover:text-white transition">Contact</Link>
             </div>
           </div>
-          <div className="pt-8 border-t border-white/10 text-center text-white/40 text-sm">
+          <div className="pt-8 text-center text-sm" style={{ borderTop: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.3)' }}>
             © 2026 Superdata Ltd · supermarket.ie · Made with ❤️ in Ireland
           </div>
         </div>

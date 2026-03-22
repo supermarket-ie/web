@@ -27,9 +27,9 @@ export default function RequestLinkPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FFFBF7] flex flex-col items-center justify-center px-6 py-16">
-      <Link href="/" className="text-2xl font-bold text-[#1D2324] mb-10 inline-block">
-        supermarket<span className="text-[#E17055]">.ie</span>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16" style={{ background: '#F9F6F5' }}>
+      <Link href="/" className="text-2xl font-bold text-[#2F2F2E] mb-10 inline-block">
+        supermarket<span className="text-[#006A35]">.ie</span>
       </Link>
 
       <div className="bg-white rounded-2xl shadow-sm border border-[#E8E2DC] max-w-md w-full p-8">
@@ -73,7 +73,7 @@ export default function RequestLinkPage() {
               <button
                 type="submit"
                 disabled={!email || status === "submitting"}
-                className="w-full bg-[#E17055] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#D4604A] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-6 py-3 rounded-full font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed text-[#004a23]" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
               >
                 {status === "submitting" ? "Sending..." : "Send my list →"}
               </button>
@@ -84,7 +84,7 @@ export default function RequestLinkPage() {
 
       <p className="mt-6 text-sm text-[#636E72]">
         Not signed up yet?{" "}
-        <Link href="/" className="text-[#E17055] font-medium hover:underline">
+        <Link href="/" className="text-[#006A35] font-medium hover:underline">
           Get started free →
         </Link>
       </p>

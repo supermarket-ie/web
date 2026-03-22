@@ -40,17 +40,16 @@ export function ContactForm() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFBF7]">
+    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       {/* Header */}
       <header className="px-6 py-4 border-b border-[#E8E2DC] bg-white">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2">
             <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8">
-              <path d="M8 12C8 10.8954 8.89543 10 10 10H30C31.1046 10 32 10.8954 32 12V32C32 34.2091 30.2091 36 28 36H12C9.79086 36 8 34.2091 8 32V12Z" fill="#E17055"/>
-              <path d="M14 10V8C14 5.79086 15.7909 4 18 4H22C24.2091 4 26 5.79086 26 8V10" stroke="#E17055" strokeWidth="2.5" strokeLinecap="round"/>
-              <path d="M20 17L17 30" stroke="#FFFBF7" strokeWidth="4" strokeLinecap="round"/>
-              <path d="M18 17C18 17 19 15 20 15C21 15 22 17 22 17" stroke="#00B894" strokeWidth="2" strokeLinecap="round"/>
-              <path d="M20 15V13" stroke="#00B894" strokeWidth="2" strokeLinecap="round"/>
+              <defs><linearGradient id="contactBagGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#006A35"/><stop offset="100%" stopColor="#6BFE9C"/></linearGradient></defs>
+              <path d="M8 12C8 10.8954 8.89543 10 10 10H30C31.1046 10 32 10.8954 32 12V32C32 34.2091 30.2091 36 28 36H12C9.79086 36 8 34.2091 8 32V12Z" fill="url(#contactBagGrad)"/>
+              <path d="M14 10V8C14 5.79086 15.7909 4 18 4H22C24.2091 4 26 5.79086 26 8V10" stroke="#004a23" strokeWidth="2.5" strokeLinecap="round"/>
+              <path d="M14 22h12M20 17v10" stroke="#004a23" strokeWidth="2" strokeLinecap="round"/>
             </svg>
             <span className="text-[18px] font-bold tracking-tight text-[#1D2324]">
               supermarket<span className="text-[#1D2324]">.ie</span>
@@ -73,7 +72,7 @@ export function ContactForm() {
               Thanks for reaching out. We read every message and will get back to you soon.
             </p>
             <Link href="/"
-              className="inline-flex items-center gap-2 bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-6 py-3 rounded-xl font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all">
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full font-semibold transition-all text-[#004a23]" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
               Back to homepage
             </Link>
           </div>
@@ -81,7 +80,7 @@ export function ContactForm() {
           <>
             {/* Header copy */}
             <div className="mb-10">
-              <div className="inline-flex items-center gap-2 bg-[#FEF3E2] text-[#E17055] px-3 py-1.5 rounded-full text-sm font-medium mb-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium mb-4 text-[#006A35]" style={{ background: '#EAE7E7' }}>
                 <span className="w-2 h-2 bg-[#00B894] rounded-full"></span>
                 We'd love to hear from you
               </div>
@@ -137,8 +136,8 @@ export function ContactForm() {
                       onClick={() => update('subject', s)}
                       className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
                         form.subject === s
-                          ? 'border-[#E17055] bg-[#FEF3E2] text-[#E17055]'
-                          : 'border-[#E8E2DC] text-[#636E72] hover:border-[#E17055]/50'
+                          ? 'border-[#006A35] bg-[#EAE7E7] text-[#006A35]'
+                          : 'border-[rgba(175,173,172,0.3)] text-[#5c5b5b]'
                       }`}>
                       {s}
                     </button>
@@ -164,7 +163,7 @@ export function ContactForm() {
               )}
 
               <button type="submit" disabled={status === 'submitting'}
-                className="w-full bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white py-3.5 rounded-xl font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-sm disabled:opacity-60">
+                className="w-full py-3.5 rounded-full font-semibold transition-all disabled:opacity-60 text-[#004a23]" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
                 {status === 'submitting' ? 'Sending…' : 'Send message →'}
               </button>
 

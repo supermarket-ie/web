@@ -18,7 +18,8 @@ export function HomeNav() {
     return (
       <Link
         href={listUrl}
-        className="hidden md:inline-block bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-sm"
+        className="hidden md:inline-block px-5 py-2.5 rounded-full text-sm font-semibold transition-all text-[#004a23]"
+        style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
       >
         View my list →
       </Link>
@@ -28,7 +29,8 @@ export function HomeNav() {
   return (
     <a
       href="/list/request"
-      className="hidden md:inline-block bg-gradient-to-b from-[#E17055] to-[#D4604A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:from-[#D4604A] hover:to-[#C5533D] transition-all shadow-sm"
+      className="hidden md:inline-block px-5 py-2.5 rounded-full text-sm font-semibold transition-all text-[#004a23]"
+      style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
     >
       Get started free
     </a>
