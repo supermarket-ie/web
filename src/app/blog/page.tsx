@@ -9,46 +9,52 @@ export const metadata: Metadata = {
   description: 'Practical guides on saving money at Irish supermarkets, price comparisons between Tesco, Dunnes and SuperValu, and meal ideas with live ingredient costs.',
 };
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'Price Comparison': '#003A8C',
-  'Saving Money':     '#5D9B8F',
-  'Meal Ideas':       '#006A35',
-  'Ireland Food':     '#6C5CE7',
+// Category chips use the design system's surface-container colours;
+// the tertiary-container (#00DCFF) is reserved for "live" or special callouts.
+const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
+  'Price Comparison': { bg: 'var(--store-tesco)',     text: '#fff' },
+  'Saving Money':     { bg: 'var(--primary)',         text: '#fff' },
+  'Meal Ideas':       { bg: 'var(--surface-container-highest)', text: 'var(--on-background)' },
+  'Ireland Food':     { bg: 'var(--inverse-surface)',  text: 'var(--inverse-on-surface)' },
 };
 
 export default function BlogPage() {
   return (
-    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
+    <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
       <SiteHeader />
 
-      <main className="max-w-6xl mx-auto px-6 pb-16">
-        <div className="pt-10 pb-8">
-          <h1 className="text-3xl font-bold text-[#2F2F2E] mb-3">Blog</h1>
-          <p className="text-[#5c5b5b]">
+      <main className="max-w-6xl mx-auto px-6 pb-20">
+        <div className="pt-12 pb-10">
+          <h1 className="type-headline text-on-background mb-3">Blog</h1>
+          <p className="type-body-lg" style={{ color: 'var(--on-surface)' }}>
             Practical guides on saving money at Irish supermarkets, live price comparisons, and meal ideas with real ingredient costs.
           </p>
         </div>
 
         <div className="space-y-4">
-          {POSTS.map(post => (
-            <Link key={post.slug} href={`/blog/${post.slug}`}
-              className="block bg-white rounded-2xl p-5 hover:shadow-sm transition group" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full text-white"
-                  style={{ background: CATEGORY_COLORS[post.category] ?? '#636E72' }}>
-                  {post.category}
-                </span>
-                <span className="text-xs text-[#B2BEC3]">{post.readingTime}</span>
-                <span className="text-xs text-[#B2BEC3]">·</span>
-                <span className="text-xs text-[#B2BEC3]">{formatDate(post.date)}</span>
-              </div>
-              <h2 className="font-bold text-[#2F2F2E] group-hover:text-[#006A35] transition mb-1 leading-snug">
-                {post.title}
-              </h2>
-              <p className="text-sm text-[#5c5b5b] line-clamp-2">{post.description}</p>
-              <div className="text-xs text-[#006A35] mt-3 font-semibold">Read more →</div>
-            </Link>
-          ))}
+          {POSTS.map(post => {
+            const catStyle = CATEGORY_COLORS[post.category] ?? { bg: 'var(--surface-container)', text: 'var(--on-surface)' };
+            return (
+              <Link key={post.slug} href={`/blog/${post.slug}`}
+                className="block rounded-2xl p-5 transition-all group hover:-translate-y-0.5"
+                style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="type-label px-2.5 py-0.5 rounded-full"
+                    style={{ background: catStyle.bg, color: catStyle.text }}>
+                    {post.category}
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{post.readingTime}</span>
+                  <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>·</span>
+                  <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{formatDate(post.date)}</span>
+                </div>
+                <h2 className="font-bold leading-snug mb-2 transition-colors group-hover:text-primary" style={{ color: 'var(--on-background)' }}>
+                  {post.title}
+                </h2>
+                <p className="text-sm line-clamp-2" style={{ color: 'var(--on-surface)' }}>{post.description}</p>
+                <div className="text-xs font-semibold mt-3" style={{ color: 'var(--primary)' }}>Read more →</div>
+              </Link>
+            );
+          })}
         </div>
       </main>
 

@@ -1,19 +1,209 @@
 @import "tailwindcss";
 
+/* ── Design System: High-Velocity Freshness ─────────────────────────────
+ * Single source of truth for all design tokens.
+ * Rule: never hardcode a color outside of this file.
+ * ─────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #F9F6F5;
-  --foreground: #2F2F2E;
+  /* Primary — kinetic green accent */
+  --primary:               #006A35;
+  --primary-container:     #6BFE9C;
+  --on-primary:            #FFFFFF;
+  --on-primary-container:  #004a23;
+  --primary-fixed:         #6BFE9C;
+
+  /* Surface hierarchy — lightest to most elevated */
+  --surface:                   #F9F6F5;
+  --surface-container-lowest:  #FFFFFF;
+  --surface-container-low:     #F3F0EF;
+  --surface-container:         #EAE7E7;
+  --surface-container-high:    #DEDAD7;
+  --surface-container-highest: #D0CBC8;
+
+  /* On-surface text scale */
+  --on-background:      #2F2F2E;
+  --on-surface:         #5c5b5b;
+  --on-surface-variant: #afadac;
+  --outline-variant:    #afadac;
+
+  /* Inverse surface (footer / dark sections) */
+  --inverse-surface:    #0E0E0E;
+  --inverse-on-surface: #F9F6F5;
+
+  /* Tertiary — vitality / freshness accent */
+  --tertiary-container:    #00DCFF;
+  --on-tertiary-container: #004956;
+
+  /* Store brand colours (immutable — these are external brand identities) */
+  --store-tesco:     #003A8C;
+  --store-dunnes:    #7B0017;
+  --store-supervalu: #D4400F;
 }
+
+/* ── Tailwind v4 theme mapping ──────────────────────────────────────── */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Fonts */
   --font-sans: var(--font-plus-jakarta), var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Map every token to a Tailwind colour utility */
+  --color-background:                var(--surface);
+  --color-foreground:                var(--on-background);
+
+  --color-primary:                   var(--primary);
+  --color-primary-container:         var(--primary-container);
+  --color-on-primary:                var(--on-primary);
+  --color-on-primary-container:      var(--on-primary-container);
+  --color-primary-fixed:             var(--primary-fixed);
+
+  --color-surface:                   var(--surface);
+  --color-surface-lowest:            var(--surface-container-lowest);
+  --color-surface-low:               var(--surface-container-low);
+  --color-surface-container:         var(--surface-container);
+  --color-surface-high:              var(--surface-container-high);
+  --color-surface-highest:           var(--surface-container-highest);
+
+  --color-on-background:             var(--on-background);
+  --color-on-surface:                var(--on-surface);
+  --color-on-surface-variant:        var(--on-surface-variant);
+  --color-outline-variant:           var(--outline-variant);
+
+  --color-inverse-surface:           var(--inverse-surface);
+  --color-inverse-on-surface:        var(--inverse-on-surface);
+
+  --color-tertiary-container:        var(--tertiary-container);
+  --color-on-tertiary-container:     var(--on-tertiary-container);
+
+  --color-store-tesco:               var(--store-tesco);
+  --color-store-dunnes:              var(--store-dunnes);
+  --color-store-supervalu:           var(--store-supervalu);
 }
 
+/* ── Base ─────────────────────────────────────────────────────────────── */
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--surface);
+  color: var(--on-background);
   font-family: var(--font-plus-jakarta), 'Plus Jakarta Sans', Arial, Helvetica, sans-serif;
+}
+
+/* ── Utility classes ─────────────────────────────────────────────────── */
+
+/* Primary CTA — signature gradient button */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  color: var(--on-primary-container);
+  font-weight: 700;
+  border-radius: 9999px;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover  { opacity: 0.9; transform: translateY(-1px); }
+.btn-primary:active { opacity: 1;   transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.5; transform: none; cursor: not-allowed; }
+
+/* Secondary CTA */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-container);
+  color: var(--on-background);
+  font-weight: 600;
+  border-radius: 9999px;
+  transition: background 0.15s ease;
+  border: none;
+  cursor: pointer;
+}
+.btn-secondary:hover { background: var(--surface-container-high); }
+
+/* Glass surface — for sticky nav, floating elements */
+.glass {
+  background: rgba(249, 246, 245, 0.72);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* Ghost border — used only when tonal shift is insufficient */
+.ghost-border {
+  outline: 1.5px solid rgba(175, 173, 172, 0.15);
+  outline-offset: -1.5px;
+}
+
+/* Vitality chip — freshness indicator */
+.chip-tertiary {
+  display: inline-flex;
+  align-items: center;
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.75rem;
+}
+
+/* ── Typography scale ─────────────────────────────────────────────────
+ * Display:  clamp(2.8rem, 5vw, 4rem)  / 800 / -0.03em
+ * Headline: clamp(2rem, 4vw, 3rem)    / 800 / -0.02em
+ * Title-lg: 1.25rem (20px)            / 700
+ * Title-md: 1rem (16px)               / 600
+ * Body-lg:  1.125rem (18px)           / 400 / lh 1.6
+ * Body-md:  0.9375rem (15px)          / 400 / lh 1.6
+ * Label:    0.75rem (12px)            / 600 / uppercase + tracking
+ * ─────────────────────────────────────────────────────────────────── */
+
+.type-display {
+  font-size: clamp(2.8rem, 5vw, 4rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+}
+
+.type-headline {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.type-title-lg {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.type-title-md {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.type-body-lg {
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.type-body-md {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.type-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ── Price display — extra bold per design spec ───────────────────── */
+.price {
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
