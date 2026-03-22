@@ -7,7 +7,7 @@ if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required
 
 function getSubscriberId(token: string): string | null {
   try {
-    const p = jwt.verify(token, SECRET) as { subscriberId: string };
+    const p = jwt.verify(token, SECRET!) as { subscriberId: string };
     return p.subscriberId ?? null;
   } catch { return null; }
 }

@@ -91,7 +91,7 @@ export default async function ListPage({
   let payload: MagicLinkPayload | null = null;
   if (token) {
     try {
-      payload = jwt.verify(token, SECRET) as MagicLinkPayload;
+      payload = jwt.verify(token, SECRET!) as MagicLinkPayload;
     } catch {
       // expired or invalid
     }

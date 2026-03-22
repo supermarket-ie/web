@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     let payload: MagicLinkPayload;
     try {
-      payload = jwt.verify(token, SECRET) as MagicLinkPayload;
+      payload = jwt.verify(token, SECRET!) as MagicLinkPayload;
     } catch {
       return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
     }

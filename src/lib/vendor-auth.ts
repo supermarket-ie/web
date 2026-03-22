@@ -12,12 +12,12 @@ export interface VendorTokenPayload {
 }
 
 export function signVendorToken(payload: VendorTokenPayload): string {
-  return jwt.sign(payload, SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, SECRET!, { expiresIn: '7d' });
 }
 
 export function verifyVendorToken(token: string): VendorTokenPayload | null {
   try {
-    return jwt.verify(token, SECRET) as VendorTokenPayload;
+    return jwt.verify(token, SECRET!) as VendorTokenPayload;
   } catch {
     return null;
   }

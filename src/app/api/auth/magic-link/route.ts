@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
         subscriberId: subscriber.id,
         familySize: subscriber.family_size ?? '2',
       },
-      SECRET,
+      SECRET!,
       { expiresIn: '7d' }
     );
 
