@@ -48,25 +48,11 @@ export default function Home() {
       <header className="px-6 py-4 relative z-20 sticky top-0" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="relative w-9 h-9">
-              <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                <defs>
-                  <linearGradient id="homeBagGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#006A35"/>
-                    <stop offset="100%" stopColor="#6BFE9C"/>
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M8 12C8 10.8954 8.89543 10 10 10H30C31.1046 10 32 10.8954 32 12V32C32 34.2091 30.2091 36 28 36H12C9.79086 36 8 34.2091 8 32V12Z"
-                  fill="url(#homeBagGrad)"
-                />
-                <path
-                  d="M14 10V8C14 5.79086 15.7909 4 18 4H22C24.2091 4 26 5.79086 26 8V10"
-                  stroke="#004a23"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-                <path d="M14 22h12M20 17v10" stroke="#004a23" strokeWidth="2" strokeLinecap="round" />
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
+              <svg viewBox="0 0 24 24" fill="none" className="w-[18px] h-[18px]">
+                <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="#004a23" strokeWidth="1.5" strokeLinejoin="round"/>
+                <line x1="3" y1="6" x2="21" y2="6" stroke="#004a23" strokeWidth="1.5"/>
+                <path d="M16 10a4 4 0 01-8 0" stroke="#004a23" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </div>
             <span className="text-[22px] font-bold tracking-tight text-[#2F2F2E]">
@@ -106,7 +92,7 @@ export default function Home() {
       </header>
 
       {/* Hero */}
-      <section className="px-6 py-16 md:py-24">
+      <section className="px-6 pt-8 pb-16 md:pt-10 md:pb-24">
         <div className="max-w-6xl mx-auto">
           <div className="grid gap-12 items-start md:grid-cols-[7fr_5fr]">
             {/* Left: Copy */}
@@ -176,35 +162,6 @@ export default function Home() {
                 <span className="font-semibold text-[#2F2F2E]">100% free</span> · No signup needed to try
               </div>
 
-              {/* Price Comparison Card — hidden on mobile */}
-              <div className="hidden md:block rounded-2xl p-6" style={{ background: '#0E0E0E' }}>
-                <p className="text-white text-sm font-semibold mb-4">Price comparison this week</p>
-                <div className="space-y-2">
-                  {[
-                    { store: 'Tesco', price: '€42.50', best: false },
-                    { store: 'Dunnes Stores', price: '€38.90', best: true },
-                    { store: 'SuperValu', price: '€44.15', best: false },
-                  ].map(({ store, price, best }) => (
-                    <div
-                      key={store}
-                      className="flex items-center justify-between px-4 py-3 rounded-xl"
-                      style={{
-                        background: '#1a1a1a',
-                        ...(best ? { border: '1px solid rgba(107,254,156,0.4)' } : {}),
-                      }}
-                    >
-                      <span className="text-sm font-medium" style={{ color: best ? '#6BFE9C' : 'rgba(255,255,255,0.7)' }}>{store}</span>
-                      <div className="flex items-center gap-2">
-                        {best && (
-                          <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full" style={{ background: 'rgba(107,254,156,0.15)', color: '#6BFE9C' }}>Best value</span>
-                        )}
-                        <span className="text-sm font-bold" style={{ color: best ? '#6BFE9C' : 'rgba(255,255,255,0.85)' }}>{price}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs mt-4" style={{ color: 'rgba(255,255,255,0.4)' }}>Prices updated today</p>
-              </div>
             </div>
 
             {/* Right: HomePlanner */}
