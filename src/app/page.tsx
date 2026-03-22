@@ -7,9 +7,9 @@ import { HomePlanner } from "@/components/HomePlannerGreen";
 import { loadSession } from "@/lib/session";
 
 export default function Home() {
-  const [familySize, setFamilySize] = useState<string>("");
   const [showCookieBanner, setShowCookieBanner] = useState(false);
   const [listUrl, setListUrl] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const cookieConsent = localStorage.getItem("cookieConsent");
@@ -22,15 +22,6 @@ export default function Home() {
     localStorage.setItem("cookieConsent", "accepted");
     setShowCookieBanner(false);
   };
-
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const familyOptions = [
-    { value: "1", label: "Just me", icon: "👤" },
-    { value: "2", label: "Couple", icon: "👥" },
-    { value: "3-4", label: "3-4 people", icon: "👨‍👩‍👧" },
-    { value: "5+", label: "5+", icon: "👨‍👩‍👧‍👦" },
-  ];
 
   return (
     <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
@@ -93,7 +84,6 @@ export default function Home() {
               Blog
             </Link>
             <HomeNav />
-            {/* Hamburger — mobile only */}
             <button
               className="md:hidden flex flex-col gap-1.5 p-1 ml-1"
               onClick={() => setMenuOpen(o => !o)}
@@ -105,7 +95,6 @@ export default function Home() {
             </button>
           </nav>
         </div>
-        {/* Mobile menu dropdown */}
         {menuOpen && (
           <div className="md:hidden absolute top-full left-0 right-0 shadow-lg px-6 py-4 flex flex-col gap-4 z-20" style={{ background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
             <Link href="/shop" className="text-[#2F2F2E] font-medium text-base py-1" onClick={() => setMenuOpen(false)}>Prices</Link>
@@ -119,17 +108,17 @@ export default function Home() {
       {/* Hero */}
       <section className="px-6 py-16 md:py-24">
         <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+          <div className="grid gap-12 items-start md:grid-cols-[7fr_5fr]">
             {/* Left: Copy */}
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold mb-6" style={{ background: '#EAE7E7', color: '#006A35' }}>
-                <span className="text-base">✨</span>
-                Ireland&apos;s first AI grocery planner
+              {/* Cyan vitality chip */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-widest mb-6" style={{ background: '#00DCFF', color: '#004956' }}>
+                ✨ Ireland&apos;s first AI grocery planner
               </div>
 
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-[#2F2F2E] leading-[1.1] mb-6" style={{ letterSpacing: '-0.02em' }}>
+              <h1 className="font-extrabold text-[#2F2F2E] leading-[1.08] mb-6" style={{ fontSize: 'clamp(2.8rem, 5vw, 4rem)', fontWeight: 800, letterSpacing: '-0.03em' }}>
                 Tell us what you&apos;re cooking.<br />
-                <span style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>We&apos;ll handle the rest.</span>
+                <span style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>We&apos;ll handle<br />the rest.</span>
               </h1>
 
               <p className="text-lg md:text-xl text-[#5c5b5b] leading-relaxed mb-8 max-w-lg">
@@ -183,12 +172,42 @@ export default function Home() {
                   </Link>
                 )}
               </div>
-              <div className="text-sm text-[#5c5b5b]">
+              <div className="text-sm text-[#5c5b5b] mb-10">
                 <span className="font-semibold text-[#2F2F2E]">100% free</span> · No signup needed to try
+              </div>
+
+              {/* Price Comparison Card — hidden on mobile */}
+              <div className="hidden md:block rounded-2xl p-6" style={{ background: '#0E0E0E' }}>
+                <p className="text-white text-sm font-semibold mb-4">Price comparison this week</p>
+                <div className="space-y-2">
+                  {[
+                    { store: 'Tesco', price: '€42.50', best: false },
+                    { store: 'Dunnes Stores', price: '€38.90', best: true },
+                    { store: 'SuperValu', price: '€44.15', best: false },
+                  ].map(({ store, price, best }) => (
+                    <div
+                      key={store}
+                      className="flex items-center justify-between px-4 py-3 rounded-xl"
+                      style={{
+                        background: '#1a1a1a',
+                        ...(best ? { border: '1px solid rgba(107,254,156,0.4)' } : {}),
+                      }}
+                    >
+                      <span className="text-sm font-medium" style={{ color: best ? '#6BFE9C' : 'rgba(255,255,255,0.7)' }}>{store}</span>
+                      <div className="flex items-center gap-2">
+                        {best && (
+                          <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full" style={{ background: 'rgba(107,254,156,0.15)', color: '#6BFE9C' }}>Best value</span>
+                        )}
+                        <span className="text-sm font-bold" style={{ color: best ? '#6BFE9C' : 'rgba(255,255,255,0.85)' }}>{price}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs mt-4" style={{ color: 'rgba(255,255,255,0.4)' }}>Prices updated today</p>
               </div>
             </div>
 
-            {/* Right: Live AI Planner */}
+            {/* Right: HomePlanner */}
             <div className="relative">
               <div className="bg-white rounded-2xl shadow-xl p-5 min-h-[380px] flex flex-col" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
                 <div className="flex items-center gap-3 mb-4 pb-4" style={{ borderBottom: '1px solid #F3F0EF' }}>
@@ -228,8 +247,8 @@ export default function Home() {
       {/* Trust Bar */}
       <section className="py-8 px-6" style={{ background: '#F3F0EF' }}>
         <div className="max-w-6xl mx-auto">
-          <p className="text-center text-[#5c5b5b] text-sm mb-6">
-            Trusted by families across Ireland · Deals from all major supermarkets
+          <p className="text-center text-[#5c5b5b] text-xs font-bold uppercase tracking-widest mb-4">
+            Trusted by Ireland&apos;s shoppers
           </p>
           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
             {["Dunnes", "Tesco", "SuperValu", "Lidl", "Aldi"].map((store) => (
@@ -242,13 +261,13 @@ export default function Home() {
       {/* How it Works */}
       <section id="how-it-works" className="py-20 px-6" style={{ background: '#F9F6F5' }}>
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-[#2F2F2E] mb-4" style={{ letterSpacing: '-0.02em' }}>
+          <div className="mb-16">
+            <div className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-4" style={{ background: '#EAE7E7', color: '#5c5b5b' }}>
               How it works
+            </div>
+            <h2 className="font-extrabold text-[#2F2F2E]" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 800, letterSpacing: '-0.02em' }}>
+              Three steps to smarter<br />grocery shopping
             </h2>
-            <p className="text-[#5c5b5b] text-lg max-w-2xl mx-auto">
-              Three simple steps to smarter grocery shopping
-            </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
@@ -277,12 +296,15 @@ export default function Home() {
             ].map((step) => (
               <div
                 key={step.num}
-                className="rounded-2xl p-8"
+                className="rounded-2xl p-8 relative overflow-hidden"
                 style={step.dark
                   ? { background: '#006A35', color: '#fff' }
                   : { background: '#fff', border: '1px solid rgba(175,173,172,0.2)' }
                 }
               >
+                {step.dark && (
+                  <div className="absolute w-40 h-40 rounded-full top-0 right-0 translate-x-1/2 -translate-y-1/2" style={{ background: '#6BFE9C', opacity: 0.1 }} />
+                )}
                 <div className="text-4xl mb-4">{step.icon}</div>
                 <div className="text-sm font-bold mb-2" style={{ color: step.dark ? '#6BFE9C' : '#006A35' }}>{step.num}</div>
                 <h3 className="text-xl font-bold mb-2" style={{ color: step.dark ? '#fff' : '#2F2F2E' }}>{step.title}</h3>
@@ -294,11 +316,14 @@ export default function Home() {
       </section>
 
       {/* Benefits */}
-      <section className="py-20 px-6 bg-white">
+      <section className="py-20 px-6" style={{ background: '#F3F0EF' }}>
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-2 gap-16 items-center">
             <div>
-              <h2 className="text-3xl md:text-4xl font-extrabold text-[#2F2F2E] mb-6" style={{ letterSpacing: '-0.02em' }}>
+              <div className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-4" style={{ background: '#EAE7E7', color: '#5c5b5b' }}>
+                Why supermarket.ie
+              </div>
+              <h2 className="font-extrabold text-[#2F2F2E] mb-6" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 800, letterSpacing: '-0.02em' }}>
                 Groceries without<br />the mental load
               </h2>
               <p className="text-[#5c5b5b] text-lg mb-8">
@@ -341,18 +366,18 @@ export default function Home() {
               <h3 className="text-xl font-bold mb-8">The average Irish family spends...</h3>
               <div className="space-y-6">
                 <div>
-                  <div className="text-5xl font-bold" style={{ color: '#6BFE9C' }}>€12,000</div>
+                  <div className="font-extrabold" style={{ fontSize: 'clamp(3rem, 6vw, 4rem)', color: '#6BFE9C', letterSpacing: '-0.03em' }}>€12,000</div>
                   <div style={{ color: 'rgba(255,255,255,0.5)' }}>per year on groceries</div>
                 </div>
                 <div className="h-px" style={{ background: 'rgba(255,255,255,0.1)' }}></div>
                 <div>
-                  <div className="text-5xl font-bold" style={{ color: '#00DCFF' }}>€1,200+</div>
+                  <div className="font-extrabold" style={{ fontSize: 'clamp(3rem, 6vw, 4rem)', color: '#00DCFF', letterSpacing: '-0.03em' }}>€1,200+</div>
                   <div style={{ color: 'rgba(255,255,255,0.5)' }}>potential yearly savings with us</div>
                 </div>
               </div>
               <a
                 href="#signup"
-                className="mt-8 w-full px-6 py-4 rounded-xl font-semibold flex items-center justify-center gap-2 text-[#004a23]"
+                className="mt-8 w-full px-6 py-4 rounded-full font-semibold flex items-center justify-center gap-2 text-[#004a23]"
                 style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
               >
                 Start saving today
@@ -370,12 +395,12 @@ export default function Home() {
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-1 mb-6">
             {[...Array(5)].map((_, i) => (
-              <svg key={i} className="w-6 h-6" fill="#006A35" viewBox="0 0 20 20">
+              <svg key={i} className="w-6 h-6" fill="#6BFE9C" viewBox="0 0 20 20">
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
               </svg>
             ))}
           </div>
-          <blockquote className="text-2xl md:text-3xl font-medium text-[#2F2F2E] leading-relaxed mb-8">
+          <blockquote className="text-2xl md:text-3xl font-bold text-[#2F2F2E] leading-relaxed mb-8">
             &ldquo;I used to spend my Sunday comparing Tesco and Dunnes prices. Now I just check the app and I&apos;m done in 5 minutes. Game changer.&rdquo;
           </blockquote>
           <div className="flex items-center justify-center gap-4">
@@ -397,42 +422,17 @@ export default function Home() {
                 Get your free list
               </h2>
               <p className="text-[#5c5b5b]">
-                Join 2,400+ smart shoppers across Ireland
+                Join 2,400+ smart shoppers
               </p>
             </div>
-
             <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-[#2F2F2E] mb-2">
-                  Household size
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {familyOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setFamilySize(option.value)}
-                      className="p-3 rounded-xl text-center transition-all"
-                      style={familySize === option.value
-                        ? { border: '2px solid #006A35', background: '#EAE7E7', color: '#006A35' }
-                        : { border: '2px solid rgba(175,173,172,0.3)', color: '#5c5b5b' }
-                      }
-                    >
-                      <div className="text-xl mb-1">{option.icon}</div>
-                      <div className="text-xs font-medium">{option.label}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <Link
-                href={`/list/request${familySize ? `?size=${familySize}` : ''}`}
+                href="/list/request"
                 className="w-full block text-center px-6 py-4 rounded-full text-lg font-semibold transition-all text-[#004a23]"
                 style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
               >
                 Get my free list →
               </Link>
-
               <p className="text-center text-sm text-[#5c5b5b]">
                 🔒 No spam, ever. Unsubscribe anytime.
               </p>
