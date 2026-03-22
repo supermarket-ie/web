@@ -30,7 +30,7 @@ export function SiteHeader() {
               <path d="M16 10a4 4 0 01-8 0" stroke="var(--on-primary-container)" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </div>
-          <span className="text-[20px] font-extrabold" style={{ color: 'var(--on-background)', letterSpacing: '-0.02em' }}>
+          <span className="text-[22px] font-extrabold tracking-tight" style={{ color: 'var(--on-background)', letterSpacing: '-0.02em' }}>
             supermarket<span style={{ color: 'var(--primary)' }}>.ie</span>
           </span>
         </Link>
