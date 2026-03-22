@@ -7,6 +7,7 @@ import { ShoppingList } from '@/components/ShoppingList';
 import { TokenPersist } from '@/components/TokenPersist';
 import { SavedListsPanel } from '@/components/SavedListsPanel';
 import { SiteFooter } from '@/components/SiteFooter';
+import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 
 export const metadata: Metadata = {
   title: 'Your weekly shopping list',
@@ -40,22 +41,6 @@ function familySizeLabel(size: string) {
   }
 }
 
-function storeDisplayName(store: string) {
-  const s = store.toLowerCase();
-  if (s.includes('tesco'))     return 'Tesco';
-  if (s.includes('dunnes'))    return 'Dunnes';
-  if (s.includes('supervalu')) return 'SuperValu';
-  return store;
-}
-
-function storeStyle(store: string) {
-  const s = store.toLowerCase();
-  if (s.includes('tesco'))     return { bg: '#003A8C', text: '#fff', border: '#003A8C', light: '#EEF3FB' };
-  if (s.includes('dunnes'))    return { bg: '#7B0017', text: '#fff', border: '#7B0017', light: '#FAEAEC' };
-  if (s.includes('supervalu')) return { bg: '#D4400F', text: '#fff', border: '#D4400F', light: '#FEF0E8' };
-  return { bg: '#636E72', text: '#fff', border: '#636E72', light: '#F5F5F5' };
-}
-
 function groupByCategory(items: SmartList['items']): [string, SmartList['items']][] {
   const groups = new Map<string, SmartList['items']>();
   for (const item of items) {
@@ -70,20 +55,17 @@ function groupByCategory(items: SmartList['items']): [string, SmartList['items']
 
 function ExpiredPage() {
   return (
-    <div className="min-h-screen bg-[#F9F6F5] flex flex-col items-center justify-center px-6 py-16">
-      <Link href="/" className="text-2xl font-bold text-[#1D2324] mb-10 inline-block">
-        supermarket<span className="text-[#006A35]">.ie</span>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16" style={{ background: 'var(--surface)' }}>
+      <Link href="/" className="text-2xl font-bold mb-10 inline-block" style={{ color: 'var(--on-background)' }}>
+        supermarket<span style={{ color: 'var(--primary)' }}>.ie</span>
       </Link>
-      <div className="bg-white rounded-2xl shadow-sm border border-[#E8E2DC] max-w-md w-full p-8 text-center">
+      <div className="rounded-2xl max-w-md w-full p-8 text-center" style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
         <div className="text-5xl mb-4">🔗</div>
-        <h1 className="text-2xl font-bold text-[#1D2324] mb-3">This link has expired</h1>
-        <p className="text-[#636E72] mb-6">
+        <h1 className="text-2xl font-bold mb-3" style={{ color: 'var(--on-background)' }}>This link has expired</h1>
+        <p className="mb-6" style={{ color: 'var(--on-surface)' }}>
           Shopping list links are valid for 7 days. Request a fresh one and we&rsquo;ll send it straight to your inbox.
         </p>
-        <Link
-          href="/list/request"
-          className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]" style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
-        >
+        <Link href="/list/request" className="btn-primary inline-flex px-6 py-3">
           Get a new link →
         </Link>
       </div>
@@ -195,16 +177,16 @@ export default async function ListPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-    <div className="min-h-screen bg-[#F9F6F5]">
+    <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
 
       {/* Sticky header */}
-      <header className="px-4 py-4 border-b border-[#E8E2DC] bg-white sticky top-0 z-10 shadow-sm">
+      <header className="glass px-4 py-4 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <Link href="/" className="font-bold text-lg text-[#1D2324]">
-            supermarket<span className="text-[#006A35]">.ie</span>
+          <Link href="/" className="font-bold text-lg" style={{ color: 'var(--on-background)' }}>
+            supermarket<span style={{ color: 'var(--primary)' }}>.ie</span>
           </Link>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-[#636E72]">Updated {formatDate(list.generated_at)}</span>
+            <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Updated {formatDate(list.generated_at)}</span>
           </div>
         </div>
       </header>
@@ -213,10 +195,10 @@ export default async function ListPage({
 
         {/* Title */}
         <div className="pt-8 pb-6">
-          <h1 className="text-2xl font-bold text-[#1D2324] mb-1">Your weekly shop</h1>
-          <p className="text-[#636E72] text-sm">
+          <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--on-background)' }}>Your weekly shop</h1>
+          <p className="text-sm" style={{ color: 'var(--on-surface)' }}>
             Best prices across Tesco, Dunnes &amp; SuperValu for a household of{' '}
-            <strong className="text-[#1D2324]">{familySizeLabel(familySize)}</strong>
+            <strong style={{ color: 'var(--on-background)' }}>{familySizeLabel(familySize)}</strong>
           </p>
         </div>
 
@@ -224,7 +206,7 @@ export default async function ListPage({
         <SavedListsPanel token={token!} />
 
         {list.items.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-[#E8E2DC] p-8 text-center text-[#636E72]">
+          <div className="rounded-2xl p-8 text-center" style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', color: 'var(--on-surface)' }}>
             <p className="text-lg mb-2">Prices are being updated</p>
             <p className="text-sm">Check back soon — we&rsquo;re scanning stores now.</p>
           </div>
@@ -260,33 +242,33 @@ export default async function ListPage({
             {list.store_totals.length > 0 && (
               <div className="grid grid-cols-3 gap-2 mb-6">
                 {list.store_totals.map((st, i) => {
-                  const style = storeStyle(st.store);
+                  const s = storeStyle(st.store);
                   const isCheapest = i === 0;
                   return (
                     <div
                       key={st.store}
-                      className="rounded-xl p-3 border-2 text-center"
+                      className="rounded-xl p-3 text-center"
                       style={{
-                        borderColor: isCheapest ? style.border : '#E8E2DC',
-                        background:  isCheapest ? style.light  : '#fff',
+                        background: isCheapest ? s.light : 'var(--surface-container-lowest)',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
                       }}
                     >
                       <div
                         className="font-bold text-sm mb-1"
-                        style={{ color: isCheapest ? style.bg : '#1D2324' }}
+                        style={{ color: isCheapest ? s.bg : 'var(--on-background)' }}
                       >
                         {storeDisplayName(st.store)}
                       </div>
                       <div
                         className="text-lg font-bold"
-                        style={{ color: isCheapest ? style.bg : '#1D2324' }}
+                        style={{ color: isCheapest ? s.bg : 'var(--on-background)' }}
                       >
                         {fmt(st.total)}
                       </div>
                       {isCheapest && (
                         <div
-                          className="text-[10px] font-semibold mt-1 rounded-full px-2 py-0.5 inline-block text-white"
-                          style={{ background: style.bg }}
+                          className="text-[10px] font-semibold mt-1 rounded-full px-2 py-0.5 inline-block"
+                          style={{ background: s.bg, color: '#fff' }}
                         >
                           Cheapest
                         </div>

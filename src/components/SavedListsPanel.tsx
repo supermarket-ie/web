@@ -54,7 +54,8 @@ export function SavedListsPanel({ token }: { token: string }) {
     <div className="mb-5">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 text-sm font-semibold text-[#2F2F2E] hover:text-[#006A35] transition mb-2"
+        className="flex items-center gap-2 text-sm font-semibold transition mb-2"
+        style={{ color: 'var(--on-background)' }}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -70,13 +71,13 @@ export function SavedListsPanel({ token }: { token: string }) {
           {lists.map(list => {
             const cheapest = list.store_totals?.[0];
             return (
-              <div key={list.id} className="bg-white rounded-xl border border-[#E8E2DC] px-4 py-3 flex items-center gap-3">
+              <div key={list.id} className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-[#2F2F2E] truncate">{list.name}</div>
-                  <div className="text-xs text-[#B2BEC3] mt-0.5 flex items-center gap-2">
+                  <div className="text-sm font-medium truncate" style={{ color: 'var(--on-background)' }}>{list.name}</div>
+                  <div className="text-xs mt-0.5 flex items-center gap-2" style={{ color: 'var(--on-surface-variant)' }}>
                     <span>{timeAgo(list.created_at)}</span>
                     {cheapest && (
-                      <span className="text-[#5D9B8F] font-medium">
+                      <span className="font-medium" style={{ color: 'var(--primary)' }}>
                         {storeShort(cheapest.store)} {fmt(cheapest.total)}
                       </span>
                     )}
@@ -85,7 +86,8 @@ export function SavedListsPanel({ token }: { token: string }) {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <Link
                     href={`/?prompt=${encodeURIComponent(list.meals_prompt ?? list.name)}`}
-                    className="text-xs text-[#006A35] font-semibold hover:underline"
+                    className="text-xs font-semibold hover:underline"
+                    style={{ color: 'var(--primary)' }}
                     title="Rebuild this list"
                   >
                     Rebuild
@@ -93,7 +95,8 @@ export function SavedListsPanel({ token }: { token: string }) {
                   <button
                     onClick={() => handleDelete(list.id)}
                     disabled={deleting === list.id}
-                    className="text-[#B2BEC3] hover:text-red-400 transition"
+                    className="hover:text-red-400 transition"
+                    style={{ color: 'var(--on-surface-variant)' }}
                     title="Delete list"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -106,7 +109,8 @@ export function SavedListsPanel({ token }: { token: string }) {
           })}
           <Link
             href="/"
-            className="block text-center text-xs text-[#006A35] font-semibold hover:underline py-1"
+            className="block text-center text-xs font-semibold hover:underline py-1"
+            style={{ color: 'var(--primary)' }}
           >
             + Build a new list
           </Link>

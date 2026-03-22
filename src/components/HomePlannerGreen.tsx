@@ -49,25 +49,28 @@ function SignupGate({ onSuccess, onSkip }: { onSuccess: (token: string) => void;
   }
 
   return (
-    <div className="mt-3 bg-gradient-to-br from-[#F3F0EF] to-[#F9F6F5] border-2 border-[#006A35]/20 rounded-2xl p-4">
+    <div className="mt-3 rounded-2xl p-4" style={{ background: 'var(--surface-container-low)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
       <div className="flex items-start gap-2.5 mb-3">
         <span className="text-xl flex-shrink-0">🎉</span>
         <div>
-          <div className="font-bold text-[#2F2F2E] text-sm">Your list is ready!</div>
-          <div className="text-xs text-[#5c5b5b] mt-0.5">Save it free — we&apos;ll track prices and update it every week.</div>
+          <div className="font-bold text-sm" style={{ color: 'var(--on-background)' }}>Your list is ready!</div>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--on-surface)' }}>Save it free — we&apos;ll track prices and update it every week.</div>
         </div>
       </div>
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
           placeholder="your@email.com"
-          className="flex-1 px-3 py-2 rounded-xl border-2 border-[rgba(175,173,172,0.2)] focus:border-[#006A35] focus:outline-none text-sm text-[#2F2F2E] placeholder:text-[#afadac] bg-white min-w-0" />
-        <button type="submit" disabled={submitting}
-          className="flex-shrink-0 bg-gradient-to-b from-[#006A35] to-[#005c2d] text-[#004a23] px-3 py-2 rounded-xl text-xs font-semibold hover:from-[#005c2d] hover:to-[#004a23] transition-all disabled:opacity-60 whitespace-nowrap">
+          className="flex-1 px-3 py-2 rounded-xl focus:outline-none text-sm min-w-0"
+          style={{ background: 'var(--surface-container-highest)', color: 'var(--on-background)' }}
+          onFocus={e => { e.currentTarget.style.background = 'var(--surface-container-lowest)'; e.currentTarget.style.outline = '2px solid rgba(0,106,53,0.4)'; e.currentTarget.style.outlineOffset = '-2px'; }}
+          onBlur={e =>  { e.currentTarget.style.background = 'var(--surface-container-highest)'; e.currentTarget.style.outline = 'none'; }}
+        />
+        <button type="submit" disabled={submitting} className="btn-primary flex-shrink-0 px-3 py-2 text-xs whitespace-nowrap disabled:opacity-60">
           {submitting ? '…' : 'Save →'}
         </button>
       </form>
       {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
-      <button onClick={onSkip} className="text-xs text-[#afadac] hover:text-[#5c5b5b] mt-1.5 block transition">No thanks</button>
+      <button onClick={onSkip} className="text-xs mt-1.5 block transition" style={{ color: 'var(--on-surface-variant)' }}>No thanks</button>
     </div>
   );
 }
@@ -215,23 +218,26 @@ export function HomePlanner() {
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {m.role === 'assistant' && (
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#006A35] to-[#005c2d] flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-1 flex-shrink-0">S</div>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-1 flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}>S</div>
               )}
               <div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                m.role === 'user'
-                  ? 'bg-[#2F2F2E] text-white rounded-br-sm'
-                  : 'bg-[#EAE7E7] text-[#2F2F2E] rounded-bl-sm'
-              }`}>
+                m.role === 'user' ? 'rounded-br-sm' : 'rounded-bl-sm'
+              }`} style={m.role === 'user'
+                ? { background: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' }
+                : { background: 'var(--surface-container)', color: 'var(--on-background)' }
+              }>
                 {m.role === 'assistant' ? <FormattedMessage content={m.content} /> : <p>{m.content}</p>}
               </div>
             </div>
           ))}
           {isLoading && messages[messages.length - 1]?.content === '' && (
             <div className="flex justify-start">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#006A35] to-[#005c2d] flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-1 flex-shrink-0">S</div>
-              <div className="bg-[#EAE7E7] rounded-2xl rounded-bl-sm px-3 py-2">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-1 flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}>S</div>
+              <div className="rounded-2xl rounded-bl-sm px-3 py-2" style={{ background: 'var(--surface-container)' }}>
                 <div className="flex gap-1 items-center h-4">
-                  {[0,150,300].map(d => <span key={d} className="w-1.5 h-1.5 bg-[#006A35] rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
+                  {[0,150,300].map(d => <span key={d} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--primary)', animationDelay: `${d}ms` }} />)}
                 </div>
               </div>
             </div>
@@ -247,10 +253,10 @@ export function HomePlanner() {
 
       {/* Logged-in save link */}
       {session && messages.some(m => m.role === 'assistant' && m.content) && !isLoading && (
-        <div className="mb-2 text-xs text-[#5D9B8F] font-semibold flex items-center gap-2">
+        <div className="mb-2 text-xs font-semibold flex items-center gap-2" style={{ color: 'var(--primary)' }}>
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
-          <a href={`/list?token=${session.token}`} className="underline hover:text-[#4A8A7E]">View my saved list →</a>
-          {listSaved && <span className="text-[#afadac] font-normal">· list saved ✓</span>}
+          <a href={`/list?token=${session.token}`} className="underline">View my saved list →</a>
+          {listSaved && <span className="font-normal" style={{ color: 'var(--on-surface-variant)' }}>· list saved ✓</span>}
         </div>
       )}
 
@@ -261,7 +267,8 @@ export function HomePlanner() {
             <div className="flex flex-wrap gap-1.5 mb-1.5">
               {EXAMPLES.slice(exampleOffset, exampleOffset + 4).map(e => (
                 <button key={e} type="button" onClick={() => { setInput(e); inputRef.current?.focus(); }}
-                  className="text-xs bg-[#EAE7E7] text-[#5c5b5b] px-2.5 py-1.5 rounded-full hover:bg-[#006A35]/10 hover:text-[#006A35] transition-all border border-transparent hover:border-[#006A35]/20">
+                  className="text-xs px-2.5 py-1.5 rounded-full transition-all"
+                  style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}>
                   {e.length > 38 ? e.slice(0, 38) + '…' : e}
                 </button>
               ))}
@@ -269,7 +276,8 @@ export function HomePlanner() {
             <button
               type="button"
               onClick={() => setExampleOffset(o => (o + 4) % EXAMPLES.length)}
-              className="text-xs text-[#5c5b5b] hover:text-[#006A35] transition flex items-center gap-1 mt-0.5 font-medium"
+              className="text-xs transition flex items-center gap-1 mt-0.5 font-medium"
+              style={{ color: 'var(--on-surface)' }}
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               More ideas
@@ -278,11 +286,14 @@ export function HomePlanner() {
         )}
 
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs text-[#5c5b5b]">People:</span>
+          <span className="text-xs" style={{ color: 'var(--on-surface)' }}>People:</span>
           <div className="flex gap-1">
             {[1,2,3,4,5,6].map(n => (
               <button key={n} type="button" onClick={() => setHouseholdSize(n)}
-                className={`w-6 h-6 rounded-md text-xs font-bold transition-all ${householdSize === n ? 'bg-[#006A35] text-white' : 'bg-[#EAE7E7] text-[#5c5b5b] hover:bg-[rgba(175,173,172,0.2)]'}`}>
+                className="w-6 h-6 rounded-md text-xs font-bold transition-all"
+                style={householdSize === n
+                  ? { background: 'var(--primary)', color: 'var(--on-primary)' }
+                  : { background: 'var(--surface-container)', color: 'var(--on-surface)' }}>
                 {n}
               </button>
             ))}
@@ -294,17 +305,21 @@ export function HomePlanner() {
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); }}}
             placeholder={started ? "Add a meal, go vegetarian, change quantities…" : "e.g. spaghetti bolognese, chicken stir fry, packed lunches…"}
             rows={2}
-            className="w-full px-4 py-3 pr-12 rounded-xl border-2 border-[rgba(175,173,172,0.2)] focus:border-[#006A35] focus:outline-none text-sm text-[#2F2F2E] placeholder:text-[#afadac] resize-none bg-white transition"
+            className="w-full px-4 py-3 pr-12 rounded-xl focus:outline-none text-sm resize-none transition"
+            style={{ background: 'var(--surface-container-highest)', color: 'var(--on-background)' }}
+            onFocus={e => { e.currentTarget.style.background = 'var(--surface-container-lowest)'; e.currentTarget.style.outline = '2px solid rgba(0,106,53,0.4)'; e.currentTarget.style.outlineOffset = '-2px'; }}
+            onBlur={e =>  { e.currentTarget.style.background = 'var(--surface-container-highest)'; e.currentTarget.style.outline = 'none'; }}
           />
           <button type="submit" disabled={isLoading || !input.trim()}
-            className="absolute right-2.5 bottom-2.5 w-8 h-8 bg-gradient-to-b from-[#006A35] to-[#005c2d] text-[#004a23] rounded-lg flex items-center justify-center hover:from-[#005c2d] hover:to-[#004a23] transition-all disabled:opacity-40">
+            className="absolute right-2.5 bottom-2.5 w-8 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-40"
+            style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))', color: 'var(--on-primary-container)' }}>
             {isLoading
               ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
               : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
             }
           </button>
         </form>
-        <p className="text-[11px] text-[#afadac] mt-1.5 text-center">Prices from Tesco, Dunnes &amp; SuperValu · Free to use</p>
+        <p className="text-[11px] mt-1.5 text-center" style={{ color: 'var(--on-surface-variant)' }}>Prices from Tesco, Dunnes &amp; SuperValu · Free to use</p>
       </div>}
     </div>
   );
@@ -316,11 +331,11 @@ function FormattedMessage({ content }: { content: string }) {
     <>
       {content.split('\n').map((line, i) => {
         if (!line.trim()) return <br key={i} />;
-        if (line.startsWith('### ')) return <p key={i} className="font-bold text-[#2F2F2E] mt-2 mb-0.5 text-sm">{ri(line.slice(4))}</p>;
-        if (line.startsWith('**') && line.endsWith('**') && line.length > 4) return <p key={i} className="font-semibold text-[#2F2F2E] mt-2 mb-0.5 text-xs uppercase tracking-wide">{ri(line.slice(2,-2))}</p>;
+        if (line.startsWith('### ')) return <p key={i} className="font-bold mt-2 mb-0.5 text-sm" style={{ color: 'var(--on-background)' }}>{ri(line.slice(4))}</p>;
+        if (line.startsWith('**') && line.endsWith('**') && line.length > 4) return <p key={i} className="font-semibold mt-2 mb-0.5 text-xs uppercase tracking-wide" style={{ color: 'var(--on-background)' }}>{ri(line.slice(2,-2))}</p>;
         if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="text-sm leading-snug pl-1">{ri(line.slice(2))}</p>;
-        if (line.startsWith('---')) return <hr key={i} className="border-[rgba(175,173,172,0.2)] my-2" />;
-        if (line.startsWith('💡')) return <p key={i} className="mt-2 text-xs text-[#006A35] font-medium">{ri(line)}</p>;
+        if (line.startsWith('---')) return <hr key={i} className="my-2" style={{ borderColor: 'var(--outline-variant)', opacity: 0.3 }} />;
+        if (line.startsWith('💡')) return <p key={i} className="mt-2 text-xs font-medium" style={{ color: 'var(--primary)' }}>{ri(line)}</p>;
         return <p key={i} className="text-sm leading-relaxed">{ri(line)}</p>;
       })}
     </>
