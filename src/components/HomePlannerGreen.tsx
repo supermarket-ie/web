@@ -23,6 +23,7 @@ function SignupGate({ onSuccess, onSkip }: { onSuccess: (token: string) => void;
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [savedToken, setSavedToken] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +39,7 @@ function SignupGate({ onSuccess, onSkip }: { onSuccess: (token: string) => void;
       if (!res.ok) throw new Error(data.error || 'Something went wrong');
       if (data.token) {
         saveSession({ token: data.token, familySize: '2', expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+        setSavedToken(data.token);
         onSuccess(data.token);
       } else {
         onSuccess('');
@@ -46,6 +48,27 @@ function SignupGate({ onSuccess, onSkip }: { onSuccess: (token: string) => void;
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setSubmitting(false);
     }
+  }
+
+  // Success state — show confirmation with link to list
+  if (savedToken) {
+    return (
+      <div className="mt-3 rounded-2xl p-4" style={{ background: 'var(--surface-container-low)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+        <div className="flex items-start gap-2.5">
+          <span className="text-xl flex-shrink-0">✅</span>
+          <div>
+            <div className="font-bold text-sm" style={{ color: 'var(--on-background)' }}>List saved!</div>
+            <div className="text-xs mt-0.5 mb-3" style={{ color: 'var(--on-surface)' }}>We&apos;ll update your prices every week.</div>
+            <a
+              href={`/list?token=${savedToken}`}
+              className="btn-primary inline-block px-4 py-2 text-sm font-semibold rounded-xl"
+            >
+              View my list →
+            </a>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
