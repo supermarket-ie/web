@@ -51,7 +51,7 @@ export default function Home() {
             {/* Copy */}
             <div>
               <div className="chip-tertiary mb-6">
-                ✨ Ireland&apos;s first AI grocery planner
+                Plan your weekly shop. We&apos;ll build the basket.
               </div>
 
               <h1 className="type-display text-on-background mb-6">
@@ -62,7 +62,7 @@ export default function Home() {
               </h1>
 
               <p className="type-body-lg mb-8 max-w-lg" style={{ color: 'var(--on-surface)' }}>
-                Our AI builds your weekly shopping list and finds the best prices across Tesco, Dunnes and SuperValu — in seconds.
+                From meals to essentials, get a complete, ready-to-buy shop in seconds.
               </p>
 
               <div className="space-y-3 mb-10">
