@@ -271,7 +271,29 @@ export function HomePlanner() {
 
       {/* Signup gate */}
       {showGate && !session && (
-        <SignupGate onSuccess={t => { if (t) setSession({ token: t }); setShowGate(false); setGateDone(true); }} onSkip={() => { setShowGate(false); setGateDone(true); }} />
+        <SignupGate onSuccess={t => {
+          if (t) {
+            setSession({ token: t });
+            // After gate success, persist the list items
+            if (t && lastItems && Array.isArray(lastItems) && lastItems.length > 0) {
+              const mappedItems = (lastItems as any[]).map(i => ({
+                canonical_name: i.canonical_name ?? i.name ?? '',
+                category: i.category ?? '',
+                store: i.store ?? '',
+                price_paid: i.price ?? i.price_paid ?? 0,
+                quantity: i.quantity ?? 1,
+              })).filter(i => i.canonical_name);
+              if (mappedItems.length > 0) {
+                fetch('/api/list/save-items', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token: t, items: mappedItems }),
+                }).catch(() => {});
+              }
+            }
+          }
+          setShowGate(false); setGateDone(true);
+        }} onSkip={() => { setShowGate(false); setGateDone(true); }} />
       )}
 
       {/* Logged-in save link */}

@@ -259,7 +259,7 @@ def resolve_tesco_url(search_url, product_name):
 def extract_tesco_price(product_url):
     resp = sb_fetch(product_url, render_js=True)  # needs JS for JSON-LD
     if resp.status_code != 200:
-        return None, None, f"HTTP {resp.status_code}"
+        return None, None, f"HTTP {resp.status_code}", None, False, None
 
     html = resp.text
     price, name = extract_json_ld_price(html)
@@ -320,7 +320,7 @@ def resolve_supervalu_url(search_url, product_name):
 def extract_supervalu_price(product_url):
     resp = sb_fetch(product_url, render_js=True)  # needs JS to render price
     if resp.status_code != 200:
-        return None, None, f"HTTP {resp.status_code}"
+        return None, None, f"HTTP {resp.status_code}", None, False, None
 
     html = resp.text
 

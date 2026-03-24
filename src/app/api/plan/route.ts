@@ -2,6 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase';
+import jwt from 'jsonwebtoken';
 
 export const maxDuration = 60;
 
@@ -110,55 +111,122 @@ async function queryProduct(canonicalName: string): Promise<PriceRow[]> {
   );
 }
 
+async function queryUserHistory(subscriberId: string) {
+  const { data } = await supabaseAdmin
+    .from('list_items')
+    .select('canonical_name, category, store, price_paid, quantity, observed_at')
+    .eq('subscriber_id', subscriberId)
+    .order('observed_at', { ascending: false })
+    .limit(200);
+  const map = new Map<string, { store: string; price_paid: number; quantity: number; times_bought: number; last_bought: string }>();
+  for (const r of (data ?? []) as any[]) {
+    if (!map.has(r.canonical_name)) {
+      map.set(r.canonical_name, { store: r.store, price_paid: r.price_paid, quantity: r.quantity, times_bought: 1, last_bought: r.observed_at });
+    } else {
+      map.get(r.canonical_name)!.times_bought++;
+    }
+  }
+  return [...map.entries()].map(([canonical_name, v]) => ({ canonical_name, ...v }));
+}
+
+async function queryPriceChanges(subscriberId: string) {
+  const history = await queryUserHistory(subscriberId);
+  if (!history.length) return [];
+  const results = [];
+  for (const item of history.slice(0, 30)) {
+    const current = await queryProduct(item.canonical_name);
+    const bestNow = (current as any[]).reduce((best: any, r: any) => !best || r.price < best.price ? r : best, null);
+    if (!bestNow) continue;
+    const diff = Number((bestNow.price - item.price_paid).toFixed(2));
+    if (Math.abs(diff) >= 0.05) {
+      results.push({
+        canonical_name: item.canonical_name,
+        last_store: item.store,
+        last_price: item.price_paid,
+        best_store_now: bestNow.store,
+        best_price_now: bestNow.price,
+        change: diff,
+        direction: diff < 0 ? 'cheaper' : 'dearer'
+      });
+    }
+  }
+  return results;
+}
+
 // ---------------------------------------------------------------------------
-// Tool definitions
+// Tool factory — creates tools with request-scoped subscriberId
 // ---------------------------------------------------------------------------
 
-const TOOLS = {
-  get_categories: tool({
-    description:
-      'Returns the list of all product categories available in the catalogue. Call this first to know what categories exist before calling get_prices_by_category.',
-    parameters: z.object({}),
-    execute: async () => queryCategories(),
-  }),
-
-  get_prices_by_category: tool({
-    description:
-      'Returns all products in a given category with their current price at each store, and whether each is currently on promotion (includes was_price). Use the exact category string returned by get_categories.',
-    parameters: z.object({
-      category: z
-        .string()
-        .describe('Exact category name, e.g. "Dairy", "Meat", "Vegetables"'),
+function makeTools(subscriberId: string | null) {
+  return {
+    get_categories: tool({
+      description:
+        'Returns the list of all product categories available in the catalogue. Call this first to know what categories exist before calling get_prices_by_category.',
+      parameters: z.object({}),
+      execute: async () => queryCategories(),
     }),
-    execute: async ({ category }: { category: string }) => queryCategoryPrices(category),
-  }),
 
-  get_promotions: tool({
-    description:
-      "Returns every product currently on promotion across all stores, with current price and was_price. Always call this before building the list — anchor the shop around this week's deals.",
-    parameters: z.object({}),
-    execute: async () => queryPromotions(),
-  }),
-
-  get_product: tool({
-    description:
-      'Returns the current price for a single product (by canonical_name) across all stores. Use this to drill into a specific product when you need its exact price to complete the list.',
-    parameters: z.object({
-      canonical_name: z
-        .string()
-        .describe('The canonical_name value exactly as it appears in catalogue data'),
+    get_prices_by_category: tool({
+      description:
+        'Returns all products in a given category with their current price at each store, and whether each is currently on promotion (includes was_price). Use the exact category string returned by get_categories.',
+      parameters: z.object({
+        category: z
+          .string()
+          .describe('Exact category name, e.g. "Dairy", "Meat", "Vegetables"'),
+      }),
+      execute: async ({ category }: { category: string }) => queryCategoryPrices(category),
     }),
-    execute: async ({ canonical_name }: { canonical_name: string }) => queryProduct(canonical_name),
-  }),
-};
+
+    get_promotions: tool({
+      description:
+        "Returns every product currently on promotion across all stores, with current price and was_price. Always call this before building the list — anchor the shop around this week's deals.",
+      parameters: z.object({}),
+      execute: async () => queryPromotions(),
+    }),
+
+    get_product: tool({
+      description:
+        'Returns the current price for a single product (by canonical_name) across all stores. Use this to drill into a specific product when you need its exact price to complete the list.',
+      parameters: z.object({
+        canonical_name: z
+          .string()
+          .describe('The canonical_name value exactly as it appears in catalogue data'),
+      }),
+      execute: async ({ canonical_name }: { canonical_name: string }) => queryProduct(canonical_name),
+    }),
+
+    get_user_history: tool({
+      description: "Returns this user's shopping history — products they've bought before, which store, price paid, and how often. Use this to personalise the list. Only available for signed-in users.",
+      parameters: z.object({}),
+      execute: async () => subscriberId ? queryUserHistory(subscriberId) : [],
+    }),
+
+    get_price_changes: tool({
+      description: "Compares prices the user paid last time vs current best prices. Returns items now cheaper or dearer. Call this for returning users.",
+      parameters: z.object({}),
+      execute: async () => subscriberId ? queryPriceChanges(subscriberId) : [],
+    }),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
 
+const SECRET = process.env.MAGIC_LINK_SECRET;
+
 export async function POST(req: Request) {
   const body = await req.json();
   const householdSize: number = body.householdSize ?? 2;
+
+  let subscriberId: string | null = null;
+  const token = body.token as string | undefined;
+  if (token && SECRET) {
+    try {
+      const payload = jwt.verify(token, SECRET!) as { subscriberId: string };
+      subscriberId = payload.subscriberId;
+    } catch { /* invalid/expired — anonymous */ }
+  }
 
   // useChat sends { messages: [{role, content}...] }
   // We also support direct { meals: string } for testing
@@ -202,11 +270,13 @@ Your job: take a description of what the user wants to cook or eat this week and
 - If the user asks to update or modify their list, use the full conversation history to understand what was already planned and produce a complete updated list
 
 ## Tools — use these to fetch data, do not guess prices
-You have four tools. Use them before writing any output.
+You have six tools. Use them before writing any output.
 1. get_promotions — ALWAYS call this first. Build the list around deals where possible.
 2. get_categories — call once to discover valid category names.
 3. get_prices_by_category(category) — call for each category you need.
 4. get_product(canonical_name) — use sparingly for a single product lookup.
+5. get_user_history — call for signed-in users to personalise the list.
+6. get_price_changes — call for returning users to highlight price changes.
 
 Rules:
 - Gather ALL data via tools before writing any output.
@@ -221,6 +291,14 @@ Rules:
 - e.g. "pasta sheets" → look in the same category as other pasta products
 - If multiple products could match, pick the most specific one
 - If nothing in the catalogue is a reasonable match, skip the ingredient silently
+
+## Returning user personalisation
+If get_user_history returns data, this is a returning user:
+- Mention 1-2 items they buy regularly ("You usually get X — added that in")
+- Call get_price_changes and highlight items now cheaper than last time
+- Prefer stores they've used before unless a better deal exists elsewhere
+- Weave this naturally into the list — don't over-explain it
+If get_user_history returns empty, treat as new user — no mention of history.
 
 ## Output format
 Use this structure exactly:
@@ -258,7 +336,7 @@ Use this structure exactly:
             },
           ],
 
-    tools: TOOLS,
+    tools: makeTools(subscriberId),
     maxSteps: 10,
   });
 
