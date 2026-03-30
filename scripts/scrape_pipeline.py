@@ -704,7 +704,7 @@ def main():
 
     # Trigger Vercel cache revalidation so pages show fresh prices immediately
     if total_prices > 0:
-        revalidate_secret = os.environ.get("REVALIDATE_SECRET")
+        revalidate_secret = os.environ.get("REVALIDATE_SECRET", "").strip()
         if revalidate_secret:
             try:
                 import urllib.request
