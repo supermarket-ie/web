@@ -247,7 +247,9 @@ export async function POST(req: Request) {
     return new Response('Meals required', { status: 400 });
   }
 
-  const result = await streamText({
+  let result;
+  try {
+    result = await streamText({
     model: anthropic('claude-3-5-haiku-latest'),
     system: `You are an AI grocery assistant for supermarket.ie — Ireland's smartest grocery planning platform.
 
@@ -339,6 +341,11 @@ Use this structure exactly:
     tools: makeTools(subscriberId),
     maxSteps: 10,
   });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[/api/plan] streamText error:', msg);
+    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
 
   return result.toDataStreamResponse({ sendUsage: false });
 }
