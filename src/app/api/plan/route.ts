@@ -248,7 +248,7 @@ export async function POST(req: Request) {
   }
 
   const result = await streamText({
-    model: anthropic('claude-haiku-4-5'),
+    model: anthropic('claude-3-5-haiku-latest'),
     system: `You are an AI grocery assistant for supermarket.ie — Ireland's smartest grocery planning platform.
 
 Your job: take a description of what the user wants to cook or eat this week and return a complete, priced shopping list using products from our catalogue.
