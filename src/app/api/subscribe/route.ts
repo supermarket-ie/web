@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     let subscriberId: string;
 
     if (existing) {
-      // Update existing subscriber (re-subscribe or update family size)
+      // Already subscribed — just update family size and return a fresh token (don't error)
       const { error: updateError } = await supabaseAdmin
         .from('subscribers')
         .update({

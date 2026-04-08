@@ -197,10 +197,10 @@ export function HomePlanner() {
         }
       }
 
-      // Show signup gate only when Claude actually produced a shopping list
-      const isList = assistantContent.includes('🛒') || assistantContent.includes('Store totals') || assistantContent.includes('Best value split');
+      // Show signup gate after any substantive response — don't rely on exact format strings
+      const isList = assistantContent.includes('🛒') || assistantContent.includes('Store totals') || assistantContent.includes('Best value split') || assistantContent.length > 200;
       if (!session && !gateDone && isList) {
-        setTimeout(() => setShowGate(true), 500);
+        setTimeout(() => setShowGate(true), 800);
       }
 
       // If already logged in and got a list, auto-save it
@@ -269,7 +269,7 @@ export function HomePlanner() {
         </div>
       )}
 
-      {/* Signup gate */}
+      {/* Signup gate — shown inline, does NOT hide the input */}
       {showGate && !session && (
         <SignupGate onSuccess={t => {
           if (t) {
@@ -305,8 +305,8 @@ export function HomePlanner() {
         </div>
       )}
 
-      {/* Input — hidden while signup gate is showing */}
-      {!showGate && <div>
+      {/* Input always visible */}
+      <div>
         {!started && (
           <div className="mb-2">
             <div className="flex flex-wrap gap-1.5 mb-1.5">
@@ -365,7 +365,7 @@ export function HomePlanner() {
           </button>
         </form>
         <p className="text-[11px] mt-1.5 text-center" style={{ color: 'var(--on-surface-variant)' }}>Prices from Tesco, Dunnes &amp; SuperValu · Free to use</p>
-      </div>}
+      </div>
     </div>
   );
 }
