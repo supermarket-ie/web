@@ -21,9 +21,10 @@ export async function POST(request: NextRequest) {
       .eq('subscribed', true)
       .single();
 
-    // Always return success to avoid email enumeration
     if (!subscriber) {
-      return NextResponse.json({ success: true });
+      // Return a distinct flag so the UI can nudge the user to sign up
+      // (not a full 404 to avoid leaking existence of emails to attackers — the UI handles it gracefully)
+      return NextResponse.json({ success: true, found: false });
     }
 
     const token = jwt.sign(
