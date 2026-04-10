@@ -2,20 +2,130 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
-import { HomePlanner } from "@/components/HomePlannerGreen";
 import { SiteFooter } from "@/components/SiteFooter";
-import { loadSession } from "@/lib/session";
+import { loadSession, saveSession } from "@/lib/session";
+
+const FAMILY_OPTIONS = [
+  { value: "1",   label: "Just me",     icon: "👤" },
+  { value: "2",   label: "Couple",      icon: "👥" },
+  { value: "3-4", label: "3–4 people",  icon: "👨‍👩‍👧" },
+  { value: "5+",  label: "5+ people",   icon: "👨‍👩‍👧‍👦" },
+];
+
+function SignupWidget({ onSuccess }: { onSuccess: (token: string) => void }) {
+  const [familySize, setFamilySize] = useState("2");
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), familySize }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      if (data.token) {
+        saveSession({ token: data.token, familySize, expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+        onSuccess(data.token);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Household size */}
+      <div>
+        <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--on-background)' }}>
+          Household size
+        </label>
+        <div className="grid grid-cols-4 gap-2">
+          {FAMILY_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setFamilySize(opt.value)}
+              className="p-3 rounded-xl text-center transition-all border-2"
+              style={familySize === opt.value
+                ? { borderColor: 'var(--primary)', background: 'var(--primary-fixed)', color: 'var(--primary)' }
+                : { borderColor: 'var(--surface-container)', background: 'var(--surface-container-lowest)', color: 'var(--on-surface)' }
+              }
+            >
+              <div className="text-xl mb-1">{opt.icon}</div>
+              <div className="text-[11px] font-medium leading-tight">{opt.label}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Email */}
+      <div>
+        <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--on-background)' }}>
+          Email address
+        </label>
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          className="w-full px-4 py-3 rounded-xl border-2 focus:outline-none transition text-sm"
+          style={{ borderColor: 'var(--surface-container)', background: 'var(--surface-container-lowest)', color: 'var(--on-background)' }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'var(--primary)'; }}
+          onBlur={e =>  { e.currentTarget.style.borderColor = 'var(--surface-container)'; }}
+        />
+      </div>
+
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl">{error}</p>
+      )}
+
+      <button
+        type="submit"
+        disabled={submitting || !email}
+        className="btn-primary w-full px-6 py-4 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ boxShadow: '0 4px 24px rgba(0,106,53,0.25)' }}
+      >
+        {submitting ? "Building your list…" : "Build my free list →"}
+      </button>
+
+      <p className="text-xs text-center" style={{ color: 'var(--on-surface-variant)' }}>
+        🔒 No spam, ever · Unsubscribe anytime
+      </p>
+    </form>
+  );
+}
 
 export default function Home() {
+  const router = useRouter();
   const [showCookieBanner, setShowCookieBanner] = useState(false);
   const [listUrl, setListUrl] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     if (!localStorage.getItem("cookieConsent")) setShowCookieBanner(true);
     const session = loadSession();
     if (session?.token) setListUrl(`/list?token=${session.token}`);
   }, []);
+
+  function onSignupSuccess(t: string) {
+    setToken(t);
+    setSubmitted(true);
+    // Redirect to list after short delay so user sees confirmation
+    setTimeout(() => router.push(`/list?token=${t}`), 1200);
+  }
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
@@ -51,25 +161,25 @@ export default function Home() {
             {/* Copy */}
             <div>
               <div className="chip-tertiary mb-6">
-                Plan your weekly shop. We&apos;ll build the basket.
+                🛒 Free weekly shopping lists for Irish households
               </div>
 
               <h1 className="type-display text-on-background mb-6">
-                Tell us what you&apos;re cooking.<br />
+                Your weekly shop,<br />
                 <span style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-                  We&apos;ll handle<br />the rest.
+                  built for you.
                 </span>
               </h1>
 
               <p className="type-body-lg mb-8 max-w-lg" style={{ color: 'var(--on-surface)' }}>
-                From meals to essentials, get a complete, ready-to-buy shop in seconds.
+                Tell us your household size and we&apos;ll build a complete weekly shopping list with the best prices across Tesco, Dunnes and SuperValu.
               </p>
 
               <div className="space-y-3 mb-10">
                 {[
-                  "Deals from Dunnes, Tesco, SuperValu, Lidl & Aldi",
-                  "Save €20+ every week on your shop",
-                  "Stop wasting hours comparing prices",
+                  "Best prices across Tesco, Dunnes & SuperValu",
+                  "Personalised for your household size",
+                  "Updated every week — free forever",
                 ].map(item => (
                   <div key={item} className="flex items-center gap-3">
                     <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
@@ -83,44 +193,37 @@ export default function Home() {
                 ))}
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 items-start mb-4">
-                <Link href="/plan" className="btn-primary px-8 py-4 text-lg"
-                  style={{ boxShadow: '0 4px 24px rgba(0,106,53,0.25)' }}>
-                  ✨ Plan my week
-                  <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
+              {listUrl && (
+                <Link href={listUrl} className="btn-secondary px-8 py-4 text-lg inline-flex">
+                  View my list →
                 </Link>
-                {listUrl ? (
-                  <Link href={listUrl} className="btn-secondary px-8 py-4 text-lg">My list</Link>
-                ) : (
-                  <Link href="/browse" className="btn-secondary px-8 py-4 text-lg">Browse prices</Link>
-                )}
-              </div>
-              <p className="text-sm" style={{ color: 'var(--on-surface)' }}>
-                <span className="font-semibold" style={{ color: 'var(--on-background)' }}>100% free</span> · No signup needed to try
-              </p>
+              )}
             </div>
 
-            {/* AI Planner card */}
+            {/* Signup card */}
             <div className="relative">
-              <div className="rounded-2xl p-5 min-h-[380px] flex flex-col" style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 8px 40px rgba(0,0,0,0.08)' }}>
-                <div className="flex items-center gap-3 mb-4 pb-4" style={{ borderBottom: '1px solid var(--surface-container-low)' }}>
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))', color: 'var(--on-primary-container)' }}>
-                    S
+              <div className="rounded-2xl p-6" style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 8px 40px rgba(0,0,0,0.08)' }}>
+                {submitted ? (
+                  <div className="text-center py-8">
+                    <div className="text-5xl mb-4">✅</div>
+                    <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--on-background)' }}>Your list is being built!</h2>
+                    <p className="text-sm" style={{ color: 'var(--on-surface)' }}>Taking you to your list now…</p>
                   </div>
-                  <div>
-                    <div className="font-semibold text-sm" style={{ color: 'var(--on-background)' }}>supermarket.ie AI</div>
-                    <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--primary)' }}>
-                      <span className="w-1.5 h-1.5 rounded-full animate-pulse inline-block" style={{ background: 'var(--primary-container)' }} />
-                      Online · Prices updated today
+                ) : (
+                  <>
+                    <div className="mb-5">
+                      <h2 className="text-xl font-bold mb-1" style={{ color: 'var(--on-background)' }}>Get your free list</h2>
+                      <p className="text-sm" style={{ color: 'var(--on-surface)' }}>Takes 30 seconds. No credit card.</p>
                     </div>
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <HomePlanner />
-                </div>
+                    <SignupWidget onSuccess={onSignupSuccess} />
+                    <p className="text-xs text-center mt-4" style={{ color: 'var(--on-surface-variant)' }}>
+                      Already have a list?{" "}
+                      <Link href="/list/request" className="underline font-medium" style={{ color: 'var(--primary)' }}>
+                        Sign in →
+                      </Link>
+                    </p>
+                  </>
+                )}
               </div>
 
               {/* Social proof badge */}
@@ -142,6 +245,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </section>
@@ -150,10 +254,10 @@ export default function Home() {
       <section className="py-8 px-6" style={{ background: 'var(--surface-container-low)' }}>
         <div className="max-w-6xl mx-auto">
           <p className="type-label text-center mb-4" style={{ color: 'var(--on-surface)' }}>
-            Trusted by Ireland&apos;s shoppers
+            Prices from Ireland&apos;s biggest supermarkets
           </p>
           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
-            {["Dunnes", "Tesco", "SuperValu", "Lidl", "Aldi"].map(store => (
+            {["Dunnes", "Tesco", "SuperValu"].map(store => (
               <span key={store} className="text-xl font-bold" style={{ color: 'var(--on-surface-variant)' }}>{store}</span>
             ))}
           </div>
@@ -175,9 +279,9 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { num: "01", title: "Tell us about you",    desc: "Household size, preferences, stores near you. Takes 30 seconds.",                   icon: "👤", dark: false },
-              { num: "02", title: "Get your weekly list", desc: "We scan every deal and build a personalised list just for you.",                     icon: "📋", dark: true  },
-              { num: "03", title: "Shop & save",          desc: "Use your list at any store. Watch the savings add up.",                              icon: "💰", dark: false },
+              { num: "01", title: "Tell us about your household", desc: "Pick your household size and enter your email. Takes 30 seconds.",        icon: "👤", dark: false },
+              { num: "02", title: "We build your list",           desc: "We scan every deal and build a personalised list just for your household.", icon: "📋", dark: true  },
+              { num: "03", title: "Shop & save",                  desc: "Use your list at any store. Updated every week with the latest prices.",   icon: "💰", dark: false },
             ].map(step => (
               <div key={step.num} className="rounded-2xl p-8 relative overflow-hidden"
                 style={step.dark
@@ -291,19 +395,31 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── CTA ──────────────────────────────────────────────────────────── */}
+      {/* ── Bottom CTA ───────────────────────────────────────────────────── */}
       <section id="signup" className="py-20 px-6" style={{ background: 'var(--surface-container-low)' }}>
         <div className="max-w-xl mx-auto">
-          <div className="rounded-2xl p-8 md:p-10 text-center"
+          <div className="rounded-2xl p-8 md:p-10"
             style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 8px 40px rgba(0,0,0,0.07)' }}>
-            <h2 className="type-headline text-on-background mb-3">Get your free list</h2>
-            <p className="mb-8" style={{ color: 'var(--on-surface)' }}>Join 2,400+ smart shoppers</p>
-            <Link href="/list/request" className="btn-primary w-full px-6 py-4 text-lg mb-4">
-              Get my free list →
-            </Link>
-            <p className="text-sm" style={{ color: 'var(--on-surface)' }}>
-              🔒 No spam, ever. Unsubscribe anytime.
-            </p>
+            {submitted ? (
+              <div className="text-center py-4">
+                <div className="text-5xl mb-4">✅</div>
+                <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--on-background)' }}>Your list is being built!</h2>
+                <p className="text-sm mb-4" style={{ color: 'var(--on-surface)' }}>Taking you to your list now…</p>
+                {token && (
+                  <Link href={`/list?token=${token}`} className="btn-primary inline-flex px-6 py-3">
+                    View my list →
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="text-center mb-6">
+                  <h2 className="type-headline text-on-background mb-2">Get your free list</h2>
+                  <p style={{ color: 'var(--on-surface)' }}>Join 2,400+ smart Irish shoppers</p>
+                </div>
+                <SignupWidget onSuccess={onSignupSuccess} />
+              </>
+            )}
           </div>
         </div>
       </section>
