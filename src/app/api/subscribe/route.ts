@@ -107,37 +107,35 @@ export async function POST(request: NextRequest) {
     await resend.emails.send({
       from: 'supermarket.ie <hello@mail.supermarket.ie>',
       to: email,
-      subject: 'Your supermarket.ie shopping list is ready 🛒',
+      subject: 'Your shopping list is ready',
+      text: `Hi,
+
+Your supermarket.ie shopping list is ready. Here's your link:
+
+${magicLink}
+
+We'll update your prices every week. Bookmark the page once you're in so you can come back any time.
+
+This link is valid for 7 days.
+
+— supermarket.ie
+Unsubscribe: ${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`,
       html: `
-        <!DOCTYPE html>
         <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1A1A1A; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #1D2324; margin: 0;">supermarket<span style="color: #006A35;">.ie</span></h1>
-          </div>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.6; color: #1A1A1A; max-width: 520px; margin: 0 auto; padding: 32px 20px;">
+          <p style="margin: 0 0 24px;"><strong>supermarket.ie</strong></p>
 
-          <h2 style="color: #1D2324;">Your shopping list is ready 🛒</h2>
+          <p style="margin: 0 0 16px;">Your shopping list is ready. Here&rsquo;s your link:</p>
 
-          <p>We've built your personalised weekly shopping list with the best prices across Tesco, Dunnes &amp; SuperValu.</p>
+          <p style="margin: 0 0 16px;">
+            <a href="${magicLink}" style="color: #006A35; font-weight: 600;">${magicLink}</a>
+          </p>
 
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${magicLink}" style="background: #006A35; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block;">
-              View my shopping list &rarr;
-            </a>
-          </div>
+          <p style="margin: 0 0 32px; color: #555; font-size: 14px;">Bookmark the page once you&rsquo;re in — we&rsquo;ll update your prices every week. This link is valid for 7 days.</p>
 
-          <p style="color: #636E72; font-size: 14px;">This link is valid for 7 days. Bookmark the page once you're in — we'll keep your list updated every week.</p>
-
-          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-
-          <p style="font-size: 12px; color: #666; text-align: center;">
+          <p style="font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 16px; margin: 0;">
             supermarket.ie &middot;
-            <a href="${unsubscribeUrl}" style="color: #666;">Unsubscribe</a> &middot;
-            <a href="${process.env.NEXT_PUBLIC_SITE_URL}/privacy" style="color: #666;">Privacy Policy</a>
+            <a href="${unsubscribeUrl}" style="color: #999;">Unsubscribe</a>
           </p>
         </body>
         </html>
