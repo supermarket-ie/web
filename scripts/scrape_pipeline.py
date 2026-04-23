@@ -233,23 +233,22 @@ def extract_euro_price_fallback(html):
 # ============================================================
 
 def resolve_tesco_url(search_url, product_name):
-    if "/search?" not in search_url:
-        query = urllib.parse.quote(product_name)
-        url = f"https://www.tesco.ie/groceries/en-IE/search?query={query}"
-    else:
-        url = search_url
+    # Tesco migrated from /groceries/en-IE/ to /shop/en-IE/ in 2026
+    query = urllib.parse.quote(product_name)
+    url = f"https://www.tesco.ie/shop/en-IE/search?query={query}"
 
     resp = sb_fetch(url)
     if resp.status_code != 200:
         return None, None, f"HTTP {resp.status_code}"
 
     html = resp.text
-    links = re.findall(r'href="(/groceries/en-IE/products/(\d+)[^"]*)"', html)
+    # New URL pattern: /shop/en-IE/products/<sku>
+    links = re.findall(r'href="(/shop/en-IE/products/(\d+)[^"]*)"', html)
     if not links:
-        skus = re.findall(r'/groceries/en-IE/products/(\d+)', html)
+        skus = re.findall(r'/shop/en-IE/products/(\d+)', html)
         if skus:
             sku = skus[0]
-            return f"https://www.tesco.ie/groceries/en-IE/products/{sku}", sku, None
+            return f"https://www.tesco.ie/shop/en-IE/products/{sku}", sku, None
         return None, None, "No product links found"
 
     path, sku = links[0]
@@ -257,6 +256,8 @@ def resolve_tesco_url(search_url, product_name):
 
 
 def extract_tesco_price(product_url):
+    # Rewrite old /groceries/en-IE/ URLs to new /shop/en-IE/ format
+    product_url = product_url.replace('/groceries/en-IE/', '/shop/en-IE/')
     resp = sb_fetch(product_url, render_js=True)  # needs JS for JSON-LD
     if resp.status_code != 200:
         return None, None, f"HTTP {resp.status_code}", None, False, None
