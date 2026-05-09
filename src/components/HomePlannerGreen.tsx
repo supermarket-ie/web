@@ -112,6 +112,8 @@ export function HomePlanner() {
   const [lastItems, setLastItems] = useState<unknown[]>([]);
   const [lastStoreTotals, setLastStoreTotals] = useState<unknown[]>([]);
   const [listSaved, setListSaved] = useState(false);
+  const [plannerSaved, setPlannerSaved] = useState(false);
+  const [plannerSaving, setPlannerSaving] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -131,11 +133,77 @@ export function HomePlanner() {
     }
   }, [messages]);
 
+  function parseAssistantMessageForItems(content: string): Array<{name: string, store: string, price: number}> {
+    const lines = content.split('\n');
+    const items: Array<{name: string, store: string, price: number}> = [];
+
+    for (const line of lines) {
+      // Match patterns like:
+      // - ProductName - StoreName €price
+      // - ProductName – StoreName €price
+      // * ProductName - StoreName €price
+      const match = line.match(/^[-*]\s+(.+?)\s+[-–]\s+(.+?)\s+€(\d+(?:\.\d{2})?)/);
+      if (match) {
+        const [, name, store, priceStr] = match;
+        const price = parseFloat(priceStr);
+        if (name && store && !isNaN(price)) {
+          items.push({
+            name: name.trim(),
+            store: store.trim(),
+            price
+          });
+        }
+      }
+    }
+
+    return items;
+  }
+
+  async function savePlannerList() {
+    if (!session?.token || plannerSaving) return;
+
+    const lastAssistantMessage = messages
+      .filter(m => m.role === 'assistant')
+      .pop();
+
+    if (!lastAssistantMessage?.content) return;
+
+    const items = parseAssistantMessageForItems(lastAssistantMessage.content);
+    if (items.length === 0) return;
+
+    setPlannerSaving(true);
+
+    try {
+      const response = await fetch('/api/lists/save-from-planner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: session.token,
+          items: items,
+          prompt: lastPrompt
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.ok) {
+        setPlannerSaved(true);
+        console.log(`[planner] Saved ${data.count} items to list`);
+      } else {
+        console.error('[planner] Failed to save:', data.error);
+      }
+    } catch (error) {
+      console.error('[planner] Save error:', error);
+    } finally {
+      setPlannerSaving(false);
+    }
+  }
+
   async function sendMessage(userText: string) {
     if (!userText.trim() || isLoading) return;
     setStarted(true);
     setShowGate(false);
     setListSaved(false);
+    setPlannerSaved(false);
 
     const newMessages: Message[] = [...messages, { role: 'user', content: userText }];
     setMessages(newMessages);
@@ -266,6 +334,50 @@ export function HomePlanner() {
             </div>
           )}
           <div ref={bottomRef} />
+        </div>
+      )}
+
+      {/* Save to list button for logged-in users */}
+      {session && !plannerSaved && messages.some(m => m.role === 'assistant' && m.content) && !isLoading && (
+        <div className="mb-3">
+          <button
+            onClick={savePlannerList}
+            disabled={plannerSaving}
+            className="btn-primary px-4 py-2 text-sm font-semibold rounded-xl disabled:opacity-60 flex items-center gap-2"
+          >
+            {plannerSaving ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Saving...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Save to my list
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Success message for planner save */}
+      {session && plannerSaved && (
+        <div className="mb-3 rounded-2xl p-3" style={{ background: 'var(--surface-container-low)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div className="flex items-start gap-2">
+            <span className="text-lg flex-shrink-0">✅</span>
+            <div>
+              <div className="font-bold text-sm" style={{ color: 'var(--on-background)' }}>List items saved!</div>
+              <div className="text-xs mt-0.5 mb-2" style={{ color: 'var(--on-surface)' }}>Added to your personal shopping list.</div>
+              <a
+                href={`/list?token=${session.token}`}
+                className="btn-primary inline-block px-3 py-1.5 text-xs font-semibold rounded-lg"
+              >
+                View full list →
+              </a>
+            </div>
+          </div>
         </div>
       )}
 
