@@ -120,26 +120,134 @@ This link is valid for 7 days.
 
 — supermarket.ie
 Unsubscribe: ${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`,
-      html: `
-        <html>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.6; color: #1A1A1A; max-width: 520px; margin: 0 auto; padding: 32px 20px;">
-          <p style="margin: 0 0 24px;"><strong>supermarket.ie</strong></p>
+      html: `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+  <title>Your shopping list is ready</title>
+  <!--[if mso]>
+  <style>body, table, td {font-family: Arial, sans-serif !important;}</style>
+  <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;">
 
-          <p style="margin: 0 0 16px;">Your shopping list is ready. Here&rsquo;s your link:</p>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f5;">
+    <tr>
+      <td align="center" style="padding: 40px 16px;">
 
-          <p style="margin: 0 0 16px;">
-            <a href="${magicLink}" style="color: #006A35; font-weight: 600;">${magicLink}</a>
-          </p>
+        <table width="520" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px; width: 100%;">
 
-          <p style="margin: 0 0 32px; color: #555; font-size: 14px;">Bookmark the page once you&rsquo;re in — we&rsquo;ll update your prices every week. This link is valid for 7 days.</p>
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding-bottom: 32px;">
+              <span style="font-size: 20px; font-weight: 700; color: #1A1A1A; letter-spacing: -0.5px;">supermarket</span><span style="font-size: 20px; font-weight: 700; color: #006A35; letter-spacing: -0.5px;">.ie</span>
+            </td>
+          </tr>
 
-          <p style="font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 16px; margin: 0;">
-            supermarket.ie &middot;
-            <a href="${unsubscribeUrl}" style="color: #999;">Unsubscribe</a>
-          </p>
-        </body>
-        </html>
-      `,
+          <!-- Hero -->
+          <tr>
+            <td style="background-color: #006A35; border-radius: 12px 12px 0 0; padding: 36px 28px; text-align: center;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center">
+                    <span style="font-size: 40px;">&#x1F6D2;</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 16px;">
+                    <span style="font-size: 24px; font-weight: 800; color: #ffffff; line-height: 1.2;">Your list is ready</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 8px;">
+                    <span style="font-size: 15px; color: rgba(255,255,255,0.85);">Best prices across Tesco, Dunnes &amp; SuperValu</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="background: #ffffff; border-radius: 0 0 12px 12px; border: 1px solid #e8e8e8; border-top: none; padding: 28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding-bottom: 20px;">
+                    <span style="font-size: 15px; color: #333; line-height: 1.6;">Your personalised shopping list is ready. Click below to view it &mdash; we&rsquo;ll show you where to get the best value on every item.</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding: 8px 0 24px;">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" style="background-color: #006A35; border-radius: 8px;">
+                          <!--[if mso]>
+                          <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${magicLink}" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="17%" strokecolor="#006A35" fillcolor="#006A35">
+                          <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">View my list &rarr;</center>
+                          </v:roundrect>
+                          <![endif]-->
+                          <!--[if !mso]><!-->
+                          <a href="${magicLink}" style="display: inline-block; background-color: #006A35; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 16px; line-height: 1;">View my list &rarr;</a>
+                          <!--<![endif]-->
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="border-top: 1px solid #f0f0f0; padding-top: 20px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="padding: 6px 0;">
+                          <span style="font-size: 13px; color: #666;">&#x2713;&nbsp; Updated every week with fresh prices</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0;">
+                          <span style="font-size: 13px; color: #666;">&#x2713;&nbsp; Bookmark the page for quick access</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0;">
+                          <span style="font-size: 13px; color: #666;">&#x2713;&nbsp; This link is valid for 7 days</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding-top: 32px;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center">
+                    <span style="font-size: 12px; color: #999;">supermarket.ie &mdash; Ireland&rsquo;s smartest grocery list</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 8px;">
+                    <a href="${unsubscribeUrl}" style="font-size: 12px; color: #bbb; text-decoration: underline;">Unsubscribe</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>`,
     });
 
     return NextResponse.json({ success: true, token: jwtToken });

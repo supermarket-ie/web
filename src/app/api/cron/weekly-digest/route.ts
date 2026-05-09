@@ -88,51 +88,178 @@ function formatDate(): string {
   });
 }
 
+function storeColor(store: string): string {
+  switch (store.toLowerCase()) {
+    case 'tesco': return '#00539F';
+    case 'dunnes': return '#6B2D8B';
+    case 'supervalu': return '#E31837';
+    default: return '#006A35';
+  }
+}
+
 function generateEmailHTML(deals: Deal[], magicLink: string, unsubscribeUrl: string): string {
-  const dealsHTML = deals.map(deal => `
+  const dealsHTML = deals.map((deal, i) => `
     <tr>
-      <td style="padding: 12px 0; border-bottom: 1px solid #f0f0f0;">
-        <div style="font-weight: 600; font-size: 15px; color: #1A1A1A; margin-bottom: 4px;">${deal.product_name}</div>
-        <div style="font-size: 13px; color: #666; margin-bottom: 6px;">${deal.store}</div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-weight: 700; font-size: 16px; color: #006A35;">${formatPrice(deal.current_price)}</span>
-          <span style="text-decoration: line-through; color: #999; font-size: 14px;">${formatPrice(deal.was_price)}</span>
-          <span style="background: #006A35; color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: 600;">Save ${formatPrice(deal.saving)}</span>
-        </div>
+      <td style="padding: 0 0 ${i < deals.length - 1 ? '12' : '0'}px 0;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #ffffff; border-radius: 8px; border: 1px solid #e8e8e8;">
+          <tr>
+            <td style="padding: 16px 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td>
+                    <span style="font-size: 16px; font-weight: 700; color: #1A1A1A; line-height: 1.3;">${deal.product_name}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-top: 4px;">
+                    <span style="font-size: 12px; font-weight: 600; color: ${storeColor(deal.store)}; text-transform: uppercase; letter-spacing: 0.5px;">${deal.store}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-top: 12px;">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="padding-right: 12px;">
+                          <span style="font-size: 22px; font-weight: 800; color: #006A35;">${formatPrice(deal.current_price)}</span>
+                        </td>
+                        <td style="padding-right: 12px;">
+                          <span style="font-size: 14px; color: #999; text-decoration: line-through;">${formatPrice(deal.was_price)}</span>
+                        </td>
+                        <td>
+                          <span style="background: #DCFCE7; color: #166534; padding: 3px 8px; border-radius: 20px; font-size: 12px; font-weight: 700;">Save ${formatPrice(deal.saving)}</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
       </td>
     </tr>
   `).join('');
 
-  return `
-    <html>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.6; color: #1A1A1A; max-width: 520px; margin: 0 auto; padding: 32px 20px;">
-      <p style="margin: 0 0 8px; font-weight: 600; color: #006A35;">supermarket.ie</p>
-      <h1 style="margin: 0 0 24px; font-size: 24px; font-weight: 700; color: #1A1A1A;">Your weekly deals</h1>
-      <p style="margin: 0 0 24px; color: #555; font-size: 14px;">${formatDate()}</p>
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+  <title>Your weekly deals</title>
+  <!--[if mso]>
+  <style>body, table, td {font-family: Arial, sans-serif !important;}</style>
+  <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;">
 
-      <h2 style="margin: 0 0 16px; font-size: 18px; font-weight: 600; color: #1A1A1A;">🔥 Top deals this week</h2>
+  <!-- Wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f5;">
+    <tr>
+      <td align="center" style="padding: 40px 16px;">
 
-      ${deals.length > 0 ? `
-        <table style="width: 100%; margin-bottom: 32px;">
-          ${dealsHTML}
+        <!-- Container -->
+        <table width="520" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px; width: 100%;">
+
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding-bottom: 32px;">
+              <span style="font-size: 20px; font-weight: 700; color: #1A1A1A; letter-spacing: -0.5px;">supermarket</span><span style="font-size: 20px; font-weight: 700; color: #006A35; letter-spacing: -0.5px;">.ie</span>
+            </td>
+          </tr>
+
+          <!-- Hero card -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #006A35 0%, #00873E 100%); background-color: #006A35; border-radius: 12px 12px 0 0; padding: 32px 28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td>
+                    <span style="font-size: 14px; color: rgba(255,255,255,0.8); font-weight: 500;">${formatDate()}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-top: 8px;">
+                    <span style="font-size: 26px; font-weight: 800; color: #ffffff; line-height: 1.2;">This week&rsquo;s best deals</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-top: 8px;">
+                    <span style="font-size: 15px; color: rgba(255,255,255,0.85); line-height: 1.5;">We found ${deals.length} price drops across Tesco, Dunnes &amp; SuperValu.</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Deals section -->
+          <tr>
+            <td style="background: #fafafa; padding: 24px 28px; border-radius: 0 0 12px 12px; border: 1px solid #e8e8e8; border-top: none;">
+              ${deals.length > 0 ? `
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                ${dealsHTML}
+              </table>
+              ` : `
+              <p style="margin: 0; color: #666; font-size: 15px; text-align: center; padding: 16px 0;">No promotions this week &mdash; but your list still has the best regular prices!</p>
+              `}
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td align="center" style="padding: 32px 0;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="background-color: #006A35; border-radius: 8px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${magicLink}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="17%" strokecolor="#006A35" fillcolor="#006A35">
+                    <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">View your full list &rarr;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-->
+                    <a href="${magicLink}" style="display: inline-block; background-color: #006A35; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 16px; line-height: 1;">View your full list &rarr;</a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+              <table cellpadding="0" cellspacing="0" border="0" style="margin-top: 12px;">
+                <tr>
+                  <td>
+                    <span style="font-size: 13px; color: #999;">Updated every Monday &bull; Always free</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="border-top: 1px solid #e8e8e8; padding-top: 24px;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center">
+                    <span style="font-size: 12px; color: #999;">supermarket.ie &mdash; Ireland&rsquo;s smartest grocery list</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 8px;">
+                    <a href="${unsubscribeUrl}" style="font-size: 12px; color: #bbb; text-decoration: underline;">Unsubscribe</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
         </table>
-      ` : `
-        <p style="margin: 0 0 32px; color: #666; font-style: italic;">No special deals this week, but your regular list is always up-to-date with the best prices!</p>
-      `}
+        <!-- /Container -->
 
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${magicLink}" style="display: inline-block; background: linear-gradient(135deg, #006A35, #008A45); color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View your full list →</a>
-      </div>
+      </td>
+    </tr>
+  </table>
+  <!-- /Wrapper -->
 
-      <p style="margin: 24px 0 0; color: #666; font-size: 13px; text-align: center;">Prices updated weekly • Free to use</p>
-
-      <p style="font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 16px; margin: 32px 0 0; text-align: center;">
-        supermarket.ie &middot;
-        <a href="${unsubscribeUrl}" style="color: #999;">Unsubscribe</a>
-      </p>
-    </body>
-    </html>
-  `;
+</body>
+</html>`;
 }
 
 export async function GET(request: NextRequest) {

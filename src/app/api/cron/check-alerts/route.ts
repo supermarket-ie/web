@@ -24,34 +24,158 @@ function formatPrice(price: number): string {
   return `€${price.toFixed(2)}`;
 }
 
+function storeColor(store: string): string {
+  switch (store.toLowerCase()) {
+    case 'tesco': return '#00539F';
+    case 'dunnes': return '#6B2D8B';
+    case 'supervalu': return '#E31837';
+    default: return '#006A35';
+  }
+}
+
 function generateAlertEmailHTML(productName: string, currentPrice: number, targetPrice: number, store: string, unsubscribeUrl: string): string {
-  return `
-    <html>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.6; color: #1A1A1A; max-width: 520px; margin: 0 auto; padding: 32px 20px;">
-      <p style="margin: 0 0 8px; font-weight: 600; color: #006A35;">supermarket.ie</p>
-      <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #1A1A1A;">🔔 Price alert!</h1>
+  const saving = targetPrice > currentPrice ? formatPrice(targetPrice - currentPrice) : null;
 
-      <div style="background: #f8f9fa; border-radius: 12px; padding: 20px; margin: 24px 0; border-left: 4px solid #006A35;">
-        <h2 style="margin: 0 0 12px; font-size: 18px; font-weight: 600; color: #1A1A1A;">${productName}</h2>
-        <p style="margin: 0 0 8px; color: #555; font-size: 14px;">is now available at your target price!</p>
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+  <title>Price alert</title>
+  <!--[if mso]>
+  <style>body, table, td {font-family: Arial, sans-serif !important;}</style>
+  <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;">
 
-        <div style="display: flex; align-items: center; gap: 12px; margin: 16px 0;">
-          <span style="font-weight: 700; font-size: 20px; color: #006A35;">${formatPrice(currentPrice)}</span>
-          <span style="background: #006A35; color: white; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600;">Target: ${formatPrice(targetPrice)}</span>
-        </div>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f5;">
+    <tr>
+      <td align="center" style="padding: 40px 16px;">
 
-        <p style="margin: 8px 0 0; color: #666; font-size: 14px;">Available at: <strong>${store}</strong></p>
-      </div>
+        <table width="520" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px; width: 100%;">
 
-      <p style="margin: 24px 0; color: #666; font-size: 14px;">This alert has been automatically disabled. You can set up new alerts anytime on your shopping list page.</p>
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding-bottom: 32px;">
+              <span style="font-size: 20px; font-weight: 700; color: #1A1A1A; letter-spacing: -0.5px;">supermarket</span><span style="font-size: 20px; font-weight: 700; color: #006A35; letter-spacing: -0.5px;">.ie</span>
+            </td>
+          </tr>
 
-      <p style="font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 16px; margin: 32px 0 0; text-align: center;">
-        supermarket.ie &middot;
-        <a href="${unsubscribeUrl}" style="color: #999;">Unsubscribe</a>
-      </p>
-    </body>
-    </html>
-  `;
+          <!-- Alert badge -->
+          <tr>
+            <td align="center" style="padding-bottom: 24px;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background-color: #FEF3C7; border-radius: 20px; padding: 6px 16px;">
+                    <span style="font-size: 13px; font-weight: 700; color: #92400E;">&#x1F514; Price Alert Triggered</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main card -->
+          <tr>
+            <td style="background: #ffffff; border-radius: 12px; border: 1px solid #e8e8e8; overflow: hidden;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <!-- Product name bar -->
+                <tr>
+                  <td style="background-color: ${storeColor(store)}; padding: 14px 24px;">
+                    <span style="font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.5px;">${store}</span>
+                  </td>
+                </tr>
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 28px 24px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td>
+                          <span style="font-size: 20px; font-weight: 700; color: #1A1A1A; line-height: 1.3;">${productName}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top: 6px;">
+                          <span style="font-size: 14px; color: #666;">has dropped to your target price!</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top: 20px;">
+                          <table cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                              <td style="padding-right: 16px; vertical-align: middle;">
+                                <span style="font-size: 32px; font-weight: 800; color: #006A35;">${formatPrice(currentPrice)}</span>
+                              </td>
+                              <td style="vertical-align: middle;">
+                                <table cellpadding="0" cellspacing="0" border="0">
+                                  <tr>
+                                    <td>
+                                      <span style="font-size: 12px; color: #999; display: block;">Your target</span>
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td>
+                                      <span style="font-size: 15px; font-weight: 600; color: #555;">${formatPrice(targetPrice)}</span>
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                              ${saving ? `
+                              <td style="vertical-align: middle; padding-left: 16px;">
+                                <span style="background: #DCFCE7; color: #166534; padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 700;">&darr; ${saving} under</span>
+                              </td>
+                              ` : ''}
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Note -->
+          <tr>
+            <td style="padding: 24px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #f9fafb; border-radius: 8px; padding: 16px;">
+                <tr>
+                  <td style="padding: 16px;">
+                    <span style="font-size: 13px; color: #666; line-height: 1.5;">This alert has been automatically disabled. You can set up new price alerts anytime from your shopping list.</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="border-top: 1px solid #e8e8e8; padding-top: 24px;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center">
+                    <span style="font-size: 12px; color: #999;">supermarket.ie &mdash; Ireland&rsquo;s smartest grocery list</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 8px;">
+                    <a href="${unsubscribeUrl}" style="font-size: 12px; color: #bbb; text-decoration: underline;">Unsubscribe</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>`;
 }
 
 async function getAlertsWithPrices(): Promise<AlertWithLatestPrice[]> {
