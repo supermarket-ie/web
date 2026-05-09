@@ -43,9 +43,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     let subscriberId: string;
+    const isReturningUser = existing?.subscribed === true;
 
     if (existing) {
-      // Already subscribed — just update family size and return a fresh token (don't error)
+      // Already exists — update family size and refresh unsubscribe token
       const { error: updateError } = await supabaseAdmin
         .from('subscribers')
         .update({
@@ -92,17 +93,19 @@ export async function POST(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('subscribed', true);
 
-    // Notify via Telegram
-    const isNew = !existing;
-    const label = isNew ? '🆕 New subscriber' : '🔄 Re-subscribed';
-    const familyLabel: Record<string, string> = { '1': '1 person', '2': '2 people', '3-4': '3–4 people', '5+': '5+ people' };
-    await notifyTelegram(
-      `${label} on supermarket.ie!\n\n📧 ${email}\n👥 ${familyLabel[familySize] ?? familySize}\n📊 Total subscribers: ${count ?? '?'}`
-    );
+    // Only notify Telegram and send welcome email for genuinely new signups
+    // Returning active users just get a fresh token silently
+    if (!isReturningUser) {
+      const isNew = !existing;
+      const label = isNew ? '🆕 New subscriber' : '🔄 Re-subscribed';
+      const familyLabel: Record<string, string> = { '1': '1 person', '2': '2 people', '3-4': '3–4 people', '5+': '5+ people' };
+      await notifyTelegram(
+        `${label} on supermarket.ie!\n\n📧 ${email}\n👥 ${familyLabel[familySize] ?? familySize}\n📊 Total subscribers: ${count ?? '?'}`
+      );
 
-    // Send "your list is ready" email with magic link
-    const magicLink = `${process.env.NEXT_PUBLIC_SITE_URL}/list?token=${jwtToken}`;
-    const unsubscribeUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`;
+      // Send "your list is ready" email with magic link
+      const magicLink = `${process.env.NEXT_PUBLIC_SITE_URL}/list?token=${jwtToken}`;
+      const unsubscribeUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`;
 
     await resend.emails.send({
       from: 'supermarket.ie <hello@mail.supermarket.ie>',
@@ -249,6 +252,7 @@ Unsubscribe: ${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribe
 </body>
 </html>`,
     });
+    } // end if (!isReturningUser)
 
     return NextResponse.json({ success: true, token: jwtToken });
   } catch (error) {
