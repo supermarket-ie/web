@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { HomePlanner } from "@/components/HomePlannerGreen";
+import { HomePlanner } from "@/components/HomePlanner";
 import { loadSession } from "@/lib/session";
 
 /*
