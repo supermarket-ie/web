@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { HomePlanner } from '@/components/HomePlanner';
+import { LiveDealChip } from '@/components/LiveDealChip';
 import { loadSession } from '@/lib/session';
 
 export default function Home() {
@@ -65,6 +66,10 @@ export default function Home() {
                   in seconds
                 </span>
               </h1>
+
+              <div className="mb-6">
+                <LiveDealChip />
+              </div>
 
               <p className="type-body-lg mb-8 max-w-lg" style={{ color: 'var(--on-surface)' }}>
                 Tell us what you are cooking. Our AI builds your shopping list with the best prices across Tesco, Dunnes and SuperValu.
