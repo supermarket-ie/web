@@ -691,10 +691,10 @@ export function HomePlanner() {
                 ? { background: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' }
                 : { background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }
               }>
-              {m.role === 'assistant' && m.content.includes('###') ? (
+              {m.role === 'assistant' && (m.content.includes('**') || m.content.includes('###') || m.content.includes('- ')) ? (
                 <FormattedMessage content={m.content} />
               ) : (
-                <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)' }}>{m.content}</p>
+                <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)', whiteSpace: 'pre-wrap' }}>{m.content}</p>
               )}
               {m.buttons && !buttonsDisabled && (
                 <InlineButtons buttons={m.buttons} onSelect={handleUserInput} />
