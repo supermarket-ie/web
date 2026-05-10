@@ -8,7 +8,8 @@ const DIETARY_OPTIONS = [
 ];
 
 const BUDGET_PRESETS = [50, 70, 100, 120];
-const CHILD_AGE_OPTIONS: { value: PlannerProfile['childAges'][0]; label: string }[] = [
+type ChildAge = 'toddler' | 'young' | 'older' | 'teen';
+const CHILD_AGE_OPTIONS: { value: ChildAge; label: string }[] = [
   { value: 'toddler', label: '1-3 yrs' },
   { value: 'young', label: '4-8 yrs' },
   { value: 'older', label: '9-12 yrs' },
@@ -106,7 +107,7 @@ export function GroceryPlannerSetup({ initialProfile, onSubmit }: Props) {
     setDietary(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
   }
 
-  function toggleChildAge(age: PlannerProfile['childAges'][0]) {
+  function toggleChildAge(age: ChildAge) {
     setChildAges(prev => {
       if (!prev) return [age];
       return prev.includes(age) ? prev.filter(a => a !== age) : [...prev, age];
