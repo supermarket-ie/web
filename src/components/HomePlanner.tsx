@@ -83,6 +83,21 @@ function AnimatedPrice({ target }: { target: number }) {
 
 // ─── FormattedMessage ───────────────────────────────────────────────────
 
+function RichText({ text, className, style }: { text: string; className?: string; style?: React.CSSProperties }) {
+  // Render inline **bold** within text
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <span className={className} style={style}>
+      {parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={i} style={{ color: 'var(--on-background)' }}>{part.slice(2, -2)}</strong>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </span>
+  );
+}
+
 function FormattedMessage({ content }: { content: string }) {
   if (!content) return null;
   const storeTotals = parseStoreTotals(content);
@@ -91,12 +106,12 @@ function FormattedMessage({ content }: { content: string }) {
     <div className="space-y-2">
       {lines.map((line, i) => {
         if (!line.trim()) return <br key={i} />;
-        if (line.startsWith('### ')) return <h4 key={i} className="font-bold text-base mt-4 mb-2" style={{ color: 'var(--on-background)' }}>{line.slice(4)}</h4>;
-        if (line.startsWith('**') && line.endsWith('**') && line.length > 4) return <h5 key={i} className="type-label mt-3 mb-1" style={{ color: 'var(--on-background)' }}>{line.slice(2, -2)}</h5>;
-        if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="text-sm leading-relaxed pl-4" style={{ color: 'var(--on-surface)' }}>{line.slice(2)}</p>;
+        if (line.startsWith('### ')) return <h4 key={i} className="font-bold text-base mt-4 mb-2" style={{ color: 'var(--on-background)' }}><RichText text={line.slice(4)} /></h4>;
+        if (line.startsWith('**') && line.endsWith('**') && line.length > 4 && !line.slice(2, -2).includes('**')) return <h5 key={i} className="type-label mt-3 mb-1" style={{ color: 'var(--on-background)' }}>{line.slice(2, -2)}</h5>;
+        if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="text-sm leading-relaxed pl-4" style={{ color: 'var(--on-surface)' }}><RichText text={line.slice(2)} /></p>;
         if (line.startsWith('---')) return <hr key={i} className="my-3" style={{ borderColor: 'var(--outline-variant)' }} />;
-        if (line.startsWith('💡')) return <div key={i} className="mt-3 p-3 rounded-xl" style={{ background: 'var(--primary-fixed)' }}><p className="text-sm font-medium" style={{ color: 'var(--on-primary-container)' }}>{line}</p></div>;
-        return <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--on-surface)' }}>{line}</p>;
+        if (line.startsWith('💡')) return <div key={i} className="mt-3 p-3 rounded-xl" style={{ background: 'var(--primary-fixed)' }}><p className="text-sm font-medium" style={{ color: 'var(--on-primary-container)' }}><RichText text={line} /></p></div>;
+        return <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--on-surface)' }}><RichText text={line} /></p>;
       })}
       {storeTotals.length > 0 && (
         <div className="mt-4 space-y-2">
