@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken';
 export const maxDuration = 60;
 
 // ---------------------------------------------------------------------------
-// Types for Supabase nested-select results
+// Types
 // ---------------------------------------------------------------------------
 
 type StoreProduct = {
@@ -34,8 +34,7 @@ type PriceRow = {
 };
 
 // ---------------------------------------------------------------------------
-// Dedup helper — rows must arrive ordered observed_at DESC so first hit
-// per (canonical_name, store) pair is the most-recent observation.
+// Dedup helper
 // ---------------------------------------------------------------------------
 
 function dedup(rows: RawObs[]): PriceRow[] {
@@ -154,59 +153,239 @@ async function queryPriceChanges(subscriberId: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Tool factory — creates tools with request-scoped subscriberId
+// Tools
 // ---------------------------------------------------------------------------
 
 function makeTools(subscriberId: string | null) {
   return {
     get_categories: tool({
-      description:
-        'Returns the list of all product categories available in the catalogue. Call this first to know what categories exist before calling get_prices_by_category.',
+      description: 'Returns all product categories. Call first to discover valid category names.',
       parameters: z.object({}),
       execute: async () => queryCategories(),
     }),
-
     get_prices_by_category: tool({
-      description:
-        'Returns all products in a given category with their current price at each store, and whether each is currently on promotion (includes was_price). Use the exact category string returned by get_categories.',
+      description: 'Returns all products in a category with current prices and promotions per store.',
       parameters: z.object({
-        category: z
-          .string()
-          .describe('Exact category name, e.g. "Dairy", "Meat", "Vegetables"'),
+        category: z.string().describe('Exact category name from get_categories'),
       }),
       execute: async ({ category }: { category: string }) => queryCategoryPrices(category),
     }),
-
     get_promotions: tool({
-      description:
-        "Returns every product currently on promotion across all stores, with current price and was_price. Always call this before building the list — anchor the shop around this week's deals.",
+      description: "Returns all products currently on promotion across all stores with current and was_price.",
       parameters: z.object({}),
       execute: async () => queryPromotions(),
     }),
-
     get_product: tool({
-      description:
-        'Returns the current price for a single product (by canonical_name) across all stores. Use this to drill into a specific product when you need its exact price to complete the list.',
+      description: 'Returns current price for a single product across all stores.',
       parameters: z.object({
-        canonical_name: z
-          .string()
-          .describe('The canonical_name value exactly as it appears in catalogue data'),
+        canonical_name: z.string().describe('Exact canonical_name from catalogue'),
       }),
       execute: async ({ canonical_name }: { canonical_name: string }) => queryProduct(canonical_name),
     }),
-
     get_user_history: tool({
-      description: "Returns this user's shopping history — products they've bought before, which store, price paid, and how often. Use this to personalise the list. Only available for signed-in users.",
+      description: "Returns returning user's shopping history — products bought, stores, prices, frequency.",
       parameters: z.object({}),
       execute: async () => subscriberId ? queryUserHistory(subscriberId) : [],
     }),
-
     get_price_changes: tool({
-      description: "Compares prices the user paid last time vs current best prices. Returns items now cheaper or dearer. Call this for returning users.",
+      description: "Compares prices the user paid last time vs current best prices.",
       parameters: z.object({}),
       execute: async () => subscriberId ? queryPriceChanges(subscriberId) : [],
     }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Profile-based system prompt builder
+// ---------------------------------------------------------------------------
+
+interface PlannerProfile {
+  adults: number;
+  children: number;
+  childAges?: ('toddler' | 'young' | 'older' | 'teen')[];
+  weeklyBudget?: number;
+  preferredStores: string[];
+  dietary: string[];
+  dislikes?: string;
+  meals: {
+    breakfast: boolean;
+    lunch: boolean;
+    dinner: boolean;
+    snacks: boolean;
+  };
+  batchCooking: boolean;
+  skipDays?: string;
+  extraContext?: string;
+}
+
+function buildProfilePrompt(profile: PlannerProfile): string {
+  const totalPeople = profile.adults + profile.children;
+
+  // Build household description
+  let household = `${profile.adults} adult${profile.adults !== 1 ? 's' : ''}`;
+  if (profile.children > 0) {
+    household += ` and ${profile.children} child${profile.children !== 1 ? 'ren' : ''}`;
+    if (profile.childAges?.length) {
+      const ageLabels: Record<string, string> = {
+        toddler: 'toddler (1-3)',
+        young: 'young child (4-8)',
+        older: 'older child (9-12)',
+        teen: 'teenager (13-17)',
+      };
+      household += ` (${profile.childAges.map(a => ageLabels[a] || a).join(', ')})`;
+    }
+  }
+
+  // Build meal coverage
+  const meals: string[] = [];
+  if (profile.meals.breakfast) meals.push('breakfast');
+  if (profile.meals.lunch) meals.push('lunch / packed lunches');
+  if (profile.meals.dinner) meals.push('dinner');
+  if (profile.meals.snacks) meals.push('snacks');
+  const mealCoverage = meals.length > 0 ? meals.join(', ') : 'dinner only';
+
+  // Build store preference
+  const storesPref = profile.preferredStores.includes('all')
+    ? 'all stores (Tesco, Dunnes, SuperValu)'
+    : profile.preferredStores.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ') + ' only';
+
+  return `You are an AI grocery planning assistant for supermarket.ie — Ireland's smartest grocery platform.
+
+## This Household
+- **People:** ${household} (${totalPeople} total)
+- **Meals to plan:** ${mealCoverage} for the full week
+- **Budget:** ${profile.weeklyBudget ? `€${profile.weeklyBudget}/week — STAY UNDER THIS. Actively trade down: own-brand over branded, seasonal veg over imports, cheaper cuts of meat. Show budget status at the end.` : 'No budget set'}
+- **Store preference:** ${storesPref}
+${profile.dietary.length > 0 ? `- **Dietary requirements:** ${profile.dietary.join(', ')} — STRICT. Do not include any products that violate these requirements.` : '- **Dietary requirements:** None'}
+${profile.dislikes ? `- **Dislikes / avoid:** ${profile.dislikes} — Do NOT include these items or ingredients.` : ''}
+- **Batch cooking:** ${profile.batchCooking ? 'Yes — suggest cook-once-eat-twice meals where practical (e.g. big chilli Sunday → lunches Mon-Tue)' : 'No'}
+${profile.skipDays ? `- **Eating out / skip:** ${profile.skipDays} — do not plan food for these meals` : ''}
+${profile.extraContext ? `- **Extra context:** ${profile.extraContext}` : ''}
+
+## Your Job
+Produce a COMPLETE weekly grocery list for this household. You are a **grocery planner**, not just a meal planner.
+
+### What to include:
+- **Meal ingredients** for all requested meals (${mealCoverage}), scaled for ${totalPeople} people
+- **Staples** they'll need through the week: bread, milk, butter, eggs — unless they said they already have them
+${profile.meals.snacks ? '- **Snacks**: fruit, yoghurts, biscuits, crisps — age-appropriate for the household' : ''}
+${profile.meals.lunch ? `- **Lunch/packed lunch items**: sandwich bread, deli meats/cheese, fruit, yoghurt${profile.childAges?.some(a => ['toddler', 'young'].includes(a)) ? ', juice boxes, snack bars for kids' : ''}` : ''}
+${profile.childAges?.some(a => a === 'toddler') ? '- **Toddler-specific**: suitable finger foods, pouches, milk — age-appropriate portions' : ''}
+${profile.childAges?.some(a => a === 'teen') ? '- **Teen portions**: larger quantities for growing teenagers' : ''}
+- **Household items** ONLY if specifically mentioned in extra context
+
+### What NOT to include:
+- Recipes or cooking instructions (unless asked)
+- Items they said they already have
+- Products that violate dietary requirements
+- Items they said to avoid (dislikes)
+${profile.weeklyBudget ? `- Anything that pushes the total over €${profile.weeklyBudget} — find cheaper alternatives instead` : ''}
+${!profile.preferredStores.includes('all') ? `- Products from stores they didn't select (${storesPref})` : ''}
+
+### Quantity rules:
+- Scale ALL quantities for ${totalPeople} people
+- ${profile.children > 0 ? 'Children eat roughly half adult portions (toddlers less, teens nearly full)' : ''}
+- Be practical: if a recipe needs 500g mince and we sell 500g packs, list one pack
+- Don't over-buy perishables — a week's worth, not a month's
+
+## Tools — ALWAYS use before writing output
+1. get_promotions — call FIRST. Build the list around this week's deals.
+2. get_categories — call to discover valid category names.
+3. get_prices_by_category(category) — call for each category you need.
+4. get_product(canonical_name) — for specific product lookups.
+5. get_user_history — call for signed-in users to personalise.
+6. get_price_changes — call for returning users to highlight savings.
+
+Rules:
+- Gather ALL data via tools before writing any output.
+- Only use products from the catalogue. Do not invent products.
+- Match ingredients to the closest catalogue product. Skip silently if no match.
+- Pick cheapest store per product unless a promotion elsewhere is better value.
+${!profile.preferredStores.includes('all') ? `- ONLY show prices from: ${storesPref}. Ignore other stores entirely.` : ''}
+- Never mention tool calls to the user.
+
+## Returning user personalisation
+If get_user_history returns data:
+- Mention 1-2 items they buy regularly ("Added your usual Brennans bread")
+- Call get_price_changes and highlight items now cheaper
+- Prefer their usual stores unless better deals elsewhere
+If empty, treat as new user.
+
+## Output format
+
+### 🛒 Your weekly grocery list
+_For ${household} · ${mealCoverage}_
+
+**[Category]**
+- [Product name] — [Store] €[price] ${profile.weeklyBudget ? '' : ''}
+- ...
+
+**[Next category]**
+- ...
+
+---
+**Store totals**
+- Tesco: €X.XX ([N] items)
+- Dunnes: €X.XX ([N] items)
+- SuperValu: €X.XX ([N] items)
+
+${profile.weeklyBudget ? `**Budget:** €X.XX of €${profile.weeklyBudget} (€X.XX ${profile.weeklyBudget ? 'under' : 'over'} budget)\n` : ''}
+💡 **Best value split:** [1-2 sentence recommendation]`;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy system prompt (for backward compat with messages-based requests)
+// ---------------------------------------------------------------------------
+
+function buildLegacyPrompt(householdSize: number, cachedPromotions: any[] | null): string {
+  let prompt = `You are an AI grocery assistant for supermarket.ie — Ireland's smartest grocery planning platform.
+
+Your job: take a description of what the user wants to cook or eat this week and return a complete, priced shopping list using products from our catalogue.
+
+## Rules
+- **Never ask follow-up questions.** Make sensible assumptions and produce the list immediately.
+- If the user mentions dietary needs, apply them.
+- If the request is vague, pick 5–7 suitable meals yourself.
+- Only use products from the catalogue (fetched via tools). Do not invent products.
+- Map ingredients to the closest matching catalogue product.
+- Group items by category.
+- For each item show: product name, recommended store, price.
+- Show total per store and a "Best split" recommendation.
+- Adjust quantities for household size of ${householdSize} people.
+- Keep it concise. Use € prices. This is Ireland.
+- Skip missing ingredients silently.
+
+## Tools
+`;
+
+  if (cachedPromotions?.length) {
+    prompt += `Pre-loaded promotions available. Use get_promotions only if you need fresher data.\n`;
+  } else {
+    prompt += `1. get_promotions — ALWAYS call first.\n`;
+  }
+  prompt += `2. get_categories — discover category names.
+3. get_prices_by_category(category) — prices per category.
+4. get_product(canonical_name) — single product lookup.
+5. get_user_history — returning user history.
+6. get_price_changes — price changes since last shop.
+
+Gather ALL data via tools before writing. Never mention tool calls.
+
+## Output format
+### 🛒 Your shopping list for [meals summary]
+
+**[Category]**
+- [Product name] — [Store] €[price]
+
+---
+**Store totals**
+- Tesco: €X.XX ([N] items)
+- Dunnes: €X.XX ([N] items)
+- SuperValu: €X.XX ([N] items)
+
+💡 **Best value split:** [recommendation]`;
+
+  return prompt;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,28 +396,61 @@ const SECRET = process.env.MAGIC_LINK_SECRET;
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const householdSize: number = body.householdSize ?? 2;
-  const cachedPromotions = body.cachedPromotions;
 
+  // Auth
   let subscriberId: string | null = null;
   const token = body.token as string | undefined;
   if (token && SECRET) {
     try {
       const payload = jwt.verify(token, SECRET!) as { subscriberId: string };
       subscriberId = payload.subscriberId;
-    } catch { /* invalid/expired — anonymous */ }
+    } catch {}
   }
 
-  // useChat sends { messages: [{role, content}...] }
-  // We also support direct { meals: string } for testing
+  // ── Profile-based flow (new grocery planner v2) ──
+  const profile = body.profile as PlannerProfile | undefined;
+  if (profile) {
+    const systemPrompt = buildProfilePrompt(profile);
+    const totalPeople = profile.adults + profile.children;
+
+    // Build a natural-language user message from the profile
+    const meals: string[] = [];
+    if (profile.meals.breakfast) meals.push('breakfasts');
+    if (profile.meals.lunch) meals.push('lunches / packed lunches');
+    if (profile.meals.dinner) meals.push('dinners');
+    if (profile.meals.snacks) meals.push('snacks');
+
+    let userMsg = `Plan a full week of groceries for my household of ${totalPeople}. I need: ${meals.join(', ')}.`;
+    if (profile.batchCooking) userMsg += ' I like batch cooking.';
+    if (profile.skipDays) userMsg += ` We're eating out: ${profile.skipDays}.`;
+    if (profile.extraContext) userMsg += ` Also: ${profile.extraContext}`;
+    userMsg += '\n\nBuild me a complete grocery list with the best prices.';
+
+    try {
+      const result = await streamText({
+        model: anthropic('claude-haiku-4-5-20251001'),
+        system: systemPrompt,
+        messages: [{ role: 'user' as const, content: userMsg }],
+        tools: makeTools(subscriberId),
+        maxSteps: 10,
+      });
+      return result.toDataStreamResponse({ sendUsage: false });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[/api/plan] streamText error:', msg);
+      return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
+  // ── Legacy messages-based flow ──
+  const householdSize: number = body.householdSize ?? 2;
+  const cachedPromotions = body.cachedPromotions;
+
   let userMessage: string;
   if (body.meals?.trim()) {
     userMessage = body.meals.trim();
   } else if (Array.isArray(body.messages) && body.messages.length > 0) {
-    // Get the last user message
-    const last = [...body.messages]
-      .reverse()
-      .find((m: { role: string; content: string }) => m.role === 'user');
+    const last = [...body.messages].reverse().find((m: { role: string; content: string }) => m.role === 'user');
     userMessage = last?.content?.trim() ?? '';
   } else {
     userMessage = '';
@@ -248,164 +460,28 @@ export async function POST(req: Request) {
     return new Response('Meals required', { status: 400 });
   }
 
-  let result;
   try {
-    // Build system prompt with optional cached promotions
-    let systemPrompt = `You are an AI grocery assistant for supermarket.ie — Ireland's smartest grocery planning platform.
+    const systemPrompt = buildLegacyPrompt(householdSize, cachedPromotions);
 
-Your job: take a description of what the user wants to cook or eat this week and return a complete, priced shopping list using products from our catalogue.
-
-## Rules
-- **Never ask follow-up questions.** Make sensible assumptions based on what the user said and produce the list immediately.
-- If the user mentions dietary needs (vegetarian, gluten-free, etc.), apply them to the relevant household members and choose appropriate products.
-- If the user gives a vague request (e.g. "healthy week", "family dinners"), pick 5–7 suitable meals yourself and list them.
-- Only use products from the catalogue (fetched via tools). Do not invent products.
-- Map ingredients to the closest matching catalogue product.
-- Group items by category (Bakery, Dairy, Meat & Fish, Fruit & Veg, Tins & Jars, etc.)
-- For each item show: product name, recommended store (cheapest or best promotion), price
-- At the end show a total per store and a "Best split" recommendation (e.g. buy meat at Dunnes, everything else at Tesco)
-- Adjust quantities for household size of ${householdSize} people
-- Be practical — if a recipe needs 500g mince and we sell 500g mince, list one pack
-- Keep it concise. No waffle. Just the list.
-- Use € prices. This is Ireland.
-- If an ingredient isn't in our catalogue, skip it silently (don't mention it)
-- If the user asks to update or modify their list, use the full conversation history to understand what was already planned and produce a complete updated list
-
-## Tools — use these to fetch data, do not guess prices
-You have six tools. Use them before writing any output.`;
-
-    if (cachedPromotions && Array.isArray(cachedPromotions) && cachedPromotions.length > 0) {
-      systemPrompt += `
-
-## Pre-loaded promotions
-The following promotions have been pre-loaded. You do NOT need to call get_promotions unless you need fresher data:
-${JSON.stringify(cachedPromotions, null, 2)}
-
-Build the list around these deals where possible.
-
-1. get_categories — call once to discover valid category names.
-2. get_prices_by_category(category) — call for each category you need.
-3. get_product(canonical_name) — use sparingly for a single product lookup.
-4. get_user_history — call for signed-in users to personalise the list.
-5. get_price_changes — call for returning users to highlight price changes.
-6. get_promotions — only call if you need fresher promotion data than what's pre-loaded.`;
-    } else {
-      systemPrompt += `
-1. get_promotions — ALWAYS call this first. Build the list around deals where possible.
-2. get_categories — call once to discover valid category names.
-3. get_prices_by_category(category) — call for each category you need.
-4. get_product(canonical_name) — use sparingly for a single product lookup.
-5. get_user_history — call for signed-in users to personalise the list.
-6. get_price_changes — call for returning users to highlight price changes.`;
-    }
-
-    systemPrompt += `
-
-Rules:
-- Gather ALL data via tools before writing any output.
-- Do not stream partial text between tool calls — output the complete list once you have everything.
-- Pick cheapest store per product unless a promotion at another store is better value.
-- If promotions are available (pre-loaded or from get_promotions), use them and note the saving.
-- Never mention tool calls or data fetching to the user.
-
-## Ingredient mapping rules
-- Match ingredients to the **closest product in the catalogue** using the category as a guide
-- e.g. "mozzarella" → look in Dairy for the closest cheese product
-- e.g. "pasta sheets" → look in the same category as other pasta products
-- If multiple products could match, pick the most specific one
-- If nothing in the catalogue is a reasonable match, skip the ingredient silently
-
-## Returning user personalisation
-If get_user_history returns data, this is a returning user:
-- Mention 1-2 items they buy regularly ("You usually get X — added that in")
-- Call get_price_changes and highlight items now cheaper than last time
-- Prefer stores they've used before unless a better deal exists elsewhere
-- Weave this naturally into the list — don't over-explain it
-If get_user_history returns empty, treat as new user — no mention of history.
-
-## Output format
-Use this structure exactly:
-
-### 🛒 Your shopping list for [meals summary]
-
-**[Category]**
-- [Product name] — [Cheapest store] €[price]
-- ...
-
-**[Next category]**
-- ...
-
----
-**Store totals**
-- Tesco: €X.XX ([N] items)
-- Dunnes: €X.XX ([N] items)
-- SuperValu: €X.XX ([N] items)
-
-💡 **Best value split:** [1-2 sentence recommendation on how to split the shop]
-
-## Ingredient mapping rules
-- Match ingredients to the **closest product in the catalogue** using the category as a guide
-- e.g. "mozzarella" → look in Dairy for the closest cheese product
-- e.g. "pasta sheets" → look in the same category as other pasta products
-- If multiple products could match, pick the most specific one
-- If nothing in the catalogue is a reasonable match, skip the ingredient silently
-
-## Returning user personalisation
-If get_user_history returns data, this is a returning user:
-- Mention 1-2 items they buy regularly ("You usually get X — added that in")
-- Call get_price_changes and highlight items now cheaper than last time
-- Prefer stores they've used before unless a better deal exists elsewhere
-- Weave this naturally into the list — don't over-explain it
-If get_user_history returns empty, treat as new user — no mention of history.
-
-## Output format
-Use this structure exactly:
-
-### 🛒 Your shopping list for [meals summary]
-
-**[Category]**
-- [Product name] — [Cheapest store] €[price]
-- ...
-
-**[Next category]**
-- ...
-
----
-**Store totals**
-- Tesco: €X.XX ([N] items)
-- Dunnes: €X.XX ([N] items)
-- SuperValu: €X.XX ([N] items)
-
-💡 **Best value split:** [1-2 sentence recommendation on how to split the shop]`;
-
-    result = await streamText({
+    const result = await streamText({
       model: anthropic('claude-haiku-4-5-20251001'),
       system: systemPrompt,
-
-      messages:
-      Array.isArray(body.messages) && body.messages.length > 0
+      messages: Array.isArray(body.messages) && body.messages.length > 0
         ? body.messages.map((m: { role: string; content: string }) => ({
             role: m.role as 'user' | 'assistant',
-            content:
-              m.role === 'user' && m === body.messages[0]
-                ? `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${m.content}\n\nBuild me a shopping list.`
-                : m.content,
+            content: m.role === 'user' && m === body.messages[0]
+              ? `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${m.content}\n\nBuild me a shopping list.`
+              : m.content,
           }))
-        : [
-            {
-              role: 'user' as const,
-              content: `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${userMessage}\n\nBuild me a shopping list.`,
-            },
-          ],
+        : [{ role: 'user' as const, content: `I'm planning meals for ${householdSize} people this week. Here's what I want to cook:\n\n${userMessage}\n\nBuild me a shopping list.` }],
+      tools: makeTools(subscriberId),
+      maxSteps: 10,
+    });
 
-    tools: makeTools(subscriberId),
-    maxSteps: 10,
-  });
+    return result.toDataStreamResponse({ sendUsage: false });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[/api/plan] streamText error:', msg);
     return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
-
-  return result.toDataStreamResponse({ sendUsage: false });
 }
