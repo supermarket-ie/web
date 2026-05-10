@@ -72,7 +72,7 @@ export default function Home() {
               </div>
 
               <p className="type-body-lg mb-8 max-w-lg" style={{ color: 'var(--on-surface)' }}>
-                Tell us what you are cooking. Our AI builds your shopping list with the best prices across Tesco, Dunnes and SuperValu.
+                Tell us about your household. Our AI builds your complete weekly grocery list with the best prices across Tesco, Dunnes and SuperValu.
               </p>
 
               <div className="space-y-3 mb-10">
