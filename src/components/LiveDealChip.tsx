@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { storeDisplayName } from '@/lib/store-utils';
 
 interface PromotionDeal {
@@ -19,7 +19,6 @@ const HERO_CATEGORIES = new Set([
   'Pasta & Rice', 'Chilled',
 ]);
 
-// Fallback: keywords that suggest a relatable grocery deal
 const GROCERY_KEYWORDS = [
   'milk', 'butter', 'cheese', 'bread', 'chicken', 'beef', 'pork', 'lamb',
   'rice', 'pasta', 'cereal', 'juice', 'coffee', 'tea', 'yogurt', 'yoghurt',
@@ -34,57 +33,78 @@ function isGroceryDeal(deal: PromotionDeal): boolean {
   return GROCERY_KEYWORDS.some(kw => name.includes(kw));
 }
 
+function formatDeal(deal: PromotionDeal) {
+  const pct = Math.round((deal.saving / deal.was_price) * 100);
+  let name = deal.product_name
+    .replace(/^Dunnes Stores\s+/i, '')
+    .replace(/^Tesco\s+/i, '')
+    .replace(/^SuperValu\s+/i, '');
+  if (name.length > 40) name = name.slice(0, 37) + '...';
+  return { name, pct, store: storeDisplayName(deal.store) };
+}
+
 export function LiveDealChip() {
-  const [bestDeal, setBestDeal] = useState<PromotionDeal | null>(null);
+  const [deals, setDeals] = useState<PromotionDeal[]>([]);
+  const [index, setIndex] = useState(0);
+  const [fading, setFading] = useState(false);
 
   useEffect(() => {
     fetch('/api/promotions')
       .then(res => res.json())
-      .then((deals: PromotionDeal[]) => {
-        if (!Array.isArray(deals) || deals.length === 0) return;
+      .then((data: PromotionDeal[]) => {
+        if (!Array.isArray(data) || data.length === 0) return;
 
-        // Filter to grocery-relevant deals only
-        const groceryDeals = deals.filter(isGroceryDeal);
-        const pool = groceryDeals.length > 0 ? groceryDeals : deals;
+        const groceryDeals = data.filter(isGroceryDeal);
+        const pool = groceryDeals.length > 0 ? groceryDeals : data;
 
-        // Pick the deal with the highest percentage saving (more relatable than absolute)
-        const topDeal = pool.reduce((best, current) => {
-          const bestPct = best.was_price > 0 ? best.saving / best.was_price : 0;
-          const currPct = current.was_price > 0 ? current.saving / current.was_price : 0;
-          return currPct > bestPct ? current : best;
-        });
+        // Sort by % saving descending, take top 5 for rotation
+        const sorted = [...pool]
+          .filter(d => d.was_price > 0 && d.saving > 0)
+          .sort((a, b) => (b.saving / b.was_price) - (a.saving / a.was_price))
+          .slice(0, 5);
 
-        setBestDeal(topDeal);
+        if (sorted.length > 0) {
+          // Random start position so each page load shows a different deal
+          setIndex(Math.floor(Math.random() * sorted.length));
+          setDeals(sorted);
+        }
       })
       .catch(() => {});
   }, []);
 
-  if (!bestDeal) return null;
+  // Rotate every 5 seconds
+  const rotate = useCallback(() => {
+    if (deals.length <= 1) return;
+    setFading(true);
+    setTimeout(() => {
+      setIndex(i => (i + 1) % deals.length);
+      setFading(false);
+    }, 300);
+  }, [deals.length]);
 
-  const percentageSaving = Math.round((bestDeal.saving / bestDeal.was_price) * 100);
+  useEffect(() => {
+    if (deals.length <= 1) return;
+    const iv = setInterval(rotate, 5000);
+    return () => clearInterval(iv);
+  }, [deals.length, rotate]);
 
-  // Clean up product name — strip brand prefixes like "Dunnes Stores" for brevity
-  let displayName = bestDeal.product_name
-    .replace(/^Dunnes Stores\s+/i, '')
-    .replace(/^Tesco\s+/i, '')
-    .replace(/^SuperValu\s+/i, '');
+  if (deals.length === 0) return null;
 
-  // Truncate if too long
-  if (displayName.length > 40) {
-    displayName = displayName.slice(0, 37) + '...';
-  }
+  const deal = deals[index];
+  const { name, pct, store } = formatDeal(deal);
 
   return (
     <div
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold"
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-opacity duration-300"
       style={{
         background: 'var(--primary-fixed)',
-        color: 'var(--on-primary-container)'
+        color: 'var(--on-primary-container)',
+        opacity: fading ? 0 : 1,
       }}
     >
       <span className="animate-pulse">🔥</span>
       <span>
-        {displayName} down {percentageSaving}% at {storeDisplayName(bestDeal.store)} this week
+        {name} down {pct}% at {store} this week
       </span>
     </div>
   );
