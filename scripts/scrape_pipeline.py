@@ -64,6 +64,17 @@ def supabase_get(table, params=""):
     return resp.json()
 
 
+def get_product_ids_by_category(category):
+    """Return set of product IDs matching a category filter."""
+    if not category:
+        return None  # No filter
+    rows = supabase_get("products", f"category=eq.{requests.utils.quote(category)}&select=id")
+    if not rows:
+        print(f"  ⚠ No products found for category '{category}'")
+        return set()
+    return {r['id'] for r in rows}
+
+
 def supabase_patch(table, row_id, data):
     resp = requests.patch(
         f"{SUPABASE_URL}/rest/v1/{table}?id=eq.{row_id}",
@@ -451,7 +462,7 @@ def insert_price_observation(store_product_id, price, product_name, source_url, 
 # MODE 1: RESOLVE — pending → resolved
 # ============================================================
 
-def run_resolve(stores, limit, stats):
+def run_resolve(stores, limit, stats, category_product_ids=None):
     """Resolve search URLs to real product URLs for all pending store_products."""
     for store in stores:
         resolve_fn = RESOLVERS[store]
@@ -460,8 +471,12 @@ def run_resolve(stores, limit, stats):
             "store_products",
             f"store=eq.{store}&url_status=eq.pending"
             + (f"&limit={limit}" if limit else "&limit=1000")
-            + "&select=id,store_product_name,store_url"
+            + "&select=id,product_id,store_product_name,store_url"
         )
+
+        # Filter by category if specified
+        if category_product_ids is not None:
+            rows = [r for r in rows if r.get('product_id') in category_product_ids]
 
         if not rows:
             print(f"  [{store}] No pending rows")
@@ -527,7 +542,7 @@ def run_resolve(stores, limit, stats):
 # MODE 2: REFRESH — re-scrape prices for all resolved
 # ============================================================
 
-def run_refresh(stores, limit, stats):
+def run_refresh(stores, limit, stats, category_product_ids=None):
     """Re-scrape prices for all resolved store_products."""
     for store in stores:
         extract_fn = EXTRACTORS[store]
@@ -536,8 +551,12 @@ def run_refresh(stores, limit, stats):
             "store_products",
             f"store=eq.{store}&url_status=eq.resolved"
             + (f"&limit={limit}" if limit else "&limit=1000")
-            + "&select=id,store_product_name,store_url"
+            + "&select=id,product_id,store_product_name,store_url"
         )
+
+        # Filter by category if specified
+        if category_product_ids is not None:
+            rows = [r for r in rows if r.get('product_id') in category_product_ids]
 
         if not rows:
             print(f"  [{store}] No resolved rows to refresh")
@@ -608,6 +627,7 @@ def main():
     group.add_argument("--full", action="store_true", help="Resolve then refresh (default)")
     parser.add_argument("--store", choices=STORES, help="Run for one store only")
     parser.add_argument("--limit", type=int, default=0, help="Max products per store (0 = all)")
+    parser.add_argument("--category", type=str, default="", help="Filter by product category (e.g. Household, 'Personal Care')")
     args = parser.parse_args()
 
     # Default to full
@@ -622,7 +642,14 @@ def main():
     print(f"    Mode:   {'resolve' if args.resolve else 'refresh' if args.refresh else 'full'}")
     print(f"    Stores: {', '.join(stores)}")
     print(f"    Limit:  {limit if limit else 'all'}")
+    if args.category:
+        print(f"    Category: {args.category}")
     print(f"    Time:   {datetime.now().isoformat()}")
+
+    # Category filter
+    category_product_ids = get_product_ids_by_category(args.category) if args.category else None
+    if category_product_ids is not None:
+        print(f"    Category products: {len(category_product_ids)}")
 
     # Credit check
     remaining, total = check_credits()
@@ -659,11 +686,11 @@ def main():
 
     if args.resolve or args.full:
         print("\n📍 PHASE 1: Resolving pending URLs")
-        run_resolve(stores, limit, stats)
+        run_resolve(stores, limit, stats, category_product_ids)
 
     if args.refresh or args.full:
         print("\n💰 PHASE 2: Refreshing prices")
-        run_refresh(stores, limit, stats)
+        run_refresh(stores, limit, stats, category_product_ids)
 
     # Summary
     print("\n" + "=" * 60)
