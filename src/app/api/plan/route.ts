@@ -272,7 +272,9 @@ ${profile.meals.snacks ? '- **Snacks**: fruit, yoghurts, biscuits, crisps — ag
 ${profile.meals.lunch ? `- **Lunch/packed lunch items**: sandwich bread, deli meats/cheese, fruit, yoghurt${profile.childAges?.some(a => ['toddler', 'young'].includes(a)) ? ', juice boxes, snack bars for kids' : ''}` : ''}
 ${profile.childAges?.some(a => a === 'toddler') ? '- **Toddler-specific**: suitable finger foods, pouches, milk — age-appropriate portions' : ''}
 ${profile.childAges?.some(a => a === 'teen') ? '- **Teen portions**: larger quantities for growing teenagers' : ''}
-- **Household items** ONLY if specifically mentioned in extra context
+- **Household essentials**: toilet roll, kitchen roll, washing up liquid, bin bags — everyone needs these. Include 3-5 basics unless they say they're stocked up.
+- **Personal care basics**: toothpaste, hand soap, shower gel — include 2-3 items that are likely running low.
+${profile.childAges?.some(a => a === 'toddler') ? '- **Baby supplies**: nappies, baby wipes — essential for toddler households' : ''}
 
 ### What NOT to include:
 - Recipes or cooking instructions (unless asked)
