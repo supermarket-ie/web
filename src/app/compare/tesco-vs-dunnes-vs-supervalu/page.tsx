@@ -120,7 +120,7 @@ export default async function ComparePage() {
             <span className="text-[#006A35]">Which is cheapest in Ireland?</span>
           </h1>
           <p className="text-[#5c5b5b] text-base max-w-xl">
-            We track live prices across {overallCount}+ products at Ireland's three main supermarkets.
+            Live prices compared across Tesco, Dunnes Stores and SuperValu in Ireland.
             Last updated {updatedLabel}.
           </p>
         </div>
