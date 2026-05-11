@@ -246,6 +246,7 @@ export function HomePlanner() {
   const [showEmailCapture, setShowEmailCapture] = useState(false);
   const [emailDone, setEmailDone] = useState(false);
   const [listContent, setListContent] = useState('');
+  const [mealsExplicit, setMealsExplicit] = useState(false); // true when user explicitly set meals
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -327,6 +328,7 @@ export function HomePlanner() {
           || lower.includes('meal') || /\d+\s*(evening|dinner|meal)/.test(lower),
         snacks: lower.includes('snack'),
       };
+      setMealsExplicit(true);
       // "5 evening meals" — capture number of dinners for skip days
       const mealCountMatch = lower.match(/(\d+)\s*(evening|dinner|meal|night)/);
       if (mealCountMatch) {
@@ -429,7 +431,7 @@ export function HomePlanner() {
         setProfile(p);
 
         // ── Smart skip: if we already extracted meal info, skip ahead ──
-        const hasMealInfo = p.meals.breakfast || p.meals.lunch || p.meals.dinner || p.meals.snacks;
+        const hasMealInfo = mealsExplicit;
         const hasDietaryInfo = p.dietary.length > 0;
         const hasBudgetInfo = p.weeklyBudget !== undefined;
 
@@ -490,18 +492,15 @@ export function HomePlanner() {
         } else if (['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'halal', 'low-carb', 'nut-free'].includes(lower)) {
           p.dietary = [...p.dietary, text];
         } else {
-          // Free text — parse dietary from text
-          if (lower.includes('vegetarian') || lower.includes('veggie')) p.dietary.push('Vegetarian');
-          if (lower.includes('vegan')) p.dietary.push('Vegan');
-          if (lower.includes('gluten')) p.dietary.push('Gluten-free');
-          if (lower.includes('dairy')) p.dietary.push('Dairy-free');
-          if (lower.includes('halal')) p.dietary.push('Halal');
-          if (lower.includes('nut')) p.dietary.push('Nut-free');
-          // Capture dislikes from natural text
-          const dislikeMatch = lower.match(/(?:hate|avoid|don'?t like|no )(.*)/);
-          if (dislikeMatch) p.dislikes = dislikeMatch[1].trim();
+          // Free text — parse everything we can
+          parseRichInput(lower, p);
         }
         setProfile(p);
+        // If meals were set in this message, skip to budget
+        if (mealsExplicit) {
+          askBudget(p);
+          return;
+        }
         askMeals(p);
         return;
       }
@@ -537,6 +536,33 @@ export function HomePlanner() {
 
       case 'budget': {
         const p = { ...profile };
+        
+        // Detect if user typed meal info instead of budget
+        const hasMealWords = lower.includes('lunch') || lower.includes('dinner') || lower.includes('breakfast')
+          || lower.includes('meal') || lower.includes('evening') || lower.includes('school') || lower.includes('packed');
+        
+        if (hasMealWords) {
+          // User is giving meal info — parse it and re-ask budget
+          parseRichInput(lower, p);
+          setProfile(p);
+          const mealsDesc = [
+            p.meals.breakfast && 'breakfast',
+            p.meals.lunch && 'lunch',
+            p.meals.dinner && 'dinner',
+            p.meals.snacks && 'snacks',
+          ].filter(Boolean).join(', ');
+          setTimeout(() => {
+            addMsg('assistant', `Got it — ${mealsDesc}${p.skipDays ? ` (${p.skipDays})` : ''}. Any budget in mind?`, [
+              { label: '€70', value: '€70', emoji: '💶' },
+              { label: '€100', value: '€100', emoji: '💶' },
+              { label: '€120', value: '€120', emoji: '💶' },
+              { label: 'No budget', value: '__no_budget', emoji: '🤷' },
+            ]);
+            setButtonsDisabled(false);
+          }, 300);
+          return;
+        }
+        
         if (text === '__no_budget' || lower.includes('no budget') || lower.includes('don\'t mind') || lower.includes('skip')) {
           p.weeklyBudget = undefined;
         } else {
