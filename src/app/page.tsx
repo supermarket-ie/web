@@ -77,9 +77,9 @@ export default function Home() {
 
               <div className="space-y-3 mb-10">
                 {[
-                  '✓ 309 products tracked',
-                  '✓ Prices updated twice weekly',
-                  '✓ 100% free'
+                  '✓ Takes 30 seconds — just tap a few buttons',
+                  '✓ Compares Tesco, Dunnes & SuperValu prices',
+                  '✓ Finds this week\'s deals automatically'
                 ].map(item => (
                   <div key={item} className="flex items-center gap-3">
                     <span className="font-medium text-sm" style={{ color: 'var(--on-background)' }}>{item}</span>
