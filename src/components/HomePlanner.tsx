@@ -297,6 +297,73 @@ export function HomePlanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Parse rich free text — extract everything we can from one message ──
+  function parseRichInput(lower: string, p: PlannerProfile) {
+    // ── Household ──
+    const adultMatch = lower.match(/(\d+)\s*adult/);
+    const kidMatch = lower.match(/(\d+)\s*(kid|child|children)/);
+    const justMe = lower.includes('just me') || lower === '1';
+    if (justMe) { p.adults = 1; p.children = 0; }
+    else {
+      if (adultMatch) p.adults = parseInt(adultMatch[1]);
+      else if (lower.includes('couple') || lower.includes('two of us') || lower.includes('me and my')) p.adults = 2;
+      if (kidMatch) p.children = parseInt(kidMatch[1]);
+    }
+    // Detect ages
+    if (lower.includes('teen')) p.childAges = [...(p.childAges || []), 'teen'];
+    if (lower.includes('toddler') || lower.includes('baby')) p.childAges = [...(p.childAges || []), 'toddler'];
+    if (lower.includes('young') || lower.match(/\b[4-8]\b.*year/)) p.childAges = [...(p.childAges || []), 'young'];
+
+    // ── Meals — detect from natural language ──
+    const hasMealMention = lower.includes('lunch') || lower.includes('dinner') || lower.includes('breakfast')
+      || lower.includes('meal') || lower.includes('snack') || lower.includes('evening')
+      || lower.includes('school') || lower.includes('packed');
+
+    if (hasMealMention) {
+      p.meals = {
+        breakfast: lower.includes('breakfast') || lower.includes('full week') || lower.includes('all meals'),
+        lunch: lower.includes('lunch') || lower.includes('packed') || lower.includes('school'),
+        dinner: lower.includes('dinner') || lower.includes('evening') || lower.includes('tea')
+          || lower.includes('meal') || /\d+\s*(evening|dinner|meal)/.test(lower),
+        snacks: lower.includes('snack'),
+      };
+      // "5 evening meals" — capture number of dinners for skip days
+      const mealCountMatch = lower.match(/(\d+)\s*(evening|dinner|meal|night)/);
+      if (mealCountMatch) {
+        const count = parseInt(mealCountMatch[1]);
+        if (count < 7) {
+          p.skipDays = `${7 - count} nights eating out/skipping`;
+        }
+      }
+    }
+
+    // ── Dietary ──
+    if (lower.includes('vegetarian') || lower.includes('veggie')) p.dietary.push('Vegetarian');
+    if (lower.includes('vegan')) p.dietary.push('Vegan');
+    if (lower.includes('gluten')) p.dietary.push('Gluten-free');
+    if (lower.includes('dairy free') || lower.includes('dairy-free')) p.dietary.push('Dairy-free');
+    if (lower.includes('halal')) p.dietary.push('Halal');
+    if (lower.includes('nut free') || lower.includes('nut-free')) p.dietary.push('Nut-free');
+    if (lower.includes('low carb') || lower.includes('low-carb') || lower.includes('keto')) p.dietary.push('Low-carb');
+
+    // ── Budget ──
+    const budgetMatch = lower.match(/€(\d+)|(\d+)\s*euro|budget\s*(?:of\s*)?€?(\d+)/);
+    if (budgetMatch) {
+      p.weeklyBudget = parseInt(budgetMatch[1] || budgetMatch[2] || budgetMatch[3]);
+    }
+
+    // ── Batch cooking ──
+    if (lower.includes('batch')) p.batchCooking = true;
+
+    // ── Dislikes ──
+    const dislikeMatch = lower.match(/(?:hate|avoid|don'?t like|no )([\w\s,]+?)(?:\.|,|$)/);
+    if (dislikeMatch) p.dislikes = dislikeMatch[1].trim();
+
+    // ── Extra context — capture anything after "also" or "and also" ──
+    const alsoMatch = lower.match(/(?:also|and also|oh and|btw|by the way)[,:]?\s*(.+)/);
+    if (alsoMatch) p.extraContext = alsoMatch[1].trim();
+  }
+
   // ── Handle button tap or text input ──
   function handleUserInput(text: string) {
     if (!text.trim() || isGenerating) return;
@@ -355,25 +422,18 @@ export function HomePlanner() {
         else if (text === '2a2k') { p.adults = 2; p.children = 2; }
         else if (text === '2a3k') { p.adults = 2; p.children = 3; }
         else {
-          // Parse free text: "me and my wife and 2 teenagers"
-          const adultMatch = lower.match(/(\d+)\s*adult/);
-          const kidMatch = lower.match(/(\d+)\s*(kid|child|children)/);
-          const justMe = lower.includes('just me') || lower === '1';
-          if (justMe) { p.adults = 1; p.children = 0; }
-          else {
-            if (adultMatch) p.adults = parseInt(adultMatch[1]);
-            else if (lower.includes('couple') || lower.includes('two of us') || lower.includes('me and my')) p.adults = 2;
-            if (kidMatch) p.children = parseInt(kidMatch[1]);
-            // Detect teen/toddler mentions
-            if (lower.includes('teen')) p.childAges = [...(p.childAges || []), 'teen'];
-            if (lower.includes('toddler') || lower.includes('baby')) p.childAges = [...(p.childAges || []), 'toddler'];
-            if (lower.includes('young') || lower.match(/\b[4-8]\b.*year/)) p.childAges = [...(p.childAges || []), 'young'];
-          }
+          // Parse rich free text — extract everything we can
+          parseRichInput(lower, p);
         }
 
         setProfile(p);
 
-        // If kids but no ages, ask
+        // ── Smart skip: if we already extracted meal info, skip ahead ──
+        const hasMealInfo = p.meals.breakfast || p.meals.lunch || p.meals.dinner || p.meals.snacks;
+        const hasDietaryInfo = p.dietary.length > 0;
+        const hasBudgetInfo = p.weeklyBudget !== undefined;
+
+        // If kids but no ages, ask ages first (then resume smart skip)
         if (p.children > 0 && (!p.childAges || p.childAges.length === 0)) {
           addMsg('assistant', `Got it — ${p.adults} adult${p.adults > 1 ? 's' : ''} and ${p.children} kid${p.children > 1 ? 's' : ''}. Roughly what ages?`, [
             { label: 'Toddler (1-3)', value: 'age_toddler' },
@@ -393,6 +453,28 @@ export function HomePlanner() {
             p.childAges = [...(p.childAges || []), age];
             setProfile(p);
           }
+          // After ages, resume smart skip
+          if (hasMealInfo && hasDietaryInfo) {
+            if (hasBudgetInfo) { askExtras(p); return; }
+            askBudget(p);
+            return;
+          }
+          if (hasMealInfo) { askBudget(p); return; }
+          askDietary(p);
+          return;
+        }
+
+        // Smart skip: jump to the first step we don't have info for
+        if (hasMealInfo && hasDietaryInfo && hasBudgetInfo) {
+          askExtras(p);
+          return;
+        }
+        if (hasMealInfo && hasDietaryInfo) {
+          askBudget(p);
+          return;
+        }
+        if (hasMealInfo) {
+          // We have meals but not dietary — skip to dietary
           askDietary(p);
           return;
         }
@@ -501,8 +583,10 @@ export function HomePlanner() {
   function askDietary(p: PlannerProfile) {
     setFlowStep('dietary');
     const total = p.adults + p.children;
+    const mealsSummary = [p.meals.breakfast && 'breakfast', p.meals.lunch && 'lunches', p.meals.dinner && 'dinners', p.meals.snacks && 'snacks'].filter(Boolean);
+    const mealsNote = mealsSummary.length > 0 ? ` (${mealsSummary.join(', ')})` : '';
     setTimeout(() => {
-      addMsg('assistant', `${total} ${total === 1 ? 'person' : 'people'} — got it! Any dietary needs or things to avoid?`, [
+      addMsg('assistant', `${total} ${total === 1 ? 'person' : 'people'}${mealsNote} — got it! Any dietary needs or things to avoid?`, [
         { label: 'None', value: '__none', emoji: '✅' },
         { label: 'Vegetarian', value: 'vegetarian', emoji: '🥬' },
         { label: 'Gluten-free', value: 'gluten-free', emoji: '🌾' },
