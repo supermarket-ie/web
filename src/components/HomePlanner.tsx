@@ -304,7 +304,8 @@ export function HomePlanner() {
     const adultMatch = lower.match(/(\d+)\s*adult/);
     const kidMatch = lower.match(/(\d+)\s*(kid|child|children)/);
     const justMe = lower.includes('just me') || lower === '1';
-    if (justMe) { p.adults = 1; p.children = 0; }
+    const singlePerson = lower.includes('single') || lower.match(/\b(i am|i'm|im)\b.*\b(one|1|alone|solo|myself)\b/) || lower.includes('on my own');
+    if (justMe || singlePerson) { p.adults = 1; p.children = 0; }
     else {
       if (adultMatch) p.adults = parseInt(adultMatch[1]);
       else if (lower.includes('couple') || lower.includes('two of us') || lower.includes('me and my')) p.adults = 2;
@@ -316,9 +317,10 @@ export function HomePlanner() {
     if (lower.includes('young') || lower.match(/\b[4-8]\b.*year/)) p.childAges = [...(p.childAges || []), 'young'];
 
     // ── Meals — detect from natural language ──
-    const hasMealMention = lower.includes('lunch') || lower.includes('dinner') || lower.includes('breakfast')
-      || lower.includes('meal') || lower.includes('snack') || lower.includes('evening')
-      || lower.includes('school') || lower.includes('packed');
+    // Only match actual meal words, not substring matches like "meat" containing "ea"
+    const hasMealMention = /\blunch\b/.test(lower) || /\bdinner\b/.test(lower) || /\bbreakfast\b/.test(lower)
+      || /\bmeals?\b/.test(lower) || /\bsnack/.test(lower) || /\bevening\b/.test(lower)
+      || /\bschool\b/.test(lower) || /\bpacked\b/.test(lower);
 
     if (hasMealMention) {
       p.meals = {
@@ -347,11 +349,22 @@ export function HomePlanner() {
     if (lower.includes('halal')) p.dietary.push('Halal');
     if (lower.includes('nut free') || lower.includes('nut-free')) p.dietary.push('Nut-free');
     if (lower.includes('low carb') || lower.includes('low-carb') || lower.includes('keto')) p.dietary.push('Low-carb');
+    if (lower.includes('high protein')) p.dietary.push('High-protein');
+    if (lower.includes('high fibre') || lower.includes('high fiber')) p.dietary.push('High-fibre');
 
-    // ── Budget ──
-    const budgetMatch = lower.match(/€(\d+)|(\d+)\s*euro|budget\s*(?:of\s*)?€?(\d+)/);
+    // ── Preferences (organic, free-range, etc.) → extra context ──
+    const preferences: string[] = [];
+    if (lower.includes('organic')) preferences.push('prefers organic');
+    if (lower.includes('free range') || lower.includes('free-range')) preferences.push('prefers free-range');
+    if (lower.includes('like') && lower.includes('meat')) preferences.push('likes meat');
+    if (preferences.length > 0) {
+      p.extraContext = [p.extraContext, ...preferences].filter(Boolean).join(', ');
+    }
+
+    // ── Budget — handle €80, 80€, 80 euro, budget of 80, etc. ──
+    const budgetMatch = lower.match(/€(\d+)|(\d+)\s*€|(\d+)\s*euro|budget\s*(?:of\s*)?€?(\d+)/);
     if (budgetMatch) {
-      p.weeklyBudget = parseInt(budgetMatch[1] || budgetMatch[2] || budgetMatch[3]);
+      p.weeklyBudget = parseInt(budgetMatch[1] || budgetMatch[2] || budgetMatch[3] || budgetMatch[4]);
     }
 
     // ── Batch cooking ──
@@ -609,10 +622,16 @@ export function HomePlanner() {
   function askDietary(p: PlannerProfile) {
     setFlowStep('dietary');
     const total = p.adults + p.children;
-    const mealsSummary = [p.meals.breakfast && 'breakfast', p.meals.lunch && 'lunches', p.meals.dinner && 'dinners', p.meals.snacks && 'snacks'].filter(Boolean);
-    const mealsNote = mealsSummary.length > 0 ? ` (${mealsSummary.join(', ')})` : '';
+    // Only show meals summary if user explicitly set them
+    const mealsNote = mealsExplicit
+      ? ` (${[p.meals.breakfast && 'breakfast', p.meals.lunch && 'lunches', p.meals.dinner && 'dinners', p.meals.snacks && 'snacks'].filter(Boolean).join(', ')})`
+      : '';
+    const dietaryNote = p.dietary.length > 0 ? ` I've noted: ${p.dietary.join(', ')}.` : '';
+    const budgetNote = p.weeklyBudget ? ` Budget: €${p.weeklyBudget}.` : '';
+    const extrasNote = p.extraContext ? ` (${p.extraContext})` : '';
+    const summary = [mealsNote, dietaryNote, budgetNote, extrasNote].filter(Boolean).join('');
     setTimeout(() => {
-      addMsg('assistant', `${total} ${total === 1 ? 'person' : 'people'}${mealsNote} — got it! Any dietary needs or things to avoid?`, [
+      addMsg('assistant', `${total} ${total === 1 ? 'person' : 'people'}${summary} — got it! Any dietary needs or things to avoid?`, [
         { label: 'None', value: '__none', emoji: '✅' },
         { label: 'Vegetarian', value: 'vegetarian', emoji: '🥬' },
         { label: 'Gluten-free', value: 'gluten-free', emoji: '🌾' },
