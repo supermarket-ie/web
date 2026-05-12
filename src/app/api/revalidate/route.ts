@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
   // Revalidate all price-sensitive pages
   const paths = [
-    '/compare/tesco-vs-dunnes-vs-supervalu',
+    '/compare/supermarket-prices-ireland',
     '/shop',
     '/shop/dairy',
     '/shop/meat',

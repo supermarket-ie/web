@@ -50,7 +50,7 @@ function parseStoreTotals(content: string): StoreTotal[] {
     if (line.toLowerCase().includes('store total') || line.toLowerCase().includes('best value')) { inSection = true; continue; }
     if (inSection && line.trim() === '') break;
     if (inSection) {
-      const m = line.match(/\*?\*?(tesco|dunnes|supervalu)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)/i);
+      const m = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)/i);
       if (m) { const total = parseFloat(m[2]); if (!isNaN(total)) totals.push({ store: m[1].toLowerCase(), total }); }
     }
   }
@@ -906,7 +906,7 @@ export function HomePlanner() {
           </button>
         </form>
         <p className="text-xs mt-1.5 text-center" style={{ color: 'var(--on-surface-variant)' }}>
-          Prices from Tesco, Dunnes & SuperValu · Free
+          Prices from Tesco, Dunnes, SuperValu & Aldi · Free
         </p>
       </div>
     </div>

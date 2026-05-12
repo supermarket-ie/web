@@ -72,13 +72,13 @@ export default function Home() {
               </div>
 
               <p className="type-body-lg mb-8 max-w-lg" style={{ color: 'var(--on-surface)' }}>
-                Tell us about your household. Our AI builds your complete weekly grocery list with the best prices across Tesco, Dunnes and SuperValu.
+                Tell us about your household. Our AI builds your complete weekly grocery list with the best prices across Tesco, Dunnes, SuperValu & Aldi.
               </p>
 
               <div className="space-y-3 mb-10">
                 {[
                   '✓ Takes 30 seconds — just tap a few buttons',
-                  '✓ Compares Tesco, Dunnes & SuperValu prices',
+                  '✓ Compares Tesco, Dunnes, SuperValu & Aldi prices',
                   '✓ Finds this week\'s deals automatically'
                 ].map(item => (
                   <div key={item} className="flex items-center gap-3">

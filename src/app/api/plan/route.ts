@@ -246,7 +246,7 @@ function buildProfilePrompt(profile: PlannerProfile): string {
 
   // Build store preference
   const storesPref = profile.preferredStores.includes('all')
-    ? 'all stores (Tesco, Dunnes, SuperValu)'
+    ? 'all stores (Tesco, Dunnes, SuperValu, Aldi)'
     : profile.preferredStores.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ') + ' only';
 
   return `You are an AI grocery planning assistant for supermarket.ie — Ireland's smartest grocery platform.
@@ -330,6 +330,7 @@ _For ${household} · ${mealCoverage}_
 - Tesco: €X.XX ([N] items)
 - Dunnes: €X.XX ([N] items)
 - SuperValu: €X.XX ([N] items)
+- Aldi: €X.XX ([N] items)
 
 ${profile.weeklyBudget ? `**Budget:** €X.XX of €${profile.weeklyBudget} (€X.XX ${profile.weeklyBudget ? 'under' : 'over'} budget)\n` : ''}
 💡 **Best value split:** [1-2 sentence recommendation]`;
@@ -384,6 +385,7 @@ Gather ALL data via tools before writing. Never mention tool calls.
 - Tesco: €X.XX ([N] items)
 - Dunnes: €X.XX ([N] items)
 - SuperValu: €X.XX ([N] items)
+- Aldi: €X.XX ([N] items)
 
 💡 **Best value split:** [recommendation]`;
 

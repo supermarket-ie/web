@@ -162,7 +162,7 @@ export default function Page2() {
           <nav className="hidden md:flex items-center gap-8">
             {[
               { label: "Prices", href: "/shop" },
-              { label: "Compare", href: "/compare/tesco-vs-dunnes-vs-supervalu" },
+              { label: "Compare", href: "/compare/supermarket-prices-ireland" },
               { label: "Blog", href: "/blog" },
             ].map((item) => (
               <Link
@@ -217,7 +217,7 @@ export default function Page2() {
           >
             {[
               ["Prices", "/shop"],
-              ["Compare", "/compare/tesco-vs-dunnes-vs-supervalu"],
+              ["Compare", "/compare/supermarket-prices-ireland"],
               ["Blog", "/blog"],
             ].map(([l, h]) => (
               <Link

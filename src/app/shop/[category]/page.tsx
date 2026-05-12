@@ -346,7 +346,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
           <div className="text-2xl mb-2">{meta?.emoji ?? '🛒'}</div>
           <h3 className="font-bold text-[#2F2F2E] mb-1">Build your full weekly list</h3>
           <p className="text-sm text-[#5c5b5b] mb-4">
-            Tell our AI what you want to cook and get a complete shopping list with live prices across all three stores.
+            Tell our AI what you want to cook and get a complete shopping list with live prices across Tesco, Dunnes, SuperValu & Aldi.
           </p>
           <Link href="/"
             className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]"

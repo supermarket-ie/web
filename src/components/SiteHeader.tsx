@@ -39,7 +39,7 @@ export function SiteHeader() {
 
         <nav className="flex items-center gap-6">
           <Link href="/shop"    className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Prices</Link>
-          <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Compare</Link>
+          <Link href="/compare/supermarket-prices-ireland" className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Compare</Link>
           <Link href="/blog"    className="text-sm font-medium hidden md:block transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>Blog</Link>
 
           {mounted && (
@@ -73,7 +73,7 @@ export function SiteHeader() {
         <div className="md:hidden absolute top-full left-0 right-0 px-6 py-4 flex flex-col gap-4 z-20 shadow-lg"
           style={{ background: 'rgba(249,246,245,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}>
           <Link href="/shop"    className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Prices</Link>
-          <Link href="/compare/tesco-vs-dunnes-vs-supervalu" className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Compare</Link>
+          <Link href="/compare/supermarket-prices-ireland" className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Compare</Link>
           <Link href="/blog"    className="font-medium text-base py-1" style={{ color: 'var(--on-background)' }} onClick={() => setMenuOpen(false)}>Blog</Link>
 
           {listUrl ? (

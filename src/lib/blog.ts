@@ -60,7 +60,7 @@ export const POSTS: BlogPost[] = [
       {
         type: 'tip',
         heading: 'The smart way to split',
-        text: 'Use our AI planner to generate your weekly list — it shows live prices from all three stores side by side, so you can see at a glance where each item is cheapest and decide whether to split.',
+        text: 'Use our AI planner to generate your weekly list — it shows live prices from all major stores side by side, so you can see at a glance where each item is cheapest and decide whether to split.',
       },
       { type: 'h2', text: 'What about Lidl and Aldi?' },
       {
@@ -134,7 +134,7 @@ export const POSTS: BlogPost[] = [
       { type: 'h2', text: 'What about Lidl and Aldi?' },
       {
         type: 'p',
-        text: 'Lidl and Aldi are widely regarded as the cheapest overall in Ireland — but they don\'t offer online grocery shopping, which makes systematic price tracking impossible. We\'re in talks with Lidl about a data partnership. For now, our comparison covers the three stores you can actually order from online.',
+        text: 'Lidl and Aldi are widely regarded as the cheapest overall in Ireland — but they don\'t offer online grocery shopping, which makes systematic price tracking impossible. We\'re in talks with Lidl about a data partnership. For now, our comparison covers the five major Irish supermarkets, including Aldi — with prices scraped directly from their websites.',
       },
       { type: 'h2', text: 'How to use this to save money' },
       {
@@ -287,7 +287,7 @@ export const POSTS: BlogPost[] = [
       {
         type: 'cta',
         heading: 'Get the full price breakdown',
-        text: 'Our AI planner shows live prices for every bolognese ingredient across all three stores — so you know exactly where to shop.',
+        text: 'Our AI planner shows live prices for every bolognese ingredient across all major stores — so you know exactly where to shop.',
         link: '/?prompt=Spaghetti bolognese for 4',
         linkText: 'Price up my bolognese →',
       },
@@ -338,8 +338,8 @@ export const POSTS: BlogPost[] = [
       {
         type: 'cta',
         heading: 'Compare Tesco prices vs Dunnes and SuperValu',
-        text: 'See live prices across all three stores for your weekly shop.',
-        link: '/compare/tesco-vs-dunnes-vs-supervalu',
+        text: 'See live prices across all major stores for your weekly shop.',
+        link: '/compare/supermarket-prices-ireland',
         linkText: 'See price comparison →',
       },
     ],
