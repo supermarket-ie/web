@@ -98,7 +98,52 @@ function RichText({ text, className, style }: { text: string; className?: string
   );
 }
 
-function FormattedMessage({ content }: { content: string }) {
+// ─── Blur wrapper for locked content ────────────────────────────────────
+
+function BlurredText({ children, unlocked }: { children: React.ReactNode; unlocked: boolean }) {
+  return (
+    <span
+      style={{
+        filter: unlocked ? 'blur(0)' : 'blur(5px)',
+        transition: 'filter 0.6s ease',
+        userSelect: unlocked ? 'auto' : 'none',
+        WebkitUserSelect: unlocked ? 'auto' : 'none',
+      }}
+      aria-hidden={!unlocked}
+    >
+      {children}
+    </span>
+  );
+}
+
+// ─── Parse price/store portion from list item lines ─────────────────────
+
+function ListItemLine({ text, unlocked }: { text: string; unlocked: boolean }) {
+  // Match patterns like "— Tesco €2.49" or "— SuperValu €3.19 (was €4.29)"
+  const priceMatch = text.match(/^(.+?)\s*(—\s*.+€.+)$/);
+  if (priceMatch) {
+    return (
+      <span>
+        <RichText text={priceMatch[1]} />
+        <BlurredText unlocked={unlocked}>
+          <RichText text={' ' + priceMatch[2]} />
+        </BlurredText>
+      </span>
+    );
+  }
+  return <RichText text={text} />;
+}
+
+// ─── Calculate savings from store totals ────────────────────────────────
+
+function calcSavings(totals: StoreTotal[]): number | null {
+  if (totals.length < 2) return null;
+  const sorted = [...totals].sort((a, b) => a.total - b.total);
+  const diff = sorted[sorted.length - 1].total - sorted[0].total;
+  return diff > 0 ? Math.round(diff * 100) / 100 : null;
+}
+
+function FormattedMessage({ content, unlocked = true }: { content: string; unlocked?: boolean }) {
   if (!content) return null;
   const storeTotals = parseStoreTotals(content);
   const lines = content.split('\n');
@@ -108,13 +153,21 @@ function FormattedMessage({ content }: { content: string }) {
         if (!line.trim()) return <br key={i} />;
         if (line.startsWith('### ')) return <h4 key={i} className="font-bold text-base mt-4 mb-2" style={{ color: 'var(--on-background)' }}><RichText text={line.slice(4)} /></h4>;
         if (line.startsWith('**') && line.endsWith('**') && line.length > 4 && !line.slice(2, -2).includes('**')) return <h5 key={i} className="type-label mt-3 mb-1" style={{ color: 'var(--on-background)' }}>{line.slice(2, -2)}</h5>;
-        if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="text-sm leading-relaxed pl-4" style={{ color: 'var(--on-surface)' }}><RichText text={line.slice(2)} /></p>;
+        if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="text-sm leading-relaxed pl-4" style={{ color: 'var(--on-surface)' }}><ListItemLine text={line.slice(2)} unlocked={unlocked} /></p>;
         if (line.startsWith('---')) return <hr key={i} className="my-3" style={{ borderColor: 'var(--outline-variant)' }} />;
         if (line.startsWith('💡')) return <div key={i} className="mt-3 p-3 rounded-xl" style={{ background: 'var(--primary-fixed)' }}><p className="text-sm font-medium" style={{ color: 'var(--on-primary-container)' }}><RichText text={line} /></p></div>;
         return <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--on-surface)' }}><RichText text={line} /></p>;
       })}
       {storeTotals.length > 0 && (
-        <div className="mt-4 space-y-2">
+        <div
+          className="mt-4 space-y-2"
+          style={{
+            filter: unlocked ? 'blur(0)' : 'blur(6px)',
+            transition: 'filter 0.6s ease',
+            userSelect: unlocked ? 'auto' : 'none',
+            WebkitUserSelect: unlocked ? 'auto' : 'none',
+          }}
+        >
           <h5 className="type-label" style={{ color: 'var(--on-background)' }}>STORE TOTALS</h5>
           <div className="flex flex-wrap gap-2">
             {storeTotals.map((t, i) => (
@@ -172,17 +225,30 @@ function ShareButton({ text }: { text: string }) {
   );
 }
 
-// ─── Email capture ──────────────────────────────────────────────────────
+// ─── Unlock CTA (replaces old EmailCapture) ────────────────────────────
 
-function EmailCapture({ householdSize, onDone }: { householdSize: number; onDone: () => void }) {
+function UnlockCTA({ householdSize, savings, onUnlocked }: {
+  householdSize: number; savings: number | null; onUnlocked: () => void;
+}) {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const headline = savings && savings > 1
+    ? `🔓 Sign up to see which store saves you €${savings.toFixed(2)} this week`
+    : '🔓 Sign up to unlock store-by-store prices';
+
   return (
-    <div className="rounded-xl p-3 mt-2" style={{ background: 'var(--primary-fixed)', border: '1px solid rgba(0,106,53,0.1)' }}>
-      <p className="text-sm font-bold mb-2" style={{ color: 'var(--on-primary-container)' }}>
-        📩 Get this list emailed — we'll update prices every Monday.
+    <div className="rounded-2xl p-4 mt-3 mb-2" style={{
+      background: 'linear-gradient(135deg, var(--primary-fixed), var(--surface-container-lowest))',
+      border: '2px solid var(--primary)',
+      boxShadow: '0 2px 12px rgba(0,106,53,0.12)',
+    }}>
+      <p className="text-sm font-bold mb-1" style={{ color: 'var(--on-primary-container)' }}>
+        {headline}
+      </p>
+      <p className="text-xs mb-3" style={{ color: 'var(--on-surface-variant)' }}>
+        Your list is ready — enter your email to unlock store prices and get weekly updates.
       </p>
       <form onSubmit={async (e) => {
         e.preventDefault(); if (!email.trim()) return;
@@ -196,19 +262,21 @@ function EmailCapture({ householdSize, onDone }: { householdSize: number; onDone
           if (!res.ok) throw new Error(data.error || 'Something went wrong');
           if (data.token) {
             saveSession({ token: data.token, familySize: String(householdSize), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
-            onDone();
+            onUnlocked();
           }
         } catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong'); setSubmitting(false); }
       }} className="flex gap-2">
         <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-          placeholder="your@email.com" className="flex-1 px-3 py-2 rounded-xl text-sm min-w-0 focus:outline-none"
+          placeholder="your@email.com" className="flex-1 px-3 py-2.5 rounded-xl text-sm min-w-0 focus:outline-none"
           style={{ background: 'var(--surface-container-lowest)', color: 'var(--on-background)', border: '1px solid var(--surface-container)' }} />
-        <button type="submit" disabled={submitting} className="btn-primary px-3 py-2 text-sm whitespace-nowrap disabled:opacity-60">
-          {submitting ? '...' : 'Save →'}
+        <button type="submit" disabled={submitting} className="btn-primary px-4 py-2.5 text-sm font-bold whitespace-nowrap disabled:opacity-60 rounded-xl">
+          {submitting ? '...' : 'Unlock prices →'}
         </button>
       </form>
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-      <button onClick={onDone} className="text-xs mt-1" style={{ color: 'var(--on-surface-variant)' }}>No thanks</button>
+      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
+      <p className="text-[11px] mt-2 text-center" style={{ color: 'var(--on-surface-variant)' }}>
+        Free forever · Unsubscribe anytime
+      </p>
     </div>
   );
 }
@@ -243,8 +311,7 @@ export function HomePlanner() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressIdx, setProgressIdx] = useState(0);
   const [buttonsDisabled, setButtonsDisabled] = useState(false);
-  const [showEmailCapture, setShowEmailCapture] = useState(false);
-  const [emailDone, setEmailDone] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const [listContent, setListContent] = useState('');
   const [mealsExplicit, setMealsExplicit] = useState(false); // true when user explicitly set meals
 
@@ -276,8 +343,9 @@ export function HomePlanner() {
     const session = loadSession();
 
     if (savedProfile && session?.token) {
-      // Returning user
+      // Returning user — unlocked
       setProfile(savedProfile);
+      setIsUnlocked(true);
       const people = savedProfile.adults + savedProfile.children;
       addMsg('assistant', `👋 Welcome back! Last time you planned for ${people} people. Want the same again or make changes?`, [
         { label: 'Same again →', value: '__same_again', emoji: '🔄' },
@@ -737,12 +805,6 @@ export function HomePlanner() {
 
       setFlowStep('done');
 
-      // Show email capture for new users
-      const session2 = loadSession();
-      if (!session2 && !emailDone && content.length > 200) {
-        setTimeout(() => setShowEmailCapture(true), 800);
-      }
-
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         addMsg('assistant', 'Sorry, something went wrong. Try again?', [
@@ -836,7 +898,7 @@ export function HomePlanner() {
                 : { background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }
               }>
               {m.role === 'assistant' && (m.content.includes('**') || m.content.includes('###') || m.content.includes('- ')) ? (
-                <FormattedMessage content={m.content} />
+                <FormattedMessage content={m.content} unlocked={isUnlocked} />
               ) : (
                 <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)', whiteSpace: 'pre-wrap' }}>{m.content}</p>
               )}
@@ -860,16 +922,17 @@ export function HomePlanner() {
         )}
       </div>
 
-      {/* Email capture */}
-      {showEmailCapture && !emailDone && (
-        <EmailCapture
+      {/* Unlock CTA for non-signed-in users after list is generated */}
+      {flowStep === 'done' && listContent && !isGenerating && !isUnlocked && (
+        <UnlockCTA
           householdSize={profile.adults + profile.children}
-          onDone={() => { setShowEmailCapture(false); setEmailDone(true); }}
+          savings={calcSavings(parseStoreTotals(listContent))}
+          onUnlocked={() => setIsUnlocked(true)}
         />
       )}
 
-      {/* Share button */}
-      {flowStep === 'done' && listContent && !isGenerating && (
+      {/* Share button — only for unlocked users */}
+      {flowStep === 'done' && listContent && !isGenerating && isUnlocked && (
         <div className="flex justify-end mb-2">
           <ShareButton text={listContent} />
         </div>
