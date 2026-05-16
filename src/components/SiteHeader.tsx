@@ -22,7 +22,7 @@ export function SiteHeader() {
 
   return (
     <header className="px-6 py-4 sticky top-0 z-20" style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(175,173,172,0.12)' }}>
-      <div className="max-w-6xl mx-auto flex justify-between items-center">
+      <div className="max-w-7xl mx-auto flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}>

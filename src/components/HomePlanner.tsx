@@ -956,9 +956,9 @@ export function HomePlanner() {
             rows={1}
             disabled={isGenerating}
             className="w-full px-4 py-3 pr-12 rounded-xl focus:outline-none text-sm resize-none transition disabled:opacity-50 box-border"
-            style={{ background: 'var(--surface-container-highest)', color: 'var(--on-background)', border: '2px solid transparent' }}
+            style={{ background: 'var(--surface-container-low)', color: 'var(--on-background)', border: '1.5px solid var(--surface-container)' }}
             onFocus={e => { e.currentTarget.style.background = 'var(--surface-container-lowest)'; e.currentTarget.style.borderColor = 'rgba(0,106,53,0.4)'; }}
-            onBlur={e => { e.currentTarget.style.background = 'var(--surface-container-highest)'; e.currentTarget.style.borderColor = 'transparent'; }}
+            onBlur={e => { e.currentTarget.style.background = 'var(--surface-container-low)'; e.currentTarget.style.borderColor = 'var(--surface-container)'; }}
           />
           <button type="submit" disabled={isGenerating || !input.trim()}
             className="absolute right-3 bottom-3 w-8 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-40"
