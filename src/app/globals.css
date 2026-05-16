@@ -43,6 +43,7 @@
   --store-tesco:     #003A8C;
   --store-dunnes:    #7B0017;
   --store-supervalu: #D4400F;
+  --store-aldi:      #00616A;
   --background:     oklch(1 0 0);
   --foreground:     oklch(0.145 0 0);
   --card:     oklch(1 0 0);
@@ -114,6 +115,7 @@
   --color-store-tesco:               var(--store-tesco);
   --color-store-dunnes:              var(--store-dunnes);
   --color-store-supervalu:           var(--store-supervalu);
+  --color-store-aldi:                var(--store-aldi);
   --font-heading:     var(--font-sans);
   --color-sidebar-ring:     var(--sidebar-ring);
   --color-sidebar-border:     var(--sidebar-border);
@@ -271,6 +273,42 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* ── Noise texture overlay ─────────────────────────────────────────── */
+.noise-bg {
+  position: relative;
+}
+.noise-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.025;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Animated gradient mesh ─────────────────────────────────────────── */
+@keyframes gradient-shift {
+  0%, 100% { transform: translate(0%, 0%) rotate(0deg); }
+  25% { transform: translate(5%, 5%) rotate(1deg); }
+  50% { transform: translate(-2%, 3%) rotate(-1deg); }
+  75% { transform: translate(3%, -2%) rotate(0.5deg); }
+}
+
+.gradient-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  animation: gradient-shift 15s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* ── Dot grid pattern ─────────────────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(0,106,53,0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 /* ── Price display — extra bold per design spec ───────────────────── */

@@ -12,9 +12,47 @@ interface HeroSectionProps {
 
 export function HeroSection({ listUrl }: HeroSectionProps) {
   return (
-    <section className="px-6 pt-10 pb-20 md:pt-14 md:pb-28" style={{ background: 'var(--surface)' }}>
-      <div className="max-w-7xl mx-auto">
-        <div className="grid gap-12 items-start lg:grid-cols-[1fr_600px] md:grid-cols-1">
+    <section className="relative px-6 pt-10 pb-20 md:pt-14 md:pb-28 overflow-hidden noise-bg">
+      {/* Animated gradient mesh background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Primary green blob - top left */}
+        <motion.div
+          className="gradient-blob"
+          style={{
+            width: '600px',
+            height: '600px',
+            background: 'linear-gradient(135deg, rgba(0,106,53,0.15), rgba(107,254,156,0.1))',
+            top: '-200px',
+            left: '-100px',
+          }}
+          animate={{
+            x: [0, 30, -20, 0],
+            y: [0, 20, -10, 0],
+          }}
+          transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        {/* Cyan accent blob - right */}
+        <motion.div
+          className="gradient-blob"
+          style={{
+            width: '500px',
+            height: '500px',
+            background: 'linear-gradient(135deg, rgba(0,220,255,0.08), rgba(107,254,156,0.05))',
+            top: '50%',
+            right: '-150px',
+          }}
+          animate={{
+            x: [0, -20, 30, 0],
+            y: [0, -30, 20, 0],
+          }}
+          transition={{ duration: 25, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+        />
+        {/* Dot grid overlay */}
+        <div className="absolute inset-0 dot-grid opacity-50" />
+      </div>
+
+      <div className="max-w-7xl mx-auto relative z-10">
+        <div className="grid gap-12 items-start lg:grid-cols-[1fr_560px] md:grid-cols-1">
           {/* Left: Copy & Trust Signals */}
           <motion.div
             className="lg:pr-8"
@@ -26,11 +64,11 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
               Free weekly shopping lists for Irish households
             </div>
 
-            <h1 className="type-display text-on-background mb-6">
+            <h1 className="type-display text-on-background mb-6 text-balance">
               Plan your weekly shop{' '}
               <span
                 style={{
-                  background: 'linear-gradient(135deg, var(--primary), var(--primary-container))',
+                  background: 'linear-gradient(135deg, #006A35, #6BFE9C)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
@@ -74,13 +112,16 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
             </div>
 
             {listUrl && (
-              <Link href={listUrl} className="btn-secondary px-8 py-4 text-lg inline-flex gap-2">
+              <Link 
+                href={listUrl} 
+                className="btn-secondary px-8 py-4 text-lg inline-flex gap-2 hover:scale-[1.02] active:scale-[0.98] transition-transform"
+              >
                 View my list <ArrowRight className="size-5" />
               </Link>
             )}
           </motion.div>
 
-          {/* Right: Chat Interface */}
+          {/* Right: Chat Interface placeholder */}
           <motion.div
             className="relative"
             initial={{ opacity: 0, scale: 0.98 }}
@@ -88,10 +129,10 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.2 }}
           >
             <div
-              className="rounded-2xl p-6"
+              className="rounded-2xl overflow-hidden"
               style={{
                 background: 'var(--surface-container-lowest)',
-                boxShadow: '0 8px 40px rgba(0,0,0,0.08)',
+                boxShadow: '0 8px 40px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.03)',
                 minHeight: '500px',
               }}
             >

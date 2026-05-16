@@ -29,7 +29,7 @@ export function BottomCTASection() {
           </div>
           <button
             onClick={scrollToTop}
-            className="btn-primary w-full px-6 py-4 text-lg font-bold gap-2"
+            className="btn-primary w-full px-6 py-4 text-lg font-bold gap-2 hover:scale-[1.02] active:scale-[0.98] transition-transform"
           >
             Plan my weekly shop <ArrowRight className="size-5" />
           </button>

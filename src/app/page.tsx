@@ -26,7 +26,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-surface">
+    <div className="min-h-screen bg-surface noise-bg">
       {/* Cookie banner */}
       {showCookieBanner && (
         <div
