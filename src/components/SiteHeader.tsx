@@ -25,7 +25,7 @@ export function SiteHeader() {
       <div className="max-w-7xl mx-auto flex justify-between items-center">
         {/* Logo — left */}
         <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[24px] font-extrabold tracking-tight" style={{ color: '#FFFFFF', letterSpacing: '-0.02em' }}>
+          <span className="text-[28px] font-extrabold tracking-tight" style={{ color: '#FFFFFF', letterSpacing: '-0.02em' }}>
             supermarket<span style={{ color: '#d4ffe5' }}>.ie</span>
           </span>
         </Link>
