@@ -10,7 +10,7 @@ export function BottomCTASection() {
   };
 
   return (
-    <section id="bottom-cta" className="py-20 px-6 bg-surface-low">
+    <section id="bottom-cta" className="py-20 px-6" style={{ background: 'var(--surface-container-low)' }}>
       <div className="max-w-xl mx-auto text-center">
         <motion.div
           className="rounded-2xl p-8 md:p-10"

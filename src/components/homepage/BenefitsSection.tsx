@@ -23,7 +23,7 @@ const benefits = [
 
 export function BenefitsSection() {
   return (
-    <section className="py-20 px-6 bg-surface-low">
+    <section className="py-20 px-6" style={{ background: 'var(--surface-container-low)' }}>
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-2 gap-16 items-center">
           <motion.div

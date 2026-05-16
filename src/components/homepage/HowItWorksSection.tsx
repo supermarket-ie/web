@@ -29,7 +29,7 @@ const steps = [
 
 export function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="py-20 px-6 bg-surface">
+    <section id="how-it-works" className="py-20 px-6" style={{ background: 'var(--surface)' }}>
       <div className="max-w-6xl mx-auto">
         <motion.div
           className="mb-16"

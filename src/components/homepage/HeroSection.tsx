@@ -12,7 +12,7 @@ interface HeroSectionProps {
 
 export function HeroSection({ listUrl }: HeroSectionProps) {
   return (
-    <section className="px-6 pt-10 pb-20 md:pt-14 md:pb-28 bg-surface">
+    <section className="px-6 pt-10 pb-20 md:pt-14 md:pb-28" style={{ background: 'var(--surface)' }}>
       <div className="max-w-7xl mx-auto">
         <div className="grid gap-12 items-start lg:grid-cols-[1fr_600px] md:grid-cols-1">
           {/* Left: Copy & Trust Signals */}

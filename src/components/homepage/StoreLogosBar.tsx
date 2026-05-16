@@ -10,7 +10,7 @@ const stores = [
 
 export function StoreLogosBar() {
   return (
-    <section className="py-8 px-6 bg-surface-low">
+    <section className="py-8 px-6" style={{ background: 'var(--surface-container-low)' }}>
       <div className="max-w-6xl mx-auto">
         <p className="type-label text-center mb-4 text-on-surface">
           Prices from Ireland&apos;s biggest supermarkets

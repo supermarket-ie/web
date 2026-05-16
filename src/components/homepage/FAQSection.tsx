@@ -43,7 +43,7 @@ const faqs = [
 
 export function FAQSection() {
   return (
-    <section className="py-20 px-6 bg-surface">
+    <section className="py-20 px-6" style={{ background: 'var(--surface)' }}>
       <div className="max-w-3xl mx-auto">
         <motion.div
           className="text-center mb-12"
@@ -75,11 +75,11 @@ export function FAQSection() {
                 className="border-b"
                 style={{ borderColor: 'var(--outline-variant)' }}
               >
-                <AccordionTrigger className="text-left font-semibold text-on-background hover:no-underline py-5">
+                <AccordionTrigger className="text-left font-semibold text-on-background hover:no-underline py-4">
                   {faq.question}
                 </AccordionTrigger>
-                <AccordionContent className="text-on-surface pb-5">
-                  {faq.answer}
+                <AccordionContent className="text-on-surface">
+                  <p>{faq.answer}</p>
                 </AccordionContent>
               </AccordionItem>
             ))}

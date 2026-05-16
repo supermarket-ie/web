@@ -14,7 +14,7 @@ const testimonials = [
   {
     quote:
       "Finally, something that actually compares Irish supermarket prices properly. Saved us over €90 last month!",
-    name: 'Cian O&apos;Brien',
+    name: "Cian O'Brien",
     location: 'Family of 4, Cork',
     initials: 'CO',
   },
@@ -29,7 +29,7 @@ const testimonials = [
 
 export function TestimonialsSection() {
   return (
-    <section className="py-20 px-6 bg-surface">
+    <section className="py-20 px-6" style={{ background: 'var(--surface)' }}>
       <div className="max-w-6xl mx-auto">
         <motion.div
           className="text-center mb-12"
