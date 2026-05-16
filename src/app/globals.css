@@ -11,7 +11,7 @@
 
 :root {
   /* Primary — kinetic green accent */
-  --primary:     oklch(0.205 0 0);
+  --primary:               #006A35;
   --primary-container:     #6BFE9C;
   --on-primary:            #FFFFFF;
   --on-primary-container:  #004a23;
@@ -81,7 +81,7 @@
 
 @theme inline {
   /* Fonts */
-  --font-sans:     var(--font-sans);
+  --font-sans:     var(--font-plus-jakarta), var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
   /* Map every token to a Tailwind colour utility */
@@ -170,7 +170,7 @@ body {
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--primary), var(--primary-container));
-  color: var(--on-primary-container);
+  color: #FFFFFF;
   font-weight: 700;
   border-radius: 9999px;
   transition: opacity 0.15s ease, transform 0.15s ease;

@@ -129,7 +129,7 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.2 }}
           >
             <div
-              className="rounded-2xl overflow-hidden"
+              className="rounded-2xl overflow-hidden p-4 sm:p-6"
               style={{
                 background: 'var(--surface-container-lowest)',
                 boxShadow: '0 8px 40px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.03)',

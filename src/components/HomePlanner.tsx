@@ -883,7 +883,7 @@ export function HomePlanner() {
 
   // ── Render ──
   return (
-    <div className="flex flex-col h-full max-w-2xl mx-auto">
+    <div className="flex flex-col h-full max-w-2xl mx-auto overflow-hidden">
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 space-y-3 mb-4 overflow-y-auto" style={{ maxHeight: '65vh' }}>
         {messages.map(m => (
@@ -939,8 +939,8 @@ export function HomePlanner() {
       )}
 
       {/* Input — always visible */}
-      <div className="sticky bottom-0 z-10 pt-2" style={{ background: 'var(--surface-container-lowest)' }}>
-        <form onSubmit={e => { e.preventDefault(); handleUserInput(input); }} className="relative">
+      <div className="sticky bottom-0 z-10 pt-2 w-full" style={{ background: 'var(--surface-container-lowest)' }}>
+        <form onSubmit={e => { e.preventDefault(); handleUserInput(input); }} className="relative w-full">
           <textarea
             ref={inputRef}
             value={input}
@@ -955,7 +955,7 @@ export function HomePlanner() {
             }
             rows={1}
             disabled={isGenerating}
-            className="w-full px-4 py-3 pr-12 rounded-xl focus:outline-none text-sm resize-none transition disabled:opacity-50"
+            className="w-full px-4 py-3 pr-12 rounded-xl focus:outline-none text-sm resize-none transition disabled:opacity-50 box-border"
             style={{ background: 'var(--surface-container-highest)', color: 'var(--on-background)', border: '2px solid transparent' }}
             onFocus={e => { e.currentTarget.style.background = 'var(--surface-container-lowest)'; e.currentTarget.style.borderColor = 'rgba(0,106,53,0.4)'; }}
             onBlur={e => { e.currentTarget.style.background = 'var(--surface-container-highest)'; e.currentTarget.style.borderColor = 'transparent'; }}
