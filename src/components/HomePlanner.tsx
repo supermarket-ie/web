@@ -275,7 +275,7 @@ function UnlockCTA({ householdSize, savings, onUnlocked }: {
       </form>
       {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
       <p className="text-[11px] mt-2 text-center" style={{ color: 'var(--on-surface-variant)' }}>
-        Free forever · Unsubscribe anytime
+        100% free · No card needed · Unsubscribe anytime
       </p>
     </div>
   );
