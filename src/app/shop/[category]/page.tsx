@@ -148,13 +148,24 @@ async function getCategoryProducts(category: string) {
     .select('id, store, store_product_name, store_url, products(canonical_name, category)')
     .eq('url_status', 'resolved');
 
-  const { data: priceRows } = await supabaseAdmin
-    .from('price_observations')
-    .select('store_product_id, price, on_promotion, was_price, observed_at')
-    .order('observed_at', { ascending: false })
-    .limit(3000);
+  // Fetch latest prices — use RPC or paginate to get all observations
+  // Supabase max is 1000 per request, so paginate
+  let priceRows: { store_product_id: string; price: number; on_promotion: boolean; was_price: number | null; observed_at: string }[] = [];
+  let offset = 0;
+  const PAGE = 1000;
+  while (true) {
+    const { data } = await supabaseAdmin
+      .from('price_observations')
+      .select('store_product_id, price, on_promotion, was_price, observed_at')
+      .order('observed_at', { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (!data || data.length === 0) break;
+    priceRows = priceRows.concat(data);
+    if (data.length < PAGE) break;
+    offset += PAGE;
+  }
 
-  if (!spRows || !priceRows) return null;
+  if (!spRows || !priceRows.length) return null;
 
   // Latest price per store_product
   const latestPrice = new Map<string, { price: number; on_promotion: boolean; was_price: number | null }>();
@@ -300,7 +311,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="text-sm font-medium text-[#2F2F2E]">{canonical}</div>
-                          {best && best[1].on_promotion && (
+                          {sorted.some(([, s]) => s.on_promotion) && (
                             <span className="text-[10px] font-bold uppercase tracking-wide text-[#004a23] px-1.5 py-0.5 rounded-md" style={{ background: '#6BFE9C' }}>🏷️ Offer</span>
                           )}
                         </div>
