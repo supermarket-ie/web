@@ -178,6 +178,8 @@ async function getCategoryProducts(category: string) {
   // Group by canonical product, filter to category
   const byProduct = new Map<string, { canonical: string; stores: Map<string, { price: number; name: string; url: string | null; on_promotion: boolean; was_price: number | null }> }>();
 
+  const MAIN_STORES = ['tesco', 'dunnes', 'supervalu'];
+
   for (const sp of spRows) {
     const p = sp.products as unknown as { canonical_name: string; category: string } | null;
     if (!p) continue;
@@ -197,7 +199,12 @@ async function getCategoryProducts(category: string) {
     });
   }
 
-  return Array.from(byProduct.values()).sort((a, b) => a.canonical.localeCompare(b.canonical));
+  // Only keep products available in all 3 main stores
+  const filtered = Array.from(byProduct.values())
+    .filter(p => MAIN_STORES.every(s => p.stores.has(s)))
+    .sort((a, b) => a.canonical.localeCompare(b.canonical));
+
+  return filtered;
 }
 
 export async function generateStaticParams() {

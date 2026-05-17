@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
-import { getAllLatestPrices, groupByProduct, STORE_INFO, ALL_STORES, fmt, type StoreKey } from '@/lib/price-data';
+import { getAllLatestPrices, groupByProduct, filterToMain3, STORE_INFO, ALL_STORES, fmt, type StoreKey } from '@/lib/price-data';
 
 export const revalidate = 43200; // 12h
 
@@ -59,9 +59,9 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
   const infoB = STORE_INFO[storeB];
 
   const allPrices = await getAllLatestPrices();
-  const byProduct = groupByProduct(allPrices);
+  const byProduct = filterToMain3(groupByProduct(allPrices));
 
-  // Only products available in BOTH stores
+  // Only products available in BOTH stores being compared
   const shared: { name: string; category: string; priceA: number; priceB: number }[] = [];
   for (const [name, { category, stores }] of byProduct) {
     const pA = stores.get(storeA);

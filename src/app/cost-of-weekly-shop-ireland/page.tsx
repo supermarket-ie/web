@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
-import { getAllLatestPrices, groupByProduct, STORE_INFO, ALL_STORES, fmt, type StoreKey } from '@/lib/price-data';
+import { getAllLatestPrices, groupByProduct, filterToMain3, STORE_INFO, MAIN_STORES, fmt, type StoreKey } from '@/lib/price-data';
 
 export const revalidate = 43200; // 12h
 
 export const metadata: Metadata = {
-  title: 'Cost of a Weekly Shop in Ireland 2026 — Tesco, Dunnes, SuperValu, Aldi | supermarket.ie',
-  description: 'How much does a weekly grocery shop cost in Ireland? Live prices from Tesco, Dunnes Stores, SuperValu and Aldi compared. See which supermarket is cheapest for a typical Irish weekly shop.',
+  title: 'Cost of a Weekly Shop in Ireland 2026 — Tesco, Dunnes, SuperValu | supermarket.ie',
+  description: 'How much does a weekly grocery shop cost in Ireland? Live prices from Tesco, Dunnes Stores and SuperValu compared. See which supermarket is cheapest for a typical Irish weekly shop.',
   keywords: ['cost of weekly shop Ireland', 'how much is a weekly shop in Ireland', 'cheapest weekly shop Ireland', 'grocery prices Ireland 2026', 'average weekly grocery spend Ireland'],
   openGraph: {
     title: 'Cost of a Weekly Shop in Ireland — Which Store is Cheapest?',
@@ -57,13 +57,13 @@ const BASKET_ITEMS = [
 
 export default async function WeeklyShopCostPage() {
   const allPrices = await getAllLatestPrices();
-  const byProduct = groupByProduct(allPrices);
+  const byProduct = filterToMain3(groupByProduct(allPrices));
 
-  // Match basket items to our product data (fuzzy: check if canonical_name contains the basket item or vice versa)
+  // Match basket items — only products in all 3 main stores survive filterToMain3
   const basketResults: { item: string; stores: Record<string, number> }[] = [];
   const storeTotals: Record<string, number> = {};
   const storeItemCounts: Record<string, number> = {};
-  for (const s of ALL_STORES) {
+  for (const s of MAIN_STORES) {
     storeTotals[s] = 0;
     storeItemCounts[s] = 0;
   }
@@ -97,9 +97,8 @@ export default async function WeeklyShopCostPage() {
     }
   }
 
-  // Only show stores with reasonable coverage (at least 40% of basket)
-  const minItems = Math.floor(BASKET_ITEMS.length * 0.4);
-  const activeStores = ALL_STORES.filter(s => storeItemCounts[s] >= minItems);
+  // Use main 3 stores directly (all basket items already filtered to have all 3)
+  const activeStores = MAIN_STORES;
   const ranked = [...activeStores].sort((a, b) => storeTotals[a] - storeTotals[b]);
   const cheapest = ranked[0];
 

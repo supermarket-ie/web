@@ -37,13 +37,23 @@ const BASKET_CATEGORIES = [
 ];
 
 async function getComparisonData() {
-  const { data: priceRows } = await supabaseAdmin
-    .from('price_observations')
-    .select('price, store_products(store, products(canonical_name, category))')
-    .order('observed_at', { ascending: false })
-    .limit(5000);
+  // Paginate price observations to get all data
+  let priceRows: { price: number; store_products: unknown }[] = [];
+  let offset = 0;
+  const PAGE = 1000;
+  while (true) {
+    const { data } = await supabaseAdmin
+      .from('price_observations')
+      .select('price, store_products(store, products(canonical_name, category))')
+      .order('observed_at', { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (!data || data.length === 0) break;
+    priceRows = priceRows.concat(data);
+    if (data.length < PAGE) break;
+    offset += PAGE;
+  }
 
-  if (!priceRows) return null;
+  if (!priceRows.length) return null;
 
   // latest price per product per store
   const latest = new Map<string, number>();
@@ -63,6 +73,15 @@ async function getComparisonData() {
   }
 
   // Find which stores have meaningful data (>10 products)
+  const MAIN_3: StoreKey[] = ['tesco', 'dunnes', 'supervalu'];
+  
+  // Filter to products available in all 3 main stores
+  for (const [name, { stores }] of byProduct) {
+    if (!MAIN_3.every(s => stores.has(s))) {
+      byProduct.delete(name);
+    }
+  }
+
   const storeCounts: Record<string, number> = {};
   for (const [, { stores }] of byProduct) {
     for (const store of stores.keys()) {

@@ -10,6 +10,7 @@ export const STORE_INFO: Record<StoreKey, { name: string; color: string; light: 
 };
 
 export const ALL_STORES: StoreKey[] = ['tesco', 'dunnes', 'supervalu', 'aldi'];
+export const MAIN_STORES: StoreKey[] = ['tesco', 'dunnes', 'supervalu'];
 
 export function fmt(n: number) { return `€${n.toFixed(2)}`; }
 export function pct(was: number, now: number) { return Math.round(((was - now) / was) * 100); }
@@ -99,4 +100,16 @@ export function groupByProduct(prices: ProductPrice[]) {
     map.get(p.canonical_name)!.stores.set(p.store, { price: p.price, on_promotion: p.on_promotion, was_price: p.was_price });
   }
   return map;
+}
+
+/**
+ * Filter grouped products to only those available in ALL 3 main stores (Tesco, Dunnes, SuperValu).
+ */
+export function filterToMain3(grouped: ReturnType<typeof groupByProduct>) {
+  const filtered = new Map<string, { category: string; stores: Map<string, { price: number; on_promotion: boolean; was_price: number | null }> }>();
+  for (const [name, data] of grouped) {
+    const hasAll3 = MAIN_STORES.every(s => data.stores.has(s));
+    if (hasAll3) filtered.set(name, data);
+  }
+  return filtered;
 }
