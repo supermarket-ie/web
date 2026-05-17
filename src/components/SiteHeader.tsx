@@ -36,6 +36,9 @@ export function SiteHeader() {
           <Link href="/deals" className="text-[15px] font-semibold transition-opacity hover:opacity-80" style={{ color: '#FFFFFF' }}>Deals</Link>
           <Link href="/compare/supermarket-prices-ireland" className="text-[15px] font-semibold transition-opacity hover:opacity-80" style={{ color: '#FFFFFF' }}>Compare</Link>
           <Link href="/blog" className="text-[15px] font-semibold transition-opacity hover:opacity-80" style={{ color: '#FFFFFF' }}>Blog</Link>
+          {listUrl && (
+            <Link href="/dashboard" className="text-[15px] font-semibold transition-opacity hover:opacity-80" style={{ color: '#FFFFFF' }}>Dashboard</Link>
+          )}
         </nav>
 
         {/* Right — CTA + hamburger */}
@@ -76,6 +79,9 @@ export function SiteHeader() {
           <Link href="/deals" className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>Deals</Link>
           <Link href="/compare/supermarket-prices-ireland" className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>Compare</Link>
           <Link href="/blog" className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>Blog</Link>
+          {listUrl && (
+            <Link href="/dashboard" className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>Dashboard</Link>
+          )}
 
           {listUrl ? (
             <>

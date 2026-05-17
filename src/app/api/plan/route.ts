@@ -411,6 +411,68 @@ export async function POST(req: Request) {
     } catch {}
   }
 
+  // ── Conversation-based flow (multi-turn chat from dashboard) ──
+  const conversationId = body.conversationId as string | undefined;
+  if (conversationId && subscriberId) {
+    // Load conversation from DB
+    const { data: convo, error: convoErr } = await supabaseAdmin
+      .from('conversations')
+      .select('messages, profile')
+      .eq('id', conversationId)
+      .eq('subscriber_id', subscriberId)
+      .single();
+
+    if (convoErr || !convo) {
+      return new Response(JSON.stringify({ error: 'Conversation not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const storedMessages = (convo.messages ?? []) as Array<{ role: string; content: string; timestamp?: string }>;
+    const convoProfile = convo.profile as PlannerProfile | null;
+    const newUserMessage = body.message as string;
+
+    if (!newUserMessage?.trim()) {
+      return new Response(JSON.stringify({ error: 'Message required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Build system prompt from stored profile or fallback
+    const systemPrompt = convoProfile
+      ? buildProfilePrompt(convoProfile)
+      : buildLegacyPrompt(body.householdSize ?? 2, null);
+
+    // Build messages array: existing conversation + new user message
+    const apiMessages = storedMessages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+    apiMessages.push({ role: 'user' as const, content: newUserMessage });
+
+    try {
+      const result = await streamText({
+        model: anthropic('claude-haiku-4-5-20251001'),
+        system: systemPrompt + '\n\nThe user is modifying an existing grocery list from a previous conversation. Help them make changes — swap items, add/remove products, adjust quantities, etc. Use the same output format. Always show the full updated list.',
+        messages: apiMessages,
+        tools: makeTools(subscriberId),
+        maxSteps: 10,
+      });
+      return result.toDataStreamResponse({ sendUsage: false });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[/api/plan] conversation streamText error:', msg);
+      return new Response(JSON.stringify({ error: msg }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   // ── Profile-based flow (new grocery planner v2) ──
   const profile = body.profile as PlannerProfile | undefined;
   if (profile) {

@@ -314,6 +314,8 @@ export function HomePlanner() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [listContent, setListContent] = useState('');
   const [mealsExplicit, setMealsExplicit] = useState(false); // true when user explicitly set meals
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [savedAfterUnlock, setSavedAfterUnlock] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -336,6 +338,83 @@ export function HomePlanner() {
   const addMsg = useCallback((role: ChatMessage['role'], content: string, buttons?: ChatButton[]) => {
     setMessages(prev => [...prev, { id: msgId(), role, content, buttons }]);
   }, []);
+
+  // ── Auto-save conversation + list after generation + unlock ──
+  const autoSaveConversation = useCallback(async (content: string, p: PlannerProfile) => {
+    const session = loadSession();
+    if (!session?.token || !content) return;
+
+    try {
+      // Parse store totals from the generated content
+      const storeTotals = parseStoreTotals(content);
+
+      // Create conversation
+      const total = p.adults + p.children;
+      const mealsDesc = [
+        p.meals.breakfast && 'breakfast',
+        p.meals.lunch && 'lunch',
+        p.meals.dinner && 'dinner',
+        p.meals.snacks && 'snacks',
+      ].filter(Boolean).join(', ');
+      const title = `Weekly shop — ${total} people, ${mealsDesc}`;
+
+      // Build conversation messages from chat history
+      const convMessages = [
+        { role: 'user', content: `Plan groceries for ${total} people: ${mealsDesc}`, timestamp: new Date().toISOString() },
+        { role: 'assistant', content, timestamp: new Date().toISOString() },
+      ];
+
+      // Save list first
+      const listRes = await fetch('/api/lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: session.token,
+          name: title,
+          meals_prompt: mealsDesc,
+          family_size: String(total),
+          items: [],
+          store_totals: storeTotals.map(t => ({ store: t.store, total: t.total })),
+          is_default: true,
+        }),
+      });
+      const listData = listRes.ok ? await listRes.json() : null;
+      const listId = listData?.list?.id ?? null;
+
+      // Create conversation linked to the list
+      const convRes = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: session.token,
+          title,
+          profile: p,
+          messages: convMessages,
+          list_id: listId,
+        }),
+      });
+      const convData = convRes.ok ? await convRes.json() : null;
+      if (convData?.conversation?.id) {
+        setConversationId(convData.conversation.id);
+
+        // Link saved list back to conversation
+        if (listId) {
+          // This would need the conversation_id column — we do a PATCH via lists API
+          // For now the list_id in conversation is the important link
+        }
+      }
+    } catch (err) {
+      console.error('Auto-save failed:', err);
+    }
+  }, []);
+
+  // ── Auto-save after unlock (user signed up post-generation) ──
+  useEffect(() => {
+    if (isUnlocked && listContent && flowStep === 'done' && !savedAfterUnlock && !conversationId) {
+      setSavedAfterUnlock(true);
+      autoSaveConversation(listContent, profile);
+    }
+  }, [isUnlocked, listContent, flowStep, savedAfterUnlock, conversationId, autoSaveConversation, profile]);
 
   // ── Kick off the conversation ──
   useEffect(() => {
@@ -805,6 +884,11 @@ export function HomePlanner() {
 
       setFlowStep('done');
 
+      // Auto-save if user is already signed in
+      if (isUnlocked && content) {
+        autoSaveConversation(content, p);
+      }
+
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         addMsg('assistant', 'Sorry, something went wrong. Try again?', [
@@ -933,8 +1017,22 @@ export function HomePlanner() {
 
       {/* Share button — only for unlocked users */}
       {flowStep === 'done' && listContent && !isGenerating && isUnlocked && (
-        <div className="flex justify-end mb-2">
+        <div className="flex justify-end mb-2 gap-2">
           <ShareButton text={listContent} />
+          {conversationId && (
+            <a
+              href={`/dashboard/chat/${conversationId}`}
+              className="btn-primary px-3 py-1.5 text-xs font-semibold rounded-xl flex items-center gap-1.5"
+            >
+              💬 Continue in chat
+            </a>
+          )}
+          <a
+            href="/dashboard"
+            className="btn-secondary px-3 py-1.5 text-xs font-semibold rounded-xl flex items-center gap-1.5"
+          >
+            📋 Dashboard
+          </a>
         </div>
       )}
 
