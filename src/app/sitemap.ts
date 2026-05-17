@@ -17,11 +17,31 @@ const CATEGORY_SLUGS = [
   'baking', 'spreads', 'fish',
 ];
 
+const MATCHUP_SLUGS = [
+  'tesco-vs-dunnes', 'tesco-vs-supervalu', 'dunnes-vs-supervalu',
+  'tesco-vs-aldi', 'dunnes-vs-aldi', 'supervalu-vs-aldi',
+];
+
+const STORE_SLUGS = ['tesco', 'dunnes', 'supervalu', 'aldi'];
+
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: BASE_URL, lastModified: new Date(), changeFrequency: 'weekly', priority: 1.0 },
     { url: `${BASE_URL}/compare/supermarket-prices-ireland`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.9 },
     { url: `${BASE_URL}/deals`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${BASE_URL}/cost-of-weekly-shop-ireland`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.9 },
+    ...MATCHUP_SLUGS.map(slug => ({
+      url: `${BASE_URL}/compare/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.85,
+    })),
+    ...STORE_SLUGS.map(store => ({
+      url: `${BASE_URL}/deals/${store}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.85,
+    })),
     { url: `${BASE_URL}/blog`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
     ...BLOG_SLUGS.map(slug => ({
       url: `${BASE_URL}/blog/${slug}`,
