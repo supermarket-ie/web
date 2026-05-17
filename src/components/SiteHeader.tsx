@@ -33,6 +33,7 @@ export function SiteHeader() {
         {/* Nav — centered between logo and CTA */}
         <nav className="hidden md:flex items-center gap-10">
           <Link href="/shop" className="text-[15px] font-semibold transition-opacity hover:opacity-80" style={{ color: '#FFFFFF' }}>Prices</Link>
+          <Link href="/deals" className="text-[15px] font-semibold transition-opacity hover:opacity-80" style={{ color: '#FFFFFF' }}>Deals</Link>
           <Link href="/compare/supermarket-prices-ireland" className="text-[15px] font-semibold transition-opacity hover:opacity-80" style={{ color: '#FFFFFF' }}>Compare</Link>
           <Link href="/blog" className="text-[15px] font-semibold transition-opacity hover:opacity-80" style={{ color: '#FFFFFF' }}>Blog</Link>
         </nav>
@@ -72,6 +73,7 @@ export function SiteHeader() {
         <div className="md:hidden absolute top-full left-0 right-0 px-6 py-5 flex flex-col gap-4 z-20 shadow-lg"
           style={{ background: '#00944A' }}>
           <Link href="/shop" className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>Prices</Link>
+          <Link href="/deals" className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>Deals</Link>
           <Link href="/compare/supermarket-prices-ireland" className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>Compare</Link>
           <Link href="/blog" className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>Blog</Link>
 
