@@ -16,26 +16,43 @@ export const metadata: Metadata = {
   },
 };
 
-// A "standard weekly basket" — common items most Irish households buy
+// Standard Irish weekly basket — uses exact canonical_name matches from DB
+// ~50 items covering all major categories a typical household buys
 const BASKET_ITEMS = [
   // Dairy
-  'Whole Milk 2L', 'Kerrygold Pure Irish Butter 227g', 'Mature Cheddar Cheese 200g',
-  'Free Range Eggs 10 Pack', 'Natural Yoghurt 500g',
+  'Whole Milk 2L', 'Low Fat Milk 2L', 'Avonmore 100% Irish Creamery Butter 454g',
+  'Kerrygold Irish Creamery Salted Butter 400g', 'Mature Red Cheddar 200g',
+  'Free Range Eggs 10 Pack', 'Natural Yoghurt 500g', 'Margarine 250g',
   // Bakery
-  'White Sliced Pan 800g', 'Wholemeal Bread 800g',
-  // Meat
-  'Chicken Breast Fillets 500g', 'Beef Mince 500g', 'Pork Sausages 454g',
-  // Fruit & Veg
-  'Bananas 5 Pack', 'Braeburn Apples 6 Pack', 'Carrots 1kg', 'Onions 1kg',
-  'Rooster Potatoes 2kg', 'Iceberg Lettuce',
-  // Staples
-  'Penne Pasta 500g', 'Basmati Rice 1kg', 'Chopped Tomatoes 400g', 'Baked Beans 420g',
+  'Brennans Sliced White Pan 800g', 'Wholemeal Sliced Bread', 'Pitta Bread 6 Pack',
+  // Meat & Fish
+  'Chicken Breast Fillets', 'Beef Mince 500g', 'Rashers Back',
+  'Salmon Fillets 2 Pack', 'Fish Fingers 10 Pack',
+  // Fruit
+  'Bananas Loose', 'Royal Gala Apples Bag 7 Pack', 'Pears 6 Pack', 'Blueberries 125g',
+  // Vegetables
+  'Carrots 1kg', 'Onions 1kg', 'Rooster Potatoes 2kg', 'Iceberg Lettuce',
+  'Mushrooms 250g', 'Broccoli', 'Peppers Mixed 3 Pack',
+  // Pasta & Rice
+  'Penne Pasta 500g', 'Spaghetti 500g', 'Basmati Rice 1kg',
+  // Tinned & Jars
+  'Chopped Tomatoes 400g', 'Baked Beans', 'Sweetcorn Tinned 340g',
+  'John West No Drain Fridge Pot Tuna Steak In Brine 110g',
+  // Condiments & Sauces
+  'Heinz Tomato Ketchup 460g', 'Dolmio Bolognese Original Pasta Sauce 500g',
+  'Extra Virgin Olive Oil 500ml', 'Soy Sauce Dark',
   // Beverages
-  'Barry\'s Tea 80 Bags', 'Nescafé Gold Blend Coffee 100g',
+  'Barry\'s Tea 80 Bags', 'Ground Coffee 227g', 'Orange Juice 1L', 'Still Water 6 Pack',
+  // Breakfast & Cereal
+  'Porridge Oats 1kg', 'Cornflakes', 'Granola',
+  // Frozen
+  'McCain Crinkle Cut Home Chips 1kg', 'Peas 900g',
   // Household
-  'Fairy Washing Up Liquid 900ml',
-  // Breakfast
-  'Flahavan\'s Porridge Oats 1kg',
+  'Washing Up Liquid 500ml', 'Kitchen Towel 2 Pack', 'Bleach 750ml',
+  // Snacks
+  'Cadbury Dairy Milk Chocolate Bar 110g',
+  // Spreads
+  'Strawberry Jam 454g', 'Peanut Butter Crunchy 340g',
 ];
 
 export default async function WeeklyShopCostPage() {
@@ -105,7 +122,7 @@ export default async function WeeklyShopCostPage() {
             How Much Does a Weekly Shop Cost in Ireland?
           </h1>
           <p className="text-[#5c5b5b] max-w-2xl">
-            We priced a standard {BASKET_ITEMS.length}-item Irish weekly basket across {activeStores.length} supermarkets
+            We priced a standard {basketResults.length}-item Irish weekly basket across {activeStores.length} supermarkets
             using live data. Last updated {updatedLabel}.
           </p>
         </div>
@@ -204,8 +221,9 @@ export default async function WeeklyShopCostPage() {
 
         {/* Methodology note */}
         <div className="rounded-xl p-4 mb-10 text-sm text-[#5c5b5b]" style={{ background: '#F3F0EF' }}>
-          <strong>How we calculate this:</strong> We price {BASKET_ITEMS.length} common grocery items that a typical Irish household
-          would buy weekly. Prices are scraped directly from each supermarket&apos;s website twice a week.
+          <strong>How we calculate this:</strong> We price ~50 common grocery items that a typical Irish household
+          would buy weekly — dairy, bread, meat, fruit, veg, pasta, tea, household essentials and more.
+          Prices are scraped directly from each supermarket&apos;s website twice a week.
           Not all items are available at every store — we show which stores carry each product.
           This is a like-for-like comparison using the same or equivalent branded products.
         </div>
@@ -228,7 +246,7 @@ export default async function WeeklyShopCostPage() {
           '@context': 'https://schema.org',
           '@type': 'WebPage',
           name: 'Cost of a Weekly Shop in Ireland 2026',
-          description: `Comparing the cost of a ${BASKET_ITEMS.length}-item weekly shop across Irish supermarkets with live prices.`,
+          description: `Comparing the cost of a ~50-item weekly shop across Irish supermarkets with live prices.`,
           url: 'https://supermarket.ie/cost-of-weekly-shop-ireland',
         }) }} />
       </main>
