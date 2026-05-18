@@ -403,6 +403,12 @@ export function HomePlanner() {
           // For now the list_id in conversation is the important link
         }
       }
+      // Save household profile server-side for future visits
+      await fetch('/api/household', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session.token, ...p }),
+      }).catch(() => {}); // best-effort
     } catch (err) {
       console.error('Auto-save failed:', err);
     }
@@ -421,27 +427,60 @@ export function HomePlanner() {
     const savedProfile = loadProfile();
     const session = loadSession();
 
-    if (savedProfile && session?.token) {
-      // Returning user — unlocked
-      setProfile(savedProfile);
-      setIsUnlocked(true);
-      const people = savedProfile.adults + savedProfile.children;
-      addMsg('assistant', `👋 Welcome back! Last time you planned for ${people} people. Want the same again or make changes?`, [
-        { label: 'Same again →', value: '__same_again', emoji: '🔄' },
-        { label: 'Update my plan', value: '__update_plan', emoji: '✏️' },
-        { label: 'Start fresh', value: '__start_fresh', emoji: '🆕' },
-      ]);
-      setFlowStep('greeting');
-    } else {
-      // New user
-      addMsg('assistant', "👋 Hi! Let's plan your grocery shop for the week. Who's eating?", [
-        { label: 'Just me', value: '1_adult', emoji: '👤' },
-        { label: '2 adults', value: '2_adults', emoji: '👫' },
-        { label: 'Family', value: 'family', emoji: '👨‍👩‍👧' },
-        { label: 'Other...', value: 'other', emoji: '✏️' },
-      ]);
-      setFlowStep('household');
+    async function init() {
+      let userProfile = savedProfile;
+
+      // If signed in but no local profile, try loading from server
+      if (!userProfile && session?.token) {
+        try {
+          const res = await fetch(`/api/household?token=${session.token}`);
+          if (res.ok) {
+            const { household } = await res.json();
+            if (household) {
+              userProfile = {
+                adults: household.adults,
+                children: household.children,
+                childAges: household.child_ages ?? [],
+                weeklyBudget: household.weekly_budget ?? undefined,
+                preferredStores: household.preferred_stores ?? ['all'],
+                dietary: household.dietary ?? [],
+                dislikes: household.dislikes ?? undefined,
+                meals: household.meals ?? { breakfast: true, lunch: true, dinner: true, snacks: true },
+                batchCooking: household.batch_cooking ?? false,
+                skipDays: household.skip_days ?? undefined,
+                extraContext: household.extra_context ?? undefined,
+              };
+              // Sync to localStorage for faster future loads
+              saveProfile(userProfile);
+            }
+          }
+        } catch {}
+      }
+
+      if (userProfile && session?.token) {
+        // Returning user — unlocked
+        setProfile(userProfile);
+        setIsUnlocked(true);
+        const people = userProfile.adults + userProfile.children;
+        addMsg('assistant', `👋 Welcome back! Last time you planned for ${people} people. Want the same again or make changes?`, [
+          { label: 'Same again →', value: '__same_again', emoji: '🔄' },
+          { label: 'Update my plan', value: '__update_plan', emoji: '✏️' },
+          { label: 'Start fresh', value: '__start_fresh', emoji: '🆕' },
+        ]);
+        setFlowStep('greeting');
+      } else {
+        // New user
+        addMsg('assistant', "👋 Hi! Let's plan your grocery shop for the week. Who's eating?", [
+          { label: 'Just me', value: '1_adult', emoji: '👤' },
+          { label: '2 adults', value: '2_adults', emoji: '👫' },
+          { label: 'Family', value: 'family', emoji: '👨‍👩‍👧' },
+          { label: 'Other...', value: 'other', emoji: '✏️' },
+        ]);
+        setFlowStep('household');
+      }
     }
+
+    init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -474,7 +474,30 @@ export async function POST(req: Request) {
   }
 
   // ── Profile-based flow (new grocery planner v2) ──
-  const profile = body.profile as PlannerProfile | undefined;
+  // If signed in but no profile in request, try loading from households table
+  let profile = body.profile as PlannerProfile | undefined;
+  if (!profile && subscriberId) {
+    const { data: hh } = await supabaseAdmin
+      .from('households')
+      .select('*')
+      .eq('subscriber_id', subscriberId)
+      .single();
+    if (hh) {
+      profile = {
+        adults: hh.adults,
+        children: hh.children,
+        childAges: hh.child_ages ?? [],
+        weeklyBudget: hh.weekly_budget ?? undefined,
+        preferredStores: hh.preferred_stores ?? ['all'],
+        dietary: hh.dietary ?? [],
+        dislikes: hh.dislikes ?? undefined,
+        meals: hh.meals ?? { breakfast: true, lunch: true, dinner: true, snacks: true },
+        batchCooking: hh.batch_cooking ?? false,
+        skipDays: hh.skip_days ?? undefined,
+        extraContext: hh.extra_context ?? undefined,
+      };
+    }
+  }
   if (profile) {
     const systemPrompt = buildProfilePrompt(profile);
     const totalPeople = profile.adults + profile.children;
