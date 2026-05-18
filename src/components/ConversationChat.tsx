@@ -1,18 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport, type UIMessage } from 'ai';
 import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp?: string;
-}
 
 interface StoreTotal {
   store: string;
@@ -109,24 +105,39 @@ function StreamingDots() {
 
 export function ConversationChat({ conversationId }: { conversationId: string }) {
   const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [title, setTitle] = useState('Conversation');
-  const [input, setInput] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [token, setToken] = useState<string | null>(null);
+  const [initialMessages, setInitialMessages] = useState<UIMessage[] | undefined>(undefined);
+  const [input, setInput] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const prevMessageCountRef = useRef(0);
+
+  // Memoize transport so it's stable across renders
+  const transport = useMemo(() => {
+    if (!token) return undefined;
+    return new DefaultChatTransport({
+      api: '/api/plan',
+      body: { conversationId, token },
+    });
+  }, [token, conversationId]);
+
+  const { messages, sendMessage, status } = useChat({
+    transport,
+    messages: initialMessages,
+  });
+
+  const isStreaming = status === 'streaming' || status === 'submitted';
 
   // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isStreaming]);
 
-  // Load conversation
+  // Load conversation from DB
   useEffect(() => {
     const session = loadSession();
     if (!session?.token) {
@@ -146,7 +157,20 @@ export function ConversationChat({ conversationId }: { conversationId: string })
         const data = await res.json();
         const conv = data.conversation;
         setTitle(conv.title);
-        setMessages(conv.messages ?? []);
+
+        // Convert stored messages to UIMessage format
+        const storedMsgs = (conv.messages ?? []) as Array<{ role: string; content: string; timestamp?: string }>;
+        const uiMessages: UIMessage[] = storedMsgs
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map((m, i) => ({
+            id: `msg-${i}`,
+            role: m.role as 'user' | 'assistant',
+            parts: [{ type: 'text' as const, text: m.content }],
+            createdAt: m.timestamp ? new Date(m.timestamp) : undefined,
+          }));
+
+        setInitialMessages(uiMessages);
+        prevMessageCountRef.current = uiMessages.length;
       } catch (err) {
         setError('Failed to load conversation');
       } finally {
@@ -155,85 +179,49 @@ export function ConversationChat({ conversationId }: { conversationId: string })
     })();
   }, [conversationId, router]);
 
-  // Send a message
-  const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || isStreaming || !token) return;
+  // Auto-save conversation after assistant response
+  useEffect(() => {
+    if (!token || !conversationId) return;
+    if (messages.length <= prevMessageCountRef.current) return;
+    if (isStreaming) return;
 
-    const userMsg: Message = { role: 'user', content: text, timestamp: new Date().toISOString() };
-    const updatedMessages = [...messages, userMsg];
-    setMessages(updatedMessages);
-    setInput('');
-    setIsStreaming(true);
+    // Check if the last message is from assistant (completed response)
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.role !== 'assistant') return;
 
-    abortRef.current = new AbortController();
-    let assistantContent = '';
+    prevMessageCountRef.current = messages.length;
 
-    try {
-      const res = await fetch('/api/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId,
-          message: text,
-          token,
-        }),
-        signal: abortRef.current.signal,
-      });
+    // Save to DB
+    const plainMessages = messages.map(m => ({
+      role: m.role,
+      content: m.parts
+        .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+        .map(p => p.text)
+        .join(''),
+      timestamp: new Date().toISOString(),
+    }));
 
-      if (!res.ok) throw new Error('Request failed');
-      if (!res.body) throw new Error('No stream');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      // Add placeholder for streaming assistant message
-      const streamingMessages = [...updatedMessages, { role: 'assistant' as const, content: '', timestamp: new Date().toISOString() }];
-      setMessages(streamingMessages);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          const t = line.trim();
-          if (t.startsWith('0:"') && t.endsWith('"')) {
-            try {
-              const parsed = JSON.parse(t.slice(2));
-              assistantContent += parsed;
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { ...updated[updated.length - 1], content: assistantContent };
-                return updated;
-              });
-            } catch {}
-          }
-        }
-      }
-
-      // Save conversation back to DB
-      const finalMessages = [
-        ...updatedMessages,
-        { role: 'assistant' as const, content: assistantContent, timestamp: new Date().toISOString() },
-      ];
-      setMessages(finalMessages);
-
-      await fetch(`/api/conversations/${conversationId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, messages: finalMessages }),
-      });
-
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setMessages(prev => [
-          ...prev.filter(m => m.content !== ''),
-          { role: 'assistant', content: 'Sorry, something went wrong. Please try again.', timestamp: new Date().toISOString() },
-        ]);
-      }
-    } finally {
-      setIsStreaming(false);
-    }
+    fetch(`/api/conversations/${conversationId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, messages: plainMessages }),
+    }).catch(() => {});
   }, [messages, isStreaming, token, conversationId]);
+
+  // Helper to get text content from a message
+  function getMessageText(msg: UIMessage): string {
+    return msg.parts
+      .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+      .map(p => p.text)
+      .join('');
+  }
+
+  // Handle send
+  function handleSend() {
+    if (!input.trim() || isStreaming) return;
+    sendMessage({ text: input });
+    setInput('');
+  }
 
   if (loading) {
     return (
@@ -275,28 +263,31 @@ export function ConversationChat({ conversationId }: { conversationId: string })
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 space-y-3 py-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {m.role === 'assistant' && (
-              <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-1 flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}>S</div>
-            )}
-            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${m.role === 'user' ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
-              style={m.role === 'user'
-                ? { background: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' }
-                : { background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }
-              }>
-              {m.role === 'assistant' && (m.content.includes('**') || m.content.includes('###') || m.content.includes('- ')) ? (
-                <FormattedMessage content={m.content} />
-              ) : (
-                <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)', whiteSpace: 'pre-wrap' }}>{m.content}</p>
+        {messages.map((m) => {
+          const text = getMessageText(m);
+          return (
+            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {m.role === 'assistant' && (
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-1 flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}>S</div>
               )}
+              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${m.role === 'user' ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
+                style={m.role === 'user'
+                  ? { background: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' }
+                  : { background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }
+                }>
+                {m.role === 'assistant' && (text.includes('**') || text.includes('###') || text.includes('- ')) ? (
+                  <FormattedMessage content={text} />
+                ) : (
+                  <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)', whiteSpace: 'pre-wrap' }}>{text}</p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Streaming indicator */}
-        {isStreaming && messages[messages.length - 1]?.content === '' && (
+        {isStreaming && messages.length > 0 && getMessageText(messages[messages.length - 1]) === '' && (
           <div className="flex justify-start">
             <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-1 flex-shrink-0"
               style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}>S</div>
@@ -310,12 +301,12 @@ export function ConversationChat({ conversationId }: { conversationId: string })
 
       {/* Input bar */}
       <div className="sticky bottom-0 z-10 pt-2 pb-4 w-full" style={{ background: 'var(--surface)' }}>
-        <form onSubmit={e => { e.preventDefault(); sendMessage(input); }} className="relative w-full">
+        <form onSubmit={e => { e.preventDefault(); handleSend(); }} className="relative w-full">
           <textarea
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
             placeholder="Modify your list... e.g. 'swap chicken for tofu', 'add more snacks'"
             rows={1}
             disabled={isStreaming}

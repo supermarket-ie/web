@@ -42,6 +42,24 @@ function msgId() {
   return Math.random().toString(36).slice(2, 9);
 }
 
+/** Parse SSE text-delta events from AI SDK v6 UIMessage stream */
+function parseSSETextDelta(chunk: string): string {
+  let text = '';
+  for (const line of chunk.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data: ')) continue;
+    const payload = trimmed.slice(6);
+    if (payload === '[DONE]') continue;
+    try {
+      const part = JSON.parse(payload);
+      if (part.type === 'text-delta' && part.delta) {
+        text += part.delta;
+      }
+    } catch {}
+  }
+  return text;
+}
+
 function parseStoreTotals(content: string): StoreTotal[] {
   const lines = content.split('\n');
   const totals: StoreTotal[] = [];
@@ -908,16 +926,11 @@ export function HomePlanner() {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          const t = line.trim();
-          if (t.startsWith('0:"') && t.endsWith('"')) {
-            try {
-              const text = JSON.parse(t.slice(2));
-              content += text;
-              setListContent(content);
-              setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content } : m));
-            } catch {}
-          }
+        const delta = parseSSETextDelta(chunk);
+        if (delta) {
+          content += delta;
+          setListContent(content);
+          setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content } : m));
         }
       }
 
@@ -982,16 +995,11 @@ export function HomePlanner() {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          const t = line.trim();
-          if (t.startsWith('0:"') && t.endsWith('"')) {
-            try {
-              const txt = JSON.parse(t.slice(2));
-              content += txt;
-              setListContent(content);
-              setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content } : m));
-            } catch {}
-          }
+        const delta = parseSSETextDelta(chunk);
+        if (delta) {
+          content += delta;
+          setListContent(content);
+          setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content } : m));
         }
       }
     } catch (err) {
