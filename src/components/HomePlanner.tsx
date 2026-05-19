@@ -24,9 +24,7 @@ interface StoreTotal {
   cheapest?: boolean;
 }
 
-// ─── Conversation flow steps ────────────────────────────────────────────
-
-type FlowStep = 'greeting' | 'household' | 'dietary' | 'meals' | 'budget' | 'extras' | 'generating' | 'done';
+// ─── Helpers ────────────────────────────────────────────────────────────
 
 const PROGRESS_MESSAGES = [
   "Checking this week's promotions...",
@@ -35,8 +33,6 @@ const PROGRESS_MESSAGES = [
   "Building your grocery list...",
   "Finding the best deals for your household...",
 ];
-
-// ─── Helpers ────────────────────────────────────────────────────────────
 
 function msgId() {
   return Math.random().toString(36).slice(2, 9);
@@ -79,36 +75,54 @@ function parseStoreTotals(content: string): StoreTotal[] {
   return totals;
 }
 
-// ─── Animated price ─────────────────────────────────────────────────────
-
-function AnimatedPrice({ target }: { target: number }) {
-  const [current, setCurrent] = useState(0);
-  const started = useRef(false);
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    let start: number;
-    const go = (ts: number) => {
-      if (!start) start = ts;
-      const p = Math.min((ts - start) / 1000, 1);
-      setCurrent(target * p);
-      if (p < 1) requestAnimationFrame(go); else setCurrent(target);
-    };
-    requestAnimationFrame(go);
-  }, [target]);
-  return <span>€{current.toFixed(2)}</span>;
+/** Parse [[option1|option2|...]] button suggestions from AI messages */
+function parseButtonSuggestions(content: string): { text: string; buttons: ChatButton[] } {
+  const match = content.match(/\[\[([^\]]+)\]\]\s*$/);
+  if (!match) return { text: content, buttons: [] };
+  const text = content.slice(0, match.index).trimEnd();
+  const buttons = match[1].split('|').map(opt => ({
+    label: opt.trim(),
+    value: opt.trim(),
+  }));
+  return { text, buttons };
 }
 
-// ─── FormattedMessage ───────────────────────────────────────────────────
+function calcSavings(totals: StoreTotal[]): number | null {
+  if (totals.length < 2) return null;
+  const sorted = [...totals].sort((a, b) => a.total - b.total);
+  return Math.round((sorted[sorted.length - 1].total - sorted[0].total) * 100) / 100;
+}
+
+// ─── UI Sub-Components ──────────────────────────────────────────────────
+
+function AnimatedPrice({ target }: { target: number }) {
+  const [display, setDisplay] = useState(0);
+  const ref = useRef<number>(0);
+  useEffect(() => {
+    const start = ref.current;
+    const diff = target - start;
+    const duration = 600;
+    const startTime = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= duration) { setDisplay(target); ref.current = target; return; }
+      const progress = elapsed / duration;
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round((start + diff * eased) * 100) / 100);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }, [target]);
+  return <span>€{display.toFixed(2)}</span>;
+}
 
 function RichText({ text, className, style }: { text: string; className?: string; style?: React.CSSProperties }) {
-  // Render inline **bold** within text
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
     <span className={className} style={style}>
       {parts.map((part, i) => {
         if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={i} style={{ color: 'var(--on-background)' }}>{part.slice(2, -2)}</strong>;
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
         }
         return <span key={i}>{part}</span>;
       })}
@@ -116,107 +130,110 @@ function RichText({ text, className, style }: { text: string; className?: string
   );
 }
 
-// ─── Blur wrapper for locked content ────────────────────────────────────
-
 function BlurredText({ children, unlocked }: { children: React.ReactNode; unlocked: boolean }) {
   return (
     <span
+      className="transition-all duration-[600ms]"
       style={{
-        filter: unlocked ? 'blur(0)' : 'blur(5px)',
-        transition: 'filter 0.6s ease',
+        filter: unlocked ? 'none' : 'blur(5px)',
         userSelect: unlocked ? 'auto' : 'none',
         WebkitUserSelect: unlocked ? 'auto' : 'none',
       }}
-      aria-hidden={!unlocked}
     >
       {children}
     </span>
   );
 }
 
-// ─── Parse price/store portion from list item lines ─────────────────────
-
 function ListItemLine({ text, unlocked }: { text: string; unlocked: boolean }) {
-  // Match patterns like "— Tesco €2.49" or "— SuperValu €3.19 (was €4.29)"
-  const priceMatch = text.match(/^(.+?)\s*(—\s*.+€.+)$/);
-  if (priceMatch) {
+  // Match: "- Item name ... Store €X.XX" pattern
+  const storeMatch = text.match(/^(-\s*.+?)\s+(Tesco|Dunnes|SuperValu|Aldi|Lidl)\s+(€\d+\.\d{2})/i);
+  if (storeMatch) {
+    const [, itemPart, store, price] = storeMatch;
     return (
-      <span>
-        <RichText text={priceMatch[1]} />
+      <div className="flex justify-between items-baseline gap-2">
+        <RichText text={itemPart} style={{ color: 'var(--on-surface)' }} />
         <BlurredText unlocked={unlocked}>
-          <RichText text={' ' + priceMatch[2]} />
+          <span className="text-xs whitespace-nowrap" style={{ color: storeStyle(store).bg }}>
+            {storeDisplayName(store)} {price}
+          </span>
         </BlurredText>
-      </span>
+      </div>
     );
   }
-  return <RichText text={text} />;
-}
-
-// ─── Calculate savings from store totals ────────────────────────────────
-
-function calcSavings(totals: StoreTotal[]): number | null {
-  if (totals.length < 2) return null;
-  const sorted = [...totals].sort((a, b) => a.total - b.total);
-  const diff = sorted[sorted.length - 1].total - sorted[0].total;
-  return diff > 0 ? Math.round(diff * 100) / 100 : null;
+  return <RichText text={text} style={{ color: 'var(--on-surface)' }} />;
 }
 
 function FormattedMessage({ content, unlocked = true }: { content: string; unlocked?: boolean }) {
-  if (!content) return null;
-  const storeTotals = parseStoreTotals(content);
   const lines = content.split('\n');
-  return (
-    <div className="space-y-2">
-      {lines.map((line, i) => {
-        if (!line.trim()) return <br key={i} />;
-        if (line.startsWith('### ')) return <h4 key={i} className="font-bold text-base mt-4 mb-2" style={{ color: 'var(--on-background)' }}><RichText text={line.slice(4)} /></h4>;
-        if (line.startsWith('**') && line.endsWith('**') && line.length > 4 && !line.slice(2, -2).includes('**')) return <h5 key={i} className="type-label mt-3 mb-1" style={{ color: 'var(--on-background)' }}>{line.slice(2, -2)}</h5>;
-        if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="text-sm leading-relaxed pl-4" style={{ color: 'var(--on-surface)' }}><ListItemLine text={line.slice(2)} unlocked={unlocked} /></p>;
-        if (line.startsWith('---')) return <hr key={i} className="my-3" style={{ borderColor: 'var(--outline-variant)' }} />;
-        if (line.startsWith('💡')) return <div key={i} className="mt-3 p-3 rounded-xl" style={{ background: 'var(--primary-fixed)' }}><p className="text-sm font-medium" style={{ color: 'var(--on-primary-container)' }}><RichText text={line} /></p></div>;
-        return <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--on-surface)' }}><RichText text={line} /></p>;
-      })}
-      {storeTotals.length > 0 && (
-        <div
-          className="mt-4 space-y-2"
-          style={{
-            filter: unlocked ? 'blur(0)' : 'blur(6px)',
-            transition: 'filter 0.6s ease',
-            userSelect: unlocked ? 'auto' : 'none',
-            WebkitUserSelect: unlocked ? 'auto' : 'none',
-          }}
-        >
-          <h5 className="type-label" style={{ color: 'var(--on-background)' }}>STORE TOTALS</h5>
-          <div className="flex flex-wrap gap-2">
-            {storeTotals.map((t, i) => (
-              <div key={i} className="px-3 py-2 rounded-xl text-white text-sm font-bold flex items-center gap-2" style={{ background: storeStyle(t.store).bg }}>
-                <span>{storeDisplayName(t.store)}</span>
-                {t.cheapest ? <AnimatedPrice target={t.total} /> : <span>€{t.total.toFixed(2)}</span>}
-                {t.cheapest && <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded-full">Cheapest</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  const elements: React.ReactNode[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    elements.push(
+      <ul key={elements.length} className="space-y-1 my-1">
+        {listBuffer.map((item, i) => (
+          <li key={i}><ListItemLine text={item} unlocked={unlocked} /></li>
+        ))}
+      </ul>
+    );
+    listBuffer = [];
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('- ') || line.startsWith('• ')) {
+      listBuffer.push(line);
+    } else {
+      flushList();
+      if (line.startsWith('### ')) {
+        elements.push(<h3 key={elements.length} className="font-bold mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>{line.slice(4)}</h3>);
+      } else if (line.startsWith('## ')) {
+        elements.push(<h2 key={elements.length} className="font-bold text-base mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>{line.slice(3)}</h2>);
+      } else if (line.match(/^\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€/i)) {
+        // Store total line
+        const m = line.match(/^\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)/i);
+        if (m) {
+          const store = m[1];
+          const total = parseFloat(m[2]);
+          const totals = parseStoreTotals(content);
+          const isCheapest = totals.find(t => t.store === store.toLowerCase())?.cheapest;
+          elements.push(
+            <div key={elements.length} className={`flex justify-between items-center py-1 px-2 rounded ${isCheapest ? 'ring-1 ring-green-500/30' : ''}`}
+              style={{ background: isCheapest ? 'var(--primary-container)' : 'transparent' }}>
+              <span className="font-medium" style={{ color: storeStyle(store).bg }}>{storeDisplayName(store)}</span>
+              <BlurredText unlocked={unlocked}>
+                <span className="font-bold" style={{ color: isCheapest ? 'var(--primary)' : 'var(--on-surface)' }}>
+                  <AnimatedPrice target={total} />
+                  {isCheapest && ' ✓'}
+                </span>
+              </BlurredText>
+            </div>
+          );
+        }
+      } else if (line.trim()) {
+        elements.push(<p key={elements.length} className="my-1"><RichText text={line} style={{ color: 'var(--on-surface)' }} /></p>);
+      } else {
+        elements.push(<div key={elements.length} className="h-2" />);
+      }
+    }
+  }
+  flushList();
+  return <div className="space-y-0.5">{elements}</div>;
 }
 
-// ─── Inline buttons component ───────────────────────────────────────────
-
 function InlineButtons({ buttons, onSelect, disabled }: {
-  buttons: ChatButton[]; onSelect: (value: string) => void; disabled?: boolean;
+  buttons: ChatButton[];
+  onSelect: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {buttons.map(btn => (
-        <button
-          key={btn.value}
-          onClick={() => !disabled && onSelect(btn.value)}
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {buttons.map((btn, i) => (
+        <button key={i} onClick={() => !disabled && onSelect(btn.value)}
           disabled={disabled}
-          className="px-3 py-1.5 rounded-full text-sm font-medium transition-all disabled:opacity-50"
-          style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
-        >
+          className="px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          style={{ background: 'var(--primary-container)', color: 'var(--on-primary-container)', border: '1px solid var(--primary)' }}>
           {btn.emoji && <span className="mr-1">{btn.emoji}</span>}{btn.label}
         </button>
       ))}
@@ -224,92 +241,102 @@ function InlineButtons({ buttons, onSelect, disabled }: {
   );
 }
 
-// ─── Share button ───────────────────────────────────────────────────────
-
 function ShareButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const handleShare = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title: 'My Grocery List', text }); } catch {}
+    } else {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
   return (
-    <button
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1'));
-          setCopied(true); setTimeout(() => setCopied(false), 2000);
-        } catch {}
-      }}
-      className="btn-secondary px-3 py-1.5 text-xs font-semibold rounded-xl flex items-center gap-1.5"
-    >
-      📋 {copied ? 'Copied!' : 'Share list'}
+    <button onClick={handleShare}
+      className="btn-secondary px-3 py-1.5 text-xs font-semibold rounded-xl flex items-center gap-1.5">
+      {copied ? '✓ Copied' : '📤 Share list'}
     </button>
   );
 }
 
-// ─── Unlock CTA (replaces old EmailCapture) ────────────────────────────
-
 function UnlockCTA({ householdSize, savings, onUnlocked }: {
-  householdSize: number; savings: number | null; onUnlocked: () => void;
+  householdSize: number;
+  savings: number | null;
+  onUnlocked: () => void;
 }) {
   const [email, setEmail] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const headline = savings && savings > 1
-    ? `🔓 Sign up to see which store saves you €${savings.toFixed(2)} this week`
-    : '🔓 Sign up to unlock store-by-store prices';
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, householdSize }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to sign up');
+      }
+      const data = await res.json();
+      if (data.token) {
+        saveSession({ token: data.token, email, familySize: String(householdSize), expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 });
+      }
+      onUnlocked();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="rounded-2xl p-4 mt-3 mb-2" style={{
-      background: 'linear-gradient(135deg, var(--primary-fixed), var(--surface-container-lowest))',
-      border: '2px solid var(--primary)',
-      boxShadow: '0 2px 12px rgba(0,106,53,0.12)',
-    }}>
-      <p className="text-sm font-bold mb-1" style={{ color: 'var(--on-primary-container)' }}>
-        {headline}
+    <div className="rounded-2xl p-4 mb-3" style={{ background: 'var(--primary-container)', border: '1px solid var(--primary)' }}>
+      <p className="text-sm font-semibold mb-2" style={{ color: 'var(--on-primary-container)' }}>
+        {savings
+          ? `🔓 Sign up to see which store saves you €${savings.toFixed(2)} this week`
+          : '🔓 Sign up to unlock store-by-store prices'}
       </p>
-      <p className="text-xs mb-3" style={{ color: 'var(--on-surface-variant)' }}>
-        Your list is ready — enter your email to unlock store prices and get weekly updates.
-      </p>
-      <form onSubmit={async (e) => {
-        e.preventDefault(); if (!email.trim()) return;
-        setSubmitting(true); setError('');
-        try {
-          const res = await fetch('/api/subscribe', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email.trim(), familySize: String(householdSize) }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Something went wrong');
-          if (data.token) {
-            saveSession({ token: data.token, familySize: String(householdSize), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
-            onUnlocked();
-          }
-        } catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong'); setSubmitting(false); }
-      }} className="flex gap-2">
-        <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-          placeholder="your@email.com" className="flex-1 px-3 py-2.5 rounded-xl text-sm min-w-0 focus:outline-none"
-          style={{ background: 'var(--surface-container-lowest)', color: 'var(--on-background)', border: '1px solid var(--surface-container)' }} />
-        <button type="submit" disabled={submitting} className="btn-primary px-4 py-2.5 text-sm font-bold whitespace-nowrap disabled:opacity-60 rounded-xl">
-          {submitting ? '...' : 'Unlock prices →'}
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="your@email.com"
+          required
+          className="flex-1 px-3 py-2 rounded-lg text-sm"
+          style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', color: 'var(--on-surface)' }}
+        />
+        <button type="submit" disabled={loading}
+          className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+          style={{ background: 'var(--primary)' }}>
+          {loading ? '...' : 'Unlock'}
         </button>
       </form>
-      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
-      <p className="text-[11px] mt-2 text-center" style={{ color: 'var(--on-surface-variant)' }}>
+      {error && <p className="text-xs mt-1 text-red-500">{error}</p>}
+      <p className="text-xs mt-2 opacity-70" style={{ color: 'var(--on-primary-container)' }}>
         100% free · No card needed · Unsubscribe anytime
       </p>
     </div>
   );
 }
 
-// ─── Streaming indicator ────────────────────────────────────────────────
-
 function StreamingDots({ message }: { message: string }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="flex gap-1">
-        {[0, 150, 300].map(d => (
-          <span key={d} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--primary)', animationDelay: `${d}ms` }} />
+      <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{message}</span>
+      <span className="flex gap-0.5">
+        {[0, 1, 2].map(i => (
+          <span key={i} className="w-1.5 h-1.5 rounded-full animate-bounce"
+            style={{ background: 'var(--primary)', animationDelay: `${i * 150}ms` }} />
         ))}
-      </div>
-      <span className="text-sm" style={{ color: 'var(--on-surface)' }}>{message}</span>
+      </span>
     </div>
   );
 }
@@ -319,21 +346,20 @@ function StreamingDots({ message }: { message: string }) {
 export function HomePlanner() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [flowStep, setFlowStep] = useState<FlowStep>('greeting');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progressIdx, setProgressIdx] = useState(0);
+  const [buttonsDisabled, setButtonsDisabled] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [listContent, setListContent] = useState('');
+  const [hasGeneratedList, setHasGeneratedList] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [savedAfterUnlock, setSavedAfterUnlock] = useState(false);
   const [profile, setProfile] = useState<PlannerProfile>({
     adults: 2, children: 0, childAges: [],
     preferredStores: ['all'], dietary: [],
     meals: { breakfast: true, lunch: true, dinner: true, snacks: false },
     batchCooking: false,
   });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [progressIdx, setProgressIdx] = useState(0);
-  const [buttonsDisabled, setButtonsDisabled] = useState(false);
-  const [isUnlocked, setIsUnlocked] = useState(false);
-  const [listContent, setListContent] = useState('');
-  const [mealsExplicit, setMealsExplicit] = useState(false); // true when user explicitly set meals
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [savedAfterUnlock, setSavedAfterUnlock] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -358,39 +384,25 @@ export function HomePlanner() {
   }, []);
 
   // ── Auto-save conversation + list after generation + unlock ──
-  const autoSaveConversation = useCallback(async (content: string, p: PlannerProfile) => {
+  const autoSaveConversation = useCallback(async (content: string, msgs: ChatMessage[]) => {
     const session = loadSession();
     if (!session?.token || !content) return;
 
     try {
-      // Parse store totals from the generated content
       const storeTotals = parseStoreTotals(content);
+      const title = 'Weekly grocery plan';
 
-      // Create conversation
-      const total = p.adults + p.children;
-      const mealsDesc = [
-        p.meals.breakfast && 'breakfast',
-        p.meals.lunch && 'lunch',
-        p.meals.dinner && 'dinner',
-        p.meals.snacks && 'snacks',
-      ].filter(Boolean).join(', ');
-      const title = `Weekly shop — ${total} people, ${mealsDesc}`;
+      const convMessages = msgs
+        .filter(m => m.content)
+        .map(m => ({ role: m.role, content: m.content, timestamp: new Date().toISOString() }));
 
-      // Build conversation messages from chat history
-      const convMessages = [
-        { role: 'user', content: `Plan groceries for ${total} people: ${mealsDesc}`, timestamp: new Date().toISOString() },
-        { role: 'assistant', content, timestamp: new Date().toISOString() },
-      ];
-
-      // Save list first
+      // Save list
       const listRes = await fetch('/api/lists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: session.token,
           name: title,
-          meals_prompt: mealsDesc,
-          family_size: String(total),
           items: [],
           store_totals: storeTotals.map(t => ({ store: t.store, total: t.total })),
           is_default: true,
@@ -399,14 +411,14 @@ export function HomePlanner() {
       const listData = listRes.ok ? await listRes.json() : null;
       const listId = listData?.list?.id ?? null;
 
-      // Create conversation linked to the list
+      // Create conversation
       const convRes = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: session.token,
           title,
-          profile: p,
+          profile,
           messages: convMessages,
           list_id: listId,
         }),
@@ -414,31 +426,26 @@ export function HomePlanner() {
       const convData = convRes.ok ? await convRes.json() : null;
       if (convData?.conversation?.id) {
         setConversationId(convData.conversation.id);
-
-        // Link saved list back to conversation
-        if (listId) {
-          // This would need the conversation_id column — we do a PATCH via lists API
-          // For now the list_id in conversation is the important link
-        }
       }
-      // Save household profile server-side for future visits
+
+      // Save profile server-side
       await fetch('/api/household', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: session.token, ...p }),
-      }).catch(() => {}); // best-effort
+        body: JSON.stringify({ token: session.token, ...profile }),
+      }).catch(() => {});
     } catch (err) {
       console.error('Auto-save failed:', err);
     }
-  }, []);
+  }, [profile]);
 
-  // ── Auto-save after unlock (user signed up post-generation) ──
+  // ── Auto-save after unlock ──
   useEffect(() => {
-    if (isUnlocked && listContent && flowStep === 'done' && !savedAfterUnlock && !conversationId) {
+    if (isUnlocked && listContent && hasGeneratedList && !savedAfterUnlock && !conversationId) {
       setSavedAfterUnlock(true);
-      autoSaveConversation(listContent, profile);
+      autoSaveConversation(listContent, messages);
     }
-  }, [isUnlocked, listContent, flowStep, savedAfterUnlock, conversationId, autoSaveConversation, profile]);
+  }, [isUnlocked, listContent, hasGeneratedList, savedAfterUnlock, conversationId, autoSaveConversation, messages]);
 
   // ── Kick off the conversation ──
   useEffect(() => {
@@ -468,7 +475,6 @@ export function HomePlanner() {
                 skipDays: household.skip_days ?? undefined,
                 extraContext: household.extra_context ?? undefined,
               };
-              // Sync to localStorage for faster future loads
               saveProfile(userProfile);
             }
           }
@@ -476,25 +482,14 @@ export function HomePlanner() {
       }
 
       if (userProfile && session?.token) {
-        // Returning user — unlocked
+        // Returning user
         setProfile(userProfile);
         setIsUnlocked(true);
         const people = userProfile.adults + userProfile.children;
-        addMsg('assistant', `👋 Welcome back! Last time you planned for ${people} people. Want the same again or make changes?`, [
-          { label: 'Same again →', value: '__same_again', emoji: '🔄' },
-          { label: 'Update my plan', value: '__update_plan', emoji: '✏️' },
-          { label: 'Start fresh', value: '__start_fresh', emoji: '🆕' },
-        ]);
-        setFlowStep('greeting');
+        addMsg('assistant', `👋 Welcome back! Last time you planned for ${people} people. What would you like this week?\n\n[[Same as last time|Update my preferences|Start fresh]]`);
       } else {
-        // New user
-        addMsg('assistant', "👋 Hi! Let's plan your grocery shop for the week. Who's eating?", [
-          { label: 'Just me', value: '1_adult', emoji: '👤' },
-          { label: '2 adults', value: '2_adults', emoji: '👫' },
-          { label: 'Family', value: 'family', emoji: '👨‍👩‍👧' },
-          { label: 'Other...', value: 'other', emoji: '✏️' },
-        ]);
-        setFlowStep('household');
+        // New user — AI-first greeting
+        addMsg('assistant', "👋 Hey! I\'m your grocery planning assistant. Tell me what you need — household size, any dietary requirements, budget — and I\'ll build you a priced weekly list.\n\nOr just say hi and I\'ll walk you through it!\n\n[[Family of 4, full week|Just me, dinners only|2 adults, vegetarian, €100]]");
       }
     }
 
@@ -502,480 +497,28 @@ export function HomePlanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Parse rich free text — extract everything we can from one message ──
-  function parseRichInput(lower: string, p: PlannerProfile) {
-    // ── Household ──
-    const adultMatch = lower.match(/(\d+)\s*adult/);
-    const kidMatch = lower.match(/(\d+)\s*(kid|child|children)/);
-    const justMe = lower.includes('just me') || lower === '1';
-    const singlePerson = lower.includes('single') || lower.match(/\b(i am|i'm|im)\b.*\b(one|1|alone|solo|myself)\b/) || lower.includes('on my own');
-    if (justMe || singlePerson) { p.adults = 1; p.children = 0; }
-    else {
-      if (adultMatch) p.adults = parseInt(adultMatch[1]);
-      else if (lower.includes('couple') || lower.includes('two of us') || lower.includes('me and my')) p.adults = 2;
-      if (kidMatch) p.children = parseInt(kidMatch[1]);
-    }
-    // Detect ages
-    if (lower.includes('teen')) p.childAges = [...(p.childAges || []), 'teen'];
-    if (lower.includes('toddler') || lower.includes('baby')) p.childAges = [...(p.childAges || []), 'toddler'];
-    if (lower.includes('young') || lower.match(/\b[4-8]\b.*year/)) p.childAges = [...(p.childAges || []), 'young'];
-
-    // ── Meals — detect from natural language ──
-    // Only match actual meal words, not substring matches like "meat" containing "ea"
-    const hasMealMention = /\blunch\b/.test(lower) || /\bdinner\b/.test(lower) || /\bbreakfast\b/.test(lower)
-      || /\bmeals?\b/.test(lower) || /\bsnack/.test(lower) || /\bevening\b/.test(lower)
-      || /\bschool\b/.test(lower) || /\bpacked\b/.test(lower);
-
-    if (hasMealMention) {
-      p.meals = {
-        breakfast: lower.includes('breakfast') || lower.includes('full week') || lower.includes('all meals'),
-        lunch: lower.includes('lunch') || lower.includes('packed') || lower.includes('school'),
-        dinner: lower.includes('dinner') || lower.includes('evening') || lower.includes('tea')
-          || lower.includes('meal') || /\d+\s*(evening|dinner|meal)/.test(lower),
-        snacks: lower.includes('snack'),
-      };
-      setMealsExplicit(true);
-      // "5 evening meals" — capture number of dinners for skip days
-      const mealCountMatch = lower.match(/(\d+)\s*(evening|dinner|meal|night)/);
-      if (mealCountMatch) {
-        const count = parseInt(mealCountMatch[1]);
-        if (count < 7) {
-          p.skipDays = `${7 - count} nights eating out/skipping`;
-        }
-      }
-    }
-
-    // ── Dietary ──
-    if (lower.includes('vegetarian') || lower.includes('veggie')) p.dietary.push('Vegetarian');
-    if (lower.includes('vegan')) p.dietary.push('Vegan');
-    if (lower.includes('gluten')) p.dietary.push('Gluten-free');
-    if (lower.includes('dairy free') || lower.includes('dairy-free')) p.dietary.push('Dairy-free');
-    if (lower.includes('halal')) p.dietary.push('Halal');
-    if (lower.includes('nut free') || lower.includes('nut-free')) p.dietary.push('Nut-free');
-    if (lower.includes('low carb') || lower.includes('low-carb') || lower.includes('keto')) p.dietary.push('Low-carb');
-    if (lower.includes('high protein')) p.dietary.push('High-protein');
-    if (lower.includes('high fibre') || lower.includes('high fiber')) p.dietary.push('High-fibre');
-
-    // ── Preferences (organic, free-range, etc.) → extra context ──
-    const preferences: string[] = [];
-    if (lower.includes('organic')) preferences.push('prefers organic');
-    if (lower.includes('free range') || lower.includes('free-range')) preferences.push('prefers free-range');
-    if (lower.includes('like') && lower.includes('meat')) preferences.push('likes meat');
-    if (preferences.length > 0) {
-      p.extraContext = [p.extraContext, ...preferences].filter(Boolean).join(', ');
-    }
-
-    // ── Budget — handle €80, 80€, 80 euro, budget of 80, etc. ──
-    const budgetMatch = lower.match(/€(\d+)|(\d+)\s*€|(\d+)\s*euro|budget\s*(?:of\s*)?€?(\d+)/);
-    if (budgetMatch) {
-      p.weeklyBudget = parseInt(budgetMatch[1] || budgetMatch[2] || budgetMatch[3] || budgetMatch[4]);
-    }
-
-    // ── Batch cooking ──
-    if (lower.includes('batch')) p.batchCooking = true;
-
-    // ── Dislikes ──
-    const dislikeMatch = lower.match(/(?:hate|avoid|don'?t like|no )([\w\s,]+?)(?:\.|,|$)/);
-    if (dislikeMatch) p.dislikes = dislikeMatch[1].trim();
-
-    // ── Extra context — capture anything after "also" or "and also" ──
-    const alsoMatch = lower.match(/(?:also|and also|oh and|btw|by the way)[,:]?\s*(.+)/);
-    if (alsoMatch) p.extraContext = alsoMatch[1].trim();
-  }
-
-  // ── Handle button tap or text input ──
-  function handleUserInput(text: string) {
-    if (!text.trim() || isGenerating) return;
-    addMsg('user', text);
-    setInput('');
+  // ── Send message to AI ──
+  async function sendToAI(userText: string, allMessages: ChatMessage[]) {
+    setIsGenerating(true);
+    setProgressIdx(0);
     setButtonsDisabled(true);
 
-    // Route based on flow step
-    if (flowStep === 'generating' || flowStep === 'done') {
-      // Post-list modification — send as conversation
-      handleModification(text);
-      return;
-    }
-
-    processFlowInput(text);
-  }
-
-  function processFlowInput(text: string) {
-    const lower = text.toLowerCase().trim();
-
-    switch (flowStep) {
-      case 'greeting': {
-        // Returning user choices
-        if (lower.includes('same again') || text === '__same_again') {
-          generateList(profile);
-          return;
-        }
-        if (lower.includes('update') || text === '__update_plan') {
-          askHousehold();
-          return;
-        }
-        // Start fresh or anything else
-        setProfile({ adults: 2, children: 0, childAges: [], preferredStores: ['all'], dietary: [], meals: { breakfast: true, lunch: true, dinner: true, snacks: false }, batchCooking: false });
-        askHousehold();
-        return;
-      }
-
-      case 'household': {
-        const p = { ...profile };
-
-        if (text === '1_adult') { p.adults = 1; p.children = 0; }
-        else if (text === '2_adults') { p.adults = 2; p.children = 0; }
-        else if (text === 'family') {
-          // Ask about family composition
-          setProfile(p);
-          addMsg('assistant', 'Nice! How many adults and kids?', [
-            { label: '2 adults, 1 kid', value: '2a1k', emoji: '👨‍👩‍👧' },
-            { label: '2 adults, 2 kids', value: '2a2k', emoji: '👨‍👩‍👧‍👦' },
-            { label: '2 adults, 3 kids', value: '2a3k', emoji: '👨‍👩‍👧‍👦' },
-            { label: 'Let me type it', value: 'other', emoji: '✏️' },
-          ]);
-          setButtonsDisabled(false);
-          return;
-        }
-        else if (text === '2a1k') { p.adults = 2; p.children = 1; }
-        else if (text === '2a2k') { p.adults = 2; p.children = 2; }
-        else if (text === '2a3k') { p.adults = 2; p.children = 3; }
-        else {
-          // Parse rich free text — extract everything we can
-          parseRichInput(lower, p);
-        }
-
-        setProfile(p);
-
-        // ── Smart skip: if we already extracted meal info, skip ahead ──
-        const hasMealInfo = mealsExplicit;
-        const hasDietaryInfo = p.dietary.length > 0;
-        const hasBudgetInfo = p.weeklyBudget !== undefined;
-
-        // If kids but no ages, ask ages first (then resume smart skip)
-        if (p.children > 0 && (!p.childAges || p.childAges.length === 0)) {
-          addMsg('assistant', `Got it — ${p.adults} adult${p.adults > 1 ? 's' : ''} and ${p.children} kid${p.children > 1 ? 's' : ''}. Roughly what ages?`, [
-            { label: 'Toddler (1-3)', value: 'age_toddler' },
-            { label: 'Young (4-8)', value: 'age_young' },
-            { label: 'Older (9-12)', value: 'age_older' },
-            { label: 'Teen (13-17)', value: 'age_teen' },
-            { label: 'Mix — skip', value: 'age_skip', emoji: '⏭️' },
-          ]);
-          setButtonsDisabled(false);
-          return;
-        }
-
-        // Ages sub-step
-        if (text.startsWith('age_')) {
-          if (text !== 'age_skip') {
-            const age = text.replace('age_', '') as any;
-            p.childAges = [...(p.childAges || []), age];
-            setProfile(p);
-          }
-          // After ages, resume smart skip
-          if (hasMealInfo && hasDietaryInfo) {
-            if (hasBudgetInfo) { askExtras(p); return; }
-            askBudget(p);
-            return;
-          }
-          if (hasMealInfo) { askBudget(p); return; }
-          askDietary(p);
-          return;
-        }
-
-        // Smart skip: jump to the first step we don't have info for
-        if (hasMealInfo && hasDietaryInfo && hasBudgetInfo) {
-          askExtras(p);
-          return;
-        }
-        if (hasMealInfo && hasDietaryInfo) {
-          askBudget(p);
-          return;
-        }
-        if (hasMealInfo) {
-          // We have meals but not dietary — skip to dietary
-          askDietary(p);
-          return;
-        }
-
-        askDietary(p);
-        return;
-      }
-
-      case 'dietary': {
-        const p = { ...profile };
-        if (lower === 'none' || lower.includes('no dietary') || text === '__none') {
-          p.dietary = [];
-        } else if (['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'halal', 'low-carb', 'nut-free'].includes(lower)) {
-          p.dietary = [...p.dietary, text];
-        } else {
-          // Free text — parse everything we can
-          parseRichInput(lower, p);
-        }
-        setProfile(p);
-        // If meals were set in this message, skip to budget
-        if (mealsExplicit) {
-          askBudget(p);
-          return;
-        }
-        askMeals(p);
-        return;
-      }
-
-      case 'meals': {
-        const p = { ...profile };
-        if (text === 'full_week' || lower.includes('full week') || lower.includes('everything') || lower.includes('all meals')) {
-          p.meals = { breakfast: true, lunch: true, dinner: true, snacks: true };
-        } else if (text === 'dinners_only' || lower.includes('just dinner') || lower.includes('dinners only')) {
-          p.meals = { breakfast: false, lunch: false, dinner: true, snacks: false };
-        } else if (text === 'school_week' || lower.includes('school')) {
-          p.meals = { breakfast: true, lunch: true, dinner: true, snacks: true };
-          p.batchCooking = false;
-        } else if (text === 'top_up' || lower.includes('top up') || lower.includes('top-up')) {
-          p.meals = { breakfast: false, lunch: false, dinner: true, snacks: false };
-        } else {
-          // Parse from text
-          p.meals = {
-            breakfast: lower.includes('breakfast'),
-            lunch: lower.includes('lunch') || lower.includes('packed'),
-            dinner: lower.includes('dinner') || lower.includes('tea'),
-            snacks: lower.includes('snack'),
-          };
-          if (lower.includes('batch')) p.batchCooking = true;
-          // Capture skip days
-          const skipMatch = lower.match(/(?:eating out|skip|away)(.*)/);
-          if (skipMatch) p.skipDays = skipMatch[1].trim();
-        }
-        setProfile(p);
-        askBudget(p);
-        return;
-      }
-
-      case 'budget': {
-        const p = { ...profile };
-        
-        // Detect if user typed meal info instead of budget
-        const hasMealWords = lower.includes('lunch') || lower.includes('dinner') || lower.includes('breakfast')
-          || lower.includes('meal') || lower.includes('evening') || lower.includes('school') || lower.includes('packed');
-        
-        if (hasMealWords) {
-          // User is giving meal info — parse it and re-ask budget
-          parseRichInput(lower, p);
-          setProfile(p);
-          const mealsDesc = [
-            p.meals.breakfast && 'breakfast',
-            p.meals.lunch && 'lunch',
-            p.meals.dinner && 'dinner',
-            p.meals.snacks && 'snacks',
-          ].filter(Boolean).join(', ');
-          setTimeout(() => {
-            addMsg('assistant', `Got it — ${mealsDesc}${p.skipDays ? ` (${p.skipDays})` : ''}. Any budget in mind?`, [
-              { label: '€70', value: '€70', emoji: '💶' },
-              { label: '€100', value: '€100', emoji: '💶' },
-              { label: '€120', value: '€120', emoji: '💶' },
-              { label: 'No budget', value: '__no_budget', emoji: '🤷' },
-            ]);
-            setButtonsDisabled(false);
-          }, 300);
-          return;
-        }
-        
-        if (text === '__no_budget' || lower.includes('no budget') || lower.includes('don\'t mind') || lower.includes('skip')) {
-          p.weeklyBudget = undefined;
-        } else {
-          const match = lower.match(/€?(\d+)/);
-          if (match) p.weeklyBudget = parseInt(match[1]);
-        }
-        setProfile(p);
-        askExtras(p);
-        return;
-      }
-
-      case 'extras': {
-        const p = { ...profile };
-        if (text === '__skip_extras' || lower === 'no' || lower === 'nope' || lower.includes('just build')) {
-          // Skip
-        } else {
-          p.extraContext = text;
-        }
-        setProfile(p);
-        generateList(p);
-        return;
-      }
-
-      default:
-        break;
-    }
-  }
-
-  // ── Flow step helpers ──
-
-  function askHousehold() {
-    setFlowStep('household');
-    setTimeout(() => {
-      addMsg('assistant', "Who's eating this week?", [
-        { label: 'Just me', value: '1_adult', emoji: '👤' },
-        { label: '2 adults', value: '2_adults', emoji: '👫' },
-        { label: 'Family', value: 'family', emoji: '👨‍👩‍👧' },
-        { label: 'Other...', value: 'other', emoji: '✏️' },
-      ]);
-      setButtonsDisabled(false);
-    }, 300);
-  }
-
-  function askDietary(p: PlannerProfile) {
-    setFlowStep('dietary');
-    const total = p.adults + p.children;
-    // Only show meals summary if user explicitly set them
-    const mealsNote = mealsExplicit
-      ? ` (${[p.meals.breakfast && 'breakfast', p.meals.lunch && 'lunches', p.meals.dinner && 'dinners', p.meals.snacks && 'snacks'].filter(Boolean).join(', ')})`
-      : '';
-    const dietaryNote = p.dietary.length > 0 ? ` I've noted: ${p.dietary.join(', ')}.` : '';
-    const budgetNote = p.weeklyBudget ? ` Budget: €${p.weeklyBudget}.` : '';
-    const extrasNote = p.extraContext ? ` (${p.extraContext})` : '';
-    const summary = [mealsNote, dietaryNote, budgetNote, extrasNote].filter(Boolean).join('');
-    setTimeout(() => {
-      addMsg('assistant', `${total} ${total === 1 ? 'person' : 'people'}${summary} — got it! Any dietary needs or things to avoid?`, [
-        { label: 'None', value: '__none', emoji: '✅' },
-        { label: 'Vegetarian', value: 'vegetarian', emoji: '🥬' },
-        { label: 'Gluten-free', value: 'gluten-free', emoji: '🌾' },
-        { label: 'Dairy-free', value: 'dairy-free', emoji: '🥛' },
-        { label: 'Other...', value: 'other', emoji: '✏️' },
-      ]);
-      setButtonsDisabled(false);
-    }, 300);
-  }
-
-  function askMeals(p: PlannerProfile) {
-    setFlowStep('meals');
-    const dietaryNote = p.dietary.length > 0 ? ` (${p.dietary.join(', ')})` : '';
-    setTimeout(() => {
-      addMsg('assistant', `Noted${dietaryNote}. What do you need this week?`, [
-        { label: 'Full week — all meals', value: 'full_week', emoji: '🏠' },
-        { label: 'Just dinners', value: 'dinners_only', emoji: '🍽️' },
-        { label: 'School week', value: 'school_week', emoji: '🎒' },
-        { label: 'Top-up shop', value: 'top_up', emoji: '🛒' },
-        { label: 'Let me explain...', value: 'other', emoji: '✏️' },
-      ]);
-      setButtonsDisabled(false);
-    }, 300);
-  }
-
-  function askBudget(p: PlannerProfile) {
-    setFlowStep('budget');
-    const mealsDesc = [
-      p.meals.breakfast && 'breakfast',
-      p.meals.lunch && 'lunch',
-      p.meals.dinner && 'dinner',
-      p.meals.snacks && 'snacks',
-    ].filter(Boolean).join(', ');
-    setTimeout(() => {
-      addMsg('assistant', `${mealsDesc} — perfect. Any budget in mind?`, [
-        { label: '€70', value: '€70', emoji: '💶' },
-        { label: '€100', value: '€100', emoji: '💶' },
-        { label: '€120', value: '€120', emoji: '💶' },
-        { label: 'No budget', value: '__no_budget', emoji: '🤷' },
-      ]);
-      setButtonsDisabled(false);
-    }, 300);
-  }
-
-  function askExtras(p: PlannerProfile) {
-    setFlowStep('extras');
-    setTimeout(() => {
-      addMsg('assistant', 'Anything else I should know? (What you already have, eating out, household items...)', [
-        { label: 'Nope, build it!', value: '__skip_extras', emoji: '🚀' },
-      ]);
-      setButtonsDisabled(false);
-    }, 300);
-  }
-
-  // ── Generate the grocery list ──
-  async function generateList(p: PlannerProfile) {
-    setFlowStep('generating');
-    setIsGenerating(true);
-    setProgressIdx(0);
-    setListContent('');
-    saveProfile(p);
-
-    const total = p.adults + p.children;
-    const mealsDesc = [p.meals.breakfast && 'breakfast', p.meals.lunch && 'lunch', p.meals.dinner && 'dinner', p.meals.snacks && 'snacks'].filter(Boolean).join(', ');
-    addMsg('assistant', `Building your grocery list for ${total} people (${mealsDesc})${p.weeklyBudget ? ` under €${p.weeklyBudget}` : ''}...`);
-
-    abortRef.current = new AbortController();
-    try {
-      const session = loadSession();
-      const res = await fetch('/api/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: p, token: session?.token }),
-        signal: abortRef.current.signal,
-      });
-      if (!res.ok) throw new Error('Request failed');
-      if (!res.body) throw new Error('No stream');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let content = '';
-
-      // Add placeholder for streaming
-      const streamId = msgId();
-      setMessages(prev => [...prev, { id: streamId, role: 'assistant', content: '' }]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const delta = parseSSETextDelta(chunk);
-        if (delta) {
-          content += delta;
-          setListContent(content);
-          setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content } : m));
-        }
-      }
-
-      setFlowStep('done');
-
-      // Auto-save if user is already signed in
-      if (isUnlocked && content) {
-        autoSaveConversation(content, p);
-      }
-
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        addMsg('assistant', 'Sorry, something went wrong. Try again?', [
-          { label: 'Try again', value: '__retry', emoji: '🔄' },
-        ]);
-      }
-      setFlowStep('done');
-    } finally {
-      setIsGenerating(false);
-      setButtonsDisabled(false);
-    }
-  }
-
-  // ── Handle post-list modifications ──
-  async function handleModification(text: string) {
-    if (text === '__retry') { generateList(profile); return; }
-
-    setIsGenerating(true);
-    setProgressIdx(0);
-
     abortRef.current = new AbortController();
     try {
       const session = loadSession();
 
-      // Build messages array from conversation for context
-      const apiMessages = messages
-        .filter(m => m.content && !m.content.startsWith('👋') && !m.content.startsWith('Building your'))
+      // Build messages array for the API
+      const apiMessages = allMessages
+        .filter(m => m.content)
         .map(m => ({ role: m.role, content: m.content }));
-      apiMessages.push({ role: 'user', content: text });
 
       const res = await fetch('/api/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: apiMessages,
+          intakeMode: true,
+          returningUser: isUnlocked,
           profile,
           token: session?.token,
           householdSize: profile.adults + profile.children,
@@ -998,18 +541,61 @@ export function HomePlanner() {
         const delta = parseSSETextDelta(chunk);
         if (delta) {
           content += delta;
-          setListContent(content);
-          setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content } : m));
+          // Check if this looks like a grocery list (has store totals)
+          const totals = parseStoreTotals(content);
+          if (totals.length > 0) {
+            setListContent(content);
+            setHasGeneratedList(true);
+          }
+          // Parse button suggestions from the streamed content
+          const { text: displayText, buttons } = parseButtonSuggestions(content);
+          setMessages(prev => prev.map(m =>
+            m.id === streamId ? { ...m, content: displayText, buttons: buttons.length > 0 ? buttons : undefined } : m
+          ));
         }
       }
+
+      // Final parse for buttons
+      const { text: finalText, buttons: finalButtons } = parseButtonSuggestions(content);
+      setMessages(prev => prev.map(m =>
+        m.id === streamId ? { ...m, content: finalText, buttons: finalButtons.length > 0 ? finalButtons : undefined } : m
+      ));
+
+      // If list was generated and user is already unlocked, auto-save
+      if (parseStoreTotals(content).length > 0 && isUnlocked) {
+        setListContent(content);
+        setHasGeneratedList(true);
+        const updatedMessages = [...allMessages, { id: streamId, role: 'assistant' as const, content }];
+        autoSaveConversation(content, updatedMessages);
+      }
+
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
-        addMsg('assistant', 'Sorry, something went wrong with that change. Try again?');
+        addMsg('assistant', "Sorry, something went wrong. Try again?\n\n[[Try again]]");
       }
     } finally {
       setIsGenerating(false);
       setButtonsDisabled(false);
     }
+  }
+
+  // ── Handle user input (text or button click) ──
+  function handleUserInput(text: string) {
+    if (!text.trim() || isGenerating) return;
+
+    // Add user message
+    const userMsg: ChatMessage = { id: msgId(), role: 'user', content: text };
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setButtonsDisabled(true);
+
+    // Send all messages (including this new one) to the AI
+    setMessages(prev => {
+      const allMsgs = [...prev];
+      // Send to AI with the complete message history
+      sendToAI(text, allMsgs);
+      return allMsgs;
+    });
   }
 
   // ── Render ──
@@ -1034,7 +620,7 @@ export function HomePlanner() {
                 <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)', whiteSpace: 'pre-wrap' }}>{m.content}</p>
               )}
               {m.buttons && !buttonsDisabled && (
-                <InlineButtons buttons={m.buttons} onSelect={handleUserInput} />
+                <InlineButtons buttons={m.buttons} onSelect={handleUserInput} disabled={buttonsDisabled} />
               )}
             </div>
           </div>
@@ -1054,7 +640,7 @@ export function HomePlanner() {
       </div>
 
       {/* Unlock CTA for non-signed-in users after list is generated */}
-      {flowStep === 'done' && listContent && !isGenerating && !isUnlocked && (
+      {hasGeneratedList && listContent && !isGenerating && !isUnlocked && (
         <UnlockCTA
           householdSize={profile.adults + profile.children}
           savings={calcSavings(parseStoreTotals(listContent))}
@@ -1063,7 +649,7 @@ export function HomePlanner() {
       )}
 
       {/* Share button — only for unlocked users */}
-      {flowStep === 'done' && listContent && !isGenerating && isUnlocked && (
+      {hasGeneratedList && listContent && !isGenerating && isUnlocked && (
         <div className="flex justify-end mb-2 gap-2">
           <ShareButton text={listContent} />
           {conversationId && (
@@ -1092,11 +678,11 @@ export function HomePlanner() {
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleUserInput(input); } }}
             placeholder={
-              flowStep === 'done'
+              hasGeneratedList
                 ? "Change something... e.g. 'swap chicken for fish', 'add breakfast'"
-                : flowStep === 'generating'
+                : isGenerating
                 ? 'Building your list...'
-                : 'Or just type...'
+                : 'Tell me what you need...'
             }
             rows={1}
             disabled={isGenerating}
