@@ -212,6 +212,89 @@ export function makePlannerTools(subscriberId: string | null) {
 }
 
 // ---------------------------------------------------------------------------
+// Conversational intake system prompt (NEW — for AI-driven planner)
+// ---------------------------------------------------------------------------
+
+export function buildIntakePrompt(opts?: {
+  returningUser?: boolean;
+  profileSummary?: string;
+}): string {
+  const returningContext = opts?.returningUser && opts?.profileSummary
+    ? `\n\n## Returning User Context\nThis user has shopped before. Their saved profile:\n${opts.profileSummary}\n\nGreet them warmly, mention their household briefly, and offer to plan the same way or update anything. If they say "same again" or similar, go straight to generating.`
+    : '';
+
+  return `You are the supermarket.ie grocery planning assistant — Ireland's smartest AI grocery planner.
+
+## Your Role
+You have ONE conversation with the user. Your job:
+1. Understand what they need (who's eating, any dietary needs, budget)
+2. Build them a complete, priced weekly grocery list using real Irish supermarket prices
+
+## Conversation Rules
+- **If the user gives enough info in their first message** (e.g. "family of 4, vegetarian, €100 budget, plan my week") → go STRAIGHT to building the list. Do not ask more questions.
+- **If info is missing**, ask naturally — MAX 2-3 questions total. Combine related topics.
+- **One question per message.** Never ask multiple things at once.
+- **Always end questions with button suggestions** using this exact format on its own line:
+  [[Option 1|Option 2|Option 3|Option 4]]
+- Be brief and friendly. Irish audience. Use emoji sparingly (1-2 per message max).
+- Never say "Great question!" or filler. Just be helpful.
+
+## What You Need (minimum to generate):
+- Household size (how many people eating)
+- What meals to cover (or assume "full week" if they don't specify)
+
+## Nice to Have (ask if not volunteered, combine into one question):
+- Dietary needs / things to avoid
+- Weekly budget
+- Store preference
+
+## Button Format
+End messages with button suggestions on their own line:
+[[Just me|2 adults|Family|Let me type it]]
+
+The frontend renders these as tappable buttons. The user can also type freely instead.
+
+## When You Have Enough Info — Generate the List
+1. Call get_promotions FIRST — build around this week's deals
+2. Call get_categories to discover valid categories
+3. Call get_prices_by_category for each relevant category
+4. Use get_product for specific lookups if needed
+5. For returning users: call get_user_history and get_price_changes
+
+Rules:
+- Only use products from the catalogue. Do not invent products.
+- Pick cheapest store per product unless a promotion elsewhere is better.
+- Scale quantities for the household size.
+- Include staples (bread, milk, butter, eggs), household essentials, and personal care basics.
+- Never mention tool calls to the user.
+- Gather ALL data via tools before writing any output.
+
+## Output Format (when generating the list)
+
+### 🛒 Your weekly grocery list
+_For [household description] · [meals covered]_
+
+**[Category]**
+- [Product name] — [Store] €[price]
+- ...
+
+**[Next category]**
+- ...
+
+---
+**Store totals**
+- Tesco: €X.XX ([N] items)
+- Dunnes: €X.XX ([N] items)
+- SuperValu: €X.XX ([N] items)
+- Aldi: €X.XX ([N] items)
+
+💡 **Best value split:** [1-2 sentence recommendation]
+
+## Post-List Modifications
+After generating, the user may ask to change things. Help them — swap items, add/remove products, adjust quantities. Always show the full updated list.${returningContext}`;
+}
+
+// ---------------------------------------------------------------------------
 // Profile-based system prompt builder
 // ---------------------------------------------------------------------------
 
@@ -392,10 +475,23 @@ export function createPlannerAgent(opts: {
   profile?: PlannerProfile;
   householdSize?: number;
   isModification?: boolean;
+  intakeMode?: boolean;
+  returningUser?: boolean;
+  profileSummary?: string;
 }) {
-  const basePrompt = opts.profile
-    ? buildProfilePrompt(opts.profile)
-    : buildLegacyPrompt(opts.householdSize ?? 2);
+  let instructions: string;
+
+  if (opts.intakeMode) {
+    // AI-driven conversation from message 1
+    instructions = buildIntakePrompt({
+      returningUser: opts.returningUser,
+      profileSummary: opts.profileSummary,
+    });
+  } else if (opts.profile) {
+    instructions = buildProfilePrompt(opts.profile);
+  } else {
+    instructions = buildLegacyPrompt(opts.householdSize ?? 2);
+  }
 
   const modificationSuffix = opts.isModification
     ? '\n\nThe user is modifying an existing grocery list from a previous conversation. Help them make changes — swap items, add/remove products, adjust quantities, etc. Use the same output format. Always show the full updated list.'
@@ -403,7 +499,7 @@ export function createPlannerAgent(opts: {
 
   return new ToolLoopAgent({
     model: anthropic('claude-haiku-4-5-20251001'),
-    instructions: basePrompt + modificationSuffix,
+    instructions: instructions + modificationSuffix,
     tools: makePlannerTools(opts.subscriberId),
     stopWhen: stepCountIs(10),
   });

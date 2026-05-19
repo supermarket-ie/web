@@ -24,6 +24,9 @@ export async function POST(req: Request) {
   const conversationId = body.conversationId as string | undefined;
   let profile = body.profile as PlannerProfile | undefined;
   const incomingMessages = (body.messages ?? []) as UIMessage[];
+  const intakeMode = body.intakeMode as boolean | undefined;
+  const returningUser = body.returningUser as boolean | undefined;
+  const profileSummary = body.profileSummary as string | undefined;
 
   // ── Conversation-based flow (useChat from ConversationChat): load context from DB ──
   if (conversationId && subscriberId && incomingMessages.length > 0) {
@@ -98,9 +101,8 @@ export async function POST(req: Request) {
     });
   }
 
-  // ── Legacy/HomePlanner flow (profile or messages-based, returns data stream) ──
-  // HomePlanner sends { profile, token } or { messages: [{role,content}], profile, token }
-  // These are NOT UIMessages — they're plain {role, content} objects
+  // ── Intake / AI-driven planner flow (messages-based, multi-turn) ──
+  // Frontend sends { messages: [{role,content}], intakeMode: true, token?, returningUser?, profileSummary? }
 
   // If signed in but no profile in request, try loading from households table
   if (!profile && subscriberId) {
@@ -129,7 +131,13 @@ export async function POST(req: Request) {
   // Build messages for the agent
   let apiMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
 
-  if (profile && !body.messages) {
+  if (intakeMode && Array.isArray(body.messages) && body.messages.length > 0) {
+    // AI-driven intake — pass messages straight through
+    apiMessages = body.messages.map((m: { role: string; content: string }) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+  } else if (profile && !body.messages) {
     // Profile-based generation — synthesize a user message
     const totalPeople = profile.adults + profile.children;
     const meals: string[] = [];
@@ -158,21 +166,24 @@ export async function POST(req: Request) {
     });
   }
 
-  // Determine if modification
-  const isModification = apiMessages.length > 1 && apiMessages.some(m => m.role === 'assistant');
+  // Determine mode
+  const isModification = !intakeMode && apiMessages.length > 1 && apiMessages.some(m => m.role === 'assistant');
 
   // Convert plain messages to UIMessage format for createAgentUIStreamResponse
   const uiMessages: UIMessage[] = apiMessages.map((m, i) => ({
-    id: `legacy-${i}`,
+    id: `msg-${i}`,
     role: m.role,
     parts: [{ type: 'text' as const, text: m.content }],
   }));
 
   const agent = createPlannerAgent({
     subscriberId,
-    profile,
+    profile: intakeMode ? undefined : profile,
     householdSize: body.householdSize ?? 2,
     isModification,
+    intakeMode: intakeMode ?? false,
+    returningUser: returningUser ?? false,
+    profileSummary: profileSummary ?? undefined,
   });
 
   return createAgentUIStreamResponse({
