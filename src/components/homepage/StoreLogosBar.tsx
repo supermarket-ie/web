@@ -4,10 +4,10 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 
 const stores = [
-  { name: 'Tesco', logo: '/images/stores/tesco.svg', width: 100 },
-  { name: 'Dunnes', logo: '/images/stores/dunnes.svg', width: 120 },
-  { name: 'SuperValu', logo: '/images/stores/supervalu.svg', width: 130 },
-  { name: 'Aldi', logo: '/images/stores/aldi.svg', width: 80 },
+  { name: 'Tesco', logo: '/images/stores/tesco-grey.png', width: 160, height: 48 },
+  { name: 'Dunnes Stores', logo: '/images/stores/dunnes-grey.png', width: 146, height: 36 },
+  { name: 'SuperValu', logo: '/images/stores/supervalu-grey.png', width: 199, height: 56 },
+  { name: 'Aldi', logo: '/images/stores/aldi-grey.png', width: 94, height: 31 },
 ];
 
 export function StoreLogosBar() {
@@ -27,19 +27,19 @@ export function StoreLogosBar() {
           {stores.map((store, index) => (
             <motion.div
               key={store.name}
-              className="opacity-60 hover:opacity-100 transition-opacity duration-200"
+              className="opacity-50 hover:opacity-90 transition-opacity duration-200"
               initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 0.6, y: 0 }}
+              whileInView={{ opacity: 0.5, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.3, delay: index * 0.08 }}
-              whileHover={{ opacity: 1 }}
+              whileHover={{ opacity: 0.9 }}
             >
               <Image
                 src={store.logo}
                 alt={store.name}
                 width={store.width}
-                height={40}
-                className="h-8 md:h-10 w-auto"
+                height={store.height}
+                className="h-6 md:h-8 w-auto"
               />
             </motion.div>
           ))}
