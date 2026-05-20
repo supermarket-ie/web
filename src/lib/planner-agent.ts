@@ -254,12 +254,21 @@ End messages with button suggestions on their own line:
 
 The frontend renders these as tappable buttons. The user can also type freely instead.
 
+## Dietary Requirements — CRITICAL
+If the user states ANY dietary requirement (vegetarian, vegan, gluten-free, halal, dairy-free, etc.):
+- This is a STRICT, ABSOLUTE constraint. Treat it like an allergy.
+- NEVER include products that violate it. No exceptions.
+- Vegetarian = NO meat, poultry, fish, or seafood (including tuna, salmon, prawns, chicken stock, etc.)
+- Vegan = NO animal products whatsoever (no dairy, eggs, honey, etc.)
+- Before finalising your list, review EVERY item and remove anything that violates stated dietary requirements.
+
 ## When You Have Enough Info — Generate the List
 1. Call get_promotions FIRST — build around this week's deals
 2. Call get_categories to discover valid categories
 3. Call get_prices_by_category for each relevant category
 4. Use get_product for specific lookups if needed
 5. For returning users: call get_user_history and get_price_changes
+6. **FINAL CHECK: Re-read the user's dietary requirements and verify EVERY item complies. Remove any that don't.**
 
 Rules:
 - Only use products from the catalogue. Do not invent products.
@@ -336,7 +345,7 @@ export function buildProfilePrompt(profile: PlannerProfile): string {
 - **Meals to plan:** ${mealCoverage} for the full week
 - **Budget:** ${profile.weeklyBudget ? `€${profile.weeklyBudget}/week — STAY UNDER THIS. Actively trade down: own-brand over branded, seasonal veg over imports, cheaper cuts of meat. Show budget status at the end.` : 'No budget set'}
 - **Store preference:** ${storesPref}
-${profile.dietary.length > 0 ? `- **Dietary requirements:** ${profile.dietary.join(', ')} — STRICT. Do not include any products that violate these requirements.` : '- **Dietary requirements:** None'}
+${profile.dietary.length > 0 ? `- **Dietary requirements:** ${profile.dietary.join(', ')} — STRICT ABSOLUTE CONSTRAINT. Vegetarian = NO meat/poultry/fish/seafood (tuna, salmon, chicken, beef, prawns, fish fingers, chicken stock, etc.). Vegan = NO animal products. Do NOT include ANY product that violates these requirements. Double-check every item before including it.` : '- **Dietary requirements:** None'}
 ${profile.dislikes ? `- **Dislikes / avoid:** ${profile.dislikes} — Do NOT include these items or ingredients.` : ''}
 - **Batch cooking:** ${profile.batchCooking ? 'Yes — suggest cook-once-eat-twice meals where practical (e.g. big chilli Sunday → lunches Mon-Tue)' : 'No'}
 ${profile.skipDays ? `- **Eating out / skip:** ${profile.skipDays} — do not plan food for these meals` : ''}
@@ -385,6 +394,7 @@ Rules:
 - Pick cheapest store per product unless a promotion elsewhere is better value.
 ${!profile.preferredStores.includes('all') ? `- ONLY show prices from: ${storesPref}. Ignore other stores entirely.` : ''}
 - Never mention tool calls to the user.
+${profile.dietary.length > 0 ? `- **FINAL CHECK before outputting:** Re-read dietary requirements (${profile.dietary.join(', ')}). Verify EVERY item on your list complies. Remove any that violate.` : ''}
 
 ## Returning user personalisation
 If get_user_history returns data:
