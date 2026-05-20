@@ -83,7 +83,8 @@ async function scrapeAldiCategory(page, category) {
   
   while (true) {
     const url = pageNum === 1 ? category.url : `${category.url}?page=${pageNum}`;
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000); // Allow product tiles to render
     
     const pageProducts = await page.evaluate(() => {
       const items = [];
