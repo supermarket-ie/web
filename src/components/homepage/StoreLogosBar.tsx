@@ -27,12 +27,11 @@ export function StoreLogosBar() {
           {stores.map((store, index) => (
             <motion.div
               key={store.name}
-              className="opacity-50 hover:opacity-90 transition-opacity duration-200"
+              className="opacity-50"
               initial={{ opacity: 0, y: 10 }}
               whileInView={{ opacity: 0.5, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.3, delay: index * 0.08 }}
-              whileHover={{ opacity: 0.9 }}
             >
               <Image
                 src={store.logo}
