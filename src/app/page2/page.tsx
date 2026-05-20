@@ -1075,7 +1075,7 @@ export default function Page2() {
               color: "rgba(249,246,245,0.2)",
             }}
           >
-            © 2026 Superdata Ltd · supermarket.ie · Made with ❤️ in Ireland
+            © 2026 Gosuper Ltd (Company No. 700162) · supermarket.ie · Made with ❤️ in Ireland
           </div>
         </div>
       </footer>

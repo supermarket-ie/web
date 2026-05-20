@@ -16,7 +16,7 @@ export function SiteFooter() {
           </nav>
         </div>
         <p className="text-center text-sm pt-8" style={{ color: 'rgba(249,246,245,0.3)' }}>
-          © 2026 Superdata Ltd · supermarket.ie · Made with ❤️ in Ireland
+          © 2026 Gosuper Ltd (Company No. 700162) · supermarket.ie · Made with ❤️ in Ireland
         </p>
       </div>
     </footer>

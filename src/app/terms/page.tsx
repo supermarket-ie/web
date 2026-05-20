@@ -150,7 +150,7 @@ export default function TermsOfService() {
             </p>
             <p className="mt-4">
               <strong>Email:</strong> legal@supermarket.ie<br />
-              <strong>Company:</strong> Superdata Ltd, Ireland
+              <strong>Company:</strong> Gosuper Ltd, Company No. 700162, Ireland
             </p>
           </section>
         </div>
@@ -173,7 +173,7 @@ export default function TermsOfService() {
             </div>
           </div>
           <div className="text-center text-white/40 text-sm">
-            © 2026 Superdata Ltd · supermarket.ie · Made in Ireland 🇮🇪
+            © 2026 Gosuper Ltd · supermarket.ie · Made in Ireland 🇮🇪
           </div>
         </div>
       </footer>
