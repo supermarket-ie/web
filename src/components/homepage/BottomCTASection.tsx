@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowRight, Shield } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 
 export function BottomCTASection() {
   const scrollToTop = (e: React.MouseEvent) => {
@@ -24,18 +24,20 @@ export function BottomCTASection() {
           transition={{ duration: 0.5 }}
         >
           <div className="mb-6">
-            <h2 className="type-headline text-on-background mb-2">Start planning your shop</h2>
-            <p className="text-on-surface">Join 2,400+ smart Irish shoppers</p>
+            <h2 className="type-headline text-on-background mb-2">Meet your grocery agent</h2>
+            <p className="text-on-surface">
+              Tell it about your household. It&apos;ll handle the rest — this week and every week after.
+            </p>
           </div>
           <button
             onClick={scrollToTop}
             className="btn-primary w-full px-6 py-4 text-lg font-bold gap-2 hover:scale-[1.02] active:scale-[0.98] transition-transform"
           >
-            Plan my weekly shop <ArrowRight className="size-5" />
+            <Sparkles className="size-5" />
+            Start chatting with your agent
           </button>
           <p className="text-xs mt-4 flex items-center justify-center gap-2 text-on-surface-variant">
-            <Shield className="size-4" />
-            No spam, ever · Unsubscribe anytime
+            100% free · No card needed · Takes 30 seconds
           </p>
         </motion.div>
       </div>

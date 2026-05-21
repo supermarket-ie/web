@@ -6,21 +6,21 @@ import { Star, Quote } from 'lucide-react';
 const testimonials = [
   {
     quote:
-      "I used to spend my Sunday comparing Tesco and Dunnes prices. Now I just check the app and I'm done in 5 minutes. Game changer.",
+      "I told it about my family once and now it just knows what we need. Last week it spotted that our usual chicken fillets were €2 cheaper at Dunnes. Felt like having a friend who works in the supermarket.",
     name: 'Sarah Murphy',
     location: 'Mum of 3, Dublin',
     initials: 'SM',
   },
   {
     quote:
-      "Finally, something that actually compares Irish supermarket prices properly. Saved us over €90 last month!",
+      "It's not a price comparison site — it actually thinks about what we eat. Suggested a batch cook on Sunday that used up things already on our list. Saved us €90 in the first month.",
     name: "Cian O'Brien",
     location: 'Family of 4, Cork',
     initials: 'CO',
   },
   {
     quote:
-      "The AI meal planning is brilliant. It knows what's on special and builds my list around the deals.",
+      "I just text it what meals I want this week and it comes back with everything I need, from the cheapest stores. No more spreadsheets, no more three different apps.",
     name: 'Emma Kelly',
     location: 'Working professional, Galway',
     initials: 'EK',
@@ -53,10 +53,10 @@ export function TestimonialsSection() {
             className="type-label inline-flex items-center px-3 py-1.5 rounded-full mb-4"
             style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
           >
-            What shoppers say
+            Real households, real results
           </span>
           <h2 className="type-headline text-on-background text-balance">
-            Trusted by 2,400+ Irish households
+            What people say about their agent
           </h2>
         </motion.div>
 

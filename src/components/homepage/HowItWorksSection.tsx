@@ -1,13 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { MessageSquare, Bot, PiggyBank, Check } from 'lucide-react';
-
-const mockListItems = [
-  { name: 'Milk 2L', store: 'Tesco', price: '€1.89', saving: '€0.30' },
-  { name: 'Brennans Bread', store: 'Dunnes', price: '€1.75', saving: '€0.25' },
-  { name: 'Chicken Fillets 500g', store: 'Aldi', price: '€4.99', saving: '€1.50' },
-];
+import { MessageSquare, Brain, Zap, ShoppingCart, TrendingDown, Bell } from 'lucide-react';
 
 export function HowItWorksSection() {
   return (
@@ -24,18 +18,18 @@ export function HowItWorksSection() {
             className="type-label inline-flex items-center px-3 py-1.5 rounded-full mb-4"
             style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
           >
-            How it works
+            What your agent does
           </span>
           <h2 className="type-headline text-on-background text-balance">
-            Three steps to smarter
+            Like having a personal shopper
             <br />
-            grocery shopping
+            who never sleeps
           </h2>
         </motion.div>
 
         {/* Bento Grid */}
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Step 1 - Small card */}
+          {/* Card 1 - Learns you */}
           <motion.div
             className="rounded-2xl p-8 relative overflow-hidden"
             style={{ background: 'var(--surface-container-lowest)' }}
@@ -48,20 +42,17 @@ export function HowItWorksSection() {
               className="size-12 rounded-xl flex items-center justify-center mb-4"
               style={{ background: 'var(--surface-container)' }}
             >
-              <MessageSquare className="size-6" style={{ color: 'var(--primary)' }} />
-            </div>
-            <div className="type-label mb-2" style={{ color: 'var(--primary)' }}>
-              01
+              <Brain className="size-6" style={{ color: 'var(--primary)' }} />
             </div>
             <h3 className="type-title-lg mb-2 text-on-background">
-              Tell us what you&apos;re cooking
+              Learns your household
             </h3>
             <p className="text-on-surface">
-              Chat with our AI about your weekly meals. Takes 30 seconds.
+              Family size, dietary needs, budget, favourite meals, stores you prefer — your agent remembers it all and gets better every week.
             </p>
           </motion.div>
 
-          {/* Step 2 - Large 2x1 card with mock UI */}
+          {/* Card 2 - Agent capabilities (large) */}
           <motion.div
             className="rounded-2xl p-8 relative overflow-hidden md:row-span-2"
             style={{ background: '#006A35' }}
@@ -70,7 +61,7 @@ export function HowItWorksSection() {
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.1 }}
           >
-            {/* Decorative blob */}
+            {/* Decorative blobs */}
             <div
               className="absolute size-64 rounded-full top-0 right-0 translate-x-1/3 -translate-y-1/3"
               style={{ background: 'var(--primary-container)', opacity: 0.12 }}
@@ -85,55 +76,48 @@ export function HowItWorksSection() {
                 className="size-12 rounded-xl flex items-center justify-center mb-4"
                 style={{ background: 'rgba(255,255,255,0.15)' }}
               >
-                <Bot className="size-6" style={{ color: 'var(--primary-container)' }} />
-              </div>
-              <div className="type-label mb-2" style={{ color: 'var(--primary-container)' }}>
-                02
+                <Zap className="size-6" style={{ color: 'var(--primary-container)' }} />
               </div>
               <h3 className="type-title-lg mb-2 text-white">
-                AI builds your list
+                Works for you 24/7
               </h3>
-              <p className="mb-6" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                Our AI scans every deal and builds a personalised list just for your household.
+              <p className="mb-8" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                Your agent isn&apos;t a search engine. It actively monitors prices, spots opportunities, and thinks about your grocery week so you don&apos;t have to.
               </p>
 
-              {/* Mock grocery list UI */}
+              {/* Agent capabilities */}
               <div 
-                className="rounded-xl p-4 space-y-3"
+                className="rounded-xl p-5 space-y-5"
                 style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)' }}
               >
-                <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--primary-container)' }}>
-                  Your smart list
+                <div className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--primary-container)' }}>
+                  Your agent can
                 </div>
-                {mockListItems.map((item, i) => (
+                {[
+                  { icon: ShoppingCart, text: 'Build your weekly shop from scratch based on meals you want' },
+                  { icon: TrendingDown, text: 'Find the cheapest store split for your exact basket' },
+                  { icon: Bell, text: 'Alert you when items you buy regularly drop in price' },
+                  { icon: MessageSquare, text: 'Answer any question about Irish grocery prices instantly' },
+                ].map((item, i) => (
                   <motion.div
-                    key={item.name}
-                    className="flex items-center justify-between py-2 border-b border-white/10 last:border-0"
+                    key={item.text}
+                    className="flex items-start gap-3"
                     initial={{ opacity: 0, x: -10 }}
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.3, delay: 0.4 + i * 0.1 }}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="size-5 rounded-full flex items-center justify-center" style={{ background: 'var(--primary-container)' }}>
-                        <Check className="size-3" style={{ color: '#006A35' }} strokeWidth={3} />
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-white">{item.name}</div>
-                        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{item.store}</div>
-                      </div>
+                    <div className="size-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }}>
+                      <item.icon className="size-4" style={{ color: 'var(--primary-container)' }} />
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-bold text-white">{item.price}</div>
-                      <div className="text-xs" style={{ color: 'var(--primary-container)' }}>Save {item.saving}</div>
-                    </div>
+                    <span className="text-sm font-medium text-white leading-snug">{item.text}</span>
                   </motion.div>
                 ))}
               </div>
             </div>
           </motion.div>
 
-          {/* Step 3 - Small card */}
+          {/* Card 3 - Conversational */}
           <motion.div
             className="rounded-2xl p-8 relative overflow-hidden"
             style={{ background: 'var(--surface-container-lowest)' }}
@@ -146,16 +130,13 @@ export function HowItWorksSection() {
               className="size-12 rounded-xl flex items-center justify-center mb-4"
               style={{ background: 'var(--surface-container)' }}
             >
-              <PiggyBank className="size-6" style={{ color: 'var(--primary)' }} />
-            </div>
-            <div className="type-label mb-2" style={{ color: 'var(--primary)' }}>
-              03
+              <MessageSquare className="size-6" style={{ color: 'var(--primary)' }} />
             </div>
             <h3 className="type-title-lg mb-2 text-on-background">
-              Shop & save
+              Just talk to it
             </h3>
             <p className="text-on-surface">
-              Use your list at any store. Updated every week with the latest prices.
+              &ldquo;We&apos;re doing a roast on Sunday and need lunches for the kids.&rdquo; Your agent handles the rest — no forms, no clicking through categories.
             </p>
           </motion.div>
         </div>

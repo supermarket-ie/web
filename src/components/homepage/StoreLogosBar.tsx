@@ -15,7 +15,7 @@ export function StoreLogosBar() {
     <section className="py-10 px-6" style={{ background: 'var(--surface-container-low)' }}>
       <div className="max-w-6xl mx-auto">
         <p className="type-label text-center mb-6 text-on-surface-variant">
-          Prices from Ireland&apos;s biggest supermarkets
+          Your agent understands pricing across
         </p>
         <motion.div
           className="flex flex-wrap justify-center items-center gap-8 md:gap-12"

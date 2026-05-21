@@ -2,23 +2,23 @@
 
 import { motion, useInView } from 'framer-motion';
 import { useRef, useEffect, useState } from 'react';
-import { Clock, Euro, Brain, ArrowRight } from 'lucide-react';
+import { RefreshCw, Euro, Brain, ArrowRight } from 'lucide-react';
 
 const benefits = [
   {
-    icon: Clock,
-    title: 'Save 2+ hours every week',
-    desc: 'No more hunting through apps and leaflets',
+    icon: Brain,
+    title: 'Remembers everything',
+    desc: "Your preferences, your usual items, your budget — it never forgets and never needs reminding",
+  },
+  {
+    icon: RefreshCw,
+    title: 'Improves every week',
+    desc: "The more you use it, the better it knows what you need. Like a personal shopper who's been with you for years",
   },
   {
     icon: Euro,
     title: '€80–100 saved monthly',
-    desc: 'Real savings from real deals across all stores',
-  },
-  {
-    icon: Brain,
-    title: 'Less decision fatigue',
-    desc: 'One smart list, zero stress',
+    desc: "Not from coupons or gimmicks — from genuinely knowing which store has the best price on the things you actually buy",
   },
 ];
 
@@ -75,16 +75,16 @@ export function BenefitsSection() {
               className="type-label inline-flex items-center px-3 py-1.5 rounded-full mb-4"
               style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
             >
-              Why supermarket.ie
+              Why an agent, not a website
             </span>
             <h2 className="type-headline text-on-background mb-6 text-balance">
-              Groceries without
+              Websites show you data.
               <br />
-              the mental load
+              Your agent does the work.
             </h2>
             <p className="type-body-lg mb-10 text-on-surface">
-              Stop spending your Sunday evening comparing flyers. We do the hard work so you can
-              focus on what matters.
+              Price comparison sites give you tables. Your grocery agent gives you a ready-to-go 
+              weekly shop, built around your family, your meals, and today&apos;s actual prices.
             </p>
 
             <div className="flex flex-col gap-6">
@@ -112,7 +112,7 @@ export function BenefitsSection() {
             </div>
           </motion.div>
 
-          {/* Stats card with glassmorphism */}
+          {/* Stats card */}
           <motion.div
             className="rounded-2xl p-8 relative overflow-hidden"
             style={{
@@ -125,7 +125,7 @@ export function BenefitsSection() {
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.2 }}
           >
-            {/* Glassmorphism shine effect */}
+            {/* Glassmorphism shine */}
             <div 
               className="absolute inset-0 rounded-2xl opacity-20"
               style={{
@@ -150,7 +150,7 @@ export function BenefitsSection() {
                     <AnimatedCounter end={1200} prefix="€" suffix="+" />
                   </div>
                   <div style={{ color: 'var(--tertiary-container)' }} className="font-medium mt-1">
-                    potential yearly savings with us
+                    your agent can save you per year
                   </div>
                 </div>
               </div>
@@ -158,7 +158,7 @@ export function BenefitsSection() {
                 href="#bottom-cta" 
                 className="btn-primary mt-8 w-full px-6 py-4 text-base gap-2 hover:scale-[1.02] active:scale-[0.98] transition-transform"
               >
-                Start planning today
+                Meet your agent
                 <ArrowRight className="size-5" />
               </a>
             </div>

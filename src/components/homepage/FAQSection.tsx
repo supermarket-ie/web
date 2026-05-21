@@ -10,34 +10,39 @@ import {
 
 const faqs = [
   {
-    question: 'How does supermarket.ie compare prices?',
+    question: 'What exactly is a "grocery agent"?',
     answer:
-      'We track prices from Tesco, Dunnes Stores, SuperValu, Lidl, and Aldi across Ireland. Our system updates daily to ensure you always see the most current prices and deals available.',
+      "It's an AI that works specifically for your household. Unlike a price comparison website where you search for individual products, your agent knows what you buy, remembers your preferences, and proactively builds your weekly shop. Think of it like a personal shopper who has memorised your entire household's needs.",
   },
   {
-    question: 'Is supermarket.ie really free?',
+    question: 'Is it really free?',
     answer:
-      "Yes, 100% free! We believe every Irish family deserves access to the best grocery prices. We're supported by affiliate partnerships, not by charging our users.",
+      "Yes, completely free. Your agent has full access to pricing across Tesco, Dunnes, SuperValu, and Aldi. We're building the future of grocery shopping in Ireland and want as many households as possible using it.",
   },
   {
-    question: 'How much can I actually save?',
+    question: 'How much can my agent actually save me?',
     answer:
-      'Most families save €80-100 per month by switching to the cheapest options we recommend. Over a year, that adds up to €1,000-1,200 in savings on the same groceries you already buy.',
+      "Most households save €80–100 per month. Your agent doesn't just find the cheapest item — it optimises your entire basket, splitting across stores when it makes sense and factoring in this week's deals on things you actually buy.",
   },
   {
-    question: 'How does the AI meal planning work?',
+    question: 'How does it learn about my household?',
     answer:
-      "Tell our AI about your household size, dietary preferences, and what you like to eat. It creates a personalised weekly meal plan and shopping list optimised for the best deals available this week.",
+      "Just chat with it. Tell it about your family, what you like to eat, your budget, any dietary needs. It remembers everything. The more you use it, the less you need to explain — it starts anticipating what you need.",
   },
   {
-    question: 'Which supermarkets do you cover?',
+    question: 'Which supermarkets does it cover?',
     answer:
-      'We currently track prices from Tesco Ireland, Dunnes Stores, and SuperValu — the three largest supermarket chains in Ireland. We\'re working on adding Lidl and Aldi coverage soon.',
+      "Your agent tracks real-time prices from Tesco Ireland, Dunnes Stores, SuperValu, and Aldi — covering over 1,700 products. It knows what's on promotion, what's gone up, and what's cheapest where.",
   },
   {
-    question: 'How often are prices updated?',
+    question: 'How fresh are the prices?',
     answer:
-      'Prices are updated daily. We also track weekly specials and promotional deals as soon as they become available, so your shopping list always reflects the current best prices.',
+      "Prices are updated multiple times per week. Your agent always works with current shelf prices and live promotions — not stale data from last month.",
+  },
+  {
+    question: 'Can I just ask it random questions about prices?',
+    answer:
+      'Absolutely. "What\'s the cheapest butter right now?" "Is Tesco or Dunnes better for dairy?" "What\'s on offer this week?" Your agent can answer anything about Irish grocery prices instantly.',
   },
 ];
 
@@ -58,7 +63,7 @@ export function FAQSection() {
           >
             FAQ
           </span>
-          <h2 className="type-headline text-on-background">Frequently asked questions</h2>
+          <h2 className="type-headline text-on-background">Questions about your agent</h2>
         </motion.div>
 
         <motion.div

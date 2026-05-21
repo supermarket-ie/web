@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { HomePlanner } from '@/components/HomePlanner';
 import { LiveDealChip } from '@/components/LiveDealChip';
-import { ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 
 interface HeroSectionProps {
   listUrl: string | null;
@@ -60,12 +60,13 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <div className="chip-tertiary mb-6">
-              Free weekly shopping lists for Irish households
+            <div className="chip-tertiary mb-6 inline-flex items-center gap-2">
+              <Sparkles className="size-3.5" />
+              Your personal AI grocery agent
             </div>
 
             <h1 className="type-display text-on-background mb-6 text-balance">
-              Plan your weekly shop{' '}
+              An AI agent that{' '}
               <span
                 style={{
                   background: 'linear-gradient(135deg, #006A35, #6BFE9C)',
@@ -74,7 +75,7 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
                   backgroundClip: 'text',
                 }}
               >
-                in seconds
+                handles your groceries
               </span>
             </h1>
 
@@ -83,15 +84,15 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
             </div>
 
             <p className="type-body-lg mb-8 max-w-lg text-on-surface">
-              Tell us about your household. Our AI builds your complete weekly grocery list with the
-              best prices across Tesco, Dunnes, SuperValu & Aldi.
+              Tell it about your household once. It learns what you buy, tracks prices across 
+              Tesco, Dunnes, SuperValu & Aldi, and builds your perfect weekly shop — every single week.
             </p>
 
             <div className="flex flex-col gap-3 mb-10">
               {[
-                'Takes 30 seconds — just tap a few buttons',
-                'Compares Tesco, Dunnes, SuperValu & Aldi prices',
-                "Finds this week's deals automatically",
+                'Knows your household, preferences & budget',
+                'Tracks prices across every major Irish supermarket',
+                'Gets smarter the more you use it',
               ].map((item, index) => (
                 <motion.div
                   key={item}
@@ -104,7 +105,7 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
                     className="size-5 rounded-full flex items-center justify-center flex-shrink-0"
                     style={{ background: 'var(--primary-container)' }}
                   >
-                    <Check className="size-3 text-on-primary-container" strokeWidth={3} />
+                    <Sparkles className="size-3 text-on-primary-container" strokeWidth={3} />
                   </div>
                   <span className="font-medium text-sm text-on-background">{item}</span>
                 </motion.div>
@@ -113,15 +114,15 @@ export function HeroSection({ listUrl }: HeroSectionProps) {
 
             {listUrl && (
               <Link 
-                href={listUrl} 
+                href="/dashboard" 
                 className="btn-secondary px-8 py-4 text-lg inline-flex gap-2 hover:scale-[1.02] active:scale-[0.98] transition-transform"
               >
-                View my list <ArrowRight className="size-5" />
+                Open my agent <ArrowRight className="size-5" />
               </Link>
             )}
           </motion.div>
 
-          {/* Right: Chat Interface placeholder */}
+          {/* Right: Chat Interface */}
           <motion.div
             className="relative"
             initial={{ opacity: 0, scale: 0.98 }}
