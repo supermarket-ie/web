@@ -461,7 +461,7 @@ async function resolveMode({ limit, category }) {
   );
 }
 
-async function refreshMode({ limit, category }) {
+async function refreshMode({ limit, category, offset = 0 }) {
   if (!SUPABASE_KEY) {
     console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not set');
     process.exit(1);
@@ -488,6 +488,7 @@ async function refreshMode({ limit, category }) {
   if (category) {
     filtered = filtered.filter((sp) => sp.products?.category === category);
   }
+  if (offset > 0) filtered = filtered.slice(offset);
   if (limit > 0) filtered = filtered.slice(0, limit);
 
   console.log(
@@ -675,11 +676,14 @@ async function main() {
   const limitIdx = args.indexOf('--limit');
   const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1]) : 0;
 
+  const offsetIdx = args.indexOf('--offset');
+  const offset = offsetIdx >= 0 ? parseInt(args[offsetIdx + 1]) : 0;
+
   const catIdx = args.indexOf('--category');
   const category = catIdx >= 0 ? args[catIdx + 1] : null;
 
-  if (resolve) await resolveMode({ limit, category });
-  if (refresh) await refreshMode({ limit, category });
+  if (resolve) await resolveMode({ limit, category, offset });
+  if (refresh) await refreshMode({ limit, category, offset });
 }
 
 main().catch((e) => {
