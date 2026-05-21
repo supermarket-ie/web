@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { SiteHeader } from '@/components/SiteHeader';
+import { SiteFooter } from '@/components/SiteFooter';
 
 const SUBJECTS = [
   'Vendor / Partnership',
@@ -41,27 +43,7 @@ export function ContactForm() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
-      {/* Header */}
-      <header className="glass px-6 py-4">
-        <div className="max-w-5xl mx-auto flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}>
-              <svg viewBox="0 0 40 40" fill="none" className="w-5 h-5">
-                <path d="M8 12C8 10.8954 8.89543 10 10 10H30C31.1046 10 32 10.8954 32 12V32C32 34.2091 30.2091 36 28 36H12C9.79086 36 8 34.2091 8 32V12Z" fill="var(--on-primary-container)" fillOpacity="0.3"/>
-                <path d="M14 10V8C14 5.79086 15.7909 4 18 4H22C24.2091 4 26 5.79086 26 8V10" stroke="var(--on-primary-container)" strokeWidth="2.5" strokeLinecap="round"/>
-                <path d="M14 22h12M20 17v10" stroke="var(--on-primary-container)" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <span className="text-[18px] font-extrabold" style={{ color: 'var(--on-background)', letterSpacing: '-0.02em' }}>
-              supermarket<span style={{ color: 'var(--primary)' }}>.ie</span>
-            </span>
-          </Link>
-          <Link href="/" className="text-sm font-medium transition-colors hover:text-primary" style={{ color: 'var(--on-surface)' }}>
-            ← Back
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-2xl mx-auto px-6 py-16">
         {status === 'sent' ? (
@@ -105,7 +87,7 @@ export function ContactForm() {
               ))}
             </div>
 
-            {/* Form — on surface-container-lowest, section on surface-container-low */}
+            {/* Form */}
             <div className="rounded-2xl p-6 md:p-8" style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="grid sm:grid-cols-2 gap-5">
@@ -193,15 +175,7 @@ export function ContactForm() {
         )}
       </main>
 
-      <footer className="py-8 px-6" style={{ background: 'var(--surface-container-low)' }}>
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 text-sm" style={{ color: 'var(--on-surface-variant)' }}>
-          <Link href="/" className="font-extrabold" style={{ color: 'var(--on-background)' }}>supermarket.ie</Link>
-          <div className="flex gap-5">
-            <Link href="/privacy" className="hover:text-on-surface transition">Privacy</Link>
-            <Link href="/terms"   className="hover:text-on-surface transition">Terms</Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
