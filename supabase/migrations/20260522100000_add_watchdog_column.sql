@@ -1,0 +1,1 @@
+ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS last_watchdog_sent TIMESTAMPTZ;
