@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const { data } = await supabaseAdmin.from('vendors').select('name, description').eq('slug', slug).eq('status', 'active').single();
@@ -10,6 +12,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: `${data.name} · supermarket.ie`,
     description: data.description ?? `Shop at ${data.name} on supermarket.ie`,
+    alternates: { canonical: `${BASE_URL}/store/${slug}` },
   };
 }
 

@@ -6,10 +6,13 @@ import { getAllLatestPrices, groupByProduct, filterToMain3, STORE_INFO, MAIN_STO
 
 export const revalidate = 43200; // 12h
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+
 export const metadata: Metadata = {
   title: 'Cost of a Weekly Shop in Ireland 2026 — Tesco, Dunnes, SuperValu | supermarket.ie',
   description: 'How much does a weekly grocery shop cost in Ireland? Live prices from Tesco, Dunnes Stores and SuperValu compared. See which supermarket is cheapest for a typical Irish weekly shop.',
   keywords: ['cost of weekly shop Ireland', 'how much is a weekly shop in Ireland', 'cheapest weekly shop Ireland', 'grocery prices Ireland 2026', 'average weekly grocery spend Ireland'],
+  alternates: { canonical: `${BASE_URL}/cost-of-weekly-shop-ireland` },
   openGraph: {
     title: 'Cost of a Weekly Shop in Ireland — Which Store is Cheapest?',
     description: 'Real basket costs compared across Tesco, Dunnes, SuperValu & Aldi. Updated twice weekly.',

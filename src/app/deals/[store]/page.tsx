@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { getAllLatestPrices, STORE_INFO, fmt, pct, type StoreKey } from '@/lib/price-data';
 
 export const revalidate = 43200; // 12h
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
 
 const VALID_STORES: StoreKey[] = ['tesco', 'dunnes', 'supervalu', 'aldi'];
 
@@ -21,6 +24,7 @@ export async function generateMetadata({ params }: { params: Promise<{ store: st
     title: `${info.name} Deals & Offers This Week Ireland | supermarket.ie`,
     description: `This week's ${info.name} deals and special offers in Ireland. Live promotion data updated twice weekly — see every current offer at ${info.name}.`,
     keywords: [`${info.name} deals this week`, `${info.name} offers Ireland`, `${info.name} promotions`, `${info.name} special offers this week Ireland`],
+    alternates: { canonical: `${BASE_URL}/deals/${store}` },
     openGraph: {
       title: `${info.name} Deals & Offers This Week — Ireland`,
       description: `Live ${info.name} offers updated twice weekly.`,
@@ -38,7 +42,6 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
   const allPrices = await getAllLatestPrices();
   const storeDeals = allPrices.filter(p => p.store === storeKey && p.on_promotion);
 
-  // Group by category
   const byCategory = new Map<string, typeof storeDeals>();
   for (const deal of storeDeals) {
     if (!byCategory.has(deal.category)) byCategory.set(deal.category, []);
@@ -46,7 +49,6 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
   }
   const sortedCats = [...byCategory.entries()].sort((a, b) => b[1].length - a[1].length);
 
-  // Best savings
   const withSavings = storeDeals
     .filter(d => d.was_price && d.was_price > d.price)
     .map(d => ({ ...d, saving: d.was_price! - d.price, pctOff: pct(d.was_price!, d.price) }))
@@ -56,21 +58,16 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
 
   const updatedLabel = new Date().toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  // Other stores for cross-links
   const otherStores = VALID_STORES.filter(s => s !== storeKey);
 
   return (
     <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       <SiteHeader />
       <main className="max-w-6xl mx-auto px-6 pb-16">
-        {/* Breadcrumb */}
-        <nav className="pt-6 pb-2 text-xs text-[#B2BEC3]">
-          <Link href="/" className="hover:text-[#5c5b5b]">Home</Link>
-          {' · '}
-          <Link href="/deals" className="hover:text-[#5c5b5b]">Deals</Link>
-          {' · '}
-          <span className="text-[#5c5b5b]">{info.name}</span>
-        </nav>
+        <Breadcrumbs items={[
+          { label: 'Deals', href: '/deals' },
+          { label: `${info.name} Deals`, href: `/deals/${store}` },
+        ]} />
 
         {/* Hero */}
         <div className="pt-4 pb-8">
@@ -179,10 +176,10 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
           })}
         </div>
 
-        {/* CTA */}
+        {/* AI agent CTA */}
         <div className="rounded-2xl p-6 text-center" style={{ background: '#EAE7E7' }}>
           <div className="text-2xl mb-2">🛒</div>
-          <h3 className="font-bold text-[#2F2F2E] mb-1">Build a list around {info.name} deals</h3>
+          <h3 className="font-bold text-[#2F2F2E] mb-1">Let your AI agent handle this →</h3>
           <p className="text-sm text-[#5c5b5b] mb-4">
             Our AI planner uses live offer data to find you the cheapest meals and ingredients.
           </p>
@@ -198,7 +195,7 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
           '@type': 'WebPage',
           name: `${info.name} Deals & Offers This Week — Ireland`,
           description: `${storeDeals.length} current ${info.name} offers in Ireland.`,
-          url: `https://supermarket.ie/deals/${store}`,
+          url: `${BASE_URL}/deals/${store}`,
         }) }} />
       </main>
       <SiteFooter />

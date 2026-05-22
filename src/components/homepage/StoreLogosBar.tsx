@@ -1,6 +1,3 @@
-'use client';
-
-import { motion } from 'framer-motion';
 import Image from 'next/image';
 
 const stores = [
@@ -17,22 +14,9 @@ export function StoreLogosBar() {
         <p className="type-label text-center mb-6 text-on-surface-variant">
           Your agent understands pricing across
         </p>
-        <motion.div
-          className="flex flex-wrap justify-center items-center gap-8 md:gap-12"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-        >
-          {stores.map((store, index) => (
-            <motion.div
-              key={store.name}
-              className="opacity-50"
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 0.5, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.3, delay: index * 0.08 }}
-            >
+        <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
+          {stores.map((store) => (
+            <div key={store.name} className="opacity-50">
               <Image
                 src={store.logo}
                 alt={store.name}
@@ -40,9 +24,9 @@ export function StoreLogosBar() {
                 height={store.height}
                 className="h-6 md:h-8 w-auto"
               />
-            </motion.div>
+            </div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );

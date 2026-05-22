@@ -2,10 +2,15 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
+import { itemListJsonLd } from '@/lib/structured-data';
+import { POSTS } from '@/lib/blog';
 
 export const revalidate = 43200; // 12 hours — matches scrape frequency
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
 
 // Category metadata for SEO + display
 const CATEGORY_META: Record<string, {
@@ -125,7 +130,6 @@ const CATEGORY_META: Record<string, {
 };
 
 function slugToCategory(slug: string): string {
-  // Convert URL slug back to category name
   return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
@@ -148,8 +152,6 @@ async function getCategoryProducts(category: string) {
     .select('id, store, store_product_name, store_url, products(canonical_name, category)')
     .eq('url_status', 'resolved');
 
-  // Fetch latest prices — use RPC or paginate to get all observations
-  // Supabase max is 1000 per request, so paginate
   let priceRows: { store_product_id: string; price: number; on_promotion: boolean; was_price: number | null; observed_at: string }[] = [];
   let offset = 0;
   const PAGE = 1000;
@@ -167,7 +169,6 @@ async function getCategoryProducts(category: string) {
 
   if (!spRows || !priceRows.length) return null;
 
-  // Latest price per store_product
   const latestPrice = new Map<string, { price: number; on_promotion: boolean; was_price: number | null }>();
   for (const row of priceRows) {
     if (!latestPrice.has(row.store_product_id)) {
@@ -175,7 +176,6 @@ async function getCategoryProducts(category: string) {
     }
   }
 
-  // Group by canonical product, filter to category
   const byProduct = new Map<string, { canonical: string; stores: Map<string, { price: number; name: string; url: string | null; on_promotion: boolean; was_price: number | null }> }>();
 
   const MAIN_STORES = ['tesco', 'dunnes', 'supervalu'];
@@ -199,7 +199,6 @@ async function getCategoryProducts(category: string) {
     });
   }
 
-  // Only keep products available in all 3 main stores
   const filtered = Array.from(byProduct.values())
     .filter(p => MAIN_STORES.every(s => p.stores.has(s)))
     .sort((a, b) => a.canonical.localeCompare(b.canonical));
@@ -219,6 +218,7 @@ export async function generateMetadata({ params }: { params: Promise<{ category:
     title: `${catName} | supermarket.ie`,
     description: meta?.description ?? `Compare ${slugToCategory(category)} prices across Tesco, Dunnes Stores and SuperValu in Ireland.`,
     keywords: meta?.keywords,
+    alternates: { canonical: `${BASE_URL}/shop/${category}` },
     openGraph: {
       title: catName,
       description: meta?.description,
@@ -233,10 +233,8 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
 
   const products = await getCategoryProducts(categoryName);
   if (!products) notFound();
-  // Allow the page even if no products yet — show empty state
   const hasProducts = products.length > 0;
 
-  // Store totals across category
   const storeTotals: Record<string, number> = { tesco: 0, dunnes: 0, supervalu: 0 };
   for (const { stores } of products) {
     for (const [store, { price }] of stores) {
@@ -246,19 +244,28 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
   const rankedStores = [...STORES].filter(s => storeTotals[s] > 0).sort((a, b) => storeTotals[a] - storeTotals[b]);
   const cheapest = rankedStores[0];
 
+  // ItemList structured data
+  const jsonLd = itemListJsonLd({
+    name: meta?.title ?? `${categoryName} Prices Ireland`,
+    description: meta?.description ?? `${categoryName} prices across Irish supermarkets`,
+    url: `/shop/${category}`,
+    items: products.map(p => {
+      const sorted = [...p.stores.entries()].sort((a, b) => a[1].price - b[1].price);
+      return { name: p.canonical, price: sorted[0]?.[1]?.price };
+    }),
+  });
+
+  // Related blog posts (up to 2) for this category
+  const categoryBlogPosts = POSTS.filter(p =>
+    p.category === 'Saving Money' || p.category === 'Price Comparison'
+  ).slice(0, 2);
+
   return (
     <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
-        {/* Breadcrumb */}
-        <nav className="pt-6 pb-2 text-xs text-[#B2BEC3]">
-          <Link href="/" className="hover:text-[#5c5b5b]">Home</Link>
-          {' · '}
-          <Link href="/shop" className="hover:text-[#5c5b5b]">Shop by category</Link>
-          {' · '}
-          <span className="text-[#5c5b5b]">{categoryName}</span>
-        </nav>
+        <Breadcrumbs items={[{ label: 'Shop by category', href: '/shop' }, { label: categoryName, href: `/shop/${category}` }]} />
 
         {/* Hero */}
         <div className="pt-4 pb-6">
@@ -359,12 +366,12 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
           </div>
         )}
 
-        {/* CTA */}
+        {/* AI agent CTA */}
         <div className="rounded-2xl p-6 text-center mb-10" style={{ background: '#EAE7E7' }}>
           <div className="text-2xl mb-2">{meta?.emoji ?? '🛒'}</div>
-          <h3 className="font-bold text-[#2F2F2E] mb-1">Build your full weekly list</h3>
+          <h3 className="font-bold text-[#2F2F2E] mb-1">Let your AI agent handle this →</h3>
           <p className="text-sm text-[#5c5b5b] mb-4">
-            Tell our AI what you want to cook and get a complete shopping list with live prices across Tesco, Dunnes, SuperValu & Aldi.
+            Tell our AI what you want to cook and get a complete shopping list with live prices across Tesco, Dunnes, SuperValu &amp; Aldi.
           </p>
           <Link href="/"
             className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]"
@@ -372,6 +379,22 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
             Try the AI planner free →
           </Link>
         </div>
+
+        {/* Related blog posts */}
+        {categoryBlogPosts.length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-lg font-bold text-[#2F2F2E] mb-4">Related guides</h2>
+            <div className="space-y-2">
+              {categoryBlogPosts.map(p => (
+                <Link key={p.slug} href={`/blog/${p.slug}`}
+                  className="block bg-white rounded-xl p-4 transition group" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
+                  <div className="text-xs mb-1" style={{ color: 'rgba(175,173,172,0.8)' }}>{p.category} · {p.readingTime}</div>
+                  <div className="text-sm font-semibold text-[#2F2F2E] group-hover:text-[#006A35] transition">{p.title}</div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Other categories */}
         <h2 className="text-lg font-bold text-[#2F2F2E] mb-4">Browse other categories</h2>
@@ -390,6 +413,9 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
       </main>
 
       <SiteFooter />
+
+      {/* ItemList structured data */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
     </div>
   );
 }

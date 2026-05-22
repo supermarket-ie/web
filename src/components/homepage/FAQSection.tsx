@@ -1,6 +1,3 @@
-'use client';
-
-import { motion } from 'framer-motion';
 import {
   Accordion,
   AccordionContent,
@@ -8,7 +5,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 
-const faqs = [
+export const faqs = [
   {
     question: 'What exactly is a "grocery agent"?',
     answer:
@@ -50,13 +47,7 @@ export function FAQSection() {
   return (
     <section className="py-20 px-6" style={{ background: 'var(--surface)' }}>
       <div className="max-w-3xl mx-auto">
-        <motion.div
-          className="text-center mb-12"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-        >
+        <div className="text-center mb-12">
           <span
             className="type-label inline-flex items-center px-3 py-1.5 rounded-full mb-4"
             style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
@@ -64,32 +55,25 @@ export function FAQSection() {
             FAQ
           </span>
           <h2 className="type-headline text-on-background">Questions about your agent</h2>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          <Accordion className="w-full">
-            {faqs.map((faq, index) => (
-              <AccordionItem
-                key={index}
-                value={`item-${index}`}
-                className="border-b"
-                style={{ borderColor: 'var(--outline-variant)' }}
-              >
-                <AccordionTrigger className="text-left font-semibold text-on-background hover:no-underline py-4">
-                  {faq.question}
-                </AccordionTrigger>
-                <AccordionContent className="text-on-surface">
-                  <p>{faq.answer}</p>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </motion.div>
+        <Accordion className="w-full">
+          {faqs.map((faq, index) => (
+            <AccordionItem
+              key={index}
+              value={`item-${index}`}
+              className="border-b"
+              style={{ borderColor: 'var(--outline-variant)' }}
+            >
+              <AccordionTrigger className="text-left font-semibold text-on-background hover:no-underline py-4">
+                {faq.question}
+              </AccordionTrigger>
+              <AccordionContent className="text-on-surface">
+                <p>{faq.answer}</p>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
       </div>
     </section>
   );

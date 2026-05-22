@@ -4,9 +4,12 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { POSTS } from '@/lib/blog';
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+
 export const metadata: Metadata = {
   title: 'Blog — Grocery Tips & Price Comparisons Ireland | supermarket.ie',
   description: 'Practical guides on saving money at Irish supermarkets, price comparisons between Tesco, Dunnes and SuperValu, and meal ideas with live ingredient costs.',
+  alternates: { canonical: `${BASE_URL}/blog` },
 };
 
 // Category chips use the design system's surface-container colours;

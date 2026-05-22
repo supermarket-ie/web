@@ -1,6 +1,3 @@
-'use client';
-
-import { motion } from 'framer-motion';
 import { Star, Quote } from 'lucide-react';
 
 const testimonials = [
@@ -29,12 +26,12 @@ const testimonials = [
 
 export function TestimonialsSection() {
   return (
-    <section 
+    <section
       className="py-20 px-6 relative overflow-hidden"
       style={{ background: 'var(--surface)' }}
     >
       {/* Radial gradient background */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse 80% 50% at 50% 50%, rgba(0,106,53,0.06) 0%, transparent 70%)',
@@ -42,13 +39,7 @@ export function TestimonialsSection() {
       />
 
       <div className="max-w-6xl mx-auto relative z-10">
-        <motion.div
-          className="text-center mb-16"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-        >
+        <div className="text-center mb-16">
           <span
             className="type-label inline-flex items-center px-3 py-1.5 rounded-full mb-4"
             style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
@@ -58,26 +49,22 @@ export function TestimonialsSection() {
           <h2 className="type-headline text-on-background text-balance">
             What people say about their agent
           </h2>
-        </motion.div>
+        </div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {testimonials.map((testimonial, index) => (
-            <motion.div
+          {testimonials.map((testimonial) => (
+            <div
               key={testimonial.name}
               className="rounded-2xl p-8 relative"
               style={{ background: 'var(--surface-container-lowest)' }}
-              initial={{ opacity: 0, y: 30, scale: 0.98 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
             >
               {/* Large quote mark */}
-              <Quote 
-                className="absolute top-6 right-6 size-10 opacity-10" 
+              <Quote
+                className="absolute top-6 right-6 size-10 opacity-10"
                 style={{ color: 'var(--primary)' }}
                 strokeWidth={1}
               />
-              
+
               <div className="flex items-center gap-1 mb-6">
                 {[...Array(5)].map((_, i) => (
                   <Star
@@ -110,7 +97,7 @@ export function TestimonialsSection() {
                   <div className="text-sm text-on-surface">{testimonial.location}</div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>

@@ -5,3 +5,6 @@ export { BenefitsSection } from './BenefitsSection';
 export { TestimonialsSection } from './TestimonialsSection';
 export { FAQSection } from './FAQSection';
 export { BottomCTASection } from './BottomCTASection';
+export { CookieBanner } from './CookieBanner';
+export { SessionLink } from './SessionLink';
+export { ScrollToTopButton } from './ScrollToTopButton';

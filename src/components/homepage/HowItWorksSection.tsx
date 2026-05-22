@@ -1,19 +1,10 @@
-'use client';
-
-import { motion } from 'framer-motion';
 import { MessageSquare, Brain, Zap, ShoppingCart, TrendingDown, Bell } from 'lucide-react';
 
 export function HowItWorksSection() {
   return (
     <section id="how-it-works" className="py-20 px-6 noise-bg relative" style={{ background: 'var(--surface)' }}>
       <div className="max-w-6xl mx-auto relative z-10">
-        <motion.div
-          className="mb-16"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-        >
+        <div className="mb-16">
           <span
             className="type-label inline-flex items-center px-3 py-1.5 rounded-full mb-4"
             style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
@@ -25,18 +16,14 @@ export function HowItWorksSection() {
             <br />
             who never sleeps
           </h2>
-        </motion.div>
+        </div>
 
         {/* Bento Grid */}
         <div className="grid md:grid-cols-2 gap-6">
           {/* Card 1 - Learns you */}
-          <motion.div
+          <div
             className="rounded-2xl p-8 relative overflow-hidden"
             style={{ background: 'var(--surface-container-lowest)' }}
-            initial={{ opacity: 0, y: 30, scale: 0.98 }}
-            whileInView={{ opacity: 1, y: 0, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
           >
             <div
               className="size-12 rounded-xl flex items-center justify-center mb-4"
@@ -50,16 +37,12 @@ export function HowItWorksSection() {
             <p className="text-on-surface">
               Family size, dietary needs, budget, favourite meals, stores you prefer — your agent remembers it all and gets better every week.
             </p>
-          </motion.div>
+          </div>
 
           {/* Card 2 - Agent capabilities (large) */}
-          <motion.div
+          <div
             className="rounded-2xl p-8 relative overflow-hidden md:row-span-2"
             style={{ background: '#006A35' }}
-            initial={{ opacity: 0, y: 30, scale: 0.98 }}
-            whileInView={{ opacity: 1, y: 0, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.1 }}
           >
             {/* Decorative blobs */}
             <div
@@ -70,7 +53,7 @@ export function HowItWorksSection() {
               className="absolute size-40 rounded-full bottom-0 left-0 -translate-x-1/4 translate-y-1/4"
               style={{ background: 'var(--primary-container)', opacity: 0.08 }}
             />
-            
+
             <div className="relative z-10">
               <div
                 className="size-12 rounded-xl flex items-center justify-center mb-4"
@@ -86,7 +69,7 @@ export function HowItWorksSection() {
               </p>
 
               {/* Agent capabilities */}
-              <div 
+              <div
                 className="rounded-xl p-5 space-y-5"
                 style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)' }}
               >
@@ -98,33 +81,22 @@ export function HowItWorksSection() {
                   { icon: TrendingDown, text: 'Find the cheapest store split for your exact basket' },
                   { icon: Bell, text: 'Alert you when items you buy regularly drop in price' },
                   { icon: MessageSquare, text: 'Answer any question about Irish grocery prices instantly' },
-                ].map((item, i) => (
-                  <motion.div
-                    key={item.text}
-                    className="flex items-start gap-3"
-                    initial={{ opacity: 0, x: -10 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.3, delay: 0.4 + i * 0.1 }}
-                  >
+                ].map((item) => (
+                  <div key={item.text} className="flex items-start gap-3">
                     <div className="size-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }}>
                       <item.icon className="size-4" style={{ color: 'var(--primary-container)' }} />
                     </div>
                     <span className="text-sm font-medium text-white leading-snug">{item.text}</span>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* Card 3 - Conversational */}
-          <motion.div
+          <div
             className="rounded-2xl p-8 relative overflow-hidden"
             style={{ background: 'var(--surface-container-lowest)' }}
-            initial={{ opacity: 0, y: 30, scale: 0.98 }}
-            whileInView={{ opacity: 1, y: 0, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.2 }}
           >
             <div
               className="size-12 rounded-xl flex items-center justify-center mb-4"
@@ -138,7 +110,7 @@ export function HowItWorksSection() {
             <p className="text-on-surface">
               &ldquo;We&apos;re doing a roast on Sunday and need lunches for the kids.&rdquo; Your agent handles the rest — no forms, no clicking through categories.
             </p>
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>

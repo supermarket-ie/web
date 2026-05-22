@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+
 export const metadata: Metadata = {
   title: 'Shop by Category — Grocery Prices Ireland | supermarket.ie',
   description: 'Browse live grocery prices by category across Tesco, Dunnes Stores and SuperValu in Ireland. Updated twice weekly.',
+  alternates: { canonical: `${BASE_URL}/shop` },
 };
 
 const CATEGORIES = [

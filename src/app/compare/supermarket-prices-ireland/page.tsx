@@ -6,10 +6,13 @@ import { SiteFooter } from '@/components/SiteFooter';
 
 export const revalidate = 43200; // Revalidate every 12 hours
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+
 export const metadata: Metadata = {
   title: 'Supermarket Price Comparison Ireland — Tesco, Dunnes, SuperValu, Aldi, Lidl',
   description: 'Compare grocery prices across all 5 major Irish supermarkets: Tesco, Dunnes Stores, SuperValu, Aldi & Lidl. See which is cheapest for your weekly shop with live price data.',
   keywords: ['supermarket prices Ireland', 'cheapest supermarket Ireland', 'Tesco vs Dunnes Ireland', 'Aldi prices Ireland', 'Lidl prices Ireland', 'grocery comparison Ireland', 'SuperValu price comparison'],
+  alternates: { canonical: `${BASE_URL}/compare/supermarket-prices-ireland` },
   openGraph: {
     title: 'Supermarket Price Comparison Ireland — Which is Cheapest?',
     description: 'Live prices compared across Tesco, Dunnes, SuperValu, Aldi & Lidl. Updated twice weekly with real prices.',

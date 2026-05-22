@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { getAllLatestPrices, groupByProduct, filterToMain3, STORE_INFO, ALL_STORES, fmt, type StoreKey } from '@/lib/price-data';
 
 export const revalidate = 43200; // 12h
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
 
 // All valid matchups
 const MATCHUPS: { slug: string; stores: [StoreKey, StoreKey] }[] = [
@@ -36,6 +39,7 @@ export async function generateMetadata({ params }: { params: Promise<{ matchup: 
     title: `${nameA} vs ${nameB} Prices Ireland — Which is Cheaper? | supermarket.ie`,
     description: `Live price comparison between ${nameA} and ${nameB} in Ireland. See which supermarket is cheaper across ${CATEGORIES.length}+ categories with real, updated prices.`,
     keywords: [`${nameA} vs ${nameB}`, `${nameA} vs ${nameB} prices Ireland`, `${nameA} or ${nameB} cheaper`, `supermarket comparison Ireland`],
+    alternates: { canonical: `${BASE_URL}/compare/${slug}` },
     openGraph: {
       title: `${nameA} vs ${nameB} — Which is Cheaper in Ireland?`,
       description: `Head-to-head grocery price comparison with live data. Updated twice weekly.`,
@@ -100,7 +104,7 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
     });
   }
 
-  // Biggest price differences (most interesting for users)
+  // Biggest price differences
   const diffs = shared
     .map(p => ({ ...p, diff: Math.abs(p.priceA - p.priceB), cheaper: p.priceA < p.priceB ? storeA : storeB }))
     .filter(p => p.diff > 0.10)
@@ -113,14 +117,10 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
     <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
       <SiteHeader />
       <main className="max-w-6xl mx-auto px-6 pb-16">
-        {/* Breadcrumb */}
-        <nav className="pt-6 pb-2 text-xs text-[#B2BEC3]">
-          <Link href="/" className="hover:text-[#5c5b5b]">Home</Link>
-          {' · '}
-          <Link href="/compare/supermarket-prices-ireland" className="hover:text-[#5c5b5b]">Compare</Link>
-          {' · '}
-          <span className="text-[#5c5b5b]">{infoA.name} vs {infoB.name}</span>
-        </nav>
+        <Breadcrumbs items={[
+          { label: 'Compare', href: '/compare/supermarket-prices-ireland' },
+          { label: `${infoA.name} vs ${infoB.name}`, href: `/compare/${slug}` },
+        ]} />
 
         {/* Hero */}
         <div className="pt-4 pb-8">
@@ -241,10 +241,10 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
           </Link>
         </div>
 
-        {/* CTA */}
+        {/* AI agent CTA */}
         <div className="rounded-2xl p-6 text-center" style={{ background: '#EAE7E7' }}>
           <div className="text-2xl mb-2">🛒</div>
-          <h3 className="font-bold text-[#2F2F2E] mb-1">Find out which store is cheapest for your shop</h3>
+          <h3 className="font-bold text-[#2F2F2E] mb-1">Let your AI agent handle this →</h3>
           <p className="text-sm text-[#5c5b5b] mb-4">
             Tell our AI what you need and get a personalised price comparison across all stores.
           </p>
@@ -261,7 +261,7 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
           '@type': 'WebPage',
           name: `${infoA.name} vs ${infoB.name} Price Comparison Ireland`,
           description: `Comparing ${shared.length} grocery products between ${infoA.name} and ${infoB.name} in Ireland.`,
-          url: `https://supermarket.ie/compare/${slug}`,
+          url: `${BASE_URL}/compare/${slug}`,
         }) }} />
       </main>
       <SiteFooter />

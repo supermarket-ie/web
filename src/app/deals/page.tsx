@@ -2,14 +2,18 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export const revalidate = 43200; // 12h — matches scrape cycle
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
 
 export const metadata: Metadata = {
   title: 'Supermarket Deals & Offers This Week Ireland | supermarket.ie',
   description: 'This week\'s best grocery deals and offers across Tesco, Dunnes Stores, SuperValu and Aldi in Ireland. Updated twice weekly with live promotion data.',
   keywords: ['supermarket deals Ireland', 'Tesco deals this week', 'Dunnes offers this week', 'SuperValu offers', 'grocery offers Ireland', 'best supermarket deals Ireland'],
+  alternates: { canonical: `${BASE_URL}/deals` },
   openGraph: {
     title: 'Supermarket Deals & Offers This Week — Ireland',
     description: 'Live grocery offers across Tesco, Dunnes, SuperValu & Aldi. Updated twice weekly.',
@@ -38,8 +42,6 @@ function fmt(n: number) { return `€${n.toFixed(2)}`; }
 function pct(was: number, now: number) { return Math.round(((was - now) / was) * 100); }
 
 async function getDeals(): Promise<Deal[]> {
-  // Get all current promotions with product info
-  // Paginate to get everything
   let allRows: Deal[] = [];
   let offset = 0;
   const PAGE = 1000;
@@ -70,7 +72,6 @@ async function getDeals(): Promise<Deal[]> {
     offset += PAGE;
   }
 
-  // Deduplicate: keep latest per (canonical_name, store)
   const seen = new Map<string, Deal>();
   for (const deal of allRows) {
     const key = `${deal.canonical_name}::${deal.store}`;
@@ -83,24 +84,12 @@ async function getDeals(): Promise<Deal[]> {
 export default async function DealsPage() {
   const deals = await getDeals();
 
-  // Group by store
   const byStore = new Map<string, Deal[]>();
   for (const deal of deals) {
     if (!byStore.has(deal.store)) byStore.set(deal.store, []);
     byStore.get(deal.store)!.push(deal);
   }
 
-  // Group by category (across all stores)
-  const byCategory = new Map<string, Deal[]>();
-  for (const deal of deals) {
-    if (!byCategory.has(deal.category)) byCategory.set(deal.category, []);
-    byCategory.get(deal.category)!.push(deal);
-  }
-
-  // Sort categories by deal count
-  const sortedCategories = [...byCategory.entries()].sort((a, b) => b[1].length - a[1].length);
-
-  // Top deals: biggest savings (need was_price)
   const withSavings = deals
     .filter(d => d.was_price && d.was_price > d.price)
     .map(d => ({ ...d, saving: d.was_price! - d.price, pctOff: pct(d.was_price!, d.price) }))
@@ -113,12 +102,7 @@ export default async function DealsPage() {
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
-        {/* Breadcrumb */}
-        <nav className="pt-6 pb-2 text-xs text-[#B2BEC3]">
-          <Link href="/" className="hover:text-[#5c5b5b]">Home</Link>
-          {' · '}
-          <span className="text-[#5c5b5b]">Deals & Offers</span>
-        </nav>
+        <Breadcrumbs items={[{ label: 'Deals & Offers', href: '/deals' }]} />
 
         {/* Hero */}
         <div className="pt-4 pb-8">
@@ -126,7 +110,7 @@ export default async function DealsPage() {
             🏷️ Supermarket Deals This Week
           </h1>
           <p className="text-[#5c5b5b] max-w-2xl">
-            Live offers across Tesco, Dunnes Stores, SuperValu and Aldi in Ireland. 
+            Live offers across Tesco, Dunnes Stores, SuperValu and Aldi in Ireland.
             Updated twice weekly from real store data — {deals.length} deals right now.
           </p>
         </div>
@@ -188,7 +172,6 @@ export default async function DealsPage() {
           const info = STORE_INFO[store];
           const storeDeals = byStore.get(store)!;
 
-          // Group by category within store
           const storeCats = new Map<string, Deal[]>();
           for (const d of storeDeals) {
             if (!storeCats.has(d.category)) storeCats.set(d.category, []);
@@ -234,10 +217,10 @@ export default async function DealsPage() {
           );
         })}
 
-        {/* CTA */}
+        {/* AI agent CTA */}
         <div className="rounded-2xl p-6 text-center mb-10" style={{ background: '#EAE7E7' }}>
           <div className="text-2xl mb-2">🛒</div>
-          <h3 className="font-bold text-[#2F2F2E] mb-1">Build a shopping list around this week&apos;s deals</h3>
+          <h3 className="font-bold text-[#2F2F2E] mb-1">Let your AI agent handle this →</h3>
           <p className="text-sm text-[#5c5b5b] mb-4">
             Our AI planner uses live promotion data to find you the cheapest meals and ingredients across all stores.
           </p>
@@ -254,7 +237,7 @@ export default async function DealsPage() {
           '@type': 'WebPage',
           name: 'Supermarket Deals & Offers This Week — Ireland',
           description: `${deals.length} live grocery deals across Irish supermarkets. Updated twice weekly.`,
-          url: 'https://supermarket.ie/deals',
+          url: `${BASE_URL}/deals`,
           mainEntity: {
             '@type': 'ItemList',
             numberOfItems: deals.length,
