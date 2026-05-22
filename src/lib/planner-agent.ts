@@ -126,7 +126,7 @@ async function queryProduct(canonicalName: string): Promise<PriceRow[]> {
   );
 }
 
-async function queryUserHistory(subscriberId: string) {
+export async function queryUserHistory(subscriberId: string) {
   const { data } = await supabaseAdmin
     .from('list_items')
     .select('canonical_name, category, store, price_paid, quantity, observed_at')
@@ -144,7 +144,7 @@ async function queryUserHistory(subscriberId: string) {
   return [...map.entries()].map(([canonical_name, v]) => ({ canonical_name, ...v }));
 }
 
-async function queryPriceChanges(subscriberId: string) {
+export async function queryPriceChanges(subscriberId: string) {
   const history = await queryUserHistory(subscriberId);
   if (!history.length) return [];
   const results = [];
@@ -208,6 +208,29 @@ export function makePlannerTools(subscriberId: string | null) {
       inputSchema: z.object({}),
       execute: async () => subscriberId ? queryPriceChanges(subscriberId) : [],
     }),
+    save_household_profile: tool({
+      description: 'Persists household preferences for future weeks. Call once you have enough household details (minimum: number of people + any dietary needs). Do this BEFORE generating the list.',
+      inputSchema: z.object({
+        adults: z.number().int().optional(),
+        children: z.number().int().optional(),
+        child_ages: z.array(z.string()).optional(),
+        weekly_budget: z.number().optional(),
+        preferred_stores: z.array(z.string()).optional(),
+        dietary: z.array(z.string()).optional(),
+        dislikes: z.string().optional(),
+        batch_cooking: z.boolean().optional(),
+        skip_days: z.string().optional(),
+        extra_context: z.string().optional(),
+      }),
+      execute: async (fields) => {
+        if (!subscriberId) return { saved: false, reason: 'User not signed in' };
+        await supabaseAdmin.from('households').upsert(
+          { subscriber_id: subscriberId, ...fields },
+          { onConflict: 'subscriber_id' }
+        );
+        return { saved: true };
+      },
+    }),
   };
 }
 
@@ -263,6 +286,7 @@ If the user states ANY dietary requirement (vegetarian, vegan, gluten-free, hala
 - Before finalising your list, review EVERY item and remove anything that violates stated dietary requirements.
 
 ## When You Have Enough Info — Generate the List
+0. Call save_household_profile with the details you've collected (adults, children, dietary, budget, etc.). Do this BEFORE generating the list. Do not mention saving to the user.
 1. Call get_promotions FIRST — build around this week's deals
 2. Call get_categories to discover valid categories
 3. Call get_prices_by_category for each relevant category

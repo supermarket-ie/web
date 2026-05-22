@@ -87,6 +87,30 @@ function parseButtonSuggestions(content: string): { text: string; buttons: ChatB
   return { text, buttons };
 }
 
+function parseListItems(content: string): { canonical_name: string; category: string; store: string; price_paid: number; quantity: number }[] {
+  const lines = content.split('\n');
+  const items: { canonical_name: string; category: string; store: string; price_paid: number; quantity: number }[] = [];
+  let currentCategory = '';
+  for (const line of lines) {
+    const catMatch = line.match(/^\*\*(.+?)\*\*\s*$/);
+    if (catMatch) {
+      currentCategory = catMatch[1].trim();
+      continue;
+    }
+    const itemMatch = line.match(/^-\s+(.+?)\s+[—–-]\s+(Tesco|Dunnes|SuperValu|Aldi|Lidl)\s+€(\d+(?:\.\d{2})?)/i);
+    if (itemMatch && currentCategory) {
+      items.push({
+        canonical_name: itemMatch[1].trim(),
+        category: currentCategory,
+        store: itemMatch[2].toLowerCase(),
+        price_paid: parseFloat(itemMatch[3]),
+        quantity: 1,
+      });
+    }
+  }
+  return items;
+}
+
 function calcSavings(totals: StoreTotal[]): number | null {
   if (totals.length < 2) return null;
   const sorted = [...totals].sort((a, b) => a.total - b.total);
@@ -434,6 +458,16 @@ export function HomePlanner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: session.token, ...profile }),
       }).catch(() => {});
+
+      // Save list items
+      const items = parseListItems(content);
+      if (items.length > 0 && session.token) {
+        await fetch('/api/list/save-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: session.token, items }),
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('Auto-save failed:', err);
     }
