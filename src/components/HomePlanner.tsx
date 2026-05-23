@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { loadSession, loadProfile, saveProfile, type PlannerProfile, saveSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
+import { SmartRefreshCard, type RefreshData } from '@/components/SmartRefreshCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -387,9 +388,13 @@ export function HomePlanner() {
     batchCooking: false,
   });
 
+  const [refreshData, setRefreshData] = useState<RefreshData | null>(null);
+  const [showRefreshCard, setShowRefreshCard] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const sameAgainModeRef = useRef(false);
 
   // ── Auto-scroll ──
   useEffect(() => {
@@ -522,6 +527,21 @@ export function HomePlanner() {
         // Returning user
         setProfile(userProfile);
         setIsUnlocked(true);
+
+        // Check if they have a recent list to show the Smart Refresh card
+        try {
+          const refreshRes = await fetch(`/api/plan/refresh?token=${encodeURIComponent(session.token)}`);
+          if (refreshRes.ok) {
+            const data = await refreshRes.json();
+            if (data.hasRecentList) {
+              setRefreshData(data);
+              setShowRefreshCard(true);
+              return; // SmartRefreshCard replaces the greeting
+            }
+          }
+        } catch {}
+
+        // No recent list — show standard returning user greeting
         const people = userProfile.adults + userProfile.children;
         addMsg('assistant', `👋 Welcome back! Last time you planned for ${people} people. What would you like this week?\n\n[[Same as last time|Update my preferences|Start fresh]]`);
       } else {
@@ -556,6 +576,7 @@ export function HomePlanner() {
           messages: apiMessages,
           intakeMode: true,
           returningUser: isUnlocked,
+          hasLastList: sameAgainModeRef.current,
           profile,
           token: session?.token,
           householdSize: profile.adults + profile.children,
@@ -649,9 +670,31 @@ export function HomePlanner() {
     });
   }
 
+  // ── Smart Refresh Card handlers ──
+  function handleSameAgain() {
+    setShowRefreshCard(false);
+    sameAgainModeRef.current = true;
+    handleUserInput('Same again please');
+  }
+
+  function handleChangeThings() {
+    setShowRefreshCard(false);
+    const people = profile.adults + profile.children;
+    addMsg('assistant', `👋 Welcome back! You last planned for ${people} people. What would you like to change this week?\n\n[[Same meals, different budget|Add more variety|Remove some items|Start fresh]]`);
+  }
+
   // ── Render ──
   return (
     <div className="flex flex-col h-full max-w-2xl mx-auto overflow-hidden">
+      {/* Smart Refresh Card for returning users with a recent list */}
+      {showRefreshCard && refreshData && (
+        <SmartRefreshCard
+          data={refreshData}
+          onSameAgain={handleSameAgain}
+          onModify={handleChangeThings}
+        />
+      )}
+
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 space-y-3 mb-4 overflow-y-auto" style={{ maxHeight: '65vh' }}>
         {messages.map(m => (

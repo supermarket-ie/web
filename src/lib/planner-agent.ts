@@ -126,6 +126,17 @@ async function queryProduct(canonicalName: string): Promise<PriceRow[]> {
   );
 }
 
+async function queryProductPromotions(canonicalName: string): Promise<PriceRow[]> {
+  const { data } = await supabaseAdmin
+    .from('price_observations')
+    .select(SELECT)
+    .eq('on_promotion', true)
+    .order('observed_at', { ascending: false })
+    .limit(200);
+  const rows = (data ?? []) as unknown as RawObs[];
+  return dedup(rows.filter(r => r.store_products?.products?.canonical_name === canonicalName));
+}
+
 export async function queryUserHistory(subscriberId: string) {
   const { data } = await supabaseAdmin
     .from('list_items')
@@ -208,6 +219,38 @@ export function makePlannerTools(subscriberId: string | null) {
       inputSchema: z.object({}),
       execute: async () => subscriberId ? queryPriceChanges(subscriberId) : [],
     }),
+    get_last_list: tool({
+      description: "Returns the user's most recent saved grocery list with all items, stores, and prices paid.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        if (!subscriberId) return { items: [], found: false };
+        const { data } = await supabaseAdmin
+          .from('saved_lists')
+          .select('items, name, generated_at, store_totals')
+          .eq('subscriber_id', subscriberId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        if (!data) return { items: [], found: false };
+        const history = await queryUserHistory(subscriberId);
+        return { ...data, history, found: true };
+      },
+    }),
+    reprice_list: tool({
+      description: 'Takes a list of product names and returns current best prices + any promotions. Use after get_last_list to build an updated "same again" list.',
+      inputSchema: z.object({
+        items: z.array(z.string()).describe('Array of canonical_name values from the previous list'),
+      }),
+      execute: async ({ items }: { items: string[] }) => {
+        const results = [];
+        for (const name of items) {
+          const prices = await queryProduct(name);
+          const promotions = await queryProductPromotions(name);
+          results.push({ canonical_name: name, prices, promotions });
+        }
+        return results;
+      },
+    }),
     save_household_profile: tool({
       description: 'Persists household preferences for future weeks. Call once you have enough household details (minimum: number of people + any dietary needs). Do this BEFORE generating the list.',
       inputSchema: z.object({
@@ -241,8 +284,13 @@ export function makePlannerTools(subscriberId: string | null) {
 export function buildIntakePrompt(opts?: {
   returningUser?: boolean;
   profileSummary?: string;
+  hasLastList?: boolean;
 }): string {
-  const returningContext = opts?.returningUser && opts?.profileSummary
+  const sameAgainContext = opts?.returningUser && opts?.hasLastList
+    ? `\n\n## Returning User — "Same Again" Mode\n\nThe user wants their usual list updated with this week's prices. Their last list is available via get_last_list.\n\nYour job:\n1. Call get_last_list to get their previous items (use the history field for canonical_names)\n2. Call reprice_list with those item canonical_names\n3. Present the updated list with clear callouts:\n   - ✅ Items that got cheaper (show saving)\n   - ⚠️ Items that got more expensive (show increase)\n   - 🏷️ Items with new promotions at a different store (suggest swap)\n   - ❌ Items no longer available (suggest alternative)\n4. Show the new total vs last time\n5. Ask if they want any changes\n\nKeep it brief. They know what they want — just show what's different.`
+    : '';
+
+  const returningContext = opts?.returningUser && opts?.profileSummary && !opts?.hasLastList
     ? `\n\n## Returning User Context\nThis user has shopped before. Their saved profile:\n${opts.profileSummary}\n\nGreet them warmly, mention their household briefly, and offer to plan the same way or update anything. If they say "same again" or similar, go straight to generating.`
     : '';
 
@@ -324,7 +372,7 @@ _For [household description] · [meals covered]_
 💡 **Best value split:** [1-2 sentence recommendation]
 
 ## Post-List Modifications
-After generating, the user may ask to change things. Help them — swap items, add/remove products, adjust quantities. Always show the full updated list.${returningContext}`;
+After generating, the user may ask to change things. Help them — swap items, add/remove products, adjust quantities. Always show the full updated list.${returningContext}${sameAgainContext}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -512,6 +560,7 @@ export function createPlannerAgent(opts: {
   intakeMode?: boolean;
   returningUser?: boolean;
   profileSummary?: string;
+  hasLastList?: boolean;
 }) {
   let instructions: string;
 
@@ -520,6 +569,7 @@ export function createPlannerAgent(opts: {
     instructions = buildIntakePrompt({
       returningUser: opts.returningUser,
       profileSummary: opts.profileSummary,
+      hasLastList: opts.hasLastList,
     });
   } else if (opts.profile) {
     instructions = buildProfilePrompt(opts.profile);

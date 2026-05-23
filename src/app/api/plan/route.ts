@@ -27,6 +27,7 @@ export async function POST(req: Request) {
   const intakeMode = body.intakeMode as boolean | undefined;
   const returningUser = body.returningUser as boolean | undefined;
   const profileSummary = body.profileSummary as string | undefined;
+  const hasLastList = body.hasLastList as boolean | undefined;
 
   // ── Conversation-based flow (useChat from ConversationChat): load context from DB ──
   if (conversationId && subscriberId && incomingMessages.length > 0) {
@@ -184,6 +185,7 @@ export async function POST(req: Request) {
     intakeMode: intakeMode ?? false,
     returningUser: returningUser ?? false,
     profileSummary: profileSummary ?? undefined,
+    hasLastList: hasLastList ?? false,
   });
 
   return createAgentUIStreamResponse({
