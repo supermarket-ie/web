@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
+import { trackEvent } from '@/lib/analytics';
 import { HouseholdEditor } from '@/components/HouseholdEditor';
 
 interface Conversation {
@@ -71,6 +72,7 @@ export function Dashboard() {
       return;
     }
     setToken(session.token);
+    trackEvent('dashboard_visit', undefined, session.token);
     loadData(session.token);
   }, [router]);
 

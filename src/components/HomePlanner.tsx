@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { loadSession, loadProfile, saveProfile, type PlannerProfile, saveSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
+import { trackEvent } from '@/lib/analytics';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -312,6 +313,7 @@ function UnlockCTA({ householdSize, savings, onUnlocked }: {
       if (data.token) {
         saveSession({ token: data.token, email, familySize: String(householdSize), expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 });
       }
+      trackEvent('signup_completed', undefined, data.token);
       onUnlocked();
     } catch (err) {
       setError((err as Error).message);
@@ -450,6 +452,7 @@ export function HomePlanner() {
       const convData = convRes.ok ? await convRes.json() : null;
       if (convData?.conversation?.id) {
         setConversationId(convData.conversation.id);
+        trackEvent('conversation_started', undefined, session.token);
       }
 
       // Save profile server-side
@@ -579,7 +582,12 @@ export function HomePlanner() {
           const totals = parseStoreTotals(content);
           if (totals.length > 0) {
             setListContent(content);
-            setHasGeneratedList(true);
+            if (!hasGeneratedList) {
+              setHasGeneratedList(true);
+              const items = parseListItems(content);
+              const session = loadSession();
+              trackEvent('list_generated', { item_count: items.length }, session?.token);
+            }
           }
           // Parse button suggestions from the streamed content
           const { text: displayText, buttons } = parseButtonSuggestions(content);
@@ -622,6 +630,15 @@ export function HomePlanner() {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setButtonsDisabled(true);
+
+    // Track planner engagement
+    const session = loadSession();
+    const userMessageCount = messages.filter(m => m.role === 'user').length;
+    if (userMessageCount === 0) {
+      trackEvent('planner_started', undefined, session?.token);
+    } else {
+      trackEvent('planner_message', { message_index: userMessageCount }, session?.token);
+    }
 
     // Send all messages (including this new one) to the AI
     setMessages(prev => {
