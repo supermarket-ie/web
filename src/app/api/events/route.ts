@@ -37,8 +37,9 @@ export async function POST(req: Request) {
     } catch {}
   }
 
-  // Fire and forget — never block the response
-  void supabaseAdmin
+  // Await the insert — serverless functions kill the process after response,
+  // so fire-and-forget never actually executes.
+  const { error } = await supabaseAdmin
     .from('agent_events')
     .insert({
       event_type,
@@ -46,6 +47,11 @@ export async function POST(req: Request) {
       subscriber_id: subscriberId,
       metadata: metadata ?? {},
     });
+
+  if (error) {
+    console.error('[events] insert error:', error.message);
+    return Response.json({ error: 'Failed to record event' }, { status: 500 });
+  }
 
   return Response.json({ ok: true });
 }
