@@ -488,6 +488,22 @@ async function refreshMode({ limit, category, offset = 0 }) {
   if (category) {
     filtered = filtered.filter((sp) => sp.products?.category === category);
   }
+
+  // Prioritise unpriced items: fetch all store_product_ids that have at least one price observation
+  const { data: pricedRows } = await supabase
+    .from('price_observations')
+    .select('store_product_id');
+  const pricedIds = new Set((pricedRows || []).map((r) => r.store_product_id));
+
+  const unpriced = filtered.filter((sp) => !pricedIds.has(sp.id));
+  const priced = filtered.filter((sp) => pricedIds.has(sp.id));
+
+  // Put unpriced first, then priced (oldest-first would be better but this is good enough)
+  filtered = [...unpriced, ...priced];
+  console.log(
+    `Priority: ${unpriced.length} unpriced items first, then ${priced.length} with existing prices`
+  );
+
   if (offset > 0) filtered = filtered.slice(offset);
   if (limit > 0) filtered = filtered.slice(0, limit);
 
