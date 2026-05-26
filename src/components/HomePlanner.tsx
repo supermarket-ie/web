@@ -304,7 +304,7 @@ function UnlockCTA({ householdSize, savings, onUnlocked }: {
       const res = await fetch('/api/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, householdSize }),
+        body: JSON.stringify({ email, familySize: householdSize }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
