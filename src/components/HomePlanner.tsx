@@ -382,7 +382,7 @@ export function HomePlanner() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [savedAfterUnlock, setSavedAfterUnlock] = useState(false);
   const [profile, setProfile] = useState<PlannerProfile>({
-    adults: 2, children: 0, childAges: [],
+    adults: 1, children: 0, childAges: [],
     preferredStores: ['all'], dietary: [],
     meals: { breakfast: true, lunch: true, dinner: true, snacks: false },
     batchCooking: false,

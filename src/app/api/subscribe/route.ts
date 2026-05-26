@@ -26,9 +26,9 @@ export async function POST(request: NextRequest) {
   try {
     const { email, familySize } = await request.json();
 
-    if (!email || !familySize) {
+    if (!email) {
       return NextResponse.json(
-        { error: 'Email and family size are required' },
+        { error: 'Email is required' },
         { status: 400 }
       );
     }
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         .from('subscribers')
         .update({
           subscribed: true,
-          family_size: familySize,
+          family_size: familySize || null,
           unsubscribe_token: unsubscribeToken,
           updated_at: new Date().toISOString(),
         })
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         .from('subscribers')
         .insert({
           email: email.toLowerCase(),
-          family_size: familySize,
+          family_size: familySize || null,
           unsubscribe_token: unsubscribeToken,
           subscribed: true,
         })
