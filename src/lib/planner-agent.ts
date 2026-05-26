@@ -363,13 +363,17 @@ _For [household description] · [meals covered]_
 - ...
 
 ---
-**Store totals**
+**🏪 Recommendation**
+[Pick ONE of these based on the totals and context:]
+- If one store has everything (or nearly): "Do your full shop at [cheapest store]. Total: €X.XX"
+- If splitting genuinely saves >€5 AND the shop is large (>€60): "Main shop at [Store A] (€X, [N] items). Grab [2-3 items] at [Store B] if you pass it (€Y). Saves €Z vs doing it all at [Store A]."
+- If splitting saves <€5 or the shop is small (<€50): ALWAYS recommend a single store. The convenience of one stop outweighs €2-3 savings.
+
+**Store totals** (for reference)
 - Tesco: €X.XX ([N] items)
 - Dunnes: €X.XX ([N] items)
 - SuperValu: €X.XX ([N] items)
 - Aldi: €X.XX ([N] items)
-
-💡 **Best value split:** [1-2 sentence recommendation]
 
 ## Post-List Modifications
 After generating, the user may ask to change things. Help them — swap items, add/remove products, adjust quantities. Always show the full updated list.${returningContext}${sameAgainContext}`;
@@ -488,14 +492,19 @@ _For ${household} · ${mealCoverage}_
 - ...
 
 ---
-**Store totals**
+**🏪 Recommendation**
+[Pick ONE of these based on the totals and context:]
+- If one store has everything (or nearly): "Do your full shop at [cheapest store]. Total: €X.XX"
+- If splitting genuinely saves >€5 AND the user has a large shop (>€60): "Main shop at [Store A] (€X, [N] items). Grab [2-3 items] at [Store B] if you pass it (€Y). Saves €Z vs doing it all at [Store A]."
+- If splitting saves <€5 or the shop is small (<€50): ALWAYS recommend a single store. The time cost of a second stop isn't worth it.
+
+**Store totals** (for reference)
 - Tesco: €X.XX ([N] items)
 - Dunnes: €X.XX ([N] items)
 - SuperValu: €X.XX ([N] items)
 - Aldi: €X.XX ([N] items)
 
-${profile.weeklyBudget ? `**Budget:** €X.XX of €${profile.weeklyBudget} (€X.XX ${profile.weeklyBudget ? 'under' : 'over'} budget)\n` : ''}
-💡 **Best value split:** [1-2 sentence recommendation]`;
+${profile.weeklyBudget ? `**Budget:** €X.XX of €${profile.weeklyBudget} (€X.XX ${profile.weeklyBudget ? 'under' : 'over'} budget)\n` : ''}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -537,13 +546,16 @@ Gather ALL data via tools before writing. Never mention tool calls.
 - [Product name] — [Store] €[price]
 
 ---
-**Store totals**
+**🏪 Recommendation**
+- If one store has everything or shop is small (<€50): "Do your full shop at [cheapest store]. Total: €X.XX"
+- If splitting saves >€5 AND shop is large (>€60): "Main shop at [Store A] (€X). Grab [items] at [Store B] if you pass it (€Y). Saves €Z."
+- Default to ONE store. Convenience > €2-3 savings.
+
+**Store totals** (for reference)
 - Tesco: €X.XX ([N] items)
 - Dunnes: €X.XX ([N] items)
 - SuperValu: €X.XX ([N] items)
-- Aldi: €X.XX ([N] items)
-
-💡 **Best value split:** [recommendation]`;
+- Aldi: €X.XX ([N] items)`;
 
   return prompt;
 }
