@@ -23,6 +23,7 @@ interface ChatButton {
 interface StoreTotal {
   store: string;
   total: number;
+  items?: number;
   cheapest?: boolean;
 }
 
@@ -66,13 +67,42 @@ function parseStoreTotals(content: string): StoreTotal[] {
     if (line.toLowerCase().includes('store total') || line.toLowerCase().includes('best value')) { inSection = true; continue; }
     if (inSection && line.trim() === '') break;
     if (inSection) {
-      const m = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)/i);
-      if (m) { const total = parseFloat(m[2]); if (!isNaN(total)) totals.push({ store: m[1].toLowerCase(), total }); }
+      const m = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)\s*(?:\((\d+)\s*items?\))?/i);
+      if (m) {
+        const total = parseFloat(m[2]);
+        const items = m[3] ? parseInt(m[3], 10) : undefined;
+        if (!isNaN(total)) totals.push({ store: m[1].toLowerCase(), total, items });
+      }
     }
   }
   if (totals.length > 0) {
-    const cheapest = totals.reduce((min, c) => c.total < min.total ? c : min);
-    cheapest.cheapest = true;
+    // "Cheapest" = store with most items (covers the basket). Among stores with equal items, pick lowest total.
+    const maxItems = Math.max(...totals.map(t => t.items ?? 0));
+    if (maxItems > 0) {
+      // Only consider stores that cover at least 70% of the max item count
+      const threshold = Math.floor(maxItems * 0.7);
+      const candidates = totals.filter(t => (t.items ?? 0) >= threshold);
+      if (candidates.length > 0) {
+        const cheapest = candidates.reduce((min, c) => c.total < min.total ? c : min);
+        cheapest.cheapest = true;
+      }
+    } else {
+      // No item counts available — fallback to highest total (most items likely)
+      // This is a heuristic: if we can't tell item counts, the store with the highest total
+      // probably has the most items. Only mark cheapest if totals are within 30% of each other.
+      const sorted = [...totals].sort((a, b) => b.total - a.total);
+      const highest = sorted[0].total;
+      const lowest = sorted[sorted.length - 1].total;
+      if (lowest / highest >= 0.7) {
+        // Totals are comparable — safe to pick cheapest
+        const cheapest = totals.reduce((min, c) => c.total < min.total ? c : min);
+        cheapest.cheapest = true;
+      } else {
+        // Big disparity — likely different item counts. Pick store with highest total as "recommended"
+        // (it covers the most items). Don't mark any as "cheapest" since it's misleading.
+        sorted[0].cheapest = true;
+      }
+    }
   }
   return totals;
 }
@@ -435,7 +465,7 @@ export function HomePlanner() {
           token: session.token,
           name: title,
           items: [],
-          store_totals: storeTotals.map(t => ({ store: t.store, total: t.total })),
+          store_totals: storeTotals.map(t => ({ store: t.store, total: t.total, ...(t.items ? { items: t.items } : {}) })),
           is_default: true,
         }),
       });

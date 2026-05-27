@@ -26,7 +26,7 @@ function AnimatedPrice({ target, duration = 1000 }: { target: number; duration?:
 }
 
 // ─── Store totals parser ────────────────────────────────────────────────
-interface StoreTotal { store: string; total: number; cheapest?: boolean; }
+interface StoreTotal { store: string; total: number; items?: number; cheapest?: boolean; }
 
 function parseStoreTotals(content: string): StoreTotal[] {
   const lines = content.split('\n');
@@ -40,18 +40,36 @@ function parseStoreTotals(content: string): StoreTotal[] {
     }
     if (inStoreSection && line.trim() === '') break;
     if (inStoreSection) {
-      const match = line.match(/\*?\*?(tesco|dunnes|supervalu)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)/i);
+      const match = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)\s*(?:\((\d+)\s*items?\))?/i);
       if (match) {
         const store = match[1].toLowerCase();
         const total = parseFloat(match[2]);
-        if (!isNaN(total)) totals.push({ store, total });
+        const items = match[3] ? parseInt(match[3], 10) : undefined;
+        if (!isNaN(total)) totals.push({ store, total, items });
       }
     }
   }
 
   if (totals.length > 0) {
-    const cheapest = totals.reduce((min, curr) => curr.total < min.total ? curr : min);
-    cheapest.cheapest = true;
+    const maxItems = Math.max(...totals.map(t => t.items ?? 0));
+    if (maxItems > 0) {
+      const threshold = Math.floor(maxItems * 0.7);
+      const candidates = totals.filter(t => (t.items ?? 0) >= threshold);
+      if (candidates.length > 0) {
+        const cheapest = candidates.reduce((min, c) => c.total < min.total ? c : min);
+        cheapest.cheapest = true;
+      }
+    } else {
+      const sorted = [...totals].sort((a, b) => b.total - a.total);
+      const highest = sorted[0].total;
+      const lowest = sorted[sorted.length - 1].total;
+      if (lowest / highest >= 0.7) {
+        const cheapest = totals.reduce((min, c) => c.total < min.total ? c : min);
+        cheapest.cheapest = true;
+      } else {
+        sorted[0].cheapest = true;
+      }
+    }
   }
   return totals;
 }

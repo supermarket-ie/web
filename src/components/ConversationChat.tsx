@@ -13,6 +13,7 @@ import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 interface StoreTotal {
   store: string;
   total: number;
+  items?: number;
   cheapest?: boolean;
 }
 
@@ -26,13 +27,34 @@ function parseStoreTotals(content: string): StoreTotal[] {
     if (line.toLowerCase().includes('store total') || line.toLowerCase().includes('best value')) { inSection = true; continue; }
     if (inSection && line.trim() === '') break;
     if (inSection) {
-      const m = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)/i);
-      if (m) { const total = parseFloat(m[2]); if (!isNaN(total)) totals.push({ store: m[1].toLowerCase(), total }); }
+      const m = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)\s*(?:\((\d+)\s*items?\))?/i);
+      if (m) {
+        const total = parseFloat(m[2]);
+        const items = m[3] ? parseInt(m[3], 10) : undefined;
+        if (!isNaN(total)) totals.push({ store: m[1].toLowerCase(), total, items });
+      }
     }
   }
   if (totals.length > 0) {
-    const cheapest = totals.reduce((min, c) => c.total < min.total ? c : min);
-    cheapest.cheapest = true;
+    const maxItems = Math.max(...totals.map(t => t.items ?? 0));
+    if (maxItems > 0) {
+      const threshold = Math.floor(maxItems * 0.7);
+      const candidates = totals.filter(t => (t.items ?? 0) >= threshold);
+      if (candidates.length > 0) {
+        const cheapest = candidates.reduce((min, c) => c.total < min.total ? c : min);
+        cheapest.cheapest = true;
+      }
+    } else {
+      const sorted = [...totals].sort((a, b) => b.total - a.total);
+      const highest = sorted[0].total;
+      const lowest = sorted[sorted.length - 1].total;
+      if (lowest / highest >= 0.7) {
+        const cheapest = totals.reduce((min, c) => c.total < min.total ? c : min);
+        cheapest.cheapest = true;
+      } else {
+        sorted[0].cheapest = true;
+      }
+    }
   }
   return totals;
 }

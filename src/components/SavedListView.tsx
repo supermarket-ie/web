@@ -67,7 +67,7 @@ function FormattedListContent({ content }: { content: string }) {
   const lines = content.split('\n');
 
   // Parse store totals from the content for the visual badge section
-  const storeTotals: Array<{ store: string; total: number; cheapest?: boolean }> = [];
+  const storeTotals: Array<{ store: string; total: number; items?: number; cheapest?: boolean }> = [];
   let inTotalsSection = false;
 
   for (const line of lines) {
@@ -77,16 +77,34 @@ function FormattedListContent({ content }: { content: string }) {
     }
     if (inTotalsSection && line.trim() === '') break;
     if (inTotalsSection) {
-      const m = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)/i);
+      const m = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)\s*(?:\((\d+)\s*items?\))?/i);
       if (m) {
         const total = parseFloat(m[2]);
-        if (!isNaN(total)) storeTotals.push({ store: m[1].toLowerCase(), total });
+        const items = m[3] ? parseInt(m[3], 10) : undefined;
+        if (!isNaN(total)) storeTotals.push({ store: m[1].toLowerCase(), total, items });
       }
     }
   }
   if (storeTotals.length > 0) {
-    const cheapest = storeTotals.reduce((min, c) => c.total < min.total ? c : min);
-    cheapest.cheapest = true;
+    const maxItems = Math.max(...storeTotals.map(t => t.items ?? 0));
+    if (maxItems > 0) {
+      const threshold = Math.floor(maxItems * 0.7);
+      const candidates = storeTotals.filter(t => (t.items ?? 0) >= threshold);
+      if (candidates.length > 0) {
+        const cheapest = candidates.reduce((min, c) => c.total < min.total ? c : min);
+        cheapest.cheapest = true;
+      }
+    } else {
+      const sorted = [...storeTotals].sort((a, b) => b.total - a.total);
+      const highest = sorted[0].total;
+      const lowest = sorted[sorted.length - 1].total;
+      if (lowest / highest >= 0.7) {
+        const cheapest = storeTotals.reduce((min, c) => c.total < min.total ? c : min);
+        cheapest.cheapest = true;
+      } else {
+        sorted[0].cheapest = true;
+      }
+    }
   }
 
   return (
@@ -154,11 +172,35 @@ function FormattedListContent({ content }: { content: string }) {
 // ─── Main Component ─────────────────────────────────────────────────────
 
 export function SavedListView({ listContent, storeTotals, listName, createdAt, conversationId, token, allLists, activeListId }: Props) {
-  // Sort store totals (cheapest first)
-  const sorted = [...storeTotals].sort((a, b) => a.total - b.total);
-  const cheapest = sorted[0];
-  const priciest = sorted[sorted.length - 1];
-  const saving = (cheapest && priciest && sorted.length > 1) ? Math.round((priciest.total - cheapest.total) * 100) / 100 : 0;
+  // Determine the "recommended" store — the one covering most items (highest total as proxy when no item count)
+  // Sort by total descending to find the store that covers the most of the basket
+  const sorted = [...storeTotals].sort((a, b) => b.total - a.total);
+  
+  // Check if totals are comparable (within 30% of each other = same item count likely)
+  const highest = sorted[0]?.total ?? 0;
+  const lowest = sorted[sorted.length - 1]?.total ?? 0;
+  const totalsComparable = highest > 0 && (lowest / highest) >= 0.7;
+  
+  // If totals are comparable, cheapest is genuinely cheapest. Otherwise, the store with 
+  // most items (highest total) is "recommended" and we don't show misleading "saves you" banners.
+  let recommended: typeof sorted[0] | null = null;
+  let saving = 0;
+  
+  if (totalsComparable && sorted.length > 1) {
+    // Totals represent similar baskets — safe to compare
+    const cheapestFirst = [...sorted].sort((a, b) => a.total - b.total);
+    recommended = cheapestFirst[0];
+    saving = Math.round((cheapestFirst[cheapestFirst.length - 1].total - cheapestFirst[0].total) * 100) / 100;
+  } else if (sorted.length > 0) {
+    // Totals not comparable — recommend store with highest total (most items)
+    recommended = sorted[0];
+    saving = 0; // Don't show misleading savings
+  }
+
+  // For display, sort cheapest first only if comparable
+  const displaySorted = totalsComparable 
+    ? [...storeTotals].sort((a, b) => a.total - b.total)
+    : [...storeTotals].sort((a, b) => b.total - a.total); // Most items first
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
@@ -172,38 +214,38 @@ export function SavedListView({ listContent, storeTotals, listName, createdAt, c
         </div>
 
         {/* Store comparison strip */}
-        {sorted.length > 0 && (
-          <div className="grid gap-2 mb-6" style={{ gridTemplateColumns: `repeat(${Math.min(sorted.length, 3)}, 1fr)` }}>
-            {sorted.map((st, i) => {
+        {displaySorted.length > 0 && (
+          <div className="grid gap-2 mb-6" style={{ gridTemplateColumns: `repeat(${Math.min(displaySorted.length, 3)}, 1fr)` }}>
+            {displaySorted.map((st, i) => {
               const s = storeStyle(st.store);
-              const isCheapest = i === 0 && sorted.length > 1;
+              const isRecommended = recommended?.store === st.store;
               return (
                 <div
                   key={st.store}
                   className="rounded-xl p-3 text-center"
                   style={{
-                    background: isCheapest ? s.light : 'var(--surface-container-lowest)',
+                    background: isRecommended ? s.light : 'var(--surface-container-lowest)',
                     boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
                   }}
                 >
                   <div
                     className="font-bold text-sm mb-1"
-                    style={{ color: isCheapest ? s.bg : 'var(--on-background)' }}
+                    style={{ color: isRecommended ? s.bg : 'var(--on-background)' }}
                   >
                     {storeDisplayName(st.store)}
                   </div>
                   <div
                     className="text-lg font-bold"
-                    style={{ color: isCheapest ? s.bg : 'var(--on-background)' }}
+                    style={{ color: isRecommended ? s.bg : 'var(--on-background)' }}
                   >
                     {fmt(st.total)}
                   </div>
-                  {isCheapest && (
+                  {isRecommended && (
                     <div
                       className="text-[10px] font-semibold mt-1 rounded-full px-2 py-0.5 inline-block"
                       style={{ background: s.bg, color: '#fff' }}
                     >
-                      Cheapest
+                      {totalsComparable ? 'Cheapest' : 'Most items'}
                     </div>
                   )}
                 </div>
@@ -212,15 +254,15 @@ export function SavedListView({ listContent, storeTotals, listName, createdAt, c
           </div>
         )}
 
-        {/* Saving banner */}
-        {saving > 0 && cheapest && (
-          <div className="rounded-xl p-4 mb-6 text-white" style={{ background: storeStyle(cheapest.store).bg }}>
+        {/* Saving banner — only show when totals are genuinely comparable */}
+        {saving > 0 && recommended && totalsComparable && (
+          <div className="rounded-xl p-4 mb-6 text-white" style={{ background: storeStyle(recommended.store).bg }}>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm opacity-90">Best value this week</p>
-                <p className="text-lg font-bold">{storeDisplayName(cheapest.store)} saves you {fmt(saving)}</p>
+                <p className="text-lg font-bold">{storeDisplayName(recommended.store)} saves you {fmt(saving)}</p>
               </div>
-              <div className="text-3xl font-bold">{fmt(cheapest.total)}</div>
+              <div className="text-3xl font-bold">{fmt(recommended.total)}</div>
             </div>
           </div>
         )}
