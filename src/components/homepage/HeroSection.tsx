@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { HomePlanner } from '@/components/HomePlanner';
 import { PlannerSSRShell } from '@/components/PlannerSSRShell';
+import { HideAfterHydration } from '@/components/HideAfterHydration';
 import { LiveDealChip } from '@/components/LiveDealChip';
 import { Sparkles } from 'lucide-react';
 import { SessionLink } from './SessionLink';
@@ -97,12 +98,12 @@ export function HeroSection() {
                 minHeight: '500px',
               }}
             >
-              {/* SSR shell — visible to crawlers, replaced after hydration */}
-              <PlannerSSRShell />
-              {/* Client planner hydrates on top */}
-              <div className="absolute inset-0 p-4 sm:p-6">
-                <HomePlanner />
-              </div>
+              {/* SSR shell — in server HTML for crawlers, removed after hydration */}
+              <HideAfterHydration>
+                <PlannerSSRShell />
+              </HideAfterHydration>
+              {/* Client planner — renders its own UI after hydration */}
+              <HomePlanner />
             </div>
           </div>
         </div>
