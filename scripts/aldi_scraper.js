@@ -69,12 +69,14 @@ const ALDI_CATEGORIES = [
   { name: 'Pet', dbCat: 'Pet Care', url: 'https://www.aldi.ie/products/pet-food/k/1588161416978083' },
 ];
 
-// Aldi own brands
+// Aldi own brands — used for brand stripping in matching
 const ALDI_OWN_BRANDS = [
   "nature's pick", 'butchers selection', 'specially selected', 'kilkeely gold',
   'clonbawn', 'harvest morn', 'village bakery', 'skellig bay', 'actileaf',
   'brannans', 'moser roth', 'alcafe', 'brooklea', 'lacura', 'mamia',
   'almat', 'magnum', 'earths choice', 'cowbelle', 'dermot & daisy',
+  "healy's farm", 'oakhurst', 'ardagh', 'emporium', 'cleaver and blade',
+  'ballymore crust', 'organic',
 ];
 
 async function scrapeAldiCategory(page, category) {
@@ -186,32 +188,68 @@ function fuzzyMatch(searchName, candidates) {
   return bestMatch ? { product: bestMatch, score: bestScore } : null;
 }
 
+/**
+ * Strip Aldi brand prefix to get a generic product name for matching.
+ * E.g. "NATURE'S PICK Brown Onions" → "Brown Onions"
+ */
+function stripBrand(fullName) {
+  let name = fullName;
+  for (const brand of ALDI_OWN_BRANDS) {
+    const escaped = brand.replace(/[.*+?${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('^' + escaped + '\\s*', 'i');
+    if (re.test(name)) {
+      name = name.replace(re, '').trim();
+      return name || fullName;
+    }
+  }
+  // Also try removing all-caps prefix (generic brand pattern: "BRAND NAME Product")
+  const capsStripped = fullName.replace(/^[A-Z][A-Z'\s]+\s+/, '').trim();
+  if (capsStripped && capsStripped !== fullName && capsStripped.length > 3) {
+    return capsStripped;
+  }
+  return fullName;
+}
+
+/**
+ * Clean a product name into a suitable canonical name.
+ * Removes "Irish" qualifier, excessive size info, etc.
+ */
+function toCanonicalName(aldiFullName) {
+  let name = stripBrand(aldiFullName);
+  // Remove "Irish " prefix (too specific for canonical)
+  name = name.replace(/^Irish\s+/i, '');
+  // Keep size/pack info as it's useful for matching
+  return name.trim();
+}
+
 async function resolveMode(categoryFilter) {
   console.log('=== ALDI RESOLVE MODE ===');
   console.log('Finding matching products for our catalogue...\n');
   
-  // Get canonical products
-  let query = supabase.from('products').select('id, canonical_name, category');
-  if (categoryFilter) query = query.eq('category', categoryFilter);
-  const { data: products, error: prodErr } = await query;
-  if (prodErr) { console.error('DB error:', prodErr); return; }
-  console.log(`Canonical products to match: ${products.length}`);
+  // Get ALL canonical products (paginate past 1000 limit)
+  let products = [];
+  let from = 0;
+  while (true) {
+    let q = supabase.from('products').select('id, canonical_name, category').range(from, from + 999);
+    if (categoryFilter) q = q.eq('category', categoryFilter);
+    const { data, error } = await q;
+    if (error || !data || data.length === 0) break;
+    products = products.concat(data);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  console.log(`Canonical products to match against: ${products.length}`);
   
   // Get existing Aldi store_products
   const { data: existing } = await supabase
     .from('store_products')
-    .select('product_id')
+    .select('product_id, store_product_name')
     .eq('store', 'aldi')
     .in('url_status', ['resolved', 'pending']);
   const existingIds = new Set((existing || []).map(e => e.product_id));
+  const existingNames = new Set((existing || []).map(e => e.store_product_name?.toLowerCase()));
   
-  const toResolve = products.filter(p => !existingIds.has(p.id));
-  console.log(`Already in DB: ${existingIds.size}, need to resolve: ${toResolve.length}\n`);
-  
-  if (toResolve.length === 0) {
-    console.log('Nothing to resolve!');
-    return;
-  }
+  console.log(`Already in DB: ${existingIds.size}\n`);
   
   // Scrape Aldi categories
   const browser = await chromium.launch({ headless: true });
@@ -225,17 +263,14 @@ async function resolveMode(categoryFilter) {
   for (const cat of categoriesToScrape) {
     try {
       console.log(`  Scraping ${cat.name}...`);
-      const products = await scrapeAldiCategory(page, cat);
-      console.log(`    → ${products.length} products`);
-      allAldiProducts = allAldiProducts.concat(products);
+      const catProducts = await scrapeAldiCategory(page, cat);
+      console.log(`    → ${catProducts.length} products`);
+      allAldiProducts = allAldiProducts.concat(catProducts);
     } catch (e) {
       console.error(`  Error scraping ${cat.name}: ${e.message}`);
     }
   }
   await browser.close();
-  
-  console.log(`\nTotal scraped: ${allAldiProducts.length} Aldi products`);
-  console.log('Matching to catalogue...\n');
   
   // Dedupe Aldi products by name
   const seen = new Set();
@@ -245,65 +280,125 @@ async function resolveMode(categoryFilter) {
     seen.add(key);
     return true;
   });
-  console.log(`Unique products: ${uniqueAldi.length}\n`);
   
-  // Convert for matcher
-  const aldiAsCandidates = uniqueAldi.map(p => ({ ...p, canonical_name: p.fullName }));
+  console.log(`\nTotal scraped: ${allAldiProducts.length}, unique: ${uniqueAldi.length}`);
+  
+  // Filter out items already in DB
+  const toProcess = uniqueAldi.filter(p => !existingNames.has(p.fullName.toLowerCase()));
+  console.log(`New items to process: ${toProcess.length}\n`);
   
   let matched = 0;
   let created = 0;
+  let newCanonicals = 0;
   
-  for (const canonical of toResolve) {
-    const match = fuzzyMatch(canonical.canonical_name, aldiAsCandidates);
+  for (const aldi of toProcess) {
+    // Try matching with brand stripped first, then with full name
+    const stripped = stripBrand(aldi.fullName);
+    const matchStripped = fuzzyMatch(stripped, products);
+    const matchFull = fuzzyMatch(aldi.fullName, products);
     
-    if (match && match.score >= 0.6) {
-      const aldi = match.product;
-      const isOwnBrand = ALDI_OWN_BRANDS.some(b => (aldi.brand || '').toLowerCase().includes(b));
+    // Pick best match
+    let best = null;
+    if (matchStripped && matchFull) {
+      best = matchStripped.score >= matchFull.score ? matchStripped : matchFull;
+    } else {
+      best = matchStripped || matchFull;
+    }
+    
+    let productId;
+    
+    if (best && best.score >= 0.6) {
+      // Matched to existing canonical product
+      productId = best.product.id;
       
-      console.log(`  ✓ ${canonical.canonical_name} → ${aldi.fullName} (€${aldi.price}, score ${match.score.toFixed(2)})`);
+      // Skip if this canonical already has an Aldi entry
+      if (existingIds.has(productId)) continue;
       
-      const { error: insertErr } = await supabase
-        .from('store_products')
+      console.log(`  ✓ ${aldi.fullName} → ${best.product.canonical_name} (score ${best.score.toFixed(2)})`);
+      matched++;
+    } else {
+      // No match — create a new canonical product
+      const canonicalName = toCanonicalName(aldi.fullName);
+      const { data: newProduct, error: insertErr } = await supabase
+        .from('products')
         .insert({
-          product_id: canonical.id,
-          store: 'aldi',
-          store_product_name: aldi.fullName,
-          brand: aldi.brand || null,
-          is_own_brand: isOwnBrand,
-          store_url: aldi.url || 'https://www.aldi.ie',
-          url_status: 'resolved',
-          store_sku: aldi.fullName,
-        });
+          canonical_name: canonicalName,
+          category: aldi.dbCat,
+        })
+        .select('id')
+        .single();
       
       if (insertErr) {
-        console.error(`    Insert error: ${insertErr.message}`);
-      } else {
-        created++;
-        // Insert price observation
-        const { data: sp } = await supabase
-          .from('store_products')
+        // Might be duplicate — try to find existing
+        const { data: existingProduct } = await supabase
+          .from('products')
           .select('id')
-          .eq('product_id', canonical.id)
-          .eq('store', 'aldi')
+          .eq('canonical_name', canonicalName)
           .single();
-        
-        if (sp) {
-          await supabase.from('price_observations').insert({
-            store_product_id: sp.id,
-            price: aldi.price,
-            was_price: aldi.wasPrice,
-            on_promotion: aldi.onPromotion,
-            price_per_unit: aldi.pricePerUnit,
-            unit_for_comparison: aldi.unitForComparison ? `per ${aldi.unitForComparison}` : null,
-            observed_at: new Date().toISOString(),
-          });
+        if (existingProduct) {
+          productId = existingProduct.id;
+        } else {
+          console.log(`  ⚠ Failed to create canonical: ${canonicalName} — ${insertErr.message}`);
+          continue;
         }
+      } else {
+        productId = newProduct.id;
+        newCanonicals++;
+        // Add to local array so future iterations can match against it
+        products.push({ id: productId, canonical_name: canonicalName, category: aldi.dbCat });
       }
-      matched++;
+      
+      if (existingIds.has(productId)) continue;
+      console.log(`  + ${aldi.fullName} → NEW: "${canonicalName}" [${aldi.dbCat}]`);
+    }
+    
+    // Insert store_product + price observation
+    const isOwnBrand = ALDI_OWN_BRANDS.some(b => (aldi.brand || '').toLowerCase().includes(b));
+    
+    const { error: spErr } = await supabase
+      .from('store_products')
+      .insert({
+        product_id: productId,
+        store: 'aldi',
+        store_product_name: aldi.fullName,
+        brand: aldi.brand || null,
+        is_own_brand: isOwnBrand,
+        store_url: aldi.url || 'https://www.aldi.ie',
+        url_status: 'resolved',
+        store_sku: aldi.fullName,
+      });
+    
+    if (spErr) {
+      console.log(`    ⚠ store_product insert error: ${spErr.message}`);
+      continue;
+    }
+    
+    created++;
+    existingIds.add(productId);
+    existingNames.add(aldi.fullName.toLowerCase());
+    
+    // Get the store_product ID for price observation
+    const { data: sp } = await supabase
+      .from('store_products')
+      .select('id')
+      .eq('product_id', productId)
+      .eq('store', 'aldi')
+      .single();
+    
+    if (sp) {
+      await supabase.from('price_observations').insert({
+        store_product_id: sp.id,
+        price: aldi.price,
+        was_price: aldi.wasPrice,
+        on_promotion: aldi.onPromotion,
+        price_per_unit: aldi.pricePerUnit,
+        unit_for_comparison: aldi.unitForComparison ? `per ${aldi.unitForComparison}` : null,
+        observed_at: new Date().toISOString(),
+      });
     }
   }
   
-  console.log(`\n=== Results: ${matched} matched, ${created} created in DB ===`);
+  console.log(`\n=== Results: ${matched} matched existing, ${newCanonicals} new canonicals created, ${created} store_products added ===`);
 }
 
 async function refreshMode(categoryFilter) {
@@ -350,17 +445,55 @@ async function refreshMode(categoryFilter) {
   console.log(`\nScraped ${allAldiProducts.length} Aldi products`);
   console.log('Matching and updating prices...\n');
   
+  // Build a lookup map by lowercase fullName for fast exact matching
+  const aldiByName = new Map();
+  for (const ap of allAldiProducts) {
+    aldiByName.set(ap.fullName.toLowerCase(), ap);
+  }
+  // Also build by stripped name for fallback
+  const aldiByStripped = new Map();
+  for (const ap of allAldiProducts) {
+    const stripped = stripBrand(ap.fullName).toLowerCase();
+    if (!aldiByStripped.has(stripped)) {
+      aldiByStripped.set(stripped, ap);
+    }
+  }
+  
   let updated = 0;
+  let notFound = 0;
+  
   for (const sp of filtered) {
-    const spName = (sp.store_product_name || sp.store_sku || '').toLowerCase();
+    const spName = (sp.store_product_name || sp.store_sku || '');
+    const spNameLower = spName.toLowerCase();
     
-    // Direct name match first
-    let match = allAldiProducts.find(ap => ap.fullName.toLowerCase() === spName);
+    // 1. Exact name match (fastest)
+    let match = aldiByName.get(spNameLower);
     
-    // Fuzzy fallback
+    // 2. Try matching by stripped canonical name
     if (!match) {
-      const result = fuzzyMatch(spName, allAldiProducts.map(p => ({ ...p, canonical_name: p.fullName })));
+      const canonName = (sp.products?.canonical_name || '').toLowerCase();
+      match = aldiByStripped.get(canonName);
+    }
+    
+    // 3. Fuzzy fallback against all Aldi products
+    if (!match) {
+      const stripped = stripBrand(spName).toLowerCase();
+      // Try stripped name in map
+      match = aldiByStripped.get(stripped);
+    }
+    
+    if (!match) {
+      // Full fuzzy match as last resort
+      const candidates = allAldiProducts.map(p => ({ ...p, canonical_name: p.fullName }));
+      const result = fuzzyMatch(spName, candidates);
       if (result && result.score >= 0.6) match = result.product;
+      
+      if (!match) {
+        // Try with stripped brand
+        const stripped = stripBrand(spName);
+        const result2 = fuzzyMatch(stripped, candidates);
+        if (result2 && result2.score >= 0.6) match = result2.product;
+      }
     }
     
     if (match) {
@@ -375,12 +508,18 @@ async function refreshMode(categoryFilter) {
       });
       if (!error) {
         updated++;
-        console.log(`  ✓ ${sp.products?.canonical_name} → €${match.price}${match.onPromotion ? ' (on offer)' : ''}`);
+        console.log(`  ✓ ${sp.products?.canonical_name || spName} → €${match.price}${match.onPromotion ? ' (on offer)' : ''}`);
+      }
+    } else {
+      notFound++;
+      if (notFound <= 10) {
+        console.log(`  ✗ ${sp.products?.canonical_name || spName} → not found on Aldi site`);
       }
     }
   }
   
-  console.log(`\n=== Updated ${updated}/${filtered.length} prices ===`);
+  if (notFound > 10) console.log(`  ... and ${notFound - 10} more not found`);
+  console.log(`\n=== Updated ${updated}/${filtered.length} prices, ${notFound} not found ===`);
 }
 
 async function main() {
