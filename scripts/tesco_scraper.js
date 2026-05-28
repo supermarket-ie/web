@@ -568,93 +568,133 @@ async function refreshMode({ limit, category, offset = 0 }) {
     return;
   }
 
-  // Launch browser
-  const { browser, context } = await launchBrowser();
-  const page = await context.newPage();
-
-  console.log('Warming up (loading homepage for cookies)...');
-  await warmUp(page);
-  console.log('Ready.\n');
-
+  // Process in batches with browser restarts to avoid memory bloat / Akamai expiry
+  const BATCH_SIZE = 100;
   let updated = 0;
   let errors = 0;
+  let batchNum = 0;
 
-  for (const sp of filtered) {
-    const name = sp.products?.canonical_name || sp.store_product_name;
+  for (let batchStart = 0; batchStart < filtered.length; batchStart += BATCH_SIZE) {
+    const batch = filtered.slice(batchStart, batchStart + BATCH_SIZE);
+    batchNum++;
+    console.log(`\n--- Batch ${batchNum} (products ${batchStart + 1}–${batchStart + batch.length} of ${filtered.length}) ---`);
+
+    let browser, context, page;
     try {
-      // Search by product name and extract price from search results
-      // Product pages no longer contain pricing data (Tesco removed JSON-LD/price elements)
-      const searchResult = await searchProduct(page, name);
-
-      if (searchResult.error) {
-        console.log(`  ✗ ${name.substring(0, 50)} → ${searchResult.error}`);
-        errors++;
-        if (searchResult.error.includes('Access Denied')) {
-          console.log('    ⏳ Waiting 30s after block...');
-          await page.waitForTimeout(30000);
-          try { await warmUp(page); } catch {}
-        }
-        continue;
-      }
-
-      const products = searchResult.products || [];
-      if (products.length === 0) {
-        console.log(`  ✗ ${name.substring(0, 50)} → No search results`);
-        errors++;
-        continue;
-      }
-
-      // Find best match by name
-      const match = fuzzyMatch(name, products);
-      const picked = match ? match.product : products[0];
-
-      if (!picked.price || picked.price <= 0) {
-        console.log(`  ✗ ${name.substring(0, 50)} → No price in search results`);
-        errors++;
-        continue;
-      }
-
-      // Update stored URL/SKU if they've changed (Tesco re-keys product IDs)
-      if (picked.sku && picked.url && picked.url !== sp.store_url) {
-        await supabase
-          .from('store_products')
-          .update({
-            store_url: picked.url,
-            store_sku: picked.sku,
-            store_product_name: picked.name || name,
-          })
-          .eq('id', sp.id);
-      }
-
-      // Insert price observation
-      await supabase.from('price_observations').insert({
-        store_product_id: sp.id,
-        price: picked.price,
-        was_price: null,
-        on_promotion: false,
-        observed_at: new Date().toISOString(),
-      });
-
-      console.log(
-        `  ✓ ${name.substring(0, 50)} → €${picked.price.toFixed(2)}`
-      );
-      updated++;
-
-      await page.waitForTimeout(1500);
+      ({ browser, context } = await launchBrowser());
+      page = await context.newPage();
+      console.log('  Warming up...');
+      await warmUp(page);
     } catch (e) {
-      console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
-      errors++;
-      if (e.message.includes('Access Denied')) {
-        console.log('    ⏳ Waiting 30s after block...');
-        await page.waitForTimeout(30000);
-        try {
-          await warmUp(page);
-        } catch {}
+      console.log(`  ✗ Browser launch/warmup failed: ${e.message}`);
+      console.log('  ⏳ Waiting 30s before retry...');
+      await new Promise((r) => setTimeout(r, 30000));
+      try {
+        if (browser) await browser.close().catch(() => {});
+        ({ browser, context } = await launchBrowser());
+        page = await context.newPage();
+        await warmUp(page);
+      } catch (e2) {
+        console.log(`  ✗✗ Retry failed: ${e2.message} — skipping batch`);
+        errors += batch.length;
+        continue;
       }
     }
-  }
 
-  await browser.close();
+    for (const sp of batch) {
+      const name = sp.products?.canonical_name || sp.store_product_name;
+      try {
+        // Search by product name and extract price from search results
+        // Product pages no longer contain pricing data (Tesco removed JSON-LD/price elements)
+        const searchResult = await searchProduct(page, name);
+
+        if (searchResult.error) {
+          console.log(`  ✗ ${name.substring(0, 50)} → ${searchResult.error}`);
+          errors++;
+          if (searchResult.error.includes('Access Denied')) {
+            console.log('    ⏳ Waiting 30s after block...');
+            await page.waitForTimeout(30000);
+            try { await warmUp(page); } catch {}
+          }
+          continue;
+        }
+
+        const products = searchResult.products || [];
+        if (products.length === 0) {
+          console.log(`  ✗ ${name.substring(0, 50)} → No search results`);
+          errors++;
+          continue;
+        }
+
+        // Find best match by name
+        const match = fuzzyMatch(name, products);
+        const picked = match ? match.product : products[0];
+
+        if (!picked.price || picked.price <= 0) {
+          console.log(`  ✗ ${name.substring(0, 50)} → No price in search results`);
+          errors++;
+          continue;
+        }
+
+        // Update stored URL/SKU if they've changed (Tesco re-keys product IDs)
+        if (picked.sku && picked.url && picked.url !== sp.store_url) {
+          await supabase
+            .from('store_products')
+            .update({
+              store_url: picked.url,
+              store_sku: picked.sku,
+              store_product_name: picked.name || name,
+            })
+            .eq('id', sp.id);
+        }
+
+        // Insert price observation
+        await supabase.from('price_observations').insert({
+          store_product_id: sp.id,
+          price: picked.price,
+          was_price: null,
+          on_promotion: false,
+          observed_at: new Date().toISOString(),
+        });
+
+        console.log(
+          `  ✓ ${name.substring(0, 50)} → €${picked.price.toFixed(2)}`
+        );
+        updated++;
+
+        await page.waitForTimeout(1500);
+      } catch (e) {
+        console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
+        errors++;
+        // If browser/page crashed, break out of this batch and restart
+        if (
+          e.message.includes('Target page, context or browser has been closed') ||
+          e.message.includes('Target closed') ||
+          e.message.includes('Browser closed') ||
+          e.message.includes('Navigation failed because page was closed')
+        ) {
+          console.log('    💥 Browser crashed — ending batch early');
+          break;
+        }
+        if (e.message.includes('Access Denied')) {
+          console.log('    ⏳ Waiting 30s after block...');
+          try {
+            await page.waitForTimeout(30000);
+            await warmUp(page);
+          } catch {
+            console.log('    💥 Recovery failed — ending batch early');
+            break;
+          }
+        }
+      }
+    }
+
+    // Close browser to free memory before next batch
+    try {
+      await browser.close();
+    } catch {}
+    console.log(`  Batch ${batchNum} done. Running total: ${updated} updated, ${errors} errors`);
+  }
 
   console.log(`\n=== Updated ${updated}/${filtered.length} prices, ${errors} errors ===`);
 }
