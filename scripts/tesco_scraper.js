@@ -93,9 +93,10 @@ async function searchProduct(page, query) {
     return { error: 'Access Denied on search' };
   }
 
-  // Extract product links from the page
+  // Extract products with prices directly from DOM
+  // This is more reliable than text-only parsing as it navigates the tile structure
   const products = await page.evaluate(() => {
-    const items = [];
+    const results = [];
     const seen = new Set();
     const productLinks = document.querySelectorAll('a[href*="/products/"]');
 
@@ -105,17 +106,31 @@ async function searchProduct(page, query) {
       if (!match || seen.has(match[1])) return;
       seen.add(match[1]);
 
-      // Walk up DOM to find the product tile container with a name
+      // Walk up DOM to find the product tile container with name + price
+      let container = a;
+      let price = null;
       let name = '';
-      let container = a.parentElement;
-      for (let i = 0; i < 8 && container; i++) {
-        const h = container.querySelector('h2, h3');
-        if (h && h.textContent.trim().length > 3) {
-          name = h.textContent.trim();
-          break;
-        }
+      for (let i = 0; i < 10 && container; i++) {
         container = container.parentElement;
+        if (!container) break;
+        // Look for price element
+        if (!price) {
+          const pEl = container.querySelector('[class*="priceText"]');
+          if (pEl) {
+            const priceMatch = pEl.textContent.match(/(\d+\.\d{2})/);
+            if (priceMatch) price = parseFloat(priceMatch[1]);
+          }
+        }
+        // Look for product name
+        if (!name) {
+          const h = container.querySelector('h2, h3');
+          if (h && h.textContent.trim().length > 3) {
+            name = h.textContent.trim();
+          }
+        }
+        if (price && name) break;
       }
+
       if (!name) {
         name = a.textContent?.trim()?.substring(0, 100) || '';
       }
@@ -124,13 +139,14 @@ async function searchProduct(page, query) {
       const fullUrl = cleanHref.startsWith('http')
         ? cleanHref
         : `${location.origin}${cleanHref}`;
-      items.push({
+      results.push({
         sku: match[1],
         name,
+        price,
         url: fullUrl,
       });
     });
-    return items;
+    return results;
   });
 
   return { products };
@@ -566,29 +582,61 @@ async function refreshMode({ limit, category, offset = 0 }) {
   for (const sp of filtered) {
     const name = sp.products?.canonical_name || sp.store_product_name;
     try {
-      const priceResult = await getProductPrice(page, sp.store_url);
+      // Search by product name and extract price from search results
+      // Product pages no longer contain pricing data (Tesco removed JSON-LD/price elements)
+      const searchResult = await searchProduct(page, name);
 
-      if (priceResult.error) {
-        console.log(`  ✗ ${name.substring(0, 50)} → ${priceResult.error}`);
+      if (searchResult.error) {
+        console.log(`  ✗ ${name.substring(0, 50)} → ${searchResult.error}`);
+        errors++;
+        if (searchResult.error.includes('Access Denied')) {
+          console.log('    ⏳ Waiting 30s after block...');
+          await page.waitForTimeout(30000);
+          try { await warmUp(page); } catch {}
+        }
+        continue;
+      }
+
+      const products = searchResult.products || [];
+      if (products.length === 0) {
+        console.log(`  ✗ ${name.substring(0, 50)} → No search results`);
         errors++;
         continue;
       }
 
-      const promo = await detectPromotion(page);
+      // Find best match by name
+      const match = fuzzyMatch(name, products);
+      const picked = match ? match.product : products[0];
 
+      if (!picked.price || picked.price <= 0) {
+        console.log(`  ✗ ${name.substring(0, 50)} → No price in search results`);
+        errors++;
+        continue;
+      }
+
+      // Update stored URL/SKU if they've changed (Tesco re-keys product IDs)
+      if (picked.sku && picked.url && picked.url !== sp.store_url) {
+        await supabase
+          .from('store_products')
+          .update({
+            store_url: picked.url,
+            store_sku: picked.sku,
+            store_product_name: picked.name || name,
+          })
+          .eq('id', sp.id);
+      }
+
+      // Insert price observation
       await supabase.from('price_observations').insert({
         store_product_id: sp.id,
-        price: priceResult.price,
-        was_price: promo.wasPrice,
-        on_promotion: promo.onPromotion,
+        price: picked.price,
+        was_price: null,
+        on_promotion: false,
         observed_at: new Date().toISOString(),
       });
 
-      const promoNote = promo.onPromotion
-        ? ` 🏷️ ${promo.promoLabel}${promo.wasPrice ? ` (was €${promo.wasPrice})` : ''}`
-        : '';
       console.log(
-        `  ✓ ${name.substring(0, 50)} → €${priceResult.price.toFixed(2)}${promoNote}`
+        `  ✓ ${name.substring(0, 50)} → €${picked.price.toFixed(2)}`
       );
       updated++;
 
