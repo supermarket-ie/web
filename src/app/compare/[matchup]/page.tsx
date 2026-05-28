@@ -8,7 +8,7 @@ import { getAllLatestPrices, groupByProduct, filterToMain3, STORE_INFO, ALL_STOR
 
 export const revalidate = 43200; // 12h
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 // All valid matchups
 const MATCHUPS: { slug: string; stores: [StoreKey, StoreKey] }[] = [

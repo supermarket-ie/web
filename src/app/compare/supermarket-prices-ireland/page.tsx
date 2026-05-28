@@ -6,7 +6,7 @@ import { SiteFooter } from '@/components/SiteFooter';
 
 export const revalidate = 43200; // Revalidate every 12 hours
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export const metadata: Metadata = {
   title: 'Supermarket Price Comparison Ireland — Tesco, Dunnes, SuperValu, Aldi, Lidl',

@@ -12,7 +12,7 @@ import {
 import { CookieBanner } from '@/components/homepage/CookieBanner';
 import { faqs } from '@/components/homepage/FAQSection';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 // FAQPage structured data — built from the same faqs array rendered on page
 const faqJsonLd = {

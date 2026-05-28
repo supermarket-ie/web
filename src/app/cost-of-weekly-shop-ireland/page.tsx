@@ -6,7 +6,7 @@ import { getAllLatestPrices, groupByProduct, filterToMain3, STORE_INFO, MAIN_STO
 
 export const revalidate = 43200; // 12h
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export const metadata: Metadata = {
   title: 'Cost of a Weekly Shop in Ireland 2026 — Tesco, Dunnes, SuperValu | supermarket.ie',
@@ -249,7 +249,7 @@ export default async function WeeklyShopCostPage() {
           '@type': 'WebPage',
           name: 'Cost of a Weekly Shop in Ireland 2026',
           description: `Comparing the cost of a ~50-item weekly shop across Irish supermarkets with live prices.`,
-          url: 'https://supermarket.ie/cost-of-weekly-shop-ireland',
+          url: 'https://www.supermarket.ie/cost-of-weekly-shop-ireland',
         }) }} />
       </main>
       <SiteFooter />

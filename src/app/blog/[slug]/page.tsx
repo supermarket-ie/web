@@ -9,7 +9,7 @@ import { articleJsonLd } from '@/lib/structured-data';
 
 export const revalidate = 86400;
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export async function generateStaticParams() {
   return POSTS.map(p => ({ slug: p.slug }));

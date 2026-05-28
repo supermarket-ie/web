@@ -8,7 +8,7 @@ import { getAllLatestPrices, STORE_INFO, fmt, pct, type StoreKey } from '@/lib/p
 
 export const revalidate = 43200; // 12h
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 const VALID_STORES: StoreKey[] = ['tesco', 'dunnes', 'supervalu', 'aldi'];
 

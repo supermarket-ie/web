@@ -94,12 +94,12 @@ export async function GET(request: Request) {
         'Live grocery prices across Tesco Ireland, Dunnes Stores, and SuperValu. ' +
         'Includes canonical product names, per-store prices with links, and nutrition data per 100g. ' +
         'Updated weekly. Country: Ireland. Currency: EUR.',
-      url: 'https://supermarket.ie/api/products',
-      license: 'https://supermarket.ie/terms',
+      url: 'https://www.supermarket.ie/api/products',
+      license: 'https://www.supermarket.ie/terms',
       creator: {
         '@type': 'Organization',
         name: 'supermarket.ie',
-        url: 'https://supermarket.ie',
+        url: 'https://www.supermarket.ie',
         areaServed: { '@type': 'Country', name: 'Ireland' },
       },
       dateModified: list.generated_at,

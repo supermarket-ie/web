@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Browse Groceries · supermarket.ie',
     description: 'Curated Irish grocery essentials — free to browse, sign in for live prices.',
-    url: 'https://supermarket.ie/browse',
+    url: 'https://www.supermarket.ie/browse',
   },
 };
 

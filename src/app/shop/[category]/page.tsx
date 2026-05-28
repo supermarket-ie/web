@@ -10,7 +10,7 @@ import { POSTS } from '@/lib/blog';
 
 export const revalidate = 43200; // 12 hours — matches scrape frequency
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 // Category metadata for SEO + display
 const CATEGORY_META: Record<string, {

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import RequestLinkClient from './RequestLinkClient';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export const metadata: Metadata = {
   title: 'Sign in to your list · supermarket.ie',

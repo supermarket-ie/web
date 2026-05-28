@@ -7,7 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 export const revalidate = 43200; // 12h — matches scrape cycle
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://supermarket.ie';
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export const metadata: Metadata = {
   title: 'Supermarket Deals & Offers This Week Ireland | supermarket.ie',
