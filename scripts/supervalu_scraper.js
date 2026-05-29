@@ -341,15 +341,19 @@ async function resolveMode({ limit, category }) {
 
   console.log('=== SUPERVALU RESOLVE MODE (Playwright) ===\n');
 
-  // Get pending + failed SuperValu store_products
-  const { data: allSV, error: spErr } = await supabase
-    .from('store_products')
-    .select('id, product_id, store_product_name, store_url, url_status')
-    .eq('store', 'supervalu');
-
-  if (spErr) {
-    console.error('DB error:', spErr);
-    return;
+  // Get pending + failed SuperValu store_products (paginate past 1000 limit)
+  let allSV = [];
+  let from = 0;
+  while (true) {
+    const { data: page, error: pageErr } = await supabase
+      .from('store_products')
+      .select('id, product_id, store_product_name, store_url, url_status')
+      .eq('store', 'supervalu')
+      .range(from, from + 999);
+    if (pageErr) { console.error('DB error:', pageErr); return; }
+    allSV = allSV.concat(page || []);
+    if (!page || page.length < 1000) break;
+    from += 1000;
   }
 
   let toResolve = allSV.filter(

@@ -402,60 +402,98 @@ async function resolveMode({ limit, category }) {
     return;
   }
 
-  // Launch browser
-  const { browser, context } = await launchBrowser();
-  const page = await context.newPage();
-
-  console.log('Warming up (loading homepage for cookies)...');
-  await warmUp(page);
-  console.log('Ready.\n');
-
+  // Process in batches with browser restarts to avoid Akamai blocking
+  const BATCH_SIZE = 50;
   let resolved = 0;
   let priced = 0;
   let errors = 0;
+  let batchNum = 0;
 
-  for (const sp of toResolve) {
-    const name = sp.store_product_name;
+  for (let batchStart = 0; batchStart < toResolve.length; batchStart += BATCH_SIZE) {
+    const batch = toResolve.slice(batchStart, batchStart + BATCH_SIZE);
+    batchNum++;
+    console.log(`\n--- Batch ${batchNum} (products ${batchStart + 1}–${batchStart + batch.length} of ${toResolve.length}) ---`);
+
+    let browser, context, page;
     try {
-      // Search for the product
-      const searchResult = await searchProduct(page, name);
-
-      if (searchResult.error) {
-        console.log(`  ✗ ${name.substring(0, 50)} → ${searchResult.error}`);
-        errors++;
-        await supabase
-          .from('store_products')
-          .update({ url_status: 'failed' })
-          .eq('id', sp.id);
+      ({ browser, context } = await launchBrowser());
+      page = await context.newPage();
+      console.log('  Warming up...');
+      await warmUp(page);
+    } catch (e) {
+      console.log(`  ✗ Browser launch/warmup failed: ${e.message}`);
+      console.log('  ⏳ Waiting 30s before retry...');
+      await new Promise((r) => setTimeout(r, 30000));
+      try {
+        if (browser) await browser.close().catch(() => {});
+        ({ browser, context } = await launchBrowser());
+        page = await context.newPage();
+        await warmUp(page);
+      } catch (e2) {
+        console.log(`  ✗✗ Retry failed: ${e2.message} — skipping batch`);
+        errors += batch.length;
         continue;
       }
+    }
 
-      const products = searchResult.products || [];
-      if (products.length === 0) {
-        console.log(`  ✗ ${name.substring(0, 50)} → No products found`);
-        errors++;
-        await supabase
-          .from('store_products')
-          .update({ url_status: 'failed' })
-          .eq('id', sp.id);
-        continue;
-      }
+    for (const sp of batch) {
+      const name = sp.store_product_name;
+      try {
+        // Search for the product
+        const searchResult = await searchProduct(page, name);
 
-      // Find best fuzzy match
-      const match = fuzzyMatch(name, products);
-      const picked = match ? match.product : products[0];
-      const matchNote = match
-        ? `(score ${match.score.toFixed(2)})`
-        : '(first result)';
+        if (searchResult.error) {
+          console.log(`  ✗ ${name.substring(0, 50)} → ${searchResult.error}`);
+          errors++;
+          await supabase
+            .from('store_products')
+            .update({ url_status: 'failed' })
+            .eq('id', sp.id);
+          if (searchResult.error.includes('Access Denied')) {
+            console.log('    ⏳ Waiting 30s after block...');
+            await page.waitForTimeout(30000);
+            try { await warmUp(page); } catch {}
+          }
+          continue;
+        }
 
-      // Get price from the product page
-      const priceResult = await getProductPrice(page, picked.url);
+        const products = searchResult.products || [];
+        if (products.length === 0) {
+          console.log(`  ✗ ${name.substring(0, 50)} → No products found`);
+          errors++;
+          await supabase
+            .from('store_products')
+            .update({ url_status: 'failed' })
+            .eq('id', sp.id);
+          continue;
+        }
 
-      if (priceResult.error) {
-        // Still resolve the URL even if price extraction fails
-        console.log(
-          `  ⚠ ${name.substring(0, 50)} → URL found but no price: ${priceResult.error}`
-        );
+        // Find best fuzzy match
+        const match = fuzzyMatch(name, products);
+        const picked = match ? match.product : products[0];
+        const matchNote = match
+          ? `(score ${match.score.toFixed(2)})`
+          : '(first result)';
+
+        // Use price directly from search results (product pages no longer have prices)
+        if (!picked.price || picked.price <= 0) {
+          console.log(
+            `  ⚠ ${name.substring(0, 50)} → URL found but no price in search results`
+          );
+          await supabase
+            .from('store_products')
+            .update({
+              store_url: picked.url,
+              store_sku: picked.sku,
+              store_product_name: picked.name || name,
+              url_status: 'resolved',
+            })
+            .eq('id', sp.id);
+          resolved++;
+          continue;
+        }
+
+        // Update store_product
         await supabase
           .from('store_products')
           .update({
@@ -465,60 +503,60 @@ async function resolveMode({ limit, category }) {
             url_status: 'resolved',
           })
           .eq('id', sp.id);
+
+        // Insert price observation
+        await supabase.from('price_observations').insert({
+          store_product_id: sp.id,
+          price: picked.price,
+          was_price: null,
+          on_promotion: false,
+          observed_at: new Date().toISOString(),
+        });
+
+        console.log(
+          `  ✓ ${name.substring(0, 45)} → €${picked.price.toFixed(2)} ${matchNote}`
+        );
         resolved++;
-        continue;
-      }
+        priced++;
 
-      // Detect promotions
-      const promo = await detectPromotion(page);
-
-      // Update store_product
-      await supabase
-        .from('store_products')
-        .update({
-          store_url: picked.url,
-          store_sku: picked.sku,
-          store_product_name: priceResult.name || picked.name || name,
-          url_status: 'resolved',
-        })
-        .eq('id', sp.id);
-
-      // Insert price observation
-      await supabase.from('price_observations').insert({
-        store_product_id: sp.id,
-        price: priceResult.price,
-        was_price: promo.wasPrice,
-        on_promotion: promo.onPromotion,
-        observed_at: new Date().toISOString(),
-      });
-
-      const promoNote = promo.onPromotion
-        ? ` 🏷️ ${promo.promoLabel}${promo.wasPrice ? ` (was €${promo.wasPrice})` : ''}`
-        : '';
-      console.log(
-        `  ✓ ${name.substring(0, 45)} → €${priceResult.price.toFixed(2)} ${matchNote}${promoNote}`
-      );
-      resolved++;
-      priced++;
-
-      // Small delay between products
-      await page.waitForTimeout(1500);
-    } catch (e) {
-      console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
-      errors++;
-      // If we hit Access Denied, wait longer
-      if (e.message.includes('Access Denied')) {
-        console.log('    ⏳ Waiting 30s after block...');
-        await page.waitForTimeout(30000);
-        // Retry warmup
-        try {
-          await warmUp(page);
-        } catch {}
+        // Small delay between products
+        await page.waitForTimeout(1500);
+      } catch (e) {
+        console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
+        errors++;
+        // If browser/page crashed, break out of this batch and restart
+        if (
+          e.message.includes('Target page, context or browser has been closed') ||
+          e.message.includes('Target closed') ||
+          e.message.includes('Browser closed') ||
+          e.message.includes('Navigation failed because page was closed')
+        ) {
+          console.log('    💥 Browser crashed — ending batch early');
+          break;
+        }
+        if (e.message.includes('Access Denied')) {
+          console.log('    ⏳ Waiting 30s after block...');
+          try {
+            await page.waitForTimeout(30000);
+            await warmUp(page);
+          } catch {
+            console.log('    💥 Recovery failed — ending batch early');
+            break;
+          }
+        }
       }
     }
-  }
 
-  await browser.close();
+    // Close browser to free memory before next batch
+    try { await browser.close(); } catch {}
+    console.log(`  Batch ${batchNum} done. Running total: ${resolved} resolved, ${priced} priced, ${errors} errors`);
+
+    // Wait between batches to avoid rate limiting
+    if (batchStart + BATCH_SIZE < toResolve.length) {
+      console.log('  ⏳ 10s cooldown...');
+      await new Promise((r) => setTimeout(r, 10000));
+    }
+  }
 
   console.log(`\n=== Results: ${resolved} resolved, ${priced} priced, ${errors} errors ===`);
 }
