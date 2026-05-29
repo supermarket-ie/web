@@ -76,7 +76,9 @@ const ALDI_OWN_BRANDS = [
   'brannans', 'moser roth', 'alcafe', 'brooklea', 'lacura', 'mamia',
   'almat', 'magnum', 'earths choice', 'cowbelle', 'dermot & daisy',
   "healy's farm", 'oakhurst', 'ardagh', 'emporium', 'cleaver and blade',
-  'ballymore crust', 'organic',
+  'ballymore crust', 'organic', "gráinne's", "grainne's", "flynn's", "egan's",
+  'duneen', 'dessert menu', 'foodie market', 'dominion', 'quick milk',
+  'barratt', 'glenilen farm', 'irish yogurts',
 ];
 
 async function scrapeAldiCategory(page, category, { firstPageOnly = false, maxPages = 0 } = {}) {
@@ -145,10 +147,39 @@ async function scrapeAldiCategory(page, category, { firstPageOnly = false, maxPa
   return products.map(p => ({ ...p, category: category.name, dbCat: category.dbCat }));
 }
 
-// Fuzzy match — bidirectional word matching
-function fuzzyMatch(searchName, candidates) {
+// Category compatibility map — prevents cross-category false positives
+// E.g. a Fruit item should NEVER match to Baby food
+const CATEGORY_COMPAT = {
+  'Fruit': ['Fruit', 'Frozen'],
+  'Vegetables': ['Vegetables', 'Frozen'],
+  'Meat': ['Meat', 'Chilled', 'Frozen'],
+  'Fish': ['Fish', 'Frozen'],
+  'Dairy': ['Dairy', 'Chilled'],
+  'Bakery': ['Bakery'],
+  'Beverages': ['Beverages'],
+  'Baby': ['Baby'],
+  'Pet Care': ['Pet Care'],
+  'Household': ['Household'],
+  'Personal Care': ['Personal Care'],
+};
+
+/**
+ * Check if a candidate's category is compatible with the expected category.
+ * If no expected category provided, all are compatible.
+ */
+function isCategoryCompatible(candidateCategory, expectedCategory) {
+  if (!expectedCategory) return true;
+  const allowed = CATEGORY_COMPAT[expectedCategory];
+  if (!allowed) return true; // no restriction defined
+  return allowed.includes(candidateCategory);
+}
+
+// Fuzzy match — bidirectional word matching with category awareness
+function fuzzyMatch(searchName, candidates, { expectedCategory = null } = {}) {
   searchName = (searchName || '').toLowerCase();
   if (!searchName) return null;
+  
+  const searchWordCount = searchName.split(/\s+/).filter(w => w.length > 2).length;
   
   let bestMatch = null;
   let bestScore = 0;
@@ -157,13 +188,45 @@ function fuzzyMatch(searchName, candidates) {
     const canonName = (cp.canonical_name || cp.fullName || '').toLowerCase();
     if (!canonName) continue;
     
+    // Category filter: skip candidates from incompatible categories
+    if (expectedCategory && cp.category && !isCategoryCompatible(cp.category, expectedCategory)) {
+      continue;
+    }
+    
+    // Name length ratio check: prevent matching "Bananas" (1 word) to
+    // "Ella's Kitchen Bananas Bananas Bananas Pouch 4+Months 70g" (8 words)
+    const canonWordCount = canonName.split(/\s+/).filter(w => w.length > 2).length;
+    const lengthRatio = Math.min(searchWordCount, canonWordCount) / Math.max(searchWordCount, canonWordCount);
+    if (lengthRatio < 0.25 && Math.max(searchWordCount, canonWordCount) > 3) {
+      // One name is way shorter than the other — skip unless exact containment
+      if (searchName !== canonName && !searchName.includes(canonName) && !canonName.includes(searchName)) {
+        continue;
+      }
+    }
+    
     // Exact or containment match
-    if (searchName === canonName || searchName.includes(canonName) || canonName.includes(searchName)) {
+    if (searchName === canonName) {
       if (1.0 > bestScore) {
         bestScore = 1.0;
         bestMatch = cp;
       }
       continue;
+    }
+    
+    // Containment: only accept if the shorter name is >= 2 words or the names are very close in length
+    if (searchName.includes(canonName) || canonName.includes(searchName)) {
+      const shorter = searchName.length < canonName.length ? searchName : canonName;
+      const shorterWords = shorter.split(/\s+/).filter(w => w.length > 2).length;
+      // Only accept containment match if short side has >= 2 significant words
+      // This prevents "Bananas" matching "Ella's Kitchen Bananas..."
+      if (shorterWords >= 2 || lengthRatio >= 0.5) {
+        if (1.0 > bestScore) {
+          bestScore = 1.0;
+          bestMatch = cp;
+        }
+        continue;
+      }
+      // Single-word containment — downgrade to word overlap scoring below
     }
     
     const searchWords = searchName.split(/\s+/).filter(w => w.length > 2);
@@ -183,8 +246,11 @@ function fuzzyMatch(searchName, candidates) {
     const score2 = searchWords.length > 0 ? searchInCanon / searchWords.length : 0;
     const score = Math.min(score1, score2);
     
-    if (score > bestScore && score >= 0.6) {
-      bestScore = score;
+    // Apply length penalty: short search against long canonical gets penalised
+    const adjustedScore = score * (0.5 + 0.5 * lengthRatio);
+    
+    if (adjustedScore > bestScore && adjustedScore >= 0.6) {
+      bestScore = adjustedScore;
       bestMatch = cp;
     }
   }
@@ -297,9 +363,10 @@ async function resolveMode(categoryFilter) {
   
   for (const aldi of toProcess) {
     // Try matching with brand stripped first, then with full name
+    // Pass expected category to prevent cross-category false positives
     const stripped = stripBrand(aldi.fullName);
-    const matchStripped = fuzzyMatch(stripped, products);
-    const matchFull = fuzzyMatch(aldi.fullName, products);
+    const matchStripped = fuzzyMatch(stripped, products, { expectedCategory: aldi.dbCat });
+    const matchFull = fuzzyMatch(aldi.fullName, products, { expectedCategory: aldi.dbCat });
     
     // Pick best match
     let best = null;
