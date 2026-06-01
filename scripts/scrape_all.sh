@@ -1,7 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# scrape_all.sh — Runs all 4 store scrapers sequentially
-# Designed to run via systemd timer or cron (no LLM agent needed)
+# scrape_all.sh — Runs all 4 store scrapers with parallelisation
+# Designed to run via systemd timer (no LLM agent needed)
+#
+# Execution plan:
+#   Phase 1 (parallel): Tesco + SuperValu (both slow, independent)
+#   Phase 2 (parallel): Dunnes + Aldi (both fast, independent)
 #
 # Usage:
 #   ./scripts/scrape_all.sh              # Run all stores
@@ -13,7 +17,7 @@
 #   - .env.local in the project root with SUPABASE_SERVICE_ROLE_KEY
 # =============================================================================
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -22,7 +26,9 @@ TIMESTAMP=$(date +%Y%m%d_%H%M)
 
 # Load env
 cd "$PROJECT_DIR"
-export $(grep -v '^#' .env.local | grep -v '^$' | xargs)
+set -a
+source .env.local
+set +a
 
 # Ensure log directory
 mkdir -p "$LOG_DIR"
@@ -35,60 +41,38 @@ if ! pgrep -f "Xvfb :99" > /dev/null; then
 fi
 export DISPLAY=:99
 
-# Results tracking
-declare -A RESULTS
+# --- Store runner functions (each writes to its own log) ---
 
-# --- TESCO ---
 run_tesco() {
-  echo "[$(date -u)] === TESCO REFRESH ==="
   local log="$LOG_DIR/tesco_${TIMESTAMP}.log"
-  
-  # Tesco needs tmux for DISPLAY to persist through browser restarts
-  # But since we're running directly with DISPLAY set, it should work
-  node scripts/tesco_scraper.js --refresh > "$log" 2>&1 || true
-  
-  local updated=$(grep -oP 'Updated \K\d+' "$log" | tail -1 || echo "0")
-  local total=$(grep -oP '/\K\d+(?= prices)' "$log" | tail -1 || echo "?")
-  RESULTS[tesco]="$updated/$total"
-  echo "[$(date -u)] Tesco done: ${RESULTS[tesco]}"
+  echo "[$(date -u)] === TESCO REFRESH ===" > "$log"
+  node scripts/tesco_scraper.js --refresh --limit 1000 >> "$log" 2>&1 || true
+  local result=$(tail -1 "$log" | grep -oP 'Updated \K\d+/\d+' || echo "unknown")
+  echo "tesco:$result"
 }
 
-# --- SUPERVALU ---
 run_supervalu() {
-  echo "[$(date -u)] === SUPERVALU REFRESH ==="
   local log="$LOG_DIR/supervalu_${TIMESTAMP}.log"
-  
-  node scripts/supervalu_scraper.js --refresh --limit 2000 > "$log" 2>&1 || true
-  
-  local updated=$(grep -oP 'Updated \K\d+' "$log" | tail -1 || echo "0")
-  local total=$(grep -oP '/\K\d+(?= prices)' "$log" | tail -1 || echo "?")
-  RESULTS[supervalu]="$updated/$total"
-  echo "[$(date -u)] SuperValu done: ${RESULTS[supervalu]}"
+  echo "[$(date -u)] === SUPERVALU REFRESH ===" > "$log"
+  node scripts/supervalu_scraper.js --refresh --limit 2000 >> "$log" 2>&1 || true
+  local result=$(tail -1 "$log" | grep -oP 'Updated \K\d+/\d+' || echo "unknown")
+  echo "supervalu:$result"
 }
 
-# --- DUNNES ---
 run_dunnes() {
-  echo "[$(date -u)] === DUNNES REFRESH ==="
   local log="$LOG_DIR/dunnes_${TIMESTAMP}.log"
-  
-  python3 -u scripts/scrape_pipeline.py --refresh --store dunnes > "$log" 2>&1 || true
-  
-  local updated=$(grep -c "✓" "$log" || echo "0")
-  RESULTS[dunnes]="$updated"
-  echo "[$(date -u)] Dunnes done: ${RESULTS[dunnes]} updated"
+  echo "[$(date -u)] === DUNNES REFRESH ===" > "$log"
+  node scripts/dunnes_refresh.js >> "$log" 2>&1 || true
+  local result=$(tail -1 "$log" | grep -oP 'Updated \K\d+/\d+' || echo "unknown")
+  echo "dunnes:$result"
 }
 
-# --- ALDI ---
 run_aldi() {
-  echo "[$(date -u)] === ALDI REFRESH ==="
   local log="$LOG_DIR/aldi_${TIMESTAMP}.log"
-  
-  node scripts/aldi_scraper.js --refresh > "$log" 2>&1 || true
-  
-  local updated=$(grep -oP 'Updated \K\d+' "$log" | tail -1 || echo "0")
-  local total=$(grep -oP '/\K\d+' "$log" | tail -1 || echo "?")
-  RESULTS[aldi]="$updated/$total"
-  echo "[$(date -u)] Aldi done: ${RESULTS[aldi]}"
+  echo "[$(date -u)] === ALDI REFRESH ===" > "$log"
+  node scripts/aldi_scraper.js --refresh >> "$log" 2>&1 || true
+  local result=$(tail -1 "$log" | grep -oP 'Updated \K\d+/\d+' || echo "unknown")
+  echo "aldi:$result"
 }
 
 # --- REVALIDATE ---
@@ -97,17 +81,6 @@ revalidate() {
   curl -s -L -X POST https://supermarket.ie/api/revalidate \
     -H 'Content-Type: application/json' \
     -d '{"secret":"E_1-BEtOVIKglZXz0OXU2n-lY51jkiG8YxwM9RjSK9g"}' > /dev/null 2>&1 || true
-}
-
-# --- WRITE SUMMARY ---
-write_summary() {
-  local summary="$LOG_DIR/summary_${TIMESTAMP}.txt"
-  echo "=== Scrape Summary $(date -u) ===" > "$summary"
-  for store in tesco supervalu dunnes aldi; do
-    echo "  $store: ${RESULTS[$store]:-skipped}" >> "$summary"
-  done
-  echo "" >> "$summary"
-  cat "$summary"
 }
 
 # --- MAIN ---
@@ -119,18 +92,95 @@ fi
 echo "[$(date -u)] Starting scrape run: ${STORES_TO_RUN[*]}"
 echo ""
 
+# Separate stores into phases for parallel execution
+PHASE1=()  # Slow stores (browser-based)
+PHASE2=()  # Fast stores (API-based)
+
 for store in "${STORES_TO_RUN[@]}"; do
   case "$store" in
-    tesco) run_tesco ;;
-    supervalu) run_supervalu ;;
-    dunnes) run_dunnes ;;
-    aldi) run_aldi ;;
+    tesco|supervalu) PHASE1+=("$store") ;;
+    dunnes|aldi) PHASE2+=("$store") ;;
     *) echo "Unknown store: $store" ;;
   esac
-  echo ""
 done
 
-revalidate
-write_summary
+# --- Phase 1: Run slow stores in parallel ---
+if [ ${#PHASE1[@]} -gt 0 ]; then
+  echo "[$(date -u)] Phase 1 (parallel): ${PHASE1[*]}"
+  
+  PHASE1_PIDS=()
+  PHASE1_RESULTS=()
+  
+  for store in "${PHASE1[@]}"; do
+    # Run each store in background, capture output to temp file
+    TMPFILE=$(mktemp)
+    case "$store" in
+      tesco) run_tesco > "$TMPFILE" 2>&1 & ;;
+      supervalu) run_supervalu > "$TMPFILE" 2>&1 & ;;
+    esac
+    PHASE1_PIDS+=("$!:$store:$TMPFILE")
+  done
+  
+  # Wait for all phase 1 jobs
+  for entry in "${PHASE1_PIDS[@]}"; do
+    IFS=':' read -r pid store tmpfile <<< "$entry"
+    wait "$pid" 2>/dev/null || true
+    result=$(cat "$tmpfile" 2>/dev/null || echo "$store:error")
+    PHASE1_RESULTS+=("$result")
+    rm -f "$tmpfile"
+    echo "[$(date -u)] $result"
+  done
+  echo ""
+fi
 
+# --- Phase 2: Run fast stores in parallel ---
+if [ ${#PHASE2[@]} -gt 0 ]; then
+  echo "[$(date -u)] Phase 2 (parallel): ${PHASE2[*]}"
+  
+  PHASE2_PIDS=()
+  PHASE2_RESULTS=()
+  
+  for store in "${PHASE2[@]}"; do
+    TMPFILE=$(mktemp)
+    case "$store" in
+      dunnes) run_dunnes > "$TMPFILE" 2>&1 & ;;
+      aldi) run_aldi > "$TMPFILE" 2>&1 & ;;
+    esac
+    PHASE2_PIDS+=("$!:$store:$TMPFILE")
+  done
+  
+  # Wait for all phase 2 jobs
+  for entry in "${PHASE2_PIDS[@]}"; do
+    IFS=':' read -r pid store tmpfile <<< "$entry"
+    wait "$pid" 2>/dev/null || true
+    result=$(cat "$tmpfile" 2>/dev/null || echo "$store:error")
+    PHASE2_RESULTS+=("$result")
+    rm -f "$tmpfile"
+    echo "[$(date -u)] $result"
+  done
+  echo ""
+fi
+
+# --- Summary ---
+revalidate
+
+SUMMARY="$LOG_DIR/summary_${TIMESTAMP}.txt"
+{
+  echo "=== Scrape Summary $(date -u) ==="
+  echo "  Stores: ${STORES_TO_RUN[*]}"
+  echo ""
+  for store in "${STORES_TO_RUN[@]}"; do
+    local_log="$LOG_DIR/${store}_${TIMESTAMP}.log"
+    if [ -f "$local_log" ]; then
+      last_line=$(grep -E '(Updated|=== )' "$local_log" | tail -1)
+      echo "  $store: ${last_line:-no result line}"
+    else
+      echo "  $store: no log file"
+    fi
+  done
+  echo ""
+  echo "  Finished: $(date -u +%H:%M) UTC (${SECONDS}s elapsed)"
+} | tee "$SUMMARY"
+
+echo ""
 echo "[$(date -u)] All done."
