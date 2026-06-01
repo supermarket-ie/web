@@ -45,10 +45,10 @@ export DISPLAY=:99
 
 run_tesco() {
   local log="$LOG_DIR/tesco_${TIMESTAMP}.log"
-  echo "[$(date -u)] === TESCO REFRESH ===" > "$log"
-  node scripts/tesco_scraper.js --refresh --limit 1000 >> "$log" 2>&1 || true
-  local result=$(tail -1 "$log" | grep -oP 'Updated \K\d+/\d+' || echo "unknown")
-  echo "tesco:$result"
+  echo "[$(date -u)] === TESCO REFRESH ==="
+  node scripts/tesco_scraper.js --refresh --limit 1000 > "$log" 2>&1 || true
+  local result=$(grep -E '(Updated|=== )' "$log" | tail -1)
+  echo "[$(date -u)] Tesco done: ${result:-unknown}"
 }
 
 run_supervalu() {
@@ -92,57 +92,43 @@ fi
 echo "[$(date -u)] Starting scrape run: ${STORES_TO_RUN[*]}"
 echo ""
 
-# Separate stores into phases for parallel execution
-PHASE1=()  # Slow stores (browser-based)
-PHASE2=()  # Fast stores (API-based)
+# Execution strategy for 4GB RAM / 2 vCPU:
+#   Phase 1: Tesco ALONE (headed Chromium, ~1GB RAM, Akamai WAF)
+#   Phase 2: SuperValu + Dunnes + Aldi in parallel (headless/API, lighter)
+#
+# This prevents OOM crashes from concurrent headed browsers.
+
+# Separate into phases
+PHASE1=()  # Tesco only (heavy)
+PHASE2=()  # Everything else (lighter, can parallelise)
 
 for store in "${STORES_TO_RUN[@]}"; do
   case "$store" in
-    tesco|supervalu) PHASE1+=("$store") ;;
-    dunnes|aldi) PHASE2+=("$store") ;;
+    tesco) PHASE1+=("$store") ;;
+    supervalu|dunnes|aldi) PHASE2+=("$store") ;;
     *) echo "Unknown store: $store" ;;
   esac
 done
 
-# --- Phase 1: Run slow stores in parallel ---
+# --- Phase 1: Tesco alone (sequential, memory-intensive) ---
 if [ ${#PHASE1[@]} -gt 0 ]; then
-  echo "[$(date -u)] Phase 1 (parallel): ${PHASE1[*]}"
-  
-  PHASE1_PIDS=()
-  PHASE1_RESULTS=()
-  
+  echo "[$(date -u)] Phase 1 (sequential): ${PHASE1[*]}"
   for store in "${PHASE1[@]}"; do
-    # Run each store in background, capture output to temp file
-    TMPFILE=$(mktemp)
-    case "$store" in
-      tesco) run_tesco > "$TMPFILE" 2>&1 & ;;
-      supervalu) run_supervalu > "$TMPFILE" 2>&1 & ;;
-    esac
-    PHASE1_PIDS+=("$!:$store:$TMPFILE")
-  done
-  
-  # Wait for all phase 1 jobs
-  for entry in "${PHASE1_PIDS[@]}"; do
-    IFS=':' read -r pid store tmpfile <<< "$entry"
-    wait "$pid" 2>/dev/null || true
-    result=$(cat "$tmpfile" 2>/dev/null || echo "$store:error")
-    PHASE1_RESULTS+=("$result")
-    rm -f "$tmpfile"
-    echo "[$(date -u)] $result"
+    run_tesco
   done
   echo ""
 fi
 
-# --- Phase 2: Run fast stores in parallel ---
+# --- Phase 2: Remaining stores in parallel ---
 if [ ${#PHASE2[@]} -gt 0 ]; then
   echo "[$(date -u)] Phase 2 (parallel): ${PHASE2[*]}"
   
   PHASE2_PIDS=()
-  PHASE2_RESULTS=()
   
   for store in "${PHASE2[@]}"; do
     TMPFILE=$(mktemp)
     case "$store" in
+      supervalu) run_supervalu > "$TMPFILE" 2>&1 & ;;
       dunnes) run_dunnes > "$TMPFILE" 2>&1 & ;;
       aldi) run_aldi > "$TMPFILE" 2>&1 & ;;
     esac
@@ -154,7 +140,6 @@ if [ ${#PHASE2[@]} -gt 0 ]; then
     IFS=':' read -r pid store tmpfile <<< "$entry"
     wait "$pid" 2>/dev/null || true
     result=$(cat "$tmpfile" 2>/dev/null || echo "$store:error")
-    PHASE2_RESULTS+=("$result")
     rm -f "$tmpfile"
     echo "[$(date -u)] $result"
   done

@@ -519,14 +519,29 @@ async function refreshMode({ limit, category, offset = 0 }) {
     return;
   }
 
-  const { browser, context } = await launchBrowser();
-  const page = await context.newPage();
+  const { browser: initBrowser, context: initContext } = await launchBrowser();
+  let browser = initBrowser;
+  let context = initContext;
+  let page = await context.newPage();
 
   let updated = 0;
   let errors = 0;
   let offers = 0;
 
-  for (const sp of filtered) {
+  const BATCH_SIZE = 150;
+
+  for (let i = 0; i < filtered.length; i++) {
+    // Restart browser every BATCH_SIZE products to prevent memory bloat
+    if (i > 0 && i % BATCH_SIZE === 0) {
+      try { await browser.close(); } catch {}
+      console.log(`\n  --- Batch restart (${i}/${filtered.length}) ---\n`);
+      const launched = await launchBrowser();
+      browser = launched.browser;
+      context = launched.context;
+      page = await context.newPage();
+    }
+
+    const sp = filtered[i];
     const name = sp.products?.canonical_name || sp.store_product_name;
     try {
       const result = await getProductPrice(page, sp.store_url);
@@ -534,6 +549,15 @@ async function refreshMode({ limit, category, offset = 0 }) {
       if (result.error) {
         console.log(`  ✗ ${name.substring(0, 50)} → ${result.error}`);
         errors++;
+        // If browser crashed, force a restart
+        if (result.error.includes('closed') || result.error.includes('Target')) {
+          try { await browser.close(); } catch {}
+          console.log('  💥 Browser crashed — restarting...');
+          const launched = await launchBrowser();
+          browser = launched.browser;
+          context = launched.context;
+          page = await context.newPage();
+        }
         continue;
       }
 
