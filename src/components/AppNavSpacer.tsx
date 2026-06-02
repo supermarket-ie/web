@@ -17,9 +17,7 @@ export function AppNavSpacer({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   return (
-    <div
-      className={hasNav ? 'md:pl-52 pb-20 md:pb-0' : ''}
-    >
+    <div className={hasNav ? 'pb-20 md:pb-0' : ''}>
       {children}
     </div>
   );
