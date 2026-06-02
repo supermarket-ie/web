@@ -1,32 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
+import { type RefreshData } from '@/components/SmartRefreshCard';
 
-interface Conversation {
-  id: string;
-  title: string;
-  list_id: string | null;
-  created_at: string;
-  updated_at: string;
-  message_count: number;
-}
-
-interface SavedList {
-  id: string;
-  name: string;
-  meals_prompt: string | null;
-  family_size: string;
-  store_totals: Array<{ store: string; total: number }> | null;
-  is_default: boolean;
-  created_at: string;
-  generated_at: string | null;
-  conversation_id: string | null;
-}
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -57,156 +39,279 @@ function StoreTotalBadges({ totals }: { totals: Array<{ store: string; total: nu
   );
 }
 
+// ── Agent notice card ─────────────────────────────────────────────────────────
+
+function AgentNoticeCard({ data, token }: { data: RefreshData; token: string }) {
+  const { lastList, priceDiff, thisWeekTotal, daysSince } = data;
+  const saving = priceDiff.netChange > 0;
+  const stale = daysSince >= 14;
+
+  function handleSameAgain() {
+    window.location.href = `/?sameAgain=1&token=${encodeURIComponent(token)}`;
+  }
+  function handleChange() {
+    window.location.href = '/';
+  }
+
+  return (
+    <div className="rounded-2xl overflow-hidden mb-6"
+      style={{ border: '1px solid var(--surface-container)', background: 'var(--surface-container-lowest)' }}>
+
+      {/* Header bar */}
+      <div className="px-4 py-3 flex items-center justify-between"
+        style={{ background: '#00944A' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-white text-sm font-bold">Your agent noticed</span>
+        </div>
+        <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+          {daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : `${daysSince}d ago`}
+        </span>
+      </div>
+
+      <div className="px-4 py-4">
+        {/* Last shop total */}
+        <div className="flex items-baseline justify-between mb-3">
+          <span className="text-sm" style={{ color: 'var(--on-surface-variant)' }}>
+            {stale ? 'Last shop' : 'Your usual shop this week'}
+          </span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold" style={{ color: 'var(--on-background)' }}>
+              €{thisWeekTotal.toFixed(2)}
+            </span>
+            {priceDiff.netChange !== 0 && (
+              <span className="text-sm font-semibold"
+                style={{ color: saving ? '#16a34a' : '#dc2626' }}>
+                {saving ? `−€${priceDiff.netChange.toFixed(2)}` : `+€${Math.abs(priceDiff.netChange).toFixed(2)}`}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Price movements */}
+        <div className="space-y-1.5 mb-4">
+          {priceDiff.cheaper > 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <span>🟢</span>
+              <span style={{ color: 'var(--on-surface)' }}>
+                <strong>{priceDiff.cheaper} item{priceDiff.cheaper !== 1 ? 's' : ''}</strong> cheaper this week
+                <span className="ml-1 font-semibold" style={{ color: '#16a34a' }}>−€{priceDiff.cheaperAmount.toFixed(2)}</span>
+              </span>
+            </div>
+          )}
+          {priceDiff.dearer > 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <span>🔴</span>
+              <span style={{ color: 'var(--on-surface)' }}>
+                <strong>{priceDiff.dearer} item{priceDiff.dearer !== 1 ? 's' : ''}</strong> more expensive
+                <span className="ml-1 font-semibold" style={{ color: '#dc2626' }}>+€{priceDiff.dearerAmount.toFixed(2)}</span>
+              </span>
+            </div>
+          )}
+          {priceDiff.promoSwaps > 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <span>🏷️</span>
+              <span style={{ color: 'var(--on-surface)' }}>
+                <strong>{priceDiff.promoSwaps} item{priceDiff.promoSwaps !== 1 ? 's' : ''}</strong> on promotion at a different store
+              </span>
+            </div>
+          )}
+          {priceDiff.cheaper === 0 && priceDiff.dearer === 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <span>✅</span>
+              <span style={{ color: 'var(--on-surface)' }}>Prices stable this week — same as last time</span>
+            </div>
+          )}
+          {stale && (
+            <div className="flex items-center gap-2 text-sm">
+              <span>⏱️</span>
+              <span style={{ color: 'var(--on-surface-variant)' }}>It's been {daysSince} days — anything changed?</span>
+            </div>
+          )}
+        </div>
+
+        {/* CTAs */}
+        <div className="flex gap-2">
+          <button onClick={handleSameAgain}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+            style={{ background: '#00944A' }}>
+            Same again →
+          </button>
+          <button onClick={handleChange}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-opacity hover:opacity-80"
+            style={{ background: 'var(--surface-container)', color: 'var(--on-surface)', border: '1px solid var(--outline-variant)' }}>
+            Change things
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── First-time empty state ────────────────────────────────────────────────────
+
+function FirstTimeCard() {
+  return (
+    <div className="rounded-2xl overflow-hidden mb-6"
+      style={{ border: '1px solid var(--surface-container)', background: 'var(--surface-container-lowest)' }}>
+      <div className="px-4 py-3" style={{ background: '#00944A' }}>
+        <span className="text-white text-sm font-bold">Your agent is ready</span>
+      </div>
+      <div className="px-4 py-5">
+        <p className="text-sm mb-1" style={{ color: 'var(--on-background)' }}>
+          <strong>Tell me about your household</strong> and I'll build your first priced weekly list — across Tesco, Dunnes, SuperValu and Aldi.
+        </p>
+        <p className="text-xs mb-4" style={{ color: 'var(--on-surface-variant)' }}>
+          Takes about 2 minutes. The more I know, the better the list.
+        </p>
+        <Link href="/"
+          className="block w-full text-center py-3 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+          style={{ background: '#00944A' }}>
+          Start planning →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+
+interface SavedList {
+  id: string;
+  name: string;
+  store_totals: Array<{ store: string; total: number }> | null;
+  created_at: string;
+  generated_at: string | null;
+  conversation_id: string | null;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  list_id: string | null;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
 export function Dashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [lists, setLists] = useState<SavedList[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [refreshData, setRefreshData] = useState<RefreshData | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  useEffect(() => {
-    const session = loadSession();
-    if (!session?.token) {
-      router.push('/');
-      return;
-    }
-    setToken(session.token);
-    trackEvent('dashboard_visit', undefined, session.token);
-    loadData(session.token);
-  }, [router]);
-
-  async function loadData(tok: string) {
+  const loadData = useCallback(async (tok: string) => {
     setLoading(true);
     try {
-      const [convRes, listsRes] = await Promise.all([
-        fetch(`/api/conversations?token=${encodeURIComponent(tok)}`),
+      const [listsRes, convsRes, refreshRes] = await Promise.all([
         fetch(`/api/lists?token=${encodeURIComponent(tok)}`),
+        fetch(`/api/conversations?token=${encodeURIComponent(tok)}`),
+        fetch(`/api/plan/refresh?token=${encodeURIComponent(tok)}`),
       ]);
-      if (convRes.ok) {
-        const d = await convRes.json();
-        setConversations(d.conversations ?? []);
+      if (listsRes.ok) setLists((await listsRes.json()).lists ?? []);
+      if (convsRes.ok) setConversations((await convsRes.json()).conversations ?? []);
+      if (refreshRes.ok) {
+        const d = await refreshRes.json();
+        if (d.hasRecentList) setRefreshData(d);
       }
-      if (listsRes.ok) {
-        const d = await listsRes.json();
-        setLists(d.lists ?? []);
-      }
-    } catch (err) {
-      console.error('Dashboard load error:', err);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const session = loadSession();
+    if (!session?.token) { router.push('/'); return; }
+    setToken(session.token);
+    trackEvent('dashboard_visit', undefined, session.token);
+    loadData(session.token);
+  }, [router, loadData]);
 
   async function deleteConversation(id: string) {
     if (!token) return;
-    try {
-      await fetch(`/api/conversations/${id}?token=${encodeURIComponent(token)}`, { method: 'DELETE' });
-      setConversations(prev => prev.filter(c => c.id !== id));
-    } catch {}
+    await fetch(`/api/conversations/${id}?token=${encodeURIComponent(token)}`, { method: 'DELETE' });
+    setConversations(prev => prev.filter(c => c.id !== id));
   }
-
-  // Find the most recent list
-  const lastList = lists.length > 0 ? lists[0] : null;
 
   if (loading) {
     return (
-      <main className="flex-1 px-4 py-12 max-w-2xl mx-auto w-full">
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-20 rounded-2xl animate-pulse" style={{ background: 'var(--surface-container-low)' }} />
-          ))}
+      <div className="px-4 py-8 max-w-2xl mx-auto w-full">
+        <div className="space-y-3">
+          <div className="h-48 rounded-2xl animate-pulse" style={{ background: 'var(--surface-container-low)' }} />
+          <div className="h-16 rounded-2xl animate-pulse" style={{ background: 'var(--surface-container-low)' }} />
+          <div className="h-16 rounded-2xl animate-pulse" style={{ background: 'var(--surface-container-low)' }} />
         </div>
-      </main>
+      </div>
     );
   }
 
-  const hasData = conversations.length > 0 || lists.length > 0;
+  const hasHistory = lists.length > 0 || conversations.length > 0;
 
   return (
-    <main className="flex-1 px-4 py-8 max-w-2xl mx-auto w-full">
-      {/* Welcome */}
-      <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--on-background)' }}>
-        👋 Welcome back
-      </h1>
-      <p className="text-sm mb-6" style={{ color: 'var(--on-surface)' }}>
-        Your grocery planning dashboard
-      </p>
+    <div className="px-4 py-8 max-w-2xl mx-auto w-full">
 
-      {/* Primary CTA */}
-      <Link
-        href="/"
-        className="block w-full text-center py-4 px-6 rounded-2xl font-bold text-lg text-white transition-opacity hover:opacity-90 mb-8"
-        style={{ background: 'linear-gradient(135deg, #006A35, #00944A)' }}
-      >
-        🛒 Plan this week
-        <span className="block text-sm font-normal mt-0.5 opacity-80">Get a new AI grocery list</span>
-      </Link>
-
-      {!hasData && (
-        <div className="text-center py-12 rounded-2xl" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-          <p className="text-4xl mb-3">🛒</p>
-          <p className="font-semibold text-base mb-1" style={{ color: 'var(--on-background)' }}>No lists yet</p>
-          <p className="text-sm" style={{ color: 'var(--on-surface)' }}>
-            Plan your first grocery list and it'll show up here
-          </p>
-        </div>
+      {/* Agent notice / first-time card */}
+      {refreshData ? (
+        <AgentNoticeCard data={refreshData} token={token!} />
+      ) : (
+        <FirstTimeCard />
       )}
 
-      {/* Last list card */}
-      {lastList && (
-        <section className="mb-8">
+      {/* Past lists */}
+      {lists.length > 0 && (
+        <section className="mb-6">
           <h2 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--on-surface-variant)' }}>
-            📋 Your last list
+            Past lists
           </h2>
-          <div className="rounded-2xl p-4" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm truncate" style={{ color: 'var(--on-background)' }}>
-                  {lastList.name}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>
-                  {timeAgo(lastList.generated_at || lastList.created_at)}
-                </p>
+          <div className="space-y-2">
+            {lists.map(list => (
+              <div key={list.id} className="rounded-2xl p-4"
+                style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate" style={{ color: 'var(--on-background)' }}>
+                      {list.name}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>
+                      {timeAgo(list.generated_at || list.created_at)}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 ml-3">
+                    <Link href={`/list?token=${encodeURIComponent(token!)}`}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80"
+                      style={{ background: 'var(--surface-container)', color: 'var(--on-background)' }}>
+                      View
+                    </Link>
+                    {list.conversation_id && (
+                      <Link href={`/dashboard/chat/${list.conversation_id}`}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-80"
+                        style={{ background: '#006A35' }}>
+                        Chat
+                      </Link>
+                    )}
+                  </div>
+                </div>
+                {list.store_totals && list.store_totals.length > 0 && (
+                  <StoreTotalBadges totals={list.store_totals} />
+                )}
               </div>
-            </div>
-            {lastList.store_totals && lastList.store_totals.length > 0 && (
-              <StoreTotalBadges totals={lastList.store_totals} />
-            )}
-            <div className="flex gap-2 mt-3">
-              <Link
-                href={`/list?token=${encodeURIComponent(token!)}`}
-                className="flex-1 text-center px-3 py-2 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
-                style={{ background: 'var(--surface-container)', color: 'var(--on-background)' }}
-              >
-                View list
-              </Link>
-              {lastList.conversation_id && (
-                <Link
-                  href={`/dashboard/chat/${lastList.conversation_id}`}
-                  className="flex-1 text-center px-3 py-2 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                  style={{ background: '#006A35' }}
-                >
-                  Modify in chat 💬
-                </Link>
-              )}
-            </div>
+            ))}
           </div>
         </section>
       )}
 
-      {/* Recent conversations */}
-      {conversations.length > 0 && (
-        <section className="mb-8">
+      {/* Recent conversations (without a linked list) */}
+      {conversations.filter(c => !c.list_id).length > 0 && (
+        <section className="mb-6">
           <h2 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--on-surface-variant)' }}>
-            💬 Recent conversations
+            Recent conversations
           </h2>
           <div className="space-y-2">
-            {conversations.map(conv => (
-              <div
-                key={conv.id}
-                className="rounded-2xl p-4 flex items-center justify-between group transition-colors"
-                style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}
-              >
+            {conversations.filter(c => !c.list_id).map(conv => (
+              <div key={conv.id}
+                className="rounded-2xl p-4 flex items-center justify-between group"
+                style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
                 <Link href={`/dashboard/chat/${conv.id}`} className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate" style={{ color: 'var(--on-background)' }}>
                     {conv.title}
@@ -215,12 +320,9 @@ export function Dashboard() {
                     {conv.message_count} messages · {timeAgo(conv.updated_at)}
                   </p>
                 </Link>
-                <button
-                  onClick={() => deleteConversation(conv.id)}
-                  className="ml-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
-                  title="Delete conversation"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--on-surface-variant)' }}>
+                <button onClick={() => deleteConversation(conv.id)}
+                  className="ml-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--on-surface-variant)' }}>
                     <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
                 </button>
@@ -230,51 +332,13 @@ export function Dashboard() {
         </section>
       )}
 
-      {/* All saved lists */}
-      {lists.length > 1 && (
-        <section className="mb-8">
-          <h2 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--on-surface-variant)' }}>
-            📦 All saved lists
-          </h2>
-          <div className="space-y-2">
-            {lists.slice(1).map(list => (
-              <div
-                key={list.id}
-                className="rounded-2xl p-4"
-                style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate" style={{ color: 'var(--on-background)' }}>
-                      {list.name}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>
-                      {timeAgo(list.generated_at || list.created_at)}
-                    </p>
-                  </div>
-                </div>
-                {list.store_totals && list.store_totals.length > 0 && (
-                  <StoreTotalBadges totals={list.store_totals} />
-                )}
-                {list.conversation_id && (
-                  <div className="mt-3">
-                    <Link
-                      href={`/dashboard/chat/${list.conversation_id}`}
-                      className="text-xs font-semibold transition-opacity hover:opacity-80"
-                      style={{ color: '#006A35' }}
-                    >
-                      Continue chat →
-                    </Link>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
+      {/* No history at all — prompt to start */}
+      {!hasHistory && !refreshData && (
+        <p className="text-xs text-center mt-8" style={{ color: 'var(--on-surface-variant)' }}>
+          Your past lists and conversations will appear here.
+        </p>
       )}
 
-      {/* Household profile editor */}
-      {/* Moved to /dashboard/profile — accessible via Profile tab in nav */}
-    </main>
+    </div>
   );
 }
