@@ -8,14 +8,26 @@ const securityHeaders = [
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
 ];
 
+const IS_STAGING = (process.env.NEXT_PUBLIC_BASE_URL ?? '').includes('staging');
+
 const nextConfig: NextConfig = {
   async headers() {
-    return [
+    const headers = [
       {
         source: '/(.*)',
         headers: securityHeaders,
       },
     ];
+
+    // Block indexing on staging
+    if (IS_STAGING) {
+      headers.push({
+        source: '/(.*)',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      });
+    }
+
+    return headers;
   },
 };
 

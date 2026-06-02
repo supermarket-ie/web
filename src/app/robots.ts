@@ -1,8 +1,17 @@
 import { MetadataRoute } from 'next';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.supermarket.ie').trim();
+const IS_STAGING = BASE_URL.includes('staging');
 
 export default function robots(): MetadataRoute.Robots {
+  // Block all crawlers on staging/preview environments
+  if (IS_STAGING) {
+    return {
+      rules: [{ userAgent: '*', disallow: ['/'] }],
+      host: BASE_URL,
+    };
+  }
+
   return {
     rules: [
       {
