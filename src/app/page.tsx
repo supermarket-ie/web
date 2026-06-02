@@ -1,5 +1,6 @@
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { PlanPage } from '@/components/PlanPage';
 import {
   HeroSection,
   StoreLogosBar,
@@ -14,7 +15,6 @@ import { faqs } from '@/components/homepage/FAQSection';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
-// FAQPage structured data — built from the same faqs array rendered on page
 const faqJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
@@ -35,35 +35,25 @@ export const metadata = {
 export default function Home() {
   return (
     <div className="min-h-screen bg-surface noise-bg">
-      {/* Cookie banner — client island, checks localStorage */}
       <CookieBanner />
-
       <SiteHeader />
 
-      {/* Hero Section with AI Planner */}
-      <HeroSection />
+      {/* Signed-in: just the planner, no marketing content */}
+      <PlanPage />
 
-      {/* Social Proof Bar - Store Logos */}
-      <StoreLogosBar />
-
-      {/* How it works */}
-      <HowItWorksSection />
-
-      {/* Benefits Section */}
-      <BenefitsSection />
-
-      {/* Testimonials */}
-      <TestimonialsSection />
-
-      {/* FAQ Section */}
-      <FAQSection />
-
-      {/* Bottom CTA */}
-      <BottomCTASection />
+      {/* Signed-out: full marketing homepage (PlanPage renders null when signed in) */}
+      <div id="homepage-marketing">
+        <HeroSection />
+        <StoreLogosBar />
+        <HowItWorksSection />
+        <BenefitsSection />
+        <TestimonialsSection />
+        <FAQSection />
+        <BottomCTASection />
+      </div>
 
       <SiteFooter />
 
-      {/* FAQPage structured data */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
