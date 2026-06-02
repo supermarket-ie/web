@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
-import { HouseholdEditor } from '@/components/HouseholdEditor';
 
 interface Conversation {
   id: string;
@@ -275,12 +274,7 @@ export function Dashboard() {
       )}
 
       {/* Household profile editor */}
-      <section className="mb-8">
-        <h2 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--on-surface-variant)' }}>
-          ⚙️ Your preferences
-        </h2>
-        <HouseholdEditor />
-      </section>
+      {/* Moved to /dashboard/profile — accessible via Profile tab in nav */}
     </main>
   );
 }
