@@ -118,13 +118,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Link
                     key={item.href}
                     href={href}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold"
                     style={{
                       background: active ? '#00944A' : 'transparent',
-                      color: active ? '#ffffff' : 'var(--on-surface-variant)',
+                      color: active ? '#ffffff' : 'var(--on-surface)',
+                      textDecoration: 'none',
                     }}
+                    onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--surface-container)'; }}
+                    onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                   >
-                    <span style={{ opacity: active ? 1 : 0.65 }}>{item.icon}</span>
+                    <span style={{ opacity: active ? 1 : 0.8 }}>{item.icon}</span>
                     {item.label}
                   </Link>
                 );
