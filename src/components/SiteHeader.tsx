@@ -23,7 +23,7 @@ export function SiteHeader() {
   const isSignedIn = mounted && !!listToken;
 
   return (
-    <header className="px-6 py-3.5 sticky top-0 z-20" style={{ background: '#00944A' }}>
+    <header className="px-6 py-3.5 sticky top-0 z-40 w-full" style={{ background: '#00944A' }}>
       <div className="max-w-7xl mx-auto flex justify-between items-center">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 flex-shrink-0">
