@@ -441,7 +441,12 @@ export function HomePlanner() {
 
   // ── Add a message ──
   const addMsg = useCallback((role: ChatMessage['role'], content: string, buttons?: ChatButton[]) => {
-    setMessages(prev => [...prev, { id: msgId(), role, content, buttons }]);
+    if (!buttons) {
+      const parsed = parseButtonSuggestions(content);
+      setMessages(prev => [...prev, { id: msgId(), role, content: parsed.text, buttons: parsed.buttons.length > 0 ? parsed.buttons : undefined }]);
+    } else {
+      setMessages(prev => [...prev, { id: msgId(), role, content, buttons }]);
+    }
   }, []);
 
   // ── Auto-save conversation + list after generation + unlock ──
