@@ -2,18 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { loadSession, clearSession } from '@/lib/session';
 
-const NAV_ITEMS = [
-  { href: '/', label: 'Plan', match: (p: string) => p === '/' },
-  { href: '/list', label: 'My List', match: (p: string) => p.startsWith('/list') && !p.startsWith('/list/request') },
-  { href: '/dashboard', label: 'History', match: (p: string) => p.startsWith('/dashboard') && !p.startsWith('/dashboard/profile') },
-  { href: '/dashboard/profile', label: 'Profile', match: (p: string) => p.startsWith('/dashboard/profile') },
-];
-
 export function SiteHeader() {
-  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [listToken, setListToken] = useState<string | null>(null);
@@ -41,33 +32,8 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        {/* Desktop nav — signed-in users get full nav, signed-out get nothing */}
-        {isSignedIn && (
-          <nav className="hidden md:flex items-center gap-1">
-            {NAV_ITEMS.map(item => {
-              const active = item.match(pathname);
-              const href = item.href === '/list'
-                ? `/list?token=${encodeURIComponent(listToken!)}`
-                : item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={href}
-                  className="px-4 py-2 rounded-full text-[14px] font-semibold transition-all"
-                  style={{
-                    background: active ? 'rgba(255,255,255,0.2)' : 'transparent',
-                    color: '#FFFFFF',
-                  }}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        )}
-
         {/* Right side */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {mounted && (
             isSignedIn ? (
               <button
@@ -99,21 +65,9 @@ export function SiteHeader() {
         <div className="md:hidden absolute top-full left-0 right-0 px-6 py-5 flex flex-col gap-4 z-20 shadow-lg"
           style={{ background: '#00944A' }}>
           {isSignedIn ? (
-            <>
-              {NAV_ITEMS.map(item => {
-                const href = item.href === '/list'
-                  ? `/list?token=${encodeURIComponent(listToken!)}`
-                  : item.href;
-                return (
-                  <Link key={item.href} href={href} className="font-semibold text-base py-1" style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>
-                    {item.label}
-                  </Link>
-                );
-              })}
-              <button onClick={signOut} className="text-sm text-left font-medium mt-2" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                Sign out
-              </button>
-            </>
+            <button onClick={signOut} className="text-sm text-left font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              Sign out
+            </button>
           ) : (
             <Link href="/list/request" className="mt-2 px-4 py-3 text-sm text-center font-semibold rounded-full"
               style={{ border: '1.5px solid rgba(255,255,255,0.6)', color: '#FFFFFF' }}
