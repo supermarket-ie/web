@@ -4,8 +4,8 @@ import RequestLinkClient from './RequestLinkClient';
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export const metadata: Metadata = {
-  title: 'Sign in to your list · supermarket.ie',
-  description: 'Enter your email to get a link to your personalised grocery shopping list.',
+  title: 'Sign in · supermarket.ie',
+  description: 'Sign in to your supermarket.ie account to access your grocery lists and preferences.',
   alternates: { canonical: `${BASE_URL}/list/request` },
 };
 

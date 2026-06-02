@@ -52,7 +52,7 @@ export default function RequestLinkPage() {
               </div>
               <h1 className="text-2xl font-bold text-[#1D2324] mb-2">Check your inbox</h1>
               <p className="text-[#636E72] text-sm">
-                We&rsquo;ve sent a link to <strong className="text-[#1D2324]">{email}</strong>. It&rsquo;s valid for 7 days.
+                We&rsquo;ve sent a sign-in link to <strong className="text-[#1D2324]">{email}</strong>. Click it to access your account.
               </p>
             </div>
           )}
@@ -82,9 +82,9 @@ export default function RequestLinkPage() {
 
           {(status === "idle" || status === "submitting" || status === "error") && (
             <>
-              <h1 className="text-2xl font-bold text-[#1D2324] mb-2">Sign in to your list</h1>
+              <h1 className="text-2xl font-bold text-[#1D2324] mb-2">Sign in</h1>
               <p className="text-[#636E72] text-sm mb-6">
-                Enter your email and we&rsquo;ll send a link to your personalised shopping list.
+                Enter your email and we&rsquo;ll send you a sign-in link. No password needed.
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -111,7 +111,7 @@ export default function RequestLinkPage() {
                   className="w-full px-6 py-3 rounded-full font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed text-[#004a23]"
                   style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
                 >
-                  {status === "submitting" ? "Sending..." : "Send my list →"}
+                  {status === "submitting" ? "Sending..." : "Send sign-in link →"}
                 </button>
               </form>
             </>
