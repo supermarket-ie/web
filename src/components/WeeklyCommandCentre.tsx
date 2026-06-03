@@ -151,6 +151,9 @@ export function WeeklyCommandCentre() {
   const [chatOpen, setChatOpen] = useState(false);
   const [showDinners, setShowDinners] = useState(false);
   const [showLunches, setShowLunches] = useState(false);
+  // Raw markdown fallback when weekly_plans table doesn't exist yet
+  const [dinnerPlanText, setDinnerPlanText] = useState<string | null>(null);
+  const [lunchPlanText, setLunchPlanText] = useState<string | null>(null);
 
   const [token, setToken] = useState<string | null>(null);
 
@@ -179,14 +182,47 @@ export function WeeklyCommandCentre() {
     if (!token) return;
     setActionLoading(type);
     try {
-      await fetch('/api/agents/meal-plan', {
+      const res = await fetch('/api/agents/meal-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, config: { type } }),
       });
-      await fetchPlan(token);
-      if (type === 'dinners') setShowDinners(true);
-      else setShowLunches(true);
+      if (res.ok) {
+        const data = await res.json();
+        // Use parsed meal slots if available, else store raw text for display
+        if (data.meals && data.meals.length > 0) {
+          // Merge into plan state
+          setPlan(prev => {
+            const base = prev ?? {
+              weekStart: new Date().toISOString().split('T')[0],
+              meals: { dinners: [], lunches: [] },
+              shoppingList: [],
+              storeAssignment: null,
+              budget: { target: null, current: 0, onTrack: true },
+              agentNotices: [],
+              status: 'partial' as const,
+            };
+            return {
+              ...base,
+              status: 'partial',
+              meals: type === 'dinners'
+                ? { ...base.meals, dinners: data.meals }
+                : { ...base.meals, lunches: data.meals },
+            };
+          });
+        }
+        // Always store raw text as fallback
+        if (data.plan) {
+          if (type === 'dinners') setDinnerPlanText(data.plan);
+          else setLunchPlanText(data.plan);
+        }
+        if (type === 'dinners') setShowDinners(true);
+        else setShowLunches(true);
+        // Also try refreshing from DB in background (works once migration is run)
+        fetchPlan(token).catch(() => {});
+      }
+    } catch (e) {
+      console.error('meal-plan error', e);
     } finally {
       setActionLoading(null);
     }
@@ -224,8 +260,8 @@ export function WeeklyCommandCentre() {
   const shoppingItems = plan?.shoppingList?.length ?? 0;
   const budget = plan?.budget;
   const weekLabel = plan?.weekStart ? formatWeekRange(plan.weekStart) : '—';
-  const hasDinners = plannedDinners.length > 0;
-  const hasLunches = plannedLunches.length > 0;
+  const hasDinners = plannedDinners.length > 0 || !!dinnerPlanText;
+  const hasLunches = plannedLunches.length > 0 || !!lunchPlanText;
 
   const dinnersTotal = plannedDinners.reduce((s, m) => s + (m.estimatedCost ?? 0), 0);
   const lunchesTotal = plannedLunches.reduce((s, m) => s + (m.estimatedCost ?? 0), 0);
@@ -346,14 +382,19 @@ export function WeeklyCommandCentre() {
               Dinners
             </span>
             <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
-              {showDinners ? 'Hide' : 'Show'} {plannedDinners.length} meals
+              {showDinners ? 'Hide' : 'Show'} {plannedDinners.length > 0 ? `${plannedDinners.length} meals` : 'plan'}
             </span>
           </button>
           {showDinners && (
-            <div className="px-4 pb-2" style={{ background: 'var(--surface-container-lowest)' }}>
-              {plannedDinners.map((slot, i) => (
-                <MealRow key={i} slot={slot} />
-              ))}
+            <div className="px-4 pb-3" style={{ background: 'var(--surface-container-lowest)' }}>
+              {plannedDinners.length > 0
+                ? plannedDinners.map((slot, i) => <MealRow key={i} slot={slot} />)
+                : dinnerPlanText && (
+                  <pre className="text-xs whitespace-pre-wrap leading-relaxed pt-2" style={{ color: 'var(--on-surface)', fontFamily: 'inherit' }}>
+                    {dinnerPlanText}
+                  </pre>
+                )
+              }
             </div>
           )}
         </div>
@@ -374,14 +415,19 @@ export function WeeklyCommandCentre() {
               Lunches
             </span>
             <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
-              {showLunches ? 'Hide' : 'Show'} {plannedLunches.length} meals
+              {showLunches ? 'Hide' : 'Show'} {plannedLunches.length > 0 ? `${plannedLunches.length} meals` : 'plan'}
             </span>
           </button>
           {showLunches && (
-            <div className="px-4 pb-2" style={{ background: 'var(--surface-container-lowest)' }}>
-              {plannedLunches.map((slot, i) => (
-                <MealRow key={i} slot={slot} />
-              ))}
+            <div className="px-4 pb-3" style={{ background: 'var(--surface-container-lowest)' }}>
+              {plannedLunches.length > 0
+                ? plannedLunches.map((slot, i) => <MealRow key={i} slot={slot} />)
+                : lunchPlanText && (
+                  <pre className="text-xs whitespace-pre-wrap leading-relaxed pt-2" style={{ color: 'var(--on-surface)', fontFamily: 'inherit' }}>
+                    {lunchPlanText}
+                  </pre>
+                )
+              }
             </div>
           )}
         </div>
