@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { supabaseAdmin } from '@/lib/supabase';
+import { getAllLatestPrices } from '@/lib/price-data';
 import jwt from 'jsonwebtoken';
 import type { MealSlot } from '@/app/api/plan/weekly/route';
 
@@ -19,45 +20,35 @@ function getSubscriberId(token: string): string | null {
 
 // Fetch this week's cheapest products by category + promotions
 async function getWeeklyData() {
-  // Get latest prices (deduped per product per store)
-  const { data: priceData } = await supabaseAdmin
-    .from('price_observations')
-    .select('price, was_price, on_promotion, store_products(store, store_product_name, products(canonical_name, category))')
-    .order('observed_at', { ascending: false })
-    .limit(3000);
+  try {
+    const all = await getAllLatestPrices();
 
-  if (!priceData) return { cheapest: [], promotions: [] };
-
-  type Row = { price: number; was_price: number | null; on_promotion: boolean; store_products: { store: string; store_product_name: string; products: { canonical_name: string; category: string } | null } | null };
-  const rows = priceData as unknown as Row[];
-
-  // Dedup: cheapest per canonical product
-  const best = new Map<string, { name: string; category: string; store: string; price: number; was_price: number | null; on_promotion: boolean }>();
-  for (const r of rows) {
-    const sp = r.store_products;
-    const name = sp?.products?.canonical_name;
-    const cat = sp?.products?.category;
-    if (!name || !cat || !sp?.store) continue;
-    const existing = best.get(name);
-    if (!existing || r.price < existing.price) {
-      best.set(name, { name, category: cat, store: sp.store, price: r.price, was_price: r.was_price, on_promotion: r.on_promotion ?? false });
+    // Cheapest per canonical name across stores
+    const best = new Map<string, typeof all[number]>();
+    for (const item of all) {
+      const existing = best.get(item.canonical_name);
+      if (!existing || item.price < existing.price) best.set(item.canonical_name, item);
     }
-  }
 
-  const all = [...best.values()];
-  const promotions = all.filter(p => p.on_promotion);
-  // Get cheapest 5 per category for meal building
-  const byCategory = new Map<string, typeof all>();
-  for (const item of all) {
-    if (!byCategory.has(item.category)) byCategory.set(item.category, []);
-    byCategory.get(item.category)!.push(item);
-  }
-  for (const [cat, items] of byCategory) {
-    byCategory.set(cat, items.sort((a, b) => a.price - b.price).slice(0, 8));
-  }
+    const bestList = [...best.values()];
+    const promotions = bestList.filter(p => p.on_promotion);
 
-  const cheapest = [...byCategory.values()].flat();
-  return { cheapest, promotions: promotions.slice(0, 30) };
+    // Top 8 cheapest per category
+    const byCategory = new Map<string, typeof bestList>();
+    for (const item of bestList) {
+      if (!byCategory.has(item.category)) byCategory.set(item.category, []);
+      byCategory.get(item.category)!.push(item);
+    }
+    for (const [cat, items] of byCategory) {
+      byCategory.set(cat, items.sort((a, b) => a.price - b.price).slice(0, 8));
+    }
+
+    const cheapest = [...byCategory.values()].flat();
+    return { cheapest, promotions: promotions.slice(0, 30) };
+  } catch (err) {
+    console.error('[meal-plan] getWeeklyData error:', err);
+    return { cheapest: [], promotions: [] };
+  }
 }
 
 // POST /api/agents/meal-plan — generate a meal plan
@@ -91,11 +82,11 @@ export async function POST(req: NextRequest) {
   const { cheapest, promotions } = await getWeeklyData();
 
   const promoSummary = promotions.slice(0, 20).map(p =>
-    `${p.name} — ${p.store} €${p.price.toFixed(2)}${p.was_price ? ` (was €${p.was_price.toFixed(2)})` : ''}`
+    `${p.canonical_name} — ${p.store} €${p.price.toFixed(2)}${p.was_price ? ` (was €${p.was_price.toFixed(2)})` : ''}`
   ).join('\n');
 
   const cheapSummary = cheapest.slice(0, 60).map(p =>
-    `${p.name} (${p.category}) — ${p.store} €${p.price.toFixed(2)}`
+    `${p.canonical_name} (${p.category}) — ${p.store} €${p.price.toFixed(2)}`
   ).join('\n');
 
   const householdDesc = `${adults} adult${adults > 1 ? 's' : ''}${children > 0 ? ` + ${children} child${children > 1 ? 'ren' : ''}` : ''}`;
@@ -206,17 +197,21 @@ Key ingredients: [item] (€X, store), [item] (€X, store)
     maxOutputTokens: 2000,
   });
 
-  // Save to user_agents table (upsert)
-  await supabaseAdmin
-    .from('user_agents')
-    .upsert({
-      subscriber_id: subscriberId,
-      agent_type: agentType === 'lunches' ? 'lunch_planner' : 'meal_planner',
-      config: config ?? {},
-      enabled: true,
-      last_run: new Date().toISOString(),
-      last_output: text,
-    }, { onConflict: 'subscriber_id,agent_type' });
+  // Save to user_agents table (upsert, best-effort)
+  try {
+    await supabaseAdmin
+      .from('user_agents')
+      .upsert({
+        subscriber_id: subscriberId,
+        agent_type: agentType === 'lunches' ? 'lunch_planner' : 'meal_planner',
+        config: config ?? {},
+        enabled: true,
+        last_run: new Date().toISOString(),
+        last_output: text,
+      }, { onConflict: 'subscriber_id,agent_type' });
+  } catch {
+    // user_agents table may not exist yet — non-fatal
+  }
 
   // Parse structured meal slots from the generated text
   const parsedSlots = parseMealSlots(text, agentType);
