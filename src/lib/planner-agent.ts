@@ -96,45 +96,47 @@ async function queryCategories(): Promise<string[]> {
 
 async function queryPromotions(): Promise<PriceRow[]> {
   const { data } = await supabaseAdmin
-    .from('price_observations')
-    .select(SELECT)
+    .from('latest_prices')
+    .select('store, price, was_price, on_promotion, store_product_name, canonical_name, category')
     .eq('on_promotion', true)
-    .order('observed_at', { ascending: false })
-    .limit(500);
-  return dedup((data ?? []) as unknown as RawObs[]);
+    .limit(200);
+  return (data ?? []) as unknown as PriceRow[];
 }
 
 async function queryCategoryPrices(category: string): Promise<PriceRow[]> {
   const { data } = await supabaseAdmin
-    .from('price_observations')
-    .select(SELECT)
-    .order('observed_at', { ascending: false })
-    .limit(2000);
-  const rows = (data ?? []) as unknown as RawObs[];
-  return dedup(rows.filter(r => r.store_products?.products?.category === category));
+    .from('latest_prices')
+    .select('store, price, was_price, on_promotion, store_product_name, canonical_name, category')
+    .eq('category', category)
+    .limit(200);
+  return (data ?? []) as unknown as PriceRow[];
 }
 
 async function queryProduct(canonicalName: string): Promise<PriceRow[]> {
   const { data } = await supabaseAdmin
-    .from('price_observations')
-    .select(SELECT)
-    .order('observed_at', { ascending: false })
-    .limit(500);
-  const rows = (data ?? []) as unknown as RawObs[];
-  return dedup(
-    rows.filter(r => r.store_products?.products?.canonical_name === canonicalName),
-  );
+    .from('latest_prices')
+    .select('store, price, was_price, on_promotion, store_product_name, canonical_name, category')
+    .eq('canonical_name', canonicalName);
+  if (!data) return [];
+  return (data as unknown as Array<{ store: string; price: number; was_price: number | null; on_promotion: boolean; store_product_name: string; canonical_name: string; category: string }>).map(r => ({
+    store: r.store,
+    price: r.price,
+    was_price: r.was_price,
+    on_promotion: r.on_promotion,
+    store_product_name: r.store_product_name,
+    canonical_name: r.canonical_name,
+    category: r.category,
+  }));
 }
 
 async function queryProductPromotions(canonicalName: string): Promise<PriceRow[]> {
   const { data } = await supabaseAdmin
-    .from('price_observations')
-    .select(SELECT)
-    .eq('on_promotion', true)
-    .order('observed_at', { ascending: false })
-    .limit(200);
-  const rows = (data ?? []) as unknown as RawObs[];
-  return dedup(rows.filter(r => r.store_products?.products?.canonical_name === canonicalName));
+    .from('latest_prices')
+    .select('store, price, was_price, on_promotion, store_product_name, canonical_name, category')
+    .eq('canonical_name', canonicalName)
+    .eq('on_promotion', true);
+  if (!data) return [];
+  return data as unknown as PriceRow[];
 }
 
 export async function queryUserHistory(subscriberId: string) {
@@ -158,10 +160,29 @@ export async function queryUserHistory(subscriberId: string) {
 export async function queryPriceChanges(subscriberId: string) {
   const history = await queryUserHistory(subscriberId);
   if (!history.length) return [];
+
+  const names = history.slice(0, 30).map(h => h.canonical_name);
+
+  // Single batch query instead of 30 serial queryProduct calls
+  const { data } = await supabaseAdmin
+    .from('latest_prices')
+    .select('canonical_name, store, price, was_price, on_promotion')
+    .in('canonical_name', names);
+
+  if (!data) return [];
+
+  // Best price per product across all stores
+  const bestByName = new Map<string, { store: string; price: number }>();
+  for (const row of data as unknown as Array<{ canonical_name: string; store: string; price: number }>) {
+    const existing = bestByName.get(row.canonical_name);
+    if (!existing || row.price < existing.price) {
+      bestByName.set(row.canonical_name, { store: row.store, price: row.price });
+    }
+  }
+
   const results = [];
   for (const item of history.slice(0, 30)) {
-    const current = await queryProduct(item.canonical_name);
-    const bestNow = (current as any[]).reduce((best: any, r: any) => !best || r.price < best.price ? r : best, null);
+    const bestNow = bestByName.get(item.canonical_name);
     if (!bestNow) continue;
     const diff = Number((bestNow.price - item.price_paid).toFixed(2));
     if (Math.abs(diff) >= 0.05) {
@@ -172,7 +193,7 @@ export async function queryPriceChanges(subscriberId: string) {
         best_store_now: bestNow.store,
         best_price_now: bestNow.price,
         change: diff,
-        direction: diff < 0 ? 'cheaper' : 'dearer'
+        direction: diff < 0 ? 'cheaper' : 'dearer',
       });
     }
   }
@@ -242,13 +263,17 @@ export function makePlannerTools(subscriberId: string | null) {
         items: z.array(z.string()).describe('Array of canonical_name values from the previous list'),
       }),
       execute: async ({ items }: { items: string[] }) => {
-        const results = [];
-        for (const name of items) {
-          const prices = await queryProduct(name);
-          const promotions = await queryProductPromotions(name);
-          results.push({ canonical_name: name, prices, promotions });
-        }
-        return results;
+        // Batch query all products at once
+        const { data } = await supabaseAdmin
+          .from('latest_prices')
+          .select('canonical_name, store, price, was_price, on_promotion, store_product_name, category')
+          .in('canonical_name', items);
+        const rows = (data ?? []) as unknown as PriceRow[];
+        return items.map(name => ({
+          canonical_name: name,
+          prices: rows.filter(r => r.canonical_name === name),
+          promotions: rows.filter(r => r.canonical_name === name && r.on_promotion),
+        }));
       },
     }),
     save_household_profile: tool({
