@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google';
+import { AppShell } from '@/components/AppShell';
 import './globals.css';
 
 const geistSans = Geist({
@@ -138,7 +139,9 @@ export default function RootLayout({
         />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} ${plusJakartaSans.variable} antialiased`}>
-        {children}
+        <AppShell>
+          {children}
+        </AppShell>
         {/* Google Analytics */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-8107ZXC1P5"
