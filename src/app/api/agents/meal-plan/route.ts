@@ -1,0 +1,221 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { generateText } from 'ai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { supabaseAdmin } from '@/lib/supabase';
+import jwt from 'jsonwebtoken';
+
+export const maxDuration = 60;
+
+const SECRET = process.env.MAGIC_LINK_SECRET;
+if (!SECRET) throw new Error('MAGIC_LINK_SECRET required');
+
+function getSubscriberId(token: string): string | null {
+  try {
+    const p = jwt.verify(token, SECRET!) as { subscriberId: string };
+    return p.subscriberId ?? null;
+  } catch { return null; }
+}
+
+// Fetch this week's cheapest products by category + promotions
+async function getWeeklyData() {
+  // Get latest prices (deduped per product per store)
+  const { data: priceData } = await supabaseAdmin
+    .from('price_observations')
+    .select('price, was_price, on_promotion, store_products(store, store_product_name, products(canonical_name, category))')
+    .order('observed_at', { ascending: false })
+    .limit(3000);
+
+  if (!priceData) return { cheapest: [], promotions: [] };
+
+  type Row = { price: number; was_price: number | null; on_promotion: boolean; store_products: { store: string; store_product_name: string; products: { canonical_name: string; category: string } | null } | null };
+  const rows = priceData as unknown as Row[];
+
+  // Dedup: cheapest per canonical product
+  const best = new Map<string, { name: string; category: string; store: string; price: number; was_price: number | null; on_promotion: boolean }>();
+  for (const r of rows) {
+    const sp = r.store_products;
+    const name = sp?.products?.canonical_name;
+    const cat = sp?.products?.category;
+    if (!name || !cat || !sp?.store) continue;
+    const existing = best.get(name);
+    if (!existing || r.price < existing.price) {
+      best.set(name, { name, category: cat, store: sp.store, price: r.price, was_price: r.was_price, on_promotion: r.on_promotion ?? false });
+    }
+  }
+
+  const all = [...best.values()];
+  const promotions = all.filter(p => p.on_promotion);
+  // Get cheapest 5 per category for meal building
+  const byCategory = new Map<string, typeof all>();
+  for (const item of all) {
+    if (!byCategory.has(item.category)) byCategory.set(item.category, []);
+    byCategory.get(item.category)!.push(item);
+  }
+  for (const [cat, items] of byCategory) {
+    byCategory.set(cat, items.sort((a, b) => a.price - b.price).slice(0, 8));
+  }
+
+  const cheapest = [...byCategory.values()].flat();
+  return { cheapest, promotions: promotions.slice(0, 30) };
+}
+
+// POST /api/agents/meal-plan — generate a meal plan
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { token, config } = body;
+
+  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  const subscriberId = getSubscriberId(token);
+  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+
+  // Load household profile
+  const { data: household } = await supabaseAdmin
+    .from('households')
+    .select('*')
+    .eq('subscriber_id', subscriberId)
+    .single();
+
+  const adults = household?.adults ?? 2;
+  const children = household?.children ?? 0;
+  const dietary = household?.dietary ?? [];
+  const budget = household?.weekly_budget ?? null;
+  const dislikes = household?.dislikes ?? '';
+
+  // Agent type config
+  const agentType = config?.type ?? 'dinners'; // 'dinners' | 'lunches'
+  const days = config?.days ?? 7;
+  const preferences = config?.preferences ?? '';
+
+  // Get this week's data
+  const { cheapest, promotions } = await getWeeklyData();
+
+  const promoSummary = promotions.slice(0, 20).map(p =>
+    `${p.name} — ${p.store} €${p.price.toFixed(2)}${p.was_price ? ` (was €${p.was_price.toFixed(2)})` : ''}`
+  ).join('\n');
+
+  const cheapSummary = cheapest.slice(0, 60).map(p =>
+    `${p.name} (${p.category}) — ${p.store} €${p.price.toFixed(2)}`
+  ).join('\n');
+
+  const householdDesc = `${adults} adult${adults > 1 ? 's' : ''}${children > 0 ? ` + ${children} child${children > 1 ? 'ren' : ''}` : ''}`;
+  const dietaryStr = dietary.length > 0 ? `Dietary: ${dietary.join(', ')}` : 'No dietary restrictions';
+  const budgetStr = budget ? `Weekly budget: €${budget}` : '';
+  const dislikesStr = dislikes ? `Dislikes/avoids: ${dislikes}` : '';
+
+  const systemPrompt = agentType === 'lunches' ? `You are a lunch planning agent for an Irish household.
+
+## Household
+${householdDesc}
+${dietaryStr}
+${budgetStr}
+${dislikesStr}
+${preferences ? `Extra preferences: ${preferences}` : ''}
+
+## Task
+Generate ${days} weekday lunch ideas. These should be:
+- Quick to prepare (max 15 min) or batch-cookable on Sunday
+- Affordable — use the cheapest available ingredients from Irish supermarkets
+- Practical for packed lunches (work/school friendly)
+- Varied across the week
+
+## This Week's Promotions
+${promoSummary || 'None available'}
+
+## Cheapest Available Ingredients
+${cheapSummary}
+
+## Rules
+- ONLY use products from the ingredient lists above
+- Build meals AROUND what's cheap and on promotion this week
+- Show the estimated cost per lunch
+- Include a total ingredients list at the end with store + price
+- If dietary restrictions are stated, they are ABSOLUTE — never violate them
+- Be practical. Irish audience. No exotic ingredients.
+
+## Output Format
+### 🥪 Your ${days} Lunch Plan
+
+**Monday:** [Meal name]
+[Brief description, 1-2 sentences]
+Key ingredients: [item] (€X, store), [item] (€X, store)
+
+...repeat for each day...
+
+---
+### 📋 Shopping list for lunches
+- [Item] — [Store] €X.XX
+- ...
+
+**Total: €X.XX**
+`
+  : `You are a dinner meal planning agent for an Irish household.
+
+## Household
+${householdDesc}
+${dietaryStr}
+${budgetStr}
+${dislikesStr}
+${preferences ? `Extra preferences: ${preferences}` : ''}
+
+## Task
+Generate a ${days}-dinner meal plan for this week. Each dinner should:
+- Serve the household (${householdDesc})
+- Be built around what's CHEAP and on PROMOTION this week at Irish supermarkets
+- Be practical, achievable for home cooks (30-45 min max)
+- Vary protein sources and cuisines across the week
+
+## This Week's Promotions
+${promoSummary || 'None available'}
+
+## Cheapest Available Ingredients
+${cheapSummary}
+
+## Rules
+- ONLY use products from the ingredient lists above
+- Build meals AROUND what's cheap and on promotion this week — this is the key differentiator
+- Show the estimated cost per meal
+- Include a total ingredients list at the end with store + price
+- If dietary restrictions are stated, they are ABSOLUTE — never violate them
+- Be practical. Irish audience. Think shepherd's pie, stir fry, pasta bake — not restaurant food.
+- Suggest batch-cooking opportunities (e.g. "cook double, leftovers for Tuesday lunch")
+
+## Output Format
+### 🍽️ Your ${days}-Dinner Plan
+
+**Monday:** [Meal name]
+[Brief description + why it's good value this week]
+Key ingredients: [item] (€X, store), [item] (€X, store)
+*Est. cost: €X.XX*
+
+...repeat for each day...
+
+---
+### 📋 Shopping list for dinners
+- [Item] — [Store] €X.XX
+- ...
+
+**Total: €X.XX**
+💡 [One tip about batch cooking or smart shopping for this plan]
+`;
+
+  const { text } = await generateText({
+    model: anthropic('claude-haiku-4-5-20251001'),
+    system: systemPrompt,
+    prompt: `Generate the ${agentType === 'lunches' ? 'lunch' : 'dinner'} plan for this week. Be specific with real products from the data provided.`,
+    maxOutputTokens: 2000,
+  });
+
+  // Save to user_agents table (upsert)
+  await supabaseAdmin
+    .from('user_agents')
+    .upsert({
+      subscriber_id: subscriberId,
+      agent_type: agentType === 'lunches' ? 'lunch_planner' : 'meal_planner',
+      config: config ?? {},
+      enabled: true,
+      last_run: new Date().toISOString(),
+      last_output: text,
+    }, { onConflict: 'subscriber_id,agent_type' });
+
+  return NextResponse.json({ plan: text });
+}
