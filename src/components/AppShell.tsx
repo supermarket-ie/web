@@ -10,7 +10,7 @@ const NAV_ITEMS = [
     href: '/',
     label: 'Plan',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
@@ -20,7 +20,7 @@ const NAV_ITEMS = [
     href: '/list',
     label: 'My List',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
         <rect x="9" y="3" width="6" height="4" rx="1" />
         <path d="M9 12h6M9 16h4" />
@@ -32,7 +32,7 @@ const NAV_ITEMS = [
     href: '/dashboard',
     label: 'History',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10" />
         <polyline points="12 6 12 12 16 14" />
       </svg>
@@ -43,7 +43,7 @@ const NAV_ITEMS = [
     href: '/dashboard/profile',
     label: 'Profile',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="4" />
         <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
       </svg>
@@ -54,7 +54,7 @@ const NAV_ITEMS = [
     href: '/dashboard/agents',
     label: 'Agents',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" />
         <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
       </svg>
@@ -144,7 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
               >
                 <span className="sidebar-nav-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                     <polyline points="16 17 21 12 16 7" />
                     <line x1="21" y1="12" x2="9" y2="12" />
@@ -195,10 +195,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={item.href}
                 href={href}
                 className="flex-1 flex flex-col items-center justify-center gap-0.5"
-                style={{ textDecoration: 'none', color: active ? '#000' : '#666' }}
+                style={{ textDecoration: 'none', color: '#000' }}
               >
-                <span style={{ opacity: active ? 1 : 0.5 }}>{item.icon}</span>
-                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>{item.label}</span>
+                <span style={{ opacity: active ? 1 : 0.4 }}>{item.icon}</span>
+                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, opacity: active ? 1 : 0.5 }}>{item.label}</span>
               </Link>
             );
           })}
@@ -210,36 +210,39 @@ export function AppShell({ children }: { children: ReactNode }) {
         .sidebar-nav-item {
           display: flex;
           align-items: center;
-          gap: 10px;
-          margin: 1px 8px;
-          padding: 6px 10px;
+          gap: 8px;
+          margin: 0 6px;
+          padding: 5px 8px;
           border-radius: 6px;
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 400;
-          color: #666;
-          transition: background 0.1s, color 0.1s;
-        }
-        .sidebar-nav-item:hover,
-        .sidebar-nav-item:focus {
-          background: #f2f2f2;
           color: #000;
+          letter-spacing: -0.01em;
+          transition: background 0.1s;
+          line-height: 1.4;
+        }
+        .sidebar-nav-item:hover {
+          background: #f2f2f2;
         }
         .sidebar-nav-item[data-active="true"] {
-          background: #f2f2f2;
-          color: #000;
+          background: #ededed;
           font-weight: 500;
         }
         .sidebar-nav-icon {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 20px;
-          height: 20px;
+          width: 18px;
+          height: 18px;
           flex-shrink: 0;
-          color: inherit;
+          opacity: 0.7;
+          color: #000;
         }
         .sidebar-nav-item[data-active="true"] .sidebar-nav-icon {
-          color: #000;
+          opacity: 1;
+        }
+        .sidebar-nav-item:hover .sidebar-nav-icon {
+          opacity: 1;
         }
       `}</style>
     </div>
