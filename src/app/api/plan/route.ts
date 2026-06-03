@@ -1,5 +1,5 @@
 import { createAgentUIStreamResponse, UIMessage } from 'ai';
-import { createPlannerAgent, type PlannerProfile } from '@/lib/planner-agent';
+import { createPlannerAgent, updateHouseholdMemory, type PlannerProfile } from '@/lib/planner-agent';
 import { supabaseAdmin } from '@/lib/supabase';
 import jwt from 'jsonwebtoken';
 
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     // Merge: stored messages first, then incoming (which has the new user message)
     const allMessages = [...storedUIMessages, ...incomingMessages];
 
-    const agent = createPlannerAgent({
+    const agent = await createPlannerAgent({
       subscriberId,
       profile: profile ?? undefined,
       householdSize: body.householdSize ?? 2,
@@ -95,6 +95,14 @@ export async function POST(req: Request) {
             .update({ messages: updatedMessages })
             .eq('id', conversationId)
             .eq('subscriber_id', subscriberId);
+
+          // Update household memory when a grocery list is generated
+          if (assistantText.includes('🛒 Your weekly grocery list')) {
+            // Run memory update in background (non-blocking)
+            updateHouseholdMemory(subscriberId!).catch((error) => {
+              console.error('[/api/plan] Memory update failed:', error);
+            });
+          }
         } catch (err) {
           console.error('[/api/plan] conversation save error:', err);
         }
@@ -177,7 +185,7 @@ export async function POST(req: Request) {
     parts: [{ type: 'text' as const, text: m.content }],
   }));
 
-  const agent = createPlannerAgent({
+  const agent = await createPlannerAgent({
     subscriberId,
     profile: intakeMode ? undefined : profile,
     householdSize: body.householdSize ?? 2,
@@ -191,5 +199,26 @@ export async function POST(req: Request) {
   return createAgentUIStreamResponse({
     agent,
     uiMessages,
+    onFinish: async ({ responseMessage }) => {
+      // Update household memory when a grocery list is generated
+      if (subscriberId && intakeMode) {
+        try {
+          const assistantText = responseMessage.parts
+            .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+            .map(p => p.text)
+            .join('');
+
+          // Only update memory if a grocery list was actually generated (not just a clarifying question)
+          if (assistantText.includes('🛒 Your weekly grocery list')) {
+            // Run memory update in background (non-blocking)
+            updateHouseholdMemory(subscriberId).catch((error) => {
+              console.error('[/api/plan] Memory update failed:', error);
+            });
+          }
+        } catch (error) {
+          console.error('[/api/plan] onFinish error:', error);
+        }
+      }
+    },
   });
 }

@@ -7,6 +7,7 @@ import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
 import { type RefreshData } from '@/components/SmartRefreshCard';
+import { type HouseholdMemory } from '@/lib/planner-agent';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -147,6 +148,94 @@ function AgentNoticeCard({ data, token }: { data: RefreshData; token: string }) 
   );
 }
 
+// ── Household memory card ─────────────────────────────────────────────────────
+
+interface HouseholdProfile {
+  adults?: number;
+  children?: number;
+  weekly_budget?: number;
+  dietary?: string[];
+  memory?: HouseholdMemory | null;
+}
+
+function HouseholdMemoryCard({ profile }: { profile: HouseholdProfile }) {
+  const [expanded, setExpanded] = useState(false);
+  const { memory, dietary, weekly_budget, adults, children } = profile;
+
+  const hasMemory = memory && memory.totalShops > 0;
+  const hasProfile = (adults ?? 0) > 0 || (dietary ?? []).length > 0 || weekly_budget;
+  if (!hasMemory && !hasProfile) return null;
+
+  const storeName = memory?.usualStore
+    ? memory.usualStore.charAt(0).toUpperCase() + memory.usualStore.slice(1)
+    : null;
+
+  return (
+    <div className="rounded-2xl overflow-hidden mb-4"
+      style={{ border: '1px solid var(--surface-container)', background: 'var(--surface-container-lowest)' }}>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full px-4 py-3 flex items-center justify-between text-left transition-opacity hover:opacity-80"
+        style={{ background: 'var(--surface-container-low)' }}>
+        <span className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>
+          🧠 What your agent knows
+        </span>
+        <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+          {expanded ? '∧' : '›'}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="px-4 py-3 space-y-1.5">
+          {hasMemory && (
+            <p className="text-xs" style={{ color: 'var(--on-surface)' }}>
+              <strong>{memory!.totalShops} shop{memory!.totalShops !== 1 ? 's' : ''}</strong>
+              {memory!.avgWeeklySpend > 0 && <> · avg <strong>€{memory!.avgWeeklySpend.toFixed(2)}/week</strong></>}
+              {storeName && <> · usually <strong>{storeName}</strong></>}
+            </p>
+          )}
+          {(memory?.frequentItems ?? []).length > 0 && (
+            <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+              <span className="font-medium" style={{ color: 'var(--on-surface)' }}>Always buys:</span>{' '}
+              {memory!.frequentItems.slice(0, 6).join(', ')}
+            </p>
+          )}
+          {(memory?.droppedItems ?? []).length > 0 && (
+            <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+              <span className="font-medium" style={{ color: 'var(--on-surface)' }}>Avoids:</span>{' '}
+              {memory!.droppedItems.join(', ')}
+            </p>
+          )}
+          {(dietary ?? []).length > 0 && (
+            <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+              <span className="font-medium" style={{ color: 'var(--on-surface)' }}>Dietary:</span>{' '}
+              {dietary!.join(', ')}
+            </p>
+          )}
+          {weekly_budget && (
+            <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+              <span className="font-medium" style={{ color: 'var(--on-surface)' }}>Budget:</span>{' '}
+              €{weekly_budget}/week
+            </p>
+          )}
+          {!hasMemory && (
+            <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+              Complete your first shop and I'll start learning your habits.
+            </p>
+          )}
+          <div className="pt-1">
+            <Link href="/dashboard/profile"
+              className="text-xs font-semibold transition-opacity hover:opacity-70"
+              style={{ color: '#00944A' }}>
+              Edit preferences →
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── First-time empty state ────────────────────────────────────────────────────
 
 function FirstTimeCard() {
@@ -199,21 +288,27 @@ export function Dashboard() {
   const [lists, setLists] = useState<SavedList[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [refreshData, setRefreshData] = useState<RefreshData | null>(null);
+  const [householdProfile, setHouseholdProfile] = useState<HouseholdProfile | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
   const loadData = useCallback(async (tok: string) => {
     setLoading(true);
     try {
-      const [listsRes, convsRes, refreshRes] = await Promise.all([
+      const [listsRes, convsRes, refreshRes, householdRes] = await Promise.all([
         fetch(`/api/lists?token=${encodeURIComponent(tok)}`),
         fetch(`/api/conversations?token=${encodeURIComponent(tok)}`),
         fetch(`/api/plan/refresh?token=${encodeURIComponent(tok)}`),
+        fetch(`/api/household?token=${encodeURIComponent(tok)}`),
       ]);
       if (listsRes.ok) setLists((await listsRes.json()).lists ?? []);
       if (convsRes.ok) setConversations((await convsRes.json()).conversations ?? []);
       if (refreshRes.ok) {
         const d = await refreshRes.json();
         if (d.hasRecentList) setRefreshData(d);
+      }
+      if (householdRes.ok) {
+        const d = await householdRes.json();
+        if (d.household) setHouseholdProfile(d.household);
       }
     } finally {
       setLoading(false);
@@ -257,6 +352,9 @@ export function Dashboard() {
       ) : (
         <FirstTimeCard />
       )}
+
+      {/* Household memory card */}
+      {householdProfile && <HouseholdMemoryCard profile={householdProfile} />}
 
       {/* Past lists */}
       {lists.length > 0 && (

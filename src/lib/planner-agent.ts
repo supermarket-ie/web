@@ -201,6 +201,147 @@ export async function queryPriceChanges(subscriberId: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Household memory system
+// ---------------------------------------------------------------------------
+
+export interface HouseholdMemory {
+  totalShops: number;
+  avgWeeklySpend: number;
+  usualStore: string;
+  frequentItems: string[];
+  droppedItems: string[];
+  notedPreferences: string[];
+  lastShopSummary: string;
+  updatedAt: string;
+}
+
+export async function updateHouseholdMemory(subscriberId: string): Promise<void> {
+  try {
+    // 1. Fetch shopping history (list_items)
+    const { data: listItems } = await supabaseAdmin
+      .from('list_items')
+      .select('canonical_name, category, store, price_paid, quantity, observed_at')
+      .eq('subscriber_id', subscriberId)
+      .order('observed_at', { ascending: false })
+      .limit(500); // Get more data for better analysis
+
+    // 2. Fetch saved lists for weekly spend calculation
+    const { data: savedLists } = await supabaseAdmin
+      .from('saved_lists')
+      .select('store_totals, created_at, name')
+      .eq('subscriber_id', subscriberId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    // 3. Fetch removed items
+    const { data: subscriber } = await supabaseAdmin
+      .from('subscribers')
+      .select('removed_items')
+      .eq('id', subscriberId)
+      .single();
+
+    if (!listItems) return;
+
+    // Calculate totalShops (distinct saved_lists)
+    const totalShops = savedLists?.length || 0;
+
+    // Calculate average weekly spend from store_totals
+    let avgWeeklySpend = 0;
+    if (savedLists && savedLists.length > 0) {
+      const totalSpends: number[] = [];
+      for (const list of savedLists) {
+        if (list.store_totals && Array.isArray(list.store_totals)) {
+          const listTotal = list.store_totals.reduce((sum: number, store: any) => {
+            return sum + (parseFloat(store.total) || 0);
+          }, 0);
+          if (listTotal > 0) totalSpends.push(listTotal);
+        }
+      }
+      if (totalSpends.length > 0) {
+        avgWeeklySpend = Number((totalSpends.reduce((sum, total) => sum + total, 0) / totalSpends.length).toFixed(2));
+      }
+    }
+
+    // Calculate frequent items (bought 3+ times)
+    const itemCounts = new Map<string, number>();
+    const storeCounts = new Map<string, number>();
+
+    for (const item of listItems) {
+      // Count items
+      itemCounts.set(item.canonical_name, (itemCounts.get(item.canonical_name) || 0) + 1);
+      // Count stores
+      storeCounts.set(item.store, (storeCounts.get(item.store) || 0) + 1);
+    }
+
+    // Most frequent items (bought 3+ times)
+    const frequentItems = Array.from(itemCounts.entries())
+      .filter(([, count]) => count >= 3)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name]) => name);
+
+    // Most common store
+    const usualStore = Array.from(storeCounts.entries())
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || 'tesco';
+
+    // Dropped items from removed_items
+    const droppedItems = subscriber?.removed_items || [];
+
+    // Generate last shop summary
+    let lastShopSummary = 'No previous shops';
+    if (savedLists && savedLists.length > 0) {
+      const lastList = savedLists[0];
+      const lastDate = new Date(lastList.created_at).toLocaleDateString('en-IE', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
+      });
+
+      // Calculate total for last shop
+      let lastTotal = 0;
+      let itemCount = 0;
+      if (lastList.store_totals && Array.isArray(lastList.store_totals)) {
+        lastTotal = lastList.store_totals.reduce((sum: number, store: any) => {
+          itemCount += store.item_count || 0;
+          return sum + (parseFloat(store.total) || 0);
+        }, 0);
+      }
+
+      if (lastTotal > 0) {
+        lastShopSummary = `€${lastTotal.toFixed(2)} · ${itemCount} items · ${lastDate}`;
+      }
+    }
+
+    // Build memory object
+    const memory: HouseholdMemory = {
+      totalShops,
+      avgWeeklySpend,
+      usualStore,
+      frequentItems,
+      droppedItems,
+      notedPreferences: [], // Start empty, can be populated later based on patterns
+      lastShopSummary,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Upsert memory to households table
+    await supabaseAdmin
+      .from('households')
+      .upsert(
+        {
+          subscriber_id: subscriberId,
+          memory: memory
+        },
+        { onConflict: 'subscriber_id' }
+      );
+
+    console.log(`[updateHouseholdMemory] Updated memory for subscriber ${subscriberId}`);
+  } catch (error) {
+    console.error(`[updateHouseholdMemory] Error updating memory for ${subscriberId}:`, error);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tools factory
 // ---------------------------------------------------------------------------
 
@@ -310,6 +451,7 @@ export function buildIntakePrompt(opts?: {
   returningUser?: boolean;
   profileSummary?: string;
   hasLastList?: boolean;
+  householdMemory?: HouseholdMemory | null;
 }): string {
   const sameAgainContext = opts?.returningUser && opts?.hasLastList
     ? `\n\n## Returning User — "Same Again" Mode\n\nThe user wants their usual list updated with this week's prices. Their last list is available via get_last_list.\n\nYour job:\n1. Call get_last_list to get their previous items (use the history field for canonical_names)\n2. Call reprice_list with those item canonical_names\n3. Present the updated list with clear callouts:\n   - ✅ Items that got cheaper (show saving)\n   - ⚠️ Items that got more expensive (show increase)\n   - 🏷️ Items with new promotions at a different store (suggest swap)\n   - ❌ Items no longer available (suggest alternative)\n4. Show the new total vs last time\n5. Ask if they want any changes\n\nKeep it brief. They know what they want — just show what's different.`
@@ -319,7 +461,20 @@ export function buildIntakePrompt(opts?: {
     ? `\n\n## Returning User Context\nThis user has shopped before. Their saved profile:\n${opts.profileSummary}\n\nGreet them warmly, mention their household briefly, and offer to plan the same way or update anything. If they say "same again" or similar, go straight to generating.`
     : '';
 
-  return `You are the supermarket.ie grocery planning assistant — Ireland's smartest AI grocery planner.
+  const memoryContext = opts?.householdMemory && opts.householdMemory.totalShops > 0
+    ? (() => {
+        const m = opts.householdMemory!;
+        const lines = [`- ${m.totalShops} shop${m.totalShops !== 1 ? 's' : ''} completed. Average weekly spend: €${m.avgWeeklySpend}.`];
+        if (m.usualStore) lines.push(`- They usually shop at ${m.usualStore}.`);
+        if (m.frequentItems.length > 0) lines.push(`- Items they always buy: ${m.frequentItems.join(', ')}.`);
+        if (m.droppedItems.length > 0) lines.push(`- Items they have removed from past lists (do NOT suggest these): ${m.droppedItems.join(', ')}.`);
+        if (m.notedPreferences.length > 0) lines.push(`- Notes: ${m.notedPreferences.join('; ')}.`);
+        if (m.lastShopSummary && m.lastShopSummary !== 'No previous shops') lines.push(`- Last shop: ${m.lastShopSummary}.`);
+        return `\n\n## Your Memory of This Household\n${lines.join('\n')}\nStart from this context. Don't mention you have memory — just use it naturally.`;
+      })()
+    : '';
+
+  return `You are the supermarket.ie grocery planning assistant — Ireland's smartest AI grocery planner.${memoryContext}
 
 ## Your Role
 You have ONE conversation with the user. Your job:
@@ -589,7 +744,7 @@ Gather ALL data via tools before writing. Never mention tool calls.
 // Agent factory
 // ---------------------------------------------------------------------------
 
-export function createPlannerAgent(opts: {
+export async function createPlannerAgent(opts: {
   subscriberId: string | null;
   profile?: PlannerProfile;
   householdSize?: number;
@@ -599,6 +754,18 @@ export function createPlannerAgent(opts: {
   profileSummary?: string;
   hasLastList?: boolean;
 }) {
+  // Fetch household memory if subscriber is signed in
+  let householdMemory: HouseholdMemory | null = null;
+  if (opts.subscriberId && opts.intakeMode) {
+    const { data: household } = await supabaseAdmin
+      .from('households')
+      .select('memory')
+      .eq('subscriber_id', opts.subscriberId)
+      .single();
+
+    householdMemory = household?.memory as HouseholdMemory | null;
+  }
+
   let instructions: string;
 
   if (opts.intakeMode) {
@@ -607,6 +774,7 @@ export function createPlannerAgent(opts: {
       returningUser: opts.returningUser,
       profileSummary: opts.profileSummary,
       hasLastList: opts.hasLastList,
+      householdMemory: householdMemory,
     });
   } else if (opts.profile) {
     instructions = buildProfilePrompt(opts.profile);
