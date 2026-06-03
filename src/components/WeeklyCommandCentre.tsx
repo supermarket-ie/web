@@ -15,6 +15,90 @@ function formatWeekRange(weekStart: string): string {
   return `${start.toLocaleDateString('en-IE', opts)} – ${end.toLocaleDateString('en-IE', opts)}`;
 }
 
+// ── Simple markdown renderer for meal plan text ───────────────────────────────
+function renderInline(text: string): React.ReactNode[] {
+  // Handle **bold** inline
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
+function PlanMarkdown({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+  let key = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) { nodes.push(<div key={key++} className="h-2" />); continue; }
+
+    // ### Heading
+    if (trimmed.startsWith('### ')) {
+      nodes.push(
+        <h3 key={key++} className="text-sm font-bold mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>
+          {renderInline(trimmed.slice(4))}
+        </h3>
+      );
+      continue;
+    }
+    // ## Heading
+    if (trimmed.startsWith('## ')) {
+      nodes.push(
+        <h3 key={key++} className="text-sm font-bold mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>
+          {renderInline(trimmed.slice(3))}
+        </h3>
+      );
+      continue;
+    }
+    // --- divider
+    if (trimmed === '---') {
+      nodes.push(<hr key={key++} className="my-3" style={{ borderColor: 'var(--surface-container)' }} />);
+      continue;
+    }
+    // - bullet list item
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      nodes.push(
+        <div key={key++} className="flex gap-2 text-xs leading-relaxed" style={{ color: 'var(--on-surface)' }}>
+          <span className="flex-shrink-0 mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>·</span>
+          <span>{renderInline(trimmed.slice(2))}</span>
+        </div>
+      );
+      continue;
+    }
+    // **Day:** Meal — treat as day header
+    if (trimmed.match(/^\*\*\w+:\*\*/)) {
+      nodes.push(
+        <p key={key++} className="text-sm font-semibold mt-3 mb-0.5" style={{ color: 'var(--on-surface)' }}>
+          {renderInline(trimmed)}
+        </p>
+      );
+      continue;
+    }
+    // *italics / Est. cost lines*
+    if (trimmed.startsWith('*') && trimmed.endsWith('*') && !trimmed.startsWith('**')) {
+      nodes.push(
+        <p key={key++} className="text-xs italic" style={{ color: '#00944A' }}>
+          {trimmed.slice(1, -1)}
+        </p>
+      );
+      continue;
+    }
+    // Plain paragraph
+    nodes.push(
+      <p key={key++} className="text-xs leading-relaxed" style={{ color: 'var(--on-surface-variant)' }}>
+        {renderInline(trimmed)}
+      </p>
+    );
+  }
+
+  return <div className="space-y-0.5 pt-2 pb-1">{nodes}</div>;
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatusCard({
@@ -389,11 +473,7 @@ export function WeeklyCommandCentre() {
             <div className="px-4 pb-3" style={{ background: 'var(--surface-container-lowest)' }}>
               {plannedDinners.length > 0
                 ? plannedDinners.map((slot, i) => <MealRow key={i} slot={slot} />)
-                : dinnerPlanText && (
-                  <pre className="text-xs whitespace-pre-wrap leading-relaxed pt-2" style={{ color: 'var(--on-surface)', fontFamily: 'inherit' }}>
-                    {dinnerPlanText}
-                  </pre>
-                )
+                : dinnerPlanText && <PlanMarkdown text={dinnerPlanText} />
               }
             </div>
           )}
@@ -422,11 +502,7 @@ export function WeeklyCommandCentre() {
             <div className="px-4 pb-3" style={{ background: 'var(--surface-container-lowest)' }}>
               {plannedLunches.length > 0
                 ? plannedLunches.map((slot, i) => <MealRow key={i} slot={slot} />)
-                : lunchPlanText && (
-                  <pre className="text-xs whitespace-pre-wrap leading-relaxed pt-2" style={{ color: 'var(--on-surface)', fontFamily: 'inherit' }}>
-                    {lunchPlanText}
-                  </pre>
-                )
+                : lunchPlanText && <PlanMarkdown text={lunchPlanText} />
               }
             </div>
           )}
