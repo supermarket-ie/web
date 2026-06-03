@@ -94,11 +94,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               supermarket<span style={{ color: '#d4ffe5' }}>.ie</span>
             </span>
           </Link>
-          {ready && !showNav && (
-            <Link href="/list/request" className="hidden md:inline-flex items-center px-5 py-2 text-sm font-semibold rounded-full hover:opacity-90 transition-opacity"
-              style={{ border: '1.5px solid rgba(255,255,255,0.6)', color: '#FFFFFF' }}>
-              Sign in
-            </Link>
+          {ready && (
+            showNav ? (
+              <button onClick={signOut} className="text-sm font-medium hover:opacity-80 transition-opacity" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                Sign out
+              </button>
+            ) : (
+              <Link href="/list/request" className="hidden md:inline-flex items-center px-5 py-2 text-sm font-semibold rounded-full hover:opacity-90 transition-opacity"
+                style={{ border: '1.5px solid rgba(255,255,255,0.6)', color: '#FFFFFF' }}>
+                Sign in
+              </Link>
+            )
           )}
         </div>
       </header>
