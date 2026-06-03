@@ -152,19 +152,27 @@ export function WeeklyCommandCentre() {
   const [showDinners, setShowDinners] = useState(false);
   const [showLunches, setShowLunches] = useState(false);
 
-  const session = loadSession();
-  const token = session?.token;
+  const [token, setToken] = useState<string | null>(null);
 
-  const fetchPlan = useCallback(async () => {
-    if (!token) return;
+  const fetchPlan = useCallback(async (t: string) => {
     try {
-      const res = await fetch(`/api/plan/weekly?token=${encodeURIComponent(token)}`);
-      if (res.ok) setPlan(await res.json());
+      const res = await fetch(`/api/plan/weekly?token=${encodeURIComponent(t)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.error) setPlan(data);
+      }
     } catch {}
-  }, [token]);
+  }, []);
 
   useEffect(() => {
-    fetchPlan().finally(() => setLoading(false));
+    const session = loadSession();
+    const t = session?.token ?? null;
+    setToken(t);
+    if (t) {
+      fetchPlan(t).finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
   }, [fetchPlan]);
 
   async function handleQuickAction(type: 'dinners' | 'lunches') {
@@ -176,7 +184,7 @@ export function WeeklyCommandCentre() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, config: { type } }),
       });
-      await fetchPlan();
+      await fetchPlan(token);
       if (type === 'dinners') setShowDinners(true);
       else setShowLunches(true);
     } finally {
@@ -188,7 +196,6 @@ export function WeeklyCommandCentre() {
     if (!token) return;
     setActionLoading('same');
     try {
-      // Generate dinners + lunches in sequence
       await fetch('/api/agents/meal-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -199,7 +206,7 @@ export function WeeklyCommandCentre() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, config: { type: 'lunches' } }),
       });
-      await fetchPlan();
+      await fetchPlan(token);
       setShowDinners(true);
       setShowLunches(true);
     } finally {

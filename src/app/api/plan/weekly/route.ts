@@ -92,12 +92,30 @@ export async function GET(req: NextRequest) {
   const weekStart = getCurrentWeekStart();
 
   // Find or create weekly plan
-  let { data: plan } = await supabaseAdmin
+  let { data: plan, error: selectErr } = await supabaseAdmin
     .from('weekly_plans')
     .select('*')
     .eq('subscriber_id', subscriberId)
     .eq('week_start', weekStart)
     .single();
+
+  if (selectErr && (selectErr.code === '42P01' || selectErr.message?.includes('does not exist'))) {
+    // Table doesn't exist yet — return empty state
+    return NextResponse.json({
+      weekStart,
+      meals: { dinners: [], lunches: [] },
+      shoppingList: [],
+      storeAssignment: null,
+      budget: { target: null, current: 0, onTrack: true },
+      agentNotices: [{
+        type: 'suggestion',
+        message: 'Tap "Plan dinners" to generate this week\'s meal ideas based on current deals',
+        actionable: true,
+        action: 'plan_dinners',
+      }],
+      status: 'empty',
+    } satisfies WeeklyPlanState);
+  }
 
   if (!plan) {
     const { data: newPlan, error: insertErr } = await supabaseAdmin
