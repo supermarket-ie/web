@@ -8,6 +8,17 @@ import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 interface StoreTotal {
   store: string;
   total: number;
+  item_count?: number;
+}
+
+interface StructuredItem {
+  canonical_name: string;
+  store: string;
+  price: number;
+  quantity?: number;
+  category?: string;
+  store_product_name?: string;
+  on_promotion?: boolean;
 }
 
 interface ListSummary {
@@ -19,6 +30,7 @@ interface ListSummary {
 
 interface Props {
   listContent: string | null;
+  structuredItems?: StructuredItem[] | null;
   storeTotals: StoreTotal[];
   listName: string;
   createdAt: string;
@@ -47,7 +59,114 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
 }
 
-// ─── Rich text rendering (same as ConversationChat) ─────────────────────
+function shortDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
+}
+
+// ─── List switcher tabs ──────────────────────────────────────────────────
+
+function ListSwitcher({ allLists, activeListId, token }: { allLists: ListSummary[]; activeListId: string; token: string }) {
+  if (allLists.length <= 1) return null;
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1 mb-6 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+      {allLists.map(list => {
+        const isActive = list.id === activeListId;
+        const cheapest = list.store_totals?.[0];
+        const total = cheapest ? fmt(cheapest.total) : null;
+        return (
+          <Link
+            key={list.id}
+            href={`/list?token=${encodeURIComponent(token)}&list=${list.id}`}
+            className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap"
+            style={isActive
+              ? { background: '#00944A', color: '#fff' }
+              : { background: 'var(--surface-container-lowest)', color: 'var(--on-surface)', border: '1px solid var(--surface-container)' }
+            }
+          >
+            <span>{shortDate(list.created_at)}</span>
+            {total && <span className="ml-1.5 opacity-75">{total}</span>}
+          </Link>
+        );
+      })}
+      <Link
+        href="/"
+        className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap"
+        style={{ background: 'var(--surface-container-lowest)', color: '#00944A', border: '1px dashed #00944A' }}
+      >
+        + Plan new week
+      </Link>
+    </div>
+  );
+}
+
+// ─── Structured item renderer ────────────────────────────────────────────
+
+function StructuredItemList({ items, storeTotals }: { items: StructuredItem[]; storeTotals: StoreTotal[] }) {
+  // Group by category
+  const grouped = new Map<string, StructuredItem[]>();
+  for (const item of items) {
+    const cat = item.category ?? 'Other';
+    if (!grouped.has(cat)) grouped.set(cat, []);
+    grouped.get(cat)!.push(item);
+  }
+  const categories = Array.from(grouped.keys()).sort();
+
+  return (
+    <div className="space-y-4">
+      {categories.map(cat => (
+        <div key={cat}>
+          <h4 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--primary)' }}>
+            {cat}
+          </h4>
+          <div className="space-y-1">
+            {grouped.get(cat)!.map((item, i) => {
+              const s = storeStyle(item.store);
+              return (
+                <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded-xl"
+                  style={{ background: 'var(--surface-container-lowest)' }}>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium truncate block" style={{ color: 'var(--on-background)' }}>
+                      {item.store_product_name ?? item.canonical_name}
+                      {item.on_promotion && <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: '#e85d04' }}>DEAL</span>}
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white flex-shrink-0"
+                    style={{ background: s.bg }}>
+                    {storeDisplayName(item.store)}
+                  </span>
+                  <span className="text-sm font-bold flex-shrink-0" style={{ color: 'var(--on-background)' }}>
+                    {fmt(item.price)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {/* Store totals */}
+      {storeTotals.length > 0 && (
+        <div className="pt-4 border-t" style={{ borderColor: 'var(--surface-container)' }}>
+          <h4 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--on-surface-variant)' }}>
+            Store totals
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {storeTotals.map((t, i) => (
+              <div key={i} className="px-4 py-2.5 rounded-xl text-white text-sm font-bold flex items-center gap-2"
+                style={{ background: storeStyle(t.store).bg }}>
+                <span>{storeDisplayName(t.store)}</span>
+                <span>{fmt(t.total)}</span>
+                {t.item_count && <span className="text-[10px] opacity-75">{t.item_count} items</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Rich text rendering (markdown fallback) ─────────────────────────────
 
 function RichText({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -66,7 +185,6 @@ function RichText({ text }: { text: string }) {
 function FormattedListContent({ content }: { content: string }) {
   const lines = content.split('\n');
 
-  // Parse store totals from the content for the visual badge section
   const storeTotals: Array<{ store: string; total: number; items?: number; cheapest?: boolean }> = [];
   let inTotalsSection = false;
 
@@ -142,13 +260,11 @@ function FormattedListContent({ content }: { content: string }) {
             <p className="text-sm font-medium" style={{ color: 'var(--on-primary-container)' }}><RichText text={line} /></p>
           </div>
         );
-        // Skip store totals lines (rendered as badges above)
         if (line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?\d+/i)) return null;
         if (line.toLowerCase().includes('store total') || line.toLowerCase().includes('best value')) return null;
         return <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--on-surface)' }}><RichText text={line} /></p>;
       })}
 
-      {/* Render store totals as visual badges at the bottom */}
       {storeTotals.length > 0 && (
         <div className="mt-6 pt-4 border-t" style={{ borderColor: 'var(--surface-container)' }}>
           <h4 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--on-surface-variant)' }}>
@@ -171,36 +287,30 @@ function FormattedListContent({ content }: { content: string }) {
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export function SavedListView({ listContent, storeTotals, listName, createdAt, conversationId, token, allLists, activeListId }: Props) {
-  // Determine the "recommended" store — the one covering most items (highest total as proxy when no item count)
-  // Sort by total descending to find the store that covers the most of the basket
+export function SavedListView({ listContent, structuredItems, storeTotals, listName, createdAt, conversationId, token, allLists, activeListId }: Props) {
   const sorted = [...storeTotals].sort((a, b) => b.total - a.total);
-  
-  // Check if totals are comparable (within 30% of each other = same item count likely)
   const highest = sorted[0]?.total ?? 0;
   const lowest = sorted[sorted.length - 1]?.total ?? 0;
   const totalsComparable = highest > 0 && (lowest / highest) >= 0.7;
-  
-  // If totals are comparable, cheapest is genuinely cheapest. Otherwise, the store with 
-  // most items (highest total) is "recommended" and we don't show misleading "saves you" banners.
+
   let recommended: typeof sorted[0] | null = null;
   let saving = 0;
-  
+
   if (totalsComparable && sorted.length > 1) {
-    // Totals represent similar baskets — safe to compare
     const cheapestFirst = [...sorted].sort((a, b) => a.total - b.total);
     recommended = cheapestFirst[0];
     saving = Math.round((cheapestFirst[cheapestFirst.length - 1].total - cheapestFirst[0].total) * 100) / 100;
   } else if (sorted.length > 0) {
-    // Totals not comparable — recommend store with highest total (most items)
     recommended = sorted[0];
-    saving = 0; // Don't show misleading savings
+    saving = 0;
   }
 
-  // For display, sort cheapest first only if comparable
-  const displaySorted = totalsComparable 
+  const displaySorted = totalsComparable
     ? [...storeTotals].sort((a, b) => a.total - b.total)
-    : [...storeTotals].sort((a, b) => b.total - a.total); // Most items first
+    : [...storeTotals].sort((a, b) => b.total - a.total);
+
+  // Use structured items if available, fall back to markdown
+  const hasStructured = structuredItems && structuredItems.length > 0;
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
@@ -213,38 +323,26 @@ export function SavedListView({ listContent, storeTotals, listName, createdAt, c
           </p>
         </div>
 
+        {/* List switcher — shown when multiple lists exist */}
+        <ListSwitcher allLists={allLists} activeListId={activeListId} token={token} />
+
         {/* Store comparison strip */}
         {displaySorted.length > 0 && (
           <div className="grid gap-2 mb-6" style={{ gridTemplateColumns: `repeat(${Math.min(displaySorted.length, 3)}, 1fr)` }}>
-            {displaySorted.map((st, i) => {
+            {displaySorted.map((st) => {
               const s = storeStyle(st.store);
               const isRecommended = recommended?.store === st.store;
               return (
-                <div
-                  key={st.store}
-                  className="rounded-xl p-3 text-center"
-                  style={{
-                    background: isRecommended ? s.light : 'var(--surface-container-lowest)',
-                    boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-                  }}
-                >
-                  <div
-                    className="font-bold text-sm mb-1"
-                    style={{ color: isRecommended ? s.bg : 'var(--on-background)' }}
-                  >
+                <div key={st.store} className="rounded-xl p-3 text-center"
+                  style={{ background: isRecommended ? s.light : 'var(--surface-container-lowest)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                  <div className="font-bold text-sm mb-1" style={{ color: isRecommended ? s.bg : 'var(--on-background)' }}>
                     {storeDisplayName(st.store)}
                   </div>
-                  <div
-                    className="text-lg font-bold"
-                    style={{ color: isRecommended ? s.bg : 'var(--on-background)' }}
-                  >
+                  <div className="text-lg font-bold" style={{ color: isRecommended ? s.bg : 'var(--on-background)' }}>
                     {fmt(st.total)}
                   </div>
                   {isRecommended && (
-                    <div
-                      className="text-[10px] font-semibold mt-1 rounded-full px-2 py-0.5 inline-block"
-                      style={{ background: s.bg, color: '#fff' }}
-                    >
+                    <div className="text-[10px] font-semibold mt-1 rounded-full px-2 py-0.5 inline-block" style={{ background: s.bg, color: '#fff' }}>
                       {totalsComparable ? 'Cheapest' : 'Most items'}
                     </div>
                   )}
@@ -254,7 +352,7 @@ export function SavedListView({ listContent, storeTotals, listName, createdAt, c
           </div>
         )}
 
-        {/* Saving banner — only show when totals are genuinely comparable */}
+        {/* Saving banner */}
         {saving > 0 && recommended && totalsComparable && (
           <div className="rounded-xl p-4 mb-6 text-white" style={{ background: storeStyle(recommended.store).bg }}>
             <div className="flex items-center justify-between">
@@ -267,91 +365,70 @@ export function SavedListView({ listContent, storeTotals, listName, createdAt, c
           </div>
         )}
 
-        {/* List content */}
-        {listContent ? (
-          <div
-            className="rounded-2xl p-5 mb-6"
-            style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}
-          >
+        {/* List content — structured preferred, markdown fallback */}
+        <div className="rounded-2xl p-5 mb-6" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+          {hasStructured ? (
+            <StructuredItemList items={structuredItems!} storeTotals={displaySorted} />
+          ) : listContent ? (
             <FormattedListContent content={listContent} />
-          </div>
-        ) : (
-          <div className="rounded-2xl p-8 mb-6 text-center" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-            <p className="text-lg mb-2" style={{ color: 'var(--on-background)' }}>List content unavailable</p>
-            <p className="text-sm" style={{ color: 'var(--on-surface)' }}>
-              The conversation for this list may have been deleted. Create a new list to get started.
-            </p>
-          </div>
-        )}
+          ) : (
+            <div className="py-4 text-center">
+              <p className="text-sm" style={{ color: 'var(--on-surface-variant)' }}>
+                List content unavailable. <Link href="/" className="font-semibold" style={{ color: 'var(--primary)' }}>Plan a new list →</Link>
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Action buttons */}
         <div className="flex gap-3 mb-8">
           {conversationId && (
-            <Link
-              href={`/dashboard/chat/${conversationId}`}
+            <Link href={`/dashboard/chat/${conversationId}`}
               className="flex-1 text-center py-3 px-4 rounded-xl font-semibold text-sm text-white transition-opacity hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #006A35, #00944A)' }}
-            >
+              style={{ background: 'linear-gradient(135deg, #006A35, #00944A)' }}>
               💬 Modify in chat
             </Link>
           )}
-          <Link
-            href="/"
+          <Link href="/"
             className="flex-1 text-center py-3 px-4 rounded-xl font-semibold text-sm transition-opacity hover:opacity-90"
-            style={{ background: 'var(--surface-container)', color: 'var(--on-background)' }}
-          >
-            🛒 Plan new list
+            style={{ background: 'var(--surface-container)', color: 'var(--on-background)' }}>
+            🗓️ Plan new week
           </Link>
-          <Link
-            href="/dashboard"
+          <Link href="/dashboard"
             className="text-center py-3 px-4 rounded-xl font-semibold text-sm transition-opacity hover:opacity-90"
-            style={{ background: 'var(--surface-container)', color: 'var(--on-background)' }}
-          >
+            style={{ background: 'var(--surface-container)', color: 'var(--on-background)' }}>
             Dashboard
           </Link>
         </div>
-
-        {/* Other saved lists */}
-        {allLists.length > 1 && (
-          <div className="mb-8">
-            <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--on-surface-variant)' }}>
-              Other saved lists
-            </h3>
-            <div className="space-y-2">
-              {allLists
-                .filter(l => l.id !== activeListId)
-                .map(list => {
-                  const cheapestInList = list.store_totals?.[0];
-                  return (
-                    <Link
-                      key={list.id}
-                      href={`/list?token=${encodeURIComponent(token)}&list=${list.id}`}
-                      className="block rounded-xl px-4 py-3 transition-opacity hover:opacity-80"
-                      style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate" style={{ color: 'var(--on-background)' }}>{list.name}</p>
-                          <p className="text-xs mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>
-                            {timeAgo(list.created_at)}
-                            {cheapestInList && (
-                              <span className="ml-2 font-medium" style={{ color: 'var(--primary)' }}>
-                                {storeDisplayName(cheapestInList.store)} {fmt(cheapestInList.total)}
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--on-surface-variant)' }}>
-                          <path d="M9 18l6-6-6-6" />
-                        </svg>
-                      </div>
-                    </Link>
-                  );
-                })}
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );
 }
+
+// ─── Types ──────────────────────────────────────────────────────────────
+
+interface StoreTotal {
+  store: string;
+  total: number;
+}
+
+interface ListSummary {
+  id: string;
+  name: string;
+  store_totals: StoreTotal[];
+  created_at: string;
+}
+
+interface Props {
+  listContent: string | null;
+  storeTotals: StoreTotal[];
+  listName: string;
+  createdAt: string;
+  conversationId: string | null;
+  token: string;
+  allLists: ListSummary[];
+  activeListId: string;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────
+

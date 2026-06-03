@@ -146,12 +146,19 @@ export default async function ListPage({
 
   const storeTotals = (activeList.store_totals ?? []) as Array<{ store: string; total: number }>;
 
+  // Structured items from saved_lists.items (new format from save_list tool)
+  const structuredItems = (activeList.items && Array.isArray(activeList.items) && activeList.items.length > 0 &&
+    typeof activeList.items[0] === 'object' && 'canonical_name' in activeList.items[0])
+    ? activeList.items as Array<{ canonical_name: string; store: string; price: number; quantity?: number; category?: string; store_product_name?: string; on_promotion?: boolean }>
+    : null;
+
   return (
     <>
       <SiteHeader />
       <TokenPersist token={token!} familySize={activeList.family_size ?? '2'} email={payload.email} />
       <SavedListView
         listContent={listContent}
+        structuredItems={structuredItems}
         storeTotals={storeTotals}
         listName={activeList.name}
         createdAt={activeList.created_at}
