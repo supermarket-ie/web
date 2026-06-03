@@ -98,10 +98,27 @@ export async function POST(req: Request) {
 
           // Update household memory when a grocery list is generated
           if (assistantText.includes('🛒 Your weekly grocery list')) {
-            // Run memory update in background (non-blocking)
             updateHouseholdMemory(subscriberId!).catch((error) => {
               console.error('[/api/plan] Memory update failed:', error);
             });
+            // Link conversation to the list the agent just saved
+            supabaseAdmin
+              .from('saved_lists')
+              .select('id')
+              .eq('subscriber_id', subscriberId!)
+              .gte('generated_at', new Date(Date.now() - 120000).toISOString())
+              .order('generated_at', { ascending: false })
+              .limit(1)
+              .single()
+              .then(({ data: recentList }) => {
+                if (recentList) {
+                  supabaseAdmin
+                    .from('conversations')
+                    .update({ list_id: recentList.id })
+                    .eq('id', conversationId)
+                    .then(() => {});
+                }
+              });
           }
         } catch (err) {
           console.error('[/api/plan] conversation save error:', err);
@@ -208,12 +225,32 @@ export async function POST(req: Request) {
             .map(p => p.text)
             .join('');
 
-          // Only update memory if a grocery list was actually generated (not just a clarifying question)
+          // Only update memory + link conversation when a list was generated
           if (assistantText.includes('🛒 Your weekly grocery list')) {
-            // Run memory update in background (non-blocking)
             updateHouseholdMemory(subscriberId).catch((error) => {
               console.error('[/api/plan] Memory update failed:', error);
             });
+            // Link conversation to the list the agent just saved (intake mode)
+            const bodyConversationId = body.conversationId as string | undefined;
+            if (bodyConversationId) {
+              supabaseAdmin
+                .from('saved_lists')
+                .select('id')
+                .eq('subscriber_id', subscriberId)
+                .gte('generated_at', new Date(Date.now() - 120000).toISOString())
+                .order('generated_at', { ascending: false })
+                .limit(1)
+                .single()
+                .then(({ data: recentList }) => {
+                  if (recentList) {
+                    supabaseAdmin
+                      .from('conversations')
+                      .update({ list_id: recentList.id })
+                      .eq('id', bodyConversationId)
+                      .then(() => {});
+                  }
+                });
+            }
           }
         } catch (error) {
           console.error('[/api/plan] onFinish error:', error);

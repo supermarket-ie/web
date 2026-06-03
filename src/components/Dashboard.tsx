@@ -376,7 +376,7 @@ export function Dashboard() {
                     </p>
                   </div>
                   <div className="flex gap-2 ml-3">
-                    <Link href={`/list?token=${encodeURIComponent(token!)}`}
+                    <Link href={`/list?token=${encodeURIComponent(token!)}&list=${list.id}`}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80"
                       style={{ background: 'var(--surface-container)', color: 'var(--on-background)' }}>
                       View

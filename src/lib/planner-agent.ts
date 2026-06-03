@@ -440,6 +440,137 @@ export function makePlannerTools(subscriberId: string | null) {
         return { saved: true };
       },
     }),
+
+    save_list: tool({
+      description: 'Saves the completed grocery list to the database as structured data. Call this ONCE after building the complete list and BEFORE writing the markdown summary to the user. Returns list_id.',
+      inputSchema: z.object({
+        name: z.string().describe('Short descriptive name e.g. "Weekly shop · 3 Jun" or "Family of 4 · vegetarian"'),
+        items: z.array(z.object({
+          canonical_name: z.string(),
+          store: z.string(),
+          price: z.number(),
+          quantity: z.number().default(1),
+          category: z.string().optional(),
+          store_product_name: z.string().optional(),
+          on_promotion: z.boolean().optional(),
+        })),
+        store_totals: z.array(z.object({
+          store: z.string(),
+          total: z.number(),
+          item_count: z.number(),
+        })),
+        recommended_store: z.string().optional().describe('The store you recommend for the main shop'),
+      }),
+      execute: async ({ name, items, store_totals, recommended_store }) => {
+        if (!subscriberId) return { saved: false, reason: 'User not signed in', list_id: null };
+        try {
+          // Cap at 10 lists — delete oldest if needed
+          const { data: existing } = await supabaseAdmin
+            .from('saved_lists')
+            .select('id, created_at')
+            .eq('subscriber_id', subscriberId)
+            .order('created_at', { ascending: true });
+          if (existing && existing.length >= 10) {
+            const toDelete = existing.slice(0, existing.length - 9);
+            await supabaseAdmin.from('saved_lists').delete().in('id', toDelete.map((r: { id: string }) => r.id));
+          }
+          // Clear is_default on existing lists
+          await supabaseAdmin.from('saved_lists').update({ is_default: false }).eq('subscriber_id', subscriberId);
+          // Insert new list
+          const { data, error } = await supabaseAdmin
+            .from('saved_lists')
+            .insert({
+              subscriber_id: subscriberId,
+              name,
+              items,
+              store_totals,
+              recommended_store: recommended_store ?? null,
+              is_default: true,
+              generated_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+          if (error || !data) return { saved: false, reason: error?.message ?? 'Unknown error', list_id: null };
+          // Write list_items for history/memory
+          if (items.length > 0) {
+            supabaseAdmin.from('list_items').insert(
+              items.map(item => ({
+                subscriber_id: subscriberId,
+                list_id: (data as { id: string }).id,
+                canonical_name: item.canonical_name,
+                store: item.store,
+                price_paid: item.price,
+                quantity: item.quantity ?? 1,
+                category: item.category ?? null,
+                observed_at: new Date().toISOString(),
+              }))
+            ).then(() => {});
+          }
+          return { saved: true, list_id: (data as { id: string }).id };
+        } catch (err) {
+          console.error('[save_list] error:', err);
+          return { saved: false, reason: 'Unexpected error', list_id: null };
+        }
+      },
+    }),
+
+    update_list: tool({
+      description: 'Replaces items in an existing saved list with updated prices. Use for "Same Again" — pass the list_id from get_last_list. Do NOT call save_list when updating an existing list.',
+      inputSchema: z.object({
+        list_id: z.string().describe('The ID of the list to update, from get_last_list'),
+        items: z.array(z.object({
+          canonical_name: z.string(),
+          store: z.string(),
+          price: z.number(),
+          quantity: z.number().default(1),
+          category: z.string().optional(),
+          store_product_name: z.string().optional(),
+          on_promotion: z.boolean().optional(),
+        })),
+        store_totals: z.array(z.object({
+          store: z.string(),
+          total: z.number(),
+          item_count: z.number(),
+        })),
+        recommended_store: z.string().optional(),
+      }),
+      execute: async ({ list_id, items, store_totals, recommended_store }) => {
+        if (!subscriberId) return { saved: false, reason: 'User not signed in' };
+        try {
+          const { error } = await supabaseAdmin
+            .from('saved_lists')
+            .update({
+              items,
+              store_totals,
+              recommended_store: recommended_store ?? null,
+              generated_at: new Date().toISOString(),
+            })
+            .eq('id', list_id)
+            .eq('subscriber_id', subscriberId);
+          if (error) return { saved: false, reason: error.message };
+          // Replace list_items
+          await supabaseAdmin.from('list_items').delete().eq('list_id', list_id);
+          if (items.length > 0) {
+            supabaseAdmin.from('list_items').insert(
+              items.map(item => ({
+                subscriber_id: subscriberId,
+                list_id,
+                canonical_name: item.canonical_name,
+                store: item.store,
+                price_paid: item.price,
+                quantity: item.quantity ?? 1,
+                category: item.category ?? null,
+                observed_at: new Date().toISOString(),
+              }))
+            ).then(() => {});
+          }
+          return { saved: true, list_id };
+        } catch (err) {
+          console.error('[update_list] error:', err);
+          return { saved: false, reason: 'Unexpected error' };
+        }
+      },
+    }),
   };
 }
 
@@ -521,6 +652,7 @@ If the user states ANY dietary requirement (vegetarian, vegan, gluten-free, hala
 4. Use get_product for specific lookups if needed
 5. For returning users: call get_user_history and get_price_changes
 6. **FINAL CHECK: Re-read the user's dietary requirements and verify EVERY item complies. Remove any that don't.**
+7. Call save_list with all items, store_totals, and a short descriptive name. Do this BEFORE writing the markdown output. For "Same Again", call update_list with the list_id from get_last_list instead of save_list.
 
 Rules:
 - Only use products from the catalogue. Do not invent products.
@@ -529,6 +661,7 @@ Rules:
 - Include staples (bread, milk, butter, eggs), household essentials, and personal care basics.
 - Never mention tool calls to the user.
 - Gather ALL data via tools before writing any output.
+- Always call save_list (or update_list for Same Again) before writing the markdown output. Never skip this step.
 
 ## Output Format (when generating the list)
 
@@ -642,6 +775,7 @@ ${!profile.preferredStores.includes('all') ? `- Products from stores they didn't
 4. get_product(canonical_name) — for specific product lookups.
 5. get_user_history — call for signed-in users to personalise.
 6. get_price_changes — call for returning users to highlight savings.
+7. save_list — call with all items and store_totals BEFORE writing output. For Same Again, call update_list instead.
 
 Rules:
 - Gather ALL data via tools before writing any output.
@@ -650,6 +784,7 @@ Rules:
 - Pick cheapest store per product unless a promotion elsewhere is better value.
 ${!profile.preferredStores.includes('all') ? `- ONLY show prices from: ${storesPref}. Ignore other stores entirely.` : ''}
 - Never mention tool calls to the user.
+- Always call save_list (or update_list for Same Again) before writing output.
 ${profile.dietary.length > 0 ? `- **FINAL CHECK before outputting:** Re-read dietary requirements (${profile.dietary.join(', ')}). Verify EVERY item on your list complies. Remove any that violate.` : ''}
 
 ## Returning user personalisation
