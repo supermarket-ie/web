@@ -25,12 +25,55 @@ export type ProductPrice = {
   store_product_name: string;
 };
 
+// ── Module-level cache (survives across requests in the same warm Lambda) ─────
+let _priceCache: ProductPrice[] | null = null;
+let _priceCacheAt = 0;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 /**
  * Fetch all latest prices across all stores.
- * Returns one entry per (product, store) — the most recent observation.
+ *
+ * Fast path: uses the `latest_prices` DB view (single query, no pagination).
+ * The view is:
+ *   CREATE OR REPLACE VIEW latest_prices AS
+ *   SELECT DISTINCT ON (po.store_product_id)
+ *     po.store_product_id, po.price, po.was_price, po.on_promotion,
+ *     sp.store, sp.store_product_name,
+ *     p.canonical_name, p.category
+ *   FROM price_observations po
+ *   JOIN store_products sp ON sp.id = po.store_product_id AND sp.url_status = 'resolved'
+ *   JOIN products p ON p.id = sp.product_id
+ *   ORDER BY po.store_product_id, po.observed_at DESC;
+ *
+ * Slow path (fallback): paginated price_observations scan — used if view not yet created.
  */
 export async function getAllLatestPrices(): Promise<ProductPrice[]> {
-  // Get resolved store products with product info
+  // Return cached data if fresh
+  if (_priceCache && Date.now() - _priceCacheAt < CACHE_TTL_MS) {
+    return _priceCache;
+  }
+
+  // Fast path — try the view first (single DB round-trip, ~200ms)
+  const { data: viewRows, error: viewError } = await supabaseAdmin
+    .from('latest_prices')
+    .select('canonical_name, category, store, price, was_price, on_promotion, store_product_name');
+
+  if (!viewError && viewRows && viewRows.length > 0) {
+    // Dedup by canonical_name + store
+    const seen = new Set<string>();
+    const results: ProductPrice[] = [];
+    for (const r of viewRows as unknown as ProductPrice[]) {
+      const key = `${r.canonical_name}::${r.store}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      results.push(r);
+    }
+    _priceCache = results;
+    _priceCacheAt = Date.now();
+    return results;
+  }
+
+  // Slow path fallback — paginated scan (used before view is created)
   const { data: spRows } = await supabaseAdmin
     .from('store_products')
     .select('id, store, store_product_name, products(canonical_name, category)')
@@ -38,7 +81,6 @@ export async function getAllLatestPrices(): Promise<ProductPrice[]> {
 
   if (!spRows) return [];
 
-  // Paginate price observations (latest first)
   let priceRows: { store_product_id: string; price: number; on_promotion: boolean; was_price: number | null }[] = [];
   let offset = 0;
   const PAGE = 1000;
@@ -54,7 +96,6 @@ export async function getAllLatestPrices(): Promise<ProductPrice[]> {
     offset += PAGE;
   }
 
-  // Latest price per store_product_id
   const latestBySpId = new Map<string, { price: number; on_promotion: boolean; was_price: number | null }>();
   for (const row of priceRows) {
     if (!latestBySpId.has(row.store_product_id)) {
@@ -62,10 +103,8 @@ export async function getAllLatestPrices(): Promise<ProductPrice[]> {
     }
   }
 
-  // Build results — one per (product, store), deduped by canonical_name + store
   const seen = new Set<string>();
   const results: ProductPrice[] = [];
-
   for (const sp of spRows) {
     const p = sp.products as unknown as { canonical_name: string; category: string } | null;
     if (!p) continue;
@@ -85,6 +124,8 @@ export async function getAllLatestPrices(): Promise<ProductPrice[]> {
     });
   }
 
+  _priceCache = results;
+  _priceCacheAt = Date.now();
   return results;
 }
 
