@@ -3,6 +3,7 @@ import { generateText } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { supabaseAdmin } from '@/lib/supabase';
 import jwt from 'jsonwebtoken';
+import type { MealSlot } from '@/app/api/plan/weekly/route';
 
 export const maxDuration = 60;
 
@@ -217,5 +218,121 @@ Key ingredients: [item] (€X, store), [item] (€X, store)
       last_output: text,
     }, { onConflict: 'subscriber_id,agent_type' });
 
-  return NextResponse.json({ plan: text });
+  // Parse structured meal slots from the generated text
+  const parsedSlots = parseMealSlots(text, agentType);
+
+  // Write to weekly_plans (best-effort — table may not exist yet)
+  try {
+    const weekStart = getCurrentWeekStart();
+
+    // Fetch existing plan to merge
+    const { data: existing } = await supabaseAdmin
+      .from('weekly_plans')
+      .select('meals')
+      .eq('subscriber_id', subscriberId)
+      .eq('week_start', weekStart)
+      .single();
+
+    const existingMeals = (existing?.meals ?? { dinners: [], lunches: [] }) as { dinners: MealSlot[]; lunches: MealSlot[] };
+    const updatedMeals = agentType === 'lunches'
+      ? { dinners: existingMeals.dinners, lunches: parsedSlots }
+      : { dinners: parsedSlots, lunches: existingMeals.lunches };
+
+    const allPlanned = [...updatedMeals.dinners, ...updatedMeals.lunches].filter(m => m.status === 'planned').length;
+    const status = allPlanned === 0 ? 'empty' : (updatedMeals.dinners.filter(m => m.status === 'planned').length >= 7 && updatedMeals.lunches.filter(m => m.status === 'planned').length >= 5) ? 'complete' : 'partial';
+
+    await supabaseAdmin
+      .from('weekly_plans')
+      .upsert({
+        subscriber_id: subscriberId,
+        week_start: weekStart,
+        meals: updatedMeals,
+        status,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'subscriber_id,week_start' });
+  } catch {
+    // weekly_plans table may not exist yet — non-fatal
+  }
+
+  return NextResponse.json({ plan: text, meals: parsedSlots });
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function getCurrentWeekStart(): string {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diff);
+  return monday.toISOString().split('T')[0];
+}
+
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function parseMealSlots(text: string, type: string): MealSlot[] {
+  const slots: MealSlot[] = [];
+  const lines = text.split('\n');
+  let current: Partial<MealSlot> | null = null;
+
+  function flush() {
+    if (current?.day) {
+      slots.push({
+        day: current.day,
+        name: current.name ?? null,
+        description: current.description,
+        ingredients: current.ingredients ?? [],
+        estimatedCost: current.estimatedCost ?? null,
+        status: 'planned',
+      });
+    }
+    current = null;
+  }
+
+  for (const raw of lines) {
+    const line = raw.trim();
+
+    // Stop at shopping list section
+    if (line.startsWith('---') || line.toLowerCase().includes('shopping list')) {
+      flush();
+      break;
+    }
+
+    // **Monday:** Meal Name
+    const dayMatch = line.match(/^\*\*(\w+):\*\*\s*(.+)$/);
+    if (dayMatch && DAYS.includes(dayMatch[1])) {
+      flush();
+      current = { day: dayMatch[1], name: dayMatch[2].trim(), ingredients: [] };
+      continue;
+    }
+
+    if (!current) continue;
+
+    // Key ingredients: ...
+    if (line.toLowerCase().startsWith('key ingredients:')) {
+      const parts = line.slice('key ingredients:'.length).split(',');
+      current.ingredients = parts.map(p => ({
+        name: p.trim().replace(/\s*\(.*?\)/g, '').replace(/\*+/g, '').trim(),
+      })).filter(i => i.name.length > 0);
+      continue;
+    }
+
+    // *Est. cost: €X.XX*
+    const costMatch = line.match(/est\.?\s*cost:?\s*€?([\d.]+)/i);
+    if (costMatch) {
+      current.estimatedCost = parseFloat(costMatch[1]);
+      continue;
+    }
+
+    // First non-empty line after day line = description
+    if (line && !current.description && !line.startsWith('**') && !line.startsWith('*') && !line.startsWith('-')) {
+      current.description = line;
+    }
+  }
+
+  flush();
+
+  // For lunches, limit to 5 weekdays
+  if (type === 'lunches') return slots.slice(0, 5);
+  return slots;
 }
