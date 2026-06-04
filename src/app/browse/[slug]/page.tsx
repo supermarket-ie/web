@@ -5,6 +5,7 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { supabaseAdmin } from '@/lib/supabase';
 import { storeDisplayName } from '@/lib/store-utils';
+import { ProductPrices } from '@/components/ProductPrices';
 
 export const revalidate = 43200; // 12h
 
@@ -234,20 +235,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </div>
         )}
 
-        <div className="rounded-2xl p-5 text-center mb-8"
-          style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-          <p className="text-sm font-semibold mb-1" style={{ color: 'var(--on-background)' }}>
-            Want to see prices?
-          </p>
-          <p className="text-xs mb-4" style={{ color: 'var(--on-surface-variant)' }}>
-            Sign in to compare live prices across {stores.map(storeDisplayName).join(', ')} and get a personalised weekly list.
-          </p>
-          <Link href="/list/request"
-            className="inline-block px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
-            style={{ background: '#00944A' }}>
-            See prices →
-          </Link>
-        </div>
+        {/* Prices — shows live prices if logged in, gate if not */}
+        <ProductPrices productId={product.id} stores={stores} />
 
         <div className="text-center">
           <Link href={product.category ? `/browse?category=${encodeURIComponent(product.category)}` : '/browse'}
