@@ -49,7 +49,7 @@ export default function ShopPage() {
         {/* Category grid — cards on surface-container-lowest, section on surface */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {CATEGORIES.map(cat => (
-            <Link key={cat.slug} href={`/shop/${cat.slug}`}
+            <Link key={cat.slug} href={`/browse?category=${encodeURIComponent(cat.name)}`}
               className="rounded-2xl p-4 transition-all group hover:-translate-y-0.5"
               style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
               <div className="text-3xl mb-3">{cat.emoji}</div>
