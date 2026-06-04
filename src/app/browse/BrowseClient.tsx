@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { type CATEGORY_CONFIG, type BrowseProduct } from '@/lib/category-config';
 import { SiteHeader } from '@/components/SiteHeader';
@@ -39,13 +40,19 @@ const Logo = () => (
 
 export function BrowseClient({ products, categoryConfig }: { products: BrowseProduct[]; categoryConfig: CategoryConfig }) {
   const grouped = groupByCategory(products, categoryConfig);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [activeCategory, setActiveCategory] = useState<string | null>(() => {
+    return null; // will be set from URL on mount
+  });
   const [listUrl, setListUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const session = loadSession();
     if (session?.token) setListUrl(`/list?token=${session.token}`);
-  }, []);
+    // Initialise category from URL param
+    const cat = searchParams.get('category');
+    if (cat) setActiveCategory(cat);
+  }, [searchParams]);
 
   const displayedGroups = activeCategory
     ? grouped.filter(([cat]) => cat === activeCategory)
