@@ -39,7 +39,9 @@ function generateUUID() {
 }
 
 async function searchProduct(query) {
-  const url = `${GATEWAY_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(query)}&take=5&page=1&skip=0`;
+  // Instacart API returns 400 on very long queries — trim to first 5 words or 60 chars
+  const trimmedQuery = query.split(' ').slice(0, 5).join(' ').slice(0, 60);
+  const url = `${GATEWAY_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(trimmedQuery)}&take=5&page=1&skip=0`;
 
   try {
     const resp = await fetch(url, {

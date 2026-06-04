@@ -134,13 +134,17 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
               </div>
 
               <div className="bg-white rounded-2xl divide-y divide-[#F3F0EF]" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
-                {items.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)).map(product => (
+                {items.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)).map(product => {
+                  const productSlug = product.canonical_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                  return (
                   <div key={product.id} className="flex items-center gap-3 px-4 py-3.5">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0" style={{ background: cfg.color }}>
                       {cfg.emoji}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-[#2F2F2E] leading-snug">{product.canonical_name}</div>
+                      <Link href={`/browse/${productSlug}`} className="text-sm font-semibold text-[#2F2F2E] leading-snug hover:underline hover:text-[#006A35]">
+                        {product.canonical_name}
+                      </Link>
                       {product.nutrition && (
                         <div className="flex gap-2 mt-0.5">
                           <span className="text-[10px] text-[#B2BEC3]">{product.nutrition.calories} kcal</span>
@@ -164,7 +168,8 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           );

@@ -1,0 +1,270 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { SiteHeader } from '@/components/SiteHeader';
+import { SiteFooter } from '@/components/SiteFooter';
+import { supabaseAdmin } from '@/lib/supabase';
+import { storeDisplayName } from '@/lib/store-utils';
+
+export const revalidate = 43200; // 12h
+
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
+
+// ── Slug helpers ─────────────────────────────────────────────────────────────
+
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// ── Data fetching ─────────────────────────────────────────────────────────────
+
+async function getProduct(slug: string) {
+  const { data: products, error } = await supabaseAdmin
+    .from('products')
+    .select('id, canonical_name, category, description, image_url, brand');
+
+  if (error || !products) return null;
+
+  const product = products.find(p => toSlug(p.canonical_name) === slug);
+  if (!product) return null;
+
+  // Fetch store availability + nutrition
+  const { data: storeRows } = await supabaseAdmin
+    .from('store_products')
+    .select('store, brand, is_own_brand, store_product_name, calories_per_100, protein_per_100, carbs_per_100, fat_per_100, saturated_fat_per_100, sugar_per_100, fibre_per_100, salt_per_100')
+    .eq('product_id', product.id);
+
+  const stores = (storeRows ?? []).map(r => r.store);
+
+  // Best nutrition: prefer row with most fields populated
+  const withNutrition = (storeRows ?? []).filter(r => r.calories_per_100 != null);
+  const bestNutrition = withNutrition.sort((a, b) => {
+    const score = (r: typeof a) => [r.protein_per_100, r.carbs_per_100, r.fat_per_100, r.fibre_per_100, r.salt_per_100].filter(v => v != null).length;
+    return score(b) - score(a);
+  })[0] ?? null;
+
+  // Brand: prefer non-own-brand, fallback to products.brand
+  const brandRow = (storeRows ?? []).find(r => !r.is_own_brand && r.brand) ?? (storeRows ?? [])[0];
+  const brand = product.brand ?? brandRow?.brand ?? null;
+
+  return { product, stores, nutrition: bestNutrition, brand };
+}
+
+// ── Static params ─────────────────────────────────────────────────────────────
+
+export async function generateStaticParams() {
+  const { data } = await supabaseAdmin
+    .from('products')
+    .select('canonical_name');
+  return (data ?? []).map(p => ({ slug: toSlug(p.canonical_name) }));
+}
+
+// ── Metadata ──────────────────────────────────────────────────────────────────
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const result = await getProduct(slug);
+  if (!result) return { title: 'Product not found' };
+
+  const { product, stores, brand } = result;
+  const storeList = stores.map(storeDisplayName).join(', ');
+  const title = `${product.canonical_name} — Price in Ireland | supermarket.ie`;
+  const description = `${product.canonical_name}${brand ? ` by ${brand}` : ''} available at ${storeList || 'Irish supermarkets'}. Check live prices and compare across Tesco, Dunnes, SuperValu and Aldi.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `${BASE_URL}/browse/${slug}`,
+      ...(product.image_url ? { images: [{ url: product.image_url }] } : {}),
+    },
+    alternates: { canonical: `${BASE_URL}/browse/${slug}` },
+  };
+}
+
+// ── Schema.org ────────────────────────────────────────────────────────────────
+
+function productJsonLd(product: { canonical_name: string; category: string | null; description: string | null; image_url: string | null }, brand: string | null, slug: string) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.canonical_name,
+    ...(product.description ? { description: product.description } : {}),
+    ...(product.image_url ? { image: product.image_url } : {}),
+    ...(product.category ? { category: product.category } : {}),
+    ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}),
+    url: `${BASE_URL}/browse/${slug}`,
+    offers: {
+      '@type': 'AggregateOffer',
+      availability: 'https://schema.org/InStock',
+      priceCurrency: 'EUR',
+      seller: { '@type': 'Organization', name: 'supermarket.ie' },
+    },
+  };
+}
+
+// ── Nutrition table ───────────────────────────────────────────────────────────
+
+const STORE_COLOURS: Record<string, string> = {
+  tesco: '#006A35',
+  dunnes: '#e31837',
+  supervalu: '#e31837',
+  aldi: '#003399',
+  lidl: '#0050aa',
+};
+
+function NutritionTable({ n }: { n: { calories_per_100: number | null; protein_per_100: number | null; carbs_per_100: number | null; fat_per_100: number | null; saturated_fat_per_100: number | null; sugar_per_100: number | null; fibre_per_100: number | null; salt_per_100: number | null } }) {
+  const rows = [
+    { label: 'Energy', value: n.calories_per_100, unit: 'kcal' },
+    { label: 'Fat', value: n.fat_per_100, unit: 'g' },
+    { label: '  of which saturates', value: n.saturated_fat_per_100, unit: 'g', indent: true },
+    { label: 'Carbohydrates', value: n.carbs_per_100, unit: 'g' },
+    { label: '  of which sugars', value: n.sugar_per_100, unit: 'g', indent: true },
+    { label: 'Fibre', value: n.fibre_per_100, unit: 'g' },
+    { label: 'Protein', value: n.protein_per_100, unit: 'g' },
+    { label: 'Salt', value: n.salt_per_100, unit: 'g' },
+  ].filter(r => r.value != null);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
+      <div className="px-4 py-3" style={{ background: 'var(--surface-container-low)' }}>
+        <h2 className="text-sm font-bold" style={{ color: 'var(--on-surface)' }}>Nutrition per 100g</h2>
+      </div>
+      <table className="w-full text-sm">
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} style={{ borderTop: i > 0 ? '1px solid var(--surface-container)' : undefined, background: 'var(--surface-container-lowest)' }}>
+              <td className="px-4 py-2" style={{ color: row.indent ? 'var(--on-surface-variant)' : 'var(--on-surface)', paddingLeft: row.indent ? '2rem' : undefined }}>
+                {row.label.trim()}
+              </td>
+              <td className="px-4 py-2 text-right font-semibold" style={{ color: 'var(--on-background)' }}>
+                {typeof row.value === 'number' ? row.value.toFixed(1) : row.value}{row.unit}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const result = await getProduct(slug);
+  if (!result) notFound();
+
+  const { product, stores, nutrition, brand } = result;
+  const uniqueStores = [...new Set(stores)];
+
+  return (
+    <>
+      <SiteHeader />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd(product, brand, slug)) }}
+      />
+
+      <main className="max-w-2xl mx-auto px-4 pb-16 pt-6">
+        {/* Breadcrumb */}
+        <nav className="text-xs mb-4 flex items-center gap-1.5" style={{ color: 'var(--on-surface-variant)' }}>
+          <Link href="/browse" className="hover:underline">Browse</Link>
+          <span>›</span>
+          {product.category && (
+            <>
+              <span>{product.category}</span>
+              <span>›</span>
+            </>
+          )}
+          <span style={{ color: 'var(--on-background)' }}>{product.canonical_name}</span>
+        </nav>
+
+        <div className="flex gap-4 mb-6 items-start">
+          {/* Product image */}
+          {product.image_url && (
+            <div className="w-24 h-24 flex-shrink-0 rounded-2xl overflow-hidden"
+              style={{ background: 'var(--surface-container-low)', border: '1px solid var(--surface-container)' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={product.image_url} alt={product.canonical_name} className="w-full h-full object-contain p-2" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-bold leading-tight mb-1" style={{ color: 'var(--on-background)' }}>
+              {product.canonical_name}
+            </h1>
+            {brand && <p className="text-sm mb-1" style={{ color: 'var(--on-surface-variant)' }}>{brand}</p>}
+            {product.category && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full inline-block"
+                style={{ background: 'var(--surface-container)', color: 'var(--on-surface-variant)' }}>
+                {product.category}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Description */}
+        {product.description && (
+          <p className="text-sm mb-5 leading-relaxed" style={{ color: 'var(--on-surface)' }}>
+            {product.description}
+          </p>
+        )}
+
+        {/* Store availability */}
+        {uniqueStores.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--on-surface-variant)' }}>
+              Available at
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {uniqueStores.map(store => (
+                <span key={store} className="px-3 py-1.5 rounded-full text-xs font-bold text-white"
+                  style={{ background: STORE_COLOURS[store] ?? '#555' }}>
+                  {storeDisplayName(store)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Nutrition */}
+        {nutrition && (
+          <div className="mb-6">
+            <NutritionTable n={nutrition} />
+          </div>
+        )}
+
+        {/* Price gate CTA */}
+        <div className="rounded-2xl p-5 text-center mb-8"
+          style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+          <p className="text-sm font-semibold mb-1" style={{ color: 'var(--on-background)' }}>
+            Want to see prices?
+          </p>
+          <p className="text-xs mb-4" style={{ color: 'var(--on-surface-variant)' }}>
+            Sign in to compare live prices across {uniqueStores.map(storeDisplayName).join(', ')} and get a personalised weekly list.
+          </p>
+          <Link href="/list/request"
+            className="inline-block px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+            style={{ background: '#00944A' }}>
+            See prices →
+          </Link>
+        </div>
+
+        {/* Back to browse */}
+        <div className="text-center">
+          <Link href={product.category ? `/browse?category=${encodeURIComponent(product.category)}` : '/browse'}
+            className="text-sm font-semibold transition-opacity hover:opacity-70"
+            style={{ color: 'var(--primary)' }}>
+            ← Back to {product.category ?? 'browse'}
+          </Link>
+        </div>
+      </main>
+
+      <SiteFooter />
+    </>
+  );
+}
