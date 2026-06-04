@@ -112,10 +112,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                 Sign out
               </button>
             ) : (
-              <Link href="/list/request" className="hidden md:inline-flex items-center px-5 py-2 text-sm font-semibold rounded-full hover:opacity-90 transition-opacity"
-                style={{ border: '1.5px solid rgba(255,255,255,0.6)', color: '#FFFFFF' }}>
-                Sign in
-              </Link>
+              <div className="flex items-center gap-4">
+                <Link href="/shop" className="text-sm font-semibold hover:opacity-80 transition-opacity" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                  Browse
+                </Link>
+                <Link href="/list/request" className="hidden md:inline-flex items-center px-5 py-2 text-sm font-semibold rounded-full hover:opacity-90 transition-opacity"
+                  style={{ border: '1.5px solid rgba(255,255,255,0.6)', color: '#FFFFFF' }}>
+                  Sign in
+                </Link>
+              </div>
             )
           )}
         </div>
