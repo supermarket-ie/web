@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import jwt from 'jsonwebtoken';
 
-const SECRET = process.env.JWT_SECRET ?? process.env.NEXTAUTH_SECRET ?? 'dev-secret';
+const SECRET = process.env.MAGIC_LINK_SECRET;
 
 export async function GET(
   req: NextRequest,
