@@ -78,6 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const hideNav = HIDDEN_ON.some(p => pathname.startsWith(p));
   const showNav = ready && !!listToken && !hideNav;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   function signOut() {
     clearSession();
@@ -89,13 +90,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ── Header ── */}
       <header className="sticky top-0 z-40 w-full px-6 py-3.5" style={{ background: '#00944A' }}>
         <div className="flex justify-between items-center">
-          <Link href="/" className="flex-shrink-0">
+          <Link href="/" className="flex-shrink-0" onClick={() => setMenuOpen(false)}>
             <span className="text-[28px] font-extrabold tracking-tight" style={{ color: '#FFFFFF', letterSpacing: '-0.02em' }}>
               supermarket<span style={{ color: '#d4ffe5' }}>.ie</span>
             </span>
           </Link>
-          <div className="flex items-center gap-4">
-            {/* Browse always visible */}
+
+          {/* Desktop nav */}
+          <div className="hidden sm:flex items-center gap-4">
             {!hideNav && (
               <Link href="/shop" className="text-sm font-semibold hover:opacity-80 transition-opacity" style={{ color: 'rgba(255,255,255,0.9)' }}>
                 Browse
@@ -114,7 +116,61 @@ export function AppShell({ children }: { children: ReactNode }) {
               )
             )}
           </div>
+
+          {/* Mobile hamburger */}
+          <button
+            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg transition-opacity hover:opacity-80"
+            style={{ color: '#FFFFFF' }}
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label="Menu"
+          >
+            {menuOpen ? (
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
         </div>
+
+        {/* Mobile dropdown */}
+        {menuOpen && (
+          <div className="sm:hidden mt-3 pb-2 flex flex-col gap-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
+            {!hideNav && (
+              <Link
+                href="/shop"
+                className="px-2 py-2.5 text-sm font-semibold rounded-lg hover:opacity-80"
+                style={{ color: '#FFFFFF' }}
+                onClick={() => setMenuOpen(false)}
+              >
+                Browse
+              </Link>
+            )}
+            {ready && (
+              showNav ? (
+                <button
+                  onClick={() => { setMenuOpen(false); signOut(); }}
+                  className="text-left px-2 py-2.5 text-sm font-medium rounded-lg hover:opacity-80"
+                  style={{ color: 'rgba(255,255,255,0.85)' }}
+                >
+                  Sign out
+                </button>
+              ) : (
+                <Link
+                  href="/list/request"
+                  className="px-2 py-2.5 text-sm font-semibold rounded-lg hover:opacity-80"
+                  style={{ color: '#FFFFFF' }}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Sign in
+                </Link>
+              )
+            )}
+          </div>
+        )}
       </header>
 
       {/* ── Body: sidebar + content ── */}
