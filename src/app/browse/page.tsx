@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { supabaseAdmin } from '@/lib/supabase';
 import { NUTRITION } from '@/lib/nutrition-data';
 import { CATEGORY_CONFIG, type BrowseProduct } from '@/lib/category-config';
@@ -42,5 +43,9 @@ async function getProducts(): Promise<BrowseProduct[]> {
 
 export default async function BrowsePage() {
   const products = await getProducts();
-  return <BrowseClient products={products} categoryConfig={CATEGORY_CONFIG} />;
+  return (
+    <Suspense fallback={null}>
+      <BrowseClient products={products} categoryConfig={CATEGORY_CONFIG} />
+    </Suspense>
+  );
 }
