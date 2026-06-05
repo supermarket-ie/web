@@ -326,7 +326,7 @@ function fuzzyMatch(searchName, candidates) {
     const s2 = searchWords.length > 0 ? searchInC / searchWords.length : 0;
     const score = Math.min(s1, s2);
 
-    if (score > bestScore && score >= 0.5) {
+    if (score > bestScore && score >= 0.6) {
       bestScore = score;
       bestMatch = c;
     }
@@ -468,12 +468,16 @@ async function resolveMode({ limit, category }) {
           continue;
         }
 
-        // Find best fuzzy match
+        // Find best fuzzy match — no fallback to first result (causes bad matches)
         const match = fuzzyMatch(name, products);
-        const picked = match ? match.product : products[0];
-        const matchNote = match
-          ? `(score ${match.score.toFixed(2)})`
-          : '(first result)';
+        if (!match) {
+          console.log(`  ✗ ${name.substring(0, 50)} → No confident match (best < 0.5), marking failed`);
+          await supabase.from('store_products').update({ url_status: 'failed' }).eq('id', sp.id);
+          errors++;
+          continue;
+        }
+        const picked = match.product;
+        const matchNote = `(score ${match.score.toFixed(2)})`;
 
         // Use price directly from search results (product pages no longer have prices)
         if (!picked.price || picked.price <= 0) {
@@ -664,9 +668,14 @@ async function refreshMode({ limit, category, offset = 0 }) {
           continue;
         }
 
-        // Find best match by name
+        // Find best match by name — no fallback to first result
         const match = fuzzyMatch(name, products);
-        const picked = match ? match.product : products[0];
+        if (!match) {
+          console.log(`  ✗ ${name.substring(0, 50)} → No confident match in refresh, skipping`);
+          errors++;
+          continue;
+        }
+        const picked = match.product;
 
         if (!picked.price || picked.price <= 0) {
           console.log(`  ✗ ${name.substring(0, 50)} → No price in search results`);
