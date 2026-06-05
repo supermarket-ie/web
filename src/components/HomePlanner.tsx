@@ -4,6 +4,7 @@ import { loadSession, loadProfile, saveProfile, type PlannerProfile, saveSession
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
 import { SmartRefreshCard, type RefreshData } from '@/components/SmartRefreshCard';
+import { SplitRecommendationCard, type StoreRecommendation } from '@/components/SplitRecommendationCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -141,6 +142,80 @@ function parseListItems(content: string): { canonical_name: string; category: st
     }
   }
   return items;
+}
+
+function parseSplitRecommendation(content: string): StoreRecommendation {
+  const lines = content.split('\n');
+  const text = content.toLowerCase();
+
+  // Pattern 1: "Main shop at Store (€X, Y items). Grab items at Store2 if you pass it (€Z). Saves €W"
+  const splitPattern1 = /main shop at (\w+) \(€(\d+(?:\.\d{2})?),?\s*(\d+)\s*items?\)\.?\s*grab\s+([^(]+?)\s*at\s+(\w+)[^(]*?\(€(\d+(?:\.\d{2})?)\).*?saves?\s*€(\d+(?:\.\d{2})?)/i;
+  const match1 = content.match(splitPattern1);
+
+  if (match1) {
+    const [, mainStore, mainTotal, mainItems, splitItemsText, splitStore, splitTotal, savings] = match1;
+    const splitItems = splitItemsText.split(/[+&,]/).map(item => item.trim()).filter(Boolean);
+
+    return {
+      type: 'split',
+      mainStore: mainStore.toLowerCase(),
+      mainTotal: parseFloat(mainTotal),
+      mainItems: parseInt(mainItems, 10),
+      splitStore: splitStore.toLowerCase(),
+      splitItems,
+      splitTotal: parseFloat(splitTotal),
+      savings: parseFloat(savings)
+    };
+  }
+
+  // Pattern 2: "Best value split: Main at Store (€X, Y items) + Store2 for [items] (€Z). Saves €W"
+  const splitPattern2 = /best value split:\s*main at (\w+) \(€(\d+(?:\.\d{2})?),?\s*(\d+)\s*items?\)[^+]*?\+\s*(\w+) for\s+([^(]+?)\s*\(€(\d+(?:\.\d{2})?)\).*?saves?\s*€(\d+(?:\.\d{2})?)/i;
+  const match2 = content.match(splitPattern2);
+
+  if (match2) {
+    const [, mainStore, mainTotal, mainItems, splitStore, splitItemsText, splitTotal, savings] = match2;
+    const splitItems = splitItemsText.replace(/[\[\]]/g, '').split(/[+&,]/).map(item => item.trim()).filter(Boolean);
+
+    return {
+      type: 'split',
+      mainStore: mainStore.toLowerCase(),
+      mainTotal: parseFloat(mainTotal),
+      mainItems: parseInt(mainItems, 10),
+      splitStore: splitStore.toLowerCase(),
+      splitItems,
+      splitTotal: parseFloat(splitTotal),
+      savings: parseFloat(savings)
+    };
+  }
+
+  // Pattern 3: Single store recommendation
+  const singlePattern = /single store:\s*(\w+)[^€]*?€(\d+(?:\.\d{2})?).*?splitting only saves?\s*€(\d+(?:\.\d{2})?)[^.]*not worth/i;
+  const match3 = content.match(singlePattern);
+
+  if (match3) {
+    const [, store, total, potentialSavings] = match3;
+    return {
+      type: 'single',
+      store: store.toLowerCase(),
+      total: parseFloat(total),
+      reason: `Splitting only saves €${potentialSavings}, not worth the extra trip`
+    };
+  }
+
+  // Pattern 4: Simple single store pattern
+  const singlePattern2 = /(\w+) covers your full list at €(\d+(?:\.\d{2})?)/i;
+  const match4 = content.match(singlePattern2);
+
+  if (match4) {
+    const [, store, total] = match4;
+    return {
+      type: 'single',
+      store: store.toLowerCase(),
+      total: parseFloat(total)
+    };
+  }
+
+  return null;
 }
 
 function calcSavings(totals: StoreTotal[]): number | null {
@@ -420,6 +495,7 @@ export function HomePlanner() {
 
   const [refreshData, setRefreshData] = useState<RefreshData | null>(null);
   const [showRefreshCard, setShowRefreshCard] = useState(false);
+  const [splitRecommendation, setSplitRecommendation] = useState<StoreRecommendation>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -644,6 +720,10 @@ export function HomePlanner() {
               const session = loadSession();
               trackEvent('list_generated', { item_count: items.length }, session?.token);
             }
+
+            // Parse split recommendation
+            const splitRec = parseSplitRecommendation(content);
+            setSplitRecommendation(splitRec);
           }
           // Parse button suggestions from the streamed content
           const { text: displayText, buttons } = parseButtonSuggestions(content);
@@ -663,6 +743,8 @@ export function HomePlanner() {
       if (parseStoreTotals(content).length > 0 && isUnlocked) {
         setListContent(content);
         setHasGeneratedList(true);
+        const splitRec = parseSplitRecommendation(content);
+        setSplitRecommendation(splitRec);
         const updatedMessages = [...allMessages, { id: streamId, role: 'assistant' as const, content }];
         autoSaveConversation(content, updatedMessages);
       }
@@ -767,6 +849,11 @@ export function HomePlanner() {
           </div>
         )}
       </div>
+
+      {/* Split Recommendation Card — only for unlocked users */}
+      {hasGeneratedList && listContent && !isGenerating && isUnlocked && splitRecommendation && (
+        <SplitRecommendationCard recommendation={splitRecommendation} />
+      )}
 
       {/* Unlock CTA for non-signed-in users after list is generated */}
       {hasGeneratedList && listContent && !isGenerating && !isUnlocked && (
