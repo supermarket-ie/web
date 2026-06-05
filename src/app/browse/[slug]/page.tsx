@@ -21,15 +21,22 @@ function toSlug(name: string): string {
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
 async function getProduct(slug: string) {
-  // Fetch all products with high limit and match by slug (no slug column in DB yet)
-  const { data: products, error } = await supabaseAdmin
-    .from('products')
-    .select('id, canonical_name, category, description, image_url, brand')
-    .limit(5000);
+  // Fetch all products in batches and match by slug
+  let allProducts: { id: string; canonical_name: string; category: string | null; description: string | null; image_url: string | null; brand: string | null }[] = [];
+  let from = 0;
+  const batchSize = 1000;
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .select('id, canonical_name, category, description, image_url, brand')
+      .range(from, from + batchSize - 1);
+    if (error || !data || data.length === 0) break;
+    allProducts = allProducts.concat(data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
 
-  if (error || !products) return null;
-
-  const product = products.find(p => toSlug(p.canonical_name) === slug);
+  const product = allProducts.find(p => toSlug(p.canonical_name) === slug);
   if (!product) return null;
 
   const { data: storeRows } = await supabaseAdmin
@@ -53,11 +60,20 @@ async function getProduct(slug: string) {
 // ── Static params ─────────────────────────────────────────────────────────────
 
 export async function generateStaticParams() {
-  const { data } = await supabaseAdmin
-    .from('products')
-    .select('canonical_name')
-    .limit(5000);
-  return (data ?? []).map(p => ({ slug: toSlug(p.canonical_name) }));
+  let allNames: { canonical_name: string }[] = [];
+  let from = 0;
+  const batchSize = 1000;
+  while (true) {
+    const { data } = await supabaseAdmin
+      .from('products')
+      .select('canonical_name')
+      .range(from, from + batchSize - 1);
+    if (!data || data.length === 0) break;
+    allNames = allNames.concat(data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+  return allNames.map(p => ({ slug: toSlug(p.canonical_name) }));
 }
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
