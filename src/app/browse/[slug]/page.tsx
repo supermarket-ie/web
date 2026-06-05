@@ -21,10 +21,11 @@ function toSlug(name: string): string {
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
 async function getProduct(slug: string) {
-  // Fetch all products and match by slug (no slug column in DB yet)
+  // Fetch all products with high limit and match by slug (no slug column in DB yet)
   const { data: products, error } = await supabaseAdmin
     .from('products')
-    .select('id, canonical_name, category, description, image_url, brand');
+    .select('id, canonical_name, category, description, image_url, brand')
+    .limit(5000);
 
   if (error || !products) return null;
 
@@ -54,7 +55,8 @@ async function getProduct(slug: string) {
 export async function generateStaticParams() {
   const { data } = await supabaseAdmin
     .from('products')
-    .select('canonical_name');
+    .select('canonical_name')
+    .limit(5000);
   return (data ?? []).map(p => ({ slug: toSlug(p.canonical_name) }));
 }
 
