@@ -677,10 +677,16 @@ _For [household description] · [meals covered]_
 
 ---
 **🏪 Recommendation**
-[Pick ONE of these based on the totals and context:]
-- If one store has everything (or nearly): "Do your full shop at [cheapest store]. Total: €X.XX"
-- If splitting genuinely saves >€5 AND the shop is large (>€60): "Main shop at [Store A] (€X, [N] items). Grab [2-3 items] at [Store B] if you pass it (€Y). Saves €Z vs doing it all at [Store A]."
-- If splitting saves <€5 or the shop is small (<€50): ALWAYS recommend a single store. The convenience of one stop outweighs €2-3 savings.
+
+For split scenarios (genuine savings > €5, shop > €60):
+Output a split marker on its own line:
+[[split|mainStore:dunnes|mainTotal:74.20|mainItems:28|splitStore:aldi|splitTotal:4.20|savings:6.80|splitItems:milk,butter,eggs]]
+Then explain it naturally in prose below.
+
+For single store (splitting not worth it):
+Output a single marker on its own line:
+[[single|store:dunnes|total:74.20|savings:2.10]]
+Then explain it naturally in prose below.
 
 **Store totals** (for reference)
 - Tesco: €X.XX ([N] items)
@@ -808,10 +814,16 @@ _For ${household} · ${mealCoverage}_
 
 ---
 **🏪 Recommendation**
-[Pick ONE of these based on the totals and context:]
-- If one store has everything (or nearly): "Do your full shop at [cheapest store]. Total: €X.XX"
-- If splitting genuinely saves >€5 AND the user has a large shop (>€60): "Main shop at [Store A] (€X, [N] items). Grab [2-3 items] at [Store B] if you pass it (€Y). Saves €Z vs doing it all at [Store A]."
-- If splitting saves <€5 or the shop is small (<€50): ALWAYS recommend a single store. The time cost of a second stop isn't worth it.
+
+For split scenarios (genuine savings > €5, shop > €60):
+Output a split marker on its own line:
+[[split|mainStore:dunnes|mainTotal:74.20|mainItems:28|splitStore:aldi|splitTotal:4.20|savings:6.80|splitItems:milk,butter,eggs]]
+Then explain it naturally in prose below.
+
+For single store (splitting not worth it):
+Output a single marker on its own line:
+[[single|store:dunnes|total:74.20|savings:2.10]]
+Then explain it naturally in prose below.
 
 **Store totals** (for reference)
 - Tesco: €X.XX ([N] items)
@@ -862,9 +874,16 @@ Gather ALL data via tools before writing. Never mention tool calls.
 
 ---
 **🏪 Recommendation**
-- If one store has everything or shop is small (<€50): "Do your full shop at [cheapest store]. Total: €X.XX"
-- If splitting saves >€5 AND shop is large (>€60): "Main shop at [Store A] (€X). Grab [items] at [Store B] if you pass it (€Y). Saves €Z."
-- Default to ONE store. Convenience > €2-3 savings.
+
+For split scenarios (savings > €5, shop > €60):
+Output a split marker on its own line:
+[[split|mainStore:dunnes|mainTotal:74.20|mainItems:28|splitStore:aldi|splitTotal:4.20|savings:6.80|splitItems:milk,butter,eggs]]
+Then explain it naturally in prose below.
+
+For single store (splitting not worth it):
+Output a single marker on its own line:
+[[single|store:dunnes|total:74.20|savings:2.10]]
+Then explain it naturally in prose below.
 
 **Store totals** (for reference)
 - Tesco: €X.XX ([N] items)

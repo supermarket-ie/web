@@ -120,6 +120,14 @@ function parseButtonSuggestions(content: string): { text: string; buttons: ChatB
   return { text, buttons };
 }
 
+/** Strip split/single recommendation markers from content for display */
+function stripRecommendationMarkers(content: string): string {
+  return content
+    .replace(/\[\[split\|[^\]]+\]\]/g, '')
+    .replace(/\[\[single\|[^\]]+\]\]/g, '')
+    .replace(/\n\s*\n\s*\n/g, '\n\n'); // Clean up extra blank lines
+}
+
 function parseListItems(content: string): { canonical_name: string; category: string; store: string; price_paid: number; quantity: number }[] {
   const lines = content.split('\n');
   const items: { canonical_name: string; category: string; store: string; price_paid: number; quantity: number }[] = [];
@@ -145,73 +153,35 @@ function parseListItems(content: string): { canonical_name: string; category: st
 }
 
 function parseSplitRecommendation(content: string): StoreRecommendation {
-  const lines = content.split('\n');
-  const text = content.toLowerCase();
-
-  // Pattern 1: "Main shop at Store (€X, Y items). Grab items at Store2 if you pass it (€Z). Saves €W"
-  const splitPattern1 = /main shop at (\w+) \(€(\d+(?:\.\d{2})?),?\s*(\d+)\s*items?\)\.?\s*grab\s+([^(]+?)\s*at\s+(\w+)[^(]*?\(€(\d+(?:\.\d{2})?)\).*?saves?\s*€(\d+(?:\.\d{2})?)/i;
-  const match1 = content.match(splitPattern1);
-
-  if (match1) {
-    const [, mainStore, mainTotal, mainItems, splitItemsText, splitStore, splitTotal, savings] = match1;
-    const splitItems = splitItemsText.split(/[+&,]/).map(item => item.trim()).filter(Boolean);
-
+  // Look for [[split|...]] marker
+  const splitMatch = content.match(/\[\[split\|([^\]]+)\]\]/);
+  if (splitMatch) {
+    const params = Object.fromEntries(
+      splitMatch[1].split("|").map(p => p.split(":") as [string, string])
+    );
     return {
-      type: 'split',
-      mainStore: mainStore.toLowerCase(),
-      mainTotal: parseFloat(mainTotal),
-      mainItems: parseInt(mainItems, 10),
-      splitStore: splitStore.toLowerCase(),
-      splitItems,
-      splitTotal: parseFloat(splitTotal),
-      savings: parseFloat(savings)
+      type: "split",
+      mainStore: params.mainStore,
+      mainTotal: parseFloat(params.mainTotal),
+      mainItems: parseInt(params.mainItems, 10),
+      splitStore: params.splitStore,
+      splitTotal: parseFloat(params.splitTotal),
+      savings: parseFloat(params.savings),
+      splitItems: params.splitItems ? params.splitItems.split(",").map(s => s.trim()) : [],
     };
   }
 
-  // Pattern 2: "Best value split: Main at Store (€X, Y items) + Store2 for [items] (€Z). Saves €W"
-  const splitPattern2 = /best value split:\s*main at (\w+) \(€(\d+(?:\.\d{2})?),?\s*(\d+)\s*items?\)[^+]*?\+\s*(\w+) for\s+([^(]+?)\s*\(€(\d+(?:\.\d{2})?)\).*?saves?\s*€(\d+(?:\.\d{2})?)/i;
-  const match2 = content.match(splitPattern2);
-
-  if (match2) {
-    const [, mainStore, mainTotal, mainItems, splitStore, splitItemsText, splitTotal, savings] = match2;
-    const splitItems = splitItemsText.replace(/[\[\]]/g, '').split(/[+&,]/).map(item => item.trim()).filter(Boolean);
-
+  // Look for [[single|...]] marker
+  const singleMatch = content.match(/\[\[single\|([^\]]+)\]\]/);
+  if (singleMatch) {
+    const params = Object.fromEntries(
+      singleMatch[1].split("|").map(p => p.split(":") as [string, string])
+    );
     return {
-      type: 'split',
-      mainStore: mainStore.toLowerCase(),
-      mainTotal: parseFloat(mainTotal),
-      mainItems: parseInt(mainItems, 10),
-      splitStore: splitStore.toLowerCase(),
-      splitItems,
-      splitTotal: parseFloat(splitTotal),
-      savings: parseFloat(savings)
-    };
-  }
-
-  // Pattern 3: Single store recommendation
-  const singlePattern = /single store:\s*(\w+)[^€]*?€(\d+(?:\.\d{2})?).*?splitting only saves?\s*€(\d+(?:\.\d{2})?)[^.]*not worth/i;
-  const match3 = content.match(singlePattern);
-
-  if (match3) {
-    const [, store, total, potentialSavings] = match3;
-    return {
-      type: 'single',
-      store: store.toLowerCase(),
-      total: parseFloat(total),
-      reason: `Splitting only saves €${potentialSavings}, not worth the extra trip`
-    };
-  }
-
-  // Pattern 4: Simple single store pattern
-  const singlePattern2 = /(\w+) covers your full list at €(\d+(?:\.\d{2})?)/i;
-  const match4 = content.match(singlePattern2);
-
-  if (match4) {
-    const [, store, total] = match4;
-    return {
-      type: 'single',
-      store: store.toLowerCase(),
-      total: parseFloat(total)
+      type: "single",
+      store: params.store,
+      total: parseFloat(params.total),
+      reason: params.savings ? `Splitting only saves €${parseFloat(params.savings).toFixed(2)}, not worth the extra trip` : undefined,
     };
   }
 
@@ -519,9 +489,11 @@ export function HomePlanner() {
   const addMsg = useCallback((role: ChatMessage['role'], content: string, buttons?: ChatButton[]) => {
     if (!buttons) {
       const parsed = parseButtonSuggestions(content);
-      setMessages(prev => [...prev, { id: msgId(), role, content: parsed.text, buttons: parsed.buttons.length > 0 ? parsed.buttons : undefined }]);
+      const cleanContent = stripRecommendationMarkers(parsed.text);
+      setMessages(prev => [...prev, { id: msgId(), role, content: cleanContent, buttons: parsed.buttons.length > 0 ? parsed.buttons : undefined }]);
     } else {
-      setMessages(prev => [...prev, { id: msgId(), role, content, buttons }]);
+      const cleanContent = stripRecommendationMarkers(content);
+      setMessages(prev => [...prev, { id: msgId(), role, content: cleanContent, buttons }]);
     }
   }, []);
 
@@ -725,18 +697,20 @@ export function HomePlanner() {
             const splitRec = parseSplitRecommendation(content);
             setSplitRecommendation(splitRec);
           }
-          // Parse button suggestions from the streamed content
+          // Parse button suggestions from the streamed content and strip recommendation markers
           const { text: displayText, buttons } = parseButtonSuggestions(content);
+          const cleanDisplayText = stripRecommendationMarkers(displayText);
           setMessages(prev => prev.map(m =>
-            m.id === streamId ? { ...m, content: displayText, buttons: buttons.length > 0 ? buttons : undefined } : m
+            m.id === streamId ? { ...m, content: cleanDisplayText, buttons: buttons.length > 0 ? buttons : undefined } : m
           ));
         }
       }
 
-      // Final parse for buttons
+      // Final parse for buttons and strip recommendation markers
       const { text: finalText, buttons: finalButtons } = parseButtonSuggestions(content);
+      const cleanFinalText = stripRecommendationMarkers(finalText);
       setMessages(prev => prev.map(m =>
-        m.id === streamId ? { ...m, content: finalText, buttons: finalButtons.length > 0 ? finalButtons : undefined } : m
+        m.id === streamId ? { ...m, content: cleanFinalText, buttons: finalButtons.length > 0 ? finalButtons : undefined } : m
       ));
 
       // If list was generated and user is already unlocked, auto-save
