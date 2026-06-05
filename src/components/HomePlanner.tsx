@@ -266,24 +266,107 @@ function ListItemLine({ text, unlocked }: { text: string; unlocked: boolean }) {
 }
 
 function FormattedMessage({ content, unlocked = true }: { content: string; unlocked?: boolean }) {
-  const lines = content.split('\n');
+  // Strip split/single recommendation markers
+  const cleanedContent = content
+    .replace(/^\[\[(split|single)\|[^\]]+\]\]$/gm, '')
+    .replace(/\n\s*\n\s*\n/g, '\n\n'); // Clean up extra blank lines
+
+  const lines = cleanedContent.split('\n');
   const elements: React.ReactNode[] = [];
   let listBuffer: string[] = [];
+  let i = 0;
 
   const flushList = () => {
     if (listBuffer.length === 0) return;
     elements.push(
       <ul key={elements.length} className="space-y-1 my-1">
-        {listBuffer.map((item, i) => (
-          <li key={i}><ListItemLine text={item} unlocked={unlocked} /></li>
+        {listBuffer.map((item, idx) => (
+          <li key={idx}><ListItemLine text={item} unlocked={unlocked} /></li>
         ))}
       </ul>
     );
     listBuffer = [];
   };
 
-  for (const line of lines) {
-    if (line.startsWith('- ') || line.startsWith('• ')) {
+  const parseTable = (startIndex: number) => {
+    const tableLines: string[] = [];
+    let currentIndex = startIndex;
+
+    // Collect all consecutive table lines
+    while (currentIndex < lines.length && lines[currentIndex].trim().startsWith('|')) {
+      tableLines.push(lines[currentIndex].trim());
+      currentIndex++;
+    }
+
+    if (tableLines.length === 0) return startIndex;
+
+    // Filter out separator rows (like |---|---|---|)
+    const dataLines = tableLines.filter(line => !line.match(/^\|[\s\-|]+\|$/));
+
+    if (dataLines.length === 0) return currentIndex - 1;
+
+    // Parse table rows
+    const rows = dataLines.map(line =>
+      line.split('|').slice(1, -1).map(cell => cell.trim())
+    );
+
+    if (rows.length === 0) return currentIndex - 1;
+
+    const [headerRow, ...dataRows] = rows;
+
+    // Render table
+    elements.push(
+      <table key={elements.length} className="w-full text-xs my-2 border-collapse">
+        <thead>
+          <tr>
+            {headerRow.map((header, idx) => (
+              <th key={idx} className="text-left font-semibold py-1 px-2 border-b border-gray-200"
+                  style={{ color: 'var(--on-surface)' }}>
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {dataRows.map((row, rowIdx) => (
+            <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-gray-50/50' : ''}>
+              {row.map((cell, cellIdx) => {
+                const isStoreColumn = headerRow[cellIdx]?.toLowerCase() === 'store';
+                const isPriceColumn = headerRow[cellIdx]?.toLowerCase() === 'price';
+
+                return (
+                  <td key={cellIdx} className={`py-1 px-2 ${isPriceColumn ? 'text-right' : ''}`}>
+                    {isPriceColumn ? (
+                      <BlurredText unlocked={unlocked}>
+                        <span style={{ color: 'var(--primary)' }}>{cell}</span>
+                      </BlurredText>
+                    ) : isStoreColumn ? (
+                      <span style={{ color: storeStyle(cell).bg }}>
+                        {storeDisplayName(cell)}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--on-surface)' }}>{cell}</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+
+    return currentIndex - 1;
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.trim().startsWith('|')) {
+      // Table detected
+      flushList();
+      i = parseTable(i);
+    } else if (line.startsWith('- ') || line.startsWith('• ')) {
       listBuffer.push(line);
     } else {
       flushList();
@@ -297,7 +380,7 @@ function FormattedMessage({ content, unlocked = true }: { content: string; unloc
         if (m) {
           const store = m[1];
           const total = parseFloat(m[2]);
-          const totals = parseStoreTotals(content);
+          const totals = parseStoreTotals(cleanedContent);
           const isCheapest = totals.find(t => t.store === store.toLowerCase())?.cheapest;
           elements.push(
             <div key={elements.length} className={`flex justify-between items-center py-1 px-2 rounded ${isCheapest ? 'ring-1 ring-green-500/30' : ''}`}
@@ -318,6 +401,7 @@ function FormattedMessage({ content, unlocked = true }: { content: string; unloc
         elements.push(<div key={elements.length} className="h-2" />);
       }
     }
+    i++;
   }
   flushList();
   return <div className="space-y-0.5">{elements}</div>;
