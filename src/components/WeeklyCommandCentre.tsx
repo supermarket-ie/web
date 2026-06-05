@@ -27,76 +27,124 @@ function renderInline(text: string): React.ReactNode[] {
 }
 
 function PlanMarkdown({ text }: { text: string }) {
+  // Parse text into meal day blocks
   const lines = text.split('\n');
-  const nodes: React.ReactNode[] = [];
-  let key = 0;
+  const mealDays: {
+    day: string;
+    meal: string;
+    cost: string | null;
+    ingredients: string[];
+  }[] = [];
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  let currentDay: typeof mealDays[0] | null = null;
+
+  for (const line of lines) {
     const trimmed = line.trim();
+    if (!trimmed) continue;
 
-    if (!trimmed) { nodes.push(<div key={key++} className="h-2" />); continue; }
+    // **Day:** Meal Name
+    const dayMatch = trimmed.match(/^\*\*(\w+):\*\*\s*(.+)$/);
+    if (dayMatch) {
+      // Save previous day if exists
+      if (currentDay) {
+        mealDays.push(currentDay);
+      }
+      // Start new day
+      currentDay = {
+        day: dayMatch[1],
+        meal: dayMatch[2],
+        cost: null,
+        ingredients: []
+      };
+      continue;
+    }
 
-    // ### Heading
-    if (trimmed.startsWith('### ')) {
-      nodes.push(
-        <h3 key={key++} className="text-sm font-bold mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>
-          {renderInline(trimmed.slice(4))}
-        </h3>
-      );
+    if (!currentDay) continue;
+
+    // *Est. cost: €5.93*
+    const costMatch = trimmed.match(/^\*Est\.\s*cost:\s*€?([\d.]+)\*$/);
+    if (costMatch) {
+      currentDay.cost = costMatch[1];
       continue;
     }
-    // ## Heading
-    if (trimmed.startsWith('## ')) {
-      nodes.push(
-        <h3 key={key++} className="text-sm font-bold mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>
-          {renderInline(trimmed.slice(3))}
-        </h3>
-      );
-      continue;
-    }
-    // --- divider
-    if (trimmed === '---') {
-      nodes.push(<hr key={key++} className="my-3" style={{ borderColor: 'var(--surface-container)' }} />);
-      continue;
-    }
-    // - bullet list item
+
+    // - ingredient
     if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-      nodes.push(
-        <div key={key++} className="flex gap-2 text-xs leading-relaxed" style={{ color: 'var(--on-surface)' }}>
-          <span className="flex-shrink-0 mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>·</span>
-          <span>{renderInline(trimmed.slice(2))}</span>
-        </div>
-      );
+      currentDay.ingredients.push(trimmed.slice(2));
       continue;
     }
-    // **Day:** Meal — treat as day header
-    if (trimmed.match(/^\*\*\w+:\*\*/)) {
+  }
+
+  // Add final day
+  if (currentDay) {
+    mealDays.push(currentDay);
+  }
+
+  // If no meal days were parsed, fall back to the old renderer for other markdown
+  if (mealDays.length === 0) {
+    const lines = text.split('\n');
+    const nodes: React.ReactNode[] = [];
+    let key = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      if (!trimmed) { nodes.push(<div key={key++} className="h-2" />); continue; }
+
+      // Plain paragraph
       nodes.push(
-        <p key={key++} className="text-sm font-semibold mt-3 mb-0.5" style={{ color: 'var(--on-surface)' }}>
+        <p key={key++} className="text-xs leading-relaxed" style={{ color: 'var(--on-surface-variant)' }}>
           {renderInline(trimmed)}
         </p>
       );
-      continue;
     }
-    // *italics / Est. cost lines*
-    if (trimmed.startsWith('*') && trimmed.endsWith('*') && !trimmed.startsWith('**')) {
-      nodes.push(
-        <p key={key++} className="text-xs italic" style={{ color: '#00944A' }}>
-          {trimmed.slice(1, -1)}
-        </p>
-      );
-      continue;
-    }
-    // Plain paragraph
-    nodes.push(
-      <p key={key++} className="text-xs leading-relaxed" style={{ color: 'var(--on-surface-variant)' }}>
-        {renderInline(trimmed)}
-      </p>
-    );
+
+    return <div className="space-y-0.5 pt-2 pb-1">{nodes}</div>;
   }
 
-  return <div className="space-y-0.5 pt-2 pb-1">{nodes}</div>;
+  // Render as meal cards
+  return (
+    <div className="grid gap-3 pt-2 pb-1">
+      {mealDays.map((day, index) => (
+        <div
+          key={index}
+          className="rounded-xl border p-4"
+          style={{
+            background: 'var(--surface-container-lowest)',
+            border: '1px solid var(--surface-container)'
+          }}
+        >
+          {/* Day and cost header */}
+          <div className="flex items-start justify-between mb-2">
+            <span className="text-xs font-medium" style={{ color: 'var(--on-surface-variant)' }}>
+              {day.day}
+            </span>
+            {day.cost && (
+              <span
+                className="text-xs font-semibold px-2 py-1 rounded-full"
+                style={{ background: '#00944A', color: '#fff' }}
+              >
+                €{day.cost}
+              </span>
+            )}
+          </div>
+
+          {/* Meal name */}
+          <h3 className="text-base font-bold mb-3 leading-tight" style={{ color: 'var(--on-surface)' }}>
+            {day.meal}
+          </h3>
+
+          {/* Ingredients */}
+          {day.ingredients.length > 0 && (
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--on-surface-variant)' }}>
+              {day.ingredients.join(' · ')}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
