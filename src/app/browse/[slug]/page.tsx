@@ -8,6 +8,7 @@ import { storeDisplayName } from '@/lib/store-utils';
 import { ProductPrices } from '@/components/ProductPrices';
 
 export const revalidate = 43200; // 12h
+export const dynamicParams = true; // render unknown slugs on-demand (ISR) instead of 404
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
