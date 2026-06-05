@@ -42,9 +42,15 @@ async function getProduct(slug: string) {
   const { data: storeRows } = await supabaseAdmin
     .from('store_products')
     .select('store, brand, is_own_brand, store_product_name, calories_per_100, protein_per_100, carbs_per_100, fat_per_100, saturated_fat_per_100, sugar_per_100, fibre_per_100, salt_per_100')
-    .eq('product_id', product.id);
+    .eq('product_id', product.id)
+    .eq('url_status', 'resolved');
 
   const stores = [...new Set((storeRows ?? []).map(r => r.store))];
+
+  // Only show products available in at least one main store (Tesco, Dunnes, SuperValu)
+  const MAIN_STORES = ['tesco', 'dunnes', 'supervalu'];
+  const hasMainStore = stores.some(s => MAIN_STORES.includes(s));
+  if (!hasMainStore) return null;
 
   const withNutrition = (storeRows ?? []).filter(r => r.calories_per_100 != null);
   const bestNutrition = withNutrition.sort((a, b) => {
@@ -60,20 +66,34 @@ async function getProduct(slug: string) {
 // ── Static params ─────────────────────────────────────────────────────────────
 
 export async function generateStaticParams() {
-  let allNames: { canonical_name: string }[] = [];
+  // Only pre-build pages for products in at least one main store (Tesco, Dunnes, SuperValu)
+  const MAIN_STORES = ['tesco', 'dunnes', 'supervalu'];
+  const seen = new Set<string>();
+  const slugs: { slug: string }[] = [];
   let from = 0;
   const batchSize = 1000;
   while (true) {
     const { data } = await supabaseAdmin
-      .from('products')
-      .select('canonical_name')
+      .from('store_products')
+      .select('product_id')
+      .eq('url_status', 'resolved')
+      .in('store', MAIN_STORES)
       .range(from, from + batchSize - 1);
     if (!data || data.length === 0) break;
-    allNames = allNames.concat(data);
+    const productIds = [...new Set(data.map(r => r.product_id))];
+    // Fetch canonical names for these product ids
+    const { data: products } = await supabaseAdmin
+      .from('products')
+      .select('canonical_name')
+      .in('id', productIds);
+    for (const p of products ?? []) {
+      const slug = toSlug(p.canonical_name);
+      if (!seen.has(slug)) { seen.add(slug); slugs.push({ slug }); }
+    }
     if (data.length < batchSize) break;
     from += batchSize;
   }
-  return allNames.map(p => ({ slug: toSlug(p.canonical_name) }));
+  return slugs;
 }
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
