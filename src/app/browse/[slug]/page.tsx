@@ -47,10 +47,10 @@ async function getProduct(slug: string) {
 
   const stores = [...new Set((storeRows ?? []).map(r => r.store))];
 
-  // Only show products available in at least one main store (Tesco, Dunnes, SuperValu)
+  // Only show products available in ALL 3 main stores (Tesco, Dunnes, SuperValu)
   const MAIN_STORES = ['tesco', 'dunnes', 'supervalu'];
-  const hasMainStore = stores.some(s => MAIN_STORES.includes(s));
-  if (!hasMainStore) return null;
+  const hasAllMainStores = MAIN_STORES.every(s => stores.includes(s));
+  if (!hasAllMainStores) return null;
 
   const withNutrition = (storeRows ?? []).filter(r => r.calories_per_100 != null);
   const bestNutrition = withNutrition.sort((a, b) => {
@@ -66,32 +66,49 @@ async function getProduct(slug: string) {
 // ── Static params ─────────────────────────────────────────────────────────────
 
 export async function generateStaticParams() {
-  // Only pre-build pages for products in at least one main store (Tesco, Dunnes, SuperValu)
+  // Only pre-build pages for products in ALL 3 main stores (Tesco, Dunnes, SuperValu)
   const MAIN_STORES = ['tesco', 'dunnes', 'supervalu'];
-  const seen = new Set<string>();
-  const slugs: { slug: string }[] = [];
+
+  // Fetch all resolved main-store rows, then filter to products present in all 3
+  const storeMap = new Map<string, Set<string>>(); // product_id → set of resolved main stores
   let from = 0;
   const batchSize = 1000;
   while (true) {
     const { data } = await supabaseAdmin
       .from('store_products')
-      .select('product_id')
+      .select('product_id, store')
       .eq('url_status', 'resolved')
       .in('store', MAIN_STORES)
       .range(from, from + batchSize - 1);
     if (!data || data.length === 0) break;
-    const productIds = [...new Set(data.map(r => r.product_id))];
-    // Fetch canonical names for these product ids
+    for (const row of data) {
+      if (!storeMap.has(row.product_id)) storeMap.set(row.product_id, new Set());
+      storeMap.get(row.product_id)!.add(row.store);
+    }
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+
+  // Keep only products with all 3 main stores resolved
+  const qualifiedIds = [...storeMap.entries()]
+    .filter(([, stores]) => MAIN_STORES.every(s => stores.has(s)))
+    .map(([id]) => id);
+
+  if (qualifiedIds.length === 0) return [];
+
+  // Fetch canonical names in batches (Supabase .in() has limits)
+  const seen = new Set<string>();
+  const slugs: { slug: string }[] = [];
+  for (let i = 0; i < qualifiedIds.length; i += 500) {
+    const batch = qualifiedIds.slice(i, i + 500);
     const { data: products } = await supabaseAdmin
       .from('products')
       .select('canonical_name')
-      .in('id', productIds);
+      .in('id', batch);
     for (const p of products ?? []) {
       const slug = toSlug(p.canonical_name);
       if (!seen.has(slug)) { seen.add(slug); slugs.push({ slug }); }
     }
-    if (data.length < batchSize) break;
-    from += batchSize;
   }
   return slugs;
 }
