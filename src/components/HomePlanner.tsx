@@ -4,7 +4,7 @@ import { loadSession, loadProfile, saveProfile, type PlannerProfile, saveSession
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
 import { SmartRefreshCard, type RefreshData } from '@/components/SmartRefreshCard';
-import { StoreComparisonCard, deriveRecommendation, type StoreRecommendation, type StoreTotalInput } from '@/components/SplitRecommendationCard';
+import { StoreComparisonCard } from '@/components/SplitRecommendationCard';
 import { SwapSuggestionCard, parseSwapSuggestions, stripSwapMarkers, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -515,7 +515,6 @@ export function HomePlanner() {
 
   const [refreshData, setRefreshData] = useState<RefreshData | null>(null);
   const [showRefreshCard, setShowRefreshCard] = useState(false);
-  const [splitRecommendation, setSplitRecommendation] = useState<StoreRecommendation>(null);
   const [swapSuggestions, setSwapSuggestions] = useState<SwapSuggestion[]>([]);
   const [savedListId, setSavedListId] = useState<string | null>(null);
 
@@ -746,9 +745,6 @@ export function HomePlanner() {
               trackEvent('list_generated', { item_count: items.length }, session?.token);
             }
 
-            // Parse split recommendation
-            const splitRec = deriveRecommendation(parseStoreTotals(content) as StoreTotalInput[]);
-            setSplitRecommendation(splitRec);
             // Parse swap suggestions
             const swaps = parseSwapSuggestions(content);
             if (swaps.length > 0) setSwapSuggestions(swaps);
@@ -773,8 +769,6 @@ export function HomePlanner() {
       if (parseStoreTotals(content).length > 0 && isUnlocked) {
         setListContent(content);
         setHasGeneratedList(true);
-        const splitRec = deriveRecommendation(parseStoreTotals(content) as StoreTotalInput[]);
-        setSplitRecommendation(splitRec);
         const swaps = parseSwapSuggestions(content);
         if (swaps.length > 0) setSwapSuggestions(swaps);
         const updatedMessages = [...allMessages, { id: streamId, role: 'assistant' as const, content }];
@@ -892,7 +886,6 @@ export function HomePlanner() {
         <StoreComparisonCard
           token={loadSession()?.token ?? null}
           listId={savedListId}
-          storeTotals={parseStoreTotals(listContent) as StoreTotalInput[]}
         />
       )}
 

@@ -7,7 +7,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
-import { StoreComparisonCard, deriveRecommendation, type StoreRecommendation, type StoreTotalInput } from '@/components/SplitRecommendationCard';
+import { StoreComparisonCard } from '@/components/SplitRecommendationCard';
 import { SwapSuggestionCard, parseSwapSuggestions, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -317,7 +317,7 @@ export function ConversationChat({ conversationId }: { conversationId: string })
               {/* Swap + store comparison cards for completed assistant messages */}
               {m.role === 'assistant' && !isStreaming && (() => {
                 const swaps: SwapSuggestion[] = parseSwapSuggestions(text);
-                const storeTotals = parseStoreTotals(text) as StoreTotalInput[];
+                const storeTotals = parseStoreTotals(text);
                 const hasStoreTotals = storeTotals.length >= 2;
                 // Only show store comparison card on the last assistant message with store totals
                 const isLastAssistant = m.id === [...messages].reverse().find(msg => msg.role === 'assistant')?.id;
@@ -329,7 +329,6 @@ export function ConversationChat({ conversationId }: { conversationId: string })
                       <StoreComparisonCard
                         token={token}
                         listId={convListId}
-                        storeTotals={storeTotals}
                       />
                     )}
                   </div>

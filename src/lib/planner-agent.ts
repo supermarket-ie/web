@@ -703,9 +703,7 @@ If the user states ANY dietary requirement (vegetarian, vegan, gluten-free, hala
 4. Use get_product for specific lookups if needed
 5. For returning users: call get_user_history and get_price_changes
 6. **FLAVOUR INTELLIGENCE: For 2–3 hero ingredients in the planned meals (e.g. the protein + a vegetable), call get_flavour_pairings. Use the BRIDGES from the result to suggest non-obvious but recipe-grounded accompaniments that we actually stock. This is what makes you feel smarter than a basic list tool.**
-7. **SUBSTITUTIONS: If any item on the list is expensive (>€5) or if there's a significantly cheaper alternative, call get_substitutes to find a recipe-grounded swap. Cross-reference against prices to confirm the substitute is actually cheaper before suggesting it. When you find a valid swap, emit a structured marker ON ITS OWN LINE before the list:**
-   [[swap|original:Beef Mince 500g|substitute:Pork Mince 500g|saving:1.80|store:tesco|reason:Works just as well in bolognese or lasagne]]
-   You can emit multiple [[swap|...]] markers (one per swap). These are stripped from display and shown as cards — do not also mention the swap in the list text.
+7. **SUBSTITUTIONS: If any item on the list is expensive (>€5) or if there's a significantly cheaper alternative, call get_substitutes to find a recipe-grounded swap. Cross-reference against prices to confirm the substitute is actually cheaper. When you find a valid swap, mention it naturally in the list (e.g. 'Pork Mince 500g (swap for Beef Mince — saves €1.80, works just as well in bolognese)').**
 8. **FINAL CHECK: Re-read the user's dietary requirements and verify EVERY item complies. Remove any that don't.**
 9. Call save_list with all items, store_totals, and a short descriptive name. Do this BEFORE writing the markdown output. For "Same Again", call update_list with the list_id from get_last_list instead of save_list.
 
@@ -732,19 +730,7 @@ _For [household description] · [meals covered]_
 - ...
 
 ---
-**🏪 Recommendation**
-
-For split scenarios (genuine savings > €5, shop > €60):
-Output a split marker on its own line:
-[[split|mainStore:dunnes|mainTotal:74.20|mainItems:28|splitStore:aldi|splitTotal:4.20|savings:6.80|splitItems:milk,butter,eggs]]
-Then explain it naturally in prose below.
-
-For single store (splitting not worth it):
-Output a single marker on its own line:
-[[single|store:dunnes|total:74.20|savings:2.10]]
-Then explain it naturally in prose below.
-
-**Store totals** (for reference)
+**🏪 Store totals** (always include this section)
 - Tesco: €X.XX ([N] items)
 - Dunnes: €X.XX ([N] items)
 - SuperValu: €X.XX ([N] items)
@@ -838,9 +824,7 @@ ${!profile.preferredStores.includes('all') ? `- Products from stores they didn't
 5. get_user_history — call for signed-in users to personalise.
 6. get_price_changes — call for returning users to highlight savings.
 7. **FLAVOUR INTELLIGENCE: For 2–3 hero ingredients in the planned meals, call get_flavour_pairings. Use the BRIDGES to suggest non-obvious recipe-grounded accompaniments we actually stock. This is what makes you feel smarter than a basic list tool.**
-8. **SUBSTITUTIONS: If any item is expensive (>€5) or has a clearly cheaper alternative, call get_substitutes. Only suggest the swap if our catalogue confirms it's cheaper. When you find a valid swap, emit a structured marker ON ITS OWN LINE before the list:**
-   [[swap|original:Beef Mince 500g|substitute:Pork Mince 500g|saving:1.80|store:tesco|reason:Works just as well in bolognese or lasagne]]
-   You can emit multiple [[swap|...]] markers. These are stripped and shown as cards — do not also mention the swap in the list text.
+8. **SUBSTITUTIONS: If any item is expensive (>€5) or has a clearly cheaper alternative, call get_substitutes. Only suggest the swap if our catalogue confirms it's cheaper. Mention valid swaps naturally in the list (e.g. 'Pork Mince 500g (cheaper swap for Beef Mince — saves €1.80)').**
 9. save_list — call with all items and store_totals BEFORE writing output. For Same Again, call update_list instead.
 
 Rules:
@@ -874,19 +858,7 @@ _For ${household} · ${mealCoverage}_
 - ...
 
 ---
-**🏪 Recommendation**
-
-For split scenarios (genuine savings > €5, shop > €60):
-Output a split marker on its own line:
-[[split|mainStore:dunnes|mainTotal:74.20|mainItems:28|splitStore:aldi|splitTotal:4.20|savings:6.80|splitItems:milk,butter,eggs]]
-Then explain it naturally in prose below.
-
-For single store (splitting not worth it):
-Output a single marker on its own line:
-[[single|store:dunnes|total:74.20|savings:2.10]]
-Then explain it naturally in prose below.
-
-**Store totals** (for reference)
+**🏪 Store totals** (always include this section)
 - Tesco: €X.XX ([N] items)
 - Dunnes: €X.XX ([N] items)
 - SuperValu: €X.XX ([N] items)
@@ -934,19 +906,7 @@ Gather ALL data via tools before writing. Never mention tool calls.
 - [Product name] — [Store] €[price]
 
 ---
-**🏪 Recommendation**
-
-For split scenarios (savings > €5, shop > €60):
-Output a split marker on its own line:
-[[split|mainStore:dunnes|mainTotal:74.20|mainItems:28|splitStore:aldi|splitTotal:4.20|savings:6.80|splitItems:milk,butter,eggs]]
-Then explain it naturally in prose below.
-
-For single store (splitting not worth it):
-Output a single marker on its own line:
-[[single|store:dunnes|total:74.20|savings:2.10]]
-Then explain it naturally in prose below.
-
-**Store totals** (for reference)
+**🏪 Store totals** (always include this section)
 - Tesco: €X.XX ([N] items)
 - Dunnes: €X.XX ([N] items)
 - SuperValu: €X.XX ([N] items)
