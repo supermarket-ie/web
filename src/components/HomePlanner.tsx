@@ -127,6 +127,10 @@ function stripRecommendationMarkers(content: string): string {
     .replace(/\[\[split\|[^\]]+\]\]/g, '')
     .replace(/\[\[single\|[^\]]+\]\]/g, '')
     .replace(/\[\[swap\|[^\]]+\]\]/g, '')
+    // Strip the 🏪 Store totals section (from the --- divider before it to end of section)
+    .replace(/\n---\n\*\*🏪 Store totals\*\*[\s\S]*?(?=\n##|\n\*\*(?![-•])|$)/g, '')
+    // Also catch it without the --- divider
+    .replace(/\*\*🏪 Store totals\*\*[\s\S]*?(?=\n##|\n\*\*(?![-•])|$)/g, '')
     .replace(/\n\s*\n\s*\n/g, '\n\n'); // Clean up extra blank lines
 }
 

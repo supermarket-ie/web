@@ -730,11 +730,11 @@ _For [household description] · [meals covered]_
 - ...
 
 ---
-**🏪 Store totals** (always include this section)
-- Tesco: €X.XX ([N] items)
-- Dunnes: €X.XX ([N] items)
-- SuperValu: €X.XX ([N] items)
-- Aldi: €X.XX ([N] items)
+**🏪 Store totals** (always include this section — exact format, no extra commentary, no grand total)
+- Tesco: €X.XX (N items)
+- Dunnes: €X.XX (N items)
+- SuperValu: €X.XX (N items)
+- Aldi: €X.XX (N items)
 
 ## Post-List Modifications
 After generating, the user may ask to change things. Help them — swap items, add/remove products, adjust quantities. Always show the full updated list.${returningContext}${sameAgainContext}`;
@@ -858,11 +858,11 @@ _For ${household} · ${mealCoverage}_
 - ...
 
 ---
-**🏪 Store totals** (always include this section)
-- Tesco: €X.XX ([N] items)
-- Dunnes: €X.XX ([N] items)
-- SuperValu: €X.XX ([N] items)
-- Aldi: €X.XX ([N] items)
+**🏪 Store totals** (always include this section — exact format, no extra commentary, no grand total)
+- Tesco: €X.XX (N items)
+- Dunnes: €X.XX (N items)
+- SuperValu: €X.XX (N items)
+- Aldi: €X.XX (N items)
 
 ${profile.weeklyBudget ? `**Budget:** €X.XX of €${profile.weeklyBudget} (€X.XX ${profile.weeklyBudget ? 'under' : 'over'} budget)\n` : ''}`;
 }
@@ -906,11 +906,11 @@ Gather ALL data via tools before writing. Never mention tool calls.
 - [Product name] — [Store] €[price]
 
 ---
-**🏪 Store totals** (always include this section)
-- Tesco: €X.XX ([N] items)
-- Dunnes: €X.XX ([N] items)
-- SuperValu: €X.XX ([N] items)
-- Aldi: €X.XX ([N] items)`;
+**🏪 Store totals** (always include this section — exact format, no extra commentary, no grand total)
+- Tesco: €X.XX (N items)
+- Dunnes: €X.XX (N items)
+- SuperValu: €X.XX (N items)
+- Aldi: €X.XX (N items)`;
 
   return prompt;
 }

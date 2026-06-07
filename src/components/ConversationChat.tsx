@@ -84,6 +84,9 @@ function FormattedMessage({ content }: { content: string }) {
     .replace(/\[\[split\|[^\]]+\]\]/g, '')
     .replace(/\[\[single\|[^\]]+\]\]/g, '')
     .replace(/\[\[swap\|[^\]]+\]\]/g, '')
+    // Strip the 🏪 Store totals section — the card handles this for signed-in users
+    .replace(/\n---\n\*\*🏪 Store totals\*\*[\s\S]*?(?=\n##|\n\*\*(?![-•])|$)/g, '')
+    .replace(/\*\*🏪 Store totals\*\*[\s\S]*?(?=\n##|\n\*\*(?![-•])|$)/g, '')
     .replace(/\n{3,}/g, '\n\n');
   const storeTotals = parseStoreTotals(cleanContent);
   const lines = cleanContent.split('\n');
