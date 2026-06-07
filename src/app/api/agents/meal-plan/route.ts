@@ -94,31 +94,55 @@ async function buildFlavourClusters(
   const catalogueNames = new Set(allPrices.map(p => toEpicureName(p.canonical_name)));
   const clusters: FlavourCluster[] = [];
 
-  // Run Epicure calls in parallel for speed
+  // Try DB lookup first for all proteins in parallel (fast, pre-computed)
+  const epicureKeys = proteins.map(p => p.toLowerCase().trim());
+  const { data: dbRows } = await supabaseAdmin
+    .from('product_pairings')
+    .select('canonical_name, epicure_key, bridges, primaries')
+    .eq('found', true)
+    .in('epicure_key', epicureKeys);
+
+  const dbByKey = new Map((dbRows ?? []).map((r: { epicure_key: string; canonical_name: string; bridges: string[]; primaries: string[] }) => [r.epicure_key, r]));
+
   await Promise.all(proteins.map(async (protein) => {
-    try {
-      const result = await getPairings([protein]);
-      if (!result) return;
+    const epicureKey = protein.toLowerCase().trim();
+    const dbRow = dbByKey.get(epicureKey);
 
-      // Find bridge ingredients that we actually stock
-      const available = result.bridges
-        .filter(b => {
-          // Check if any catalogue item maps to this Epicure name
-          return catalogueNames.has(b) || catalogueNames.has(b.replace(/_/g, ' ')) ||
-            [...catalogueNames].some(c => c.includes(b) || b.includes(c.split(' ')[0]));
-        })
-        .slice(0, 6);
+    let bridges: string[] = [];
+    let rawGraph = '';
 
-      clusters.push({
-        protein,
-        epicureName: result.ingredient,
-        bridges: result.bridges,
-        availableInCatalogue: available,
-        rawGraph: result.rawText,
-      });
-    } catch (e) {
-      console.error(`[meal-plan] Epicure error for ${protein}:`, e);
+    if (dbRow) {
+      // Use pre-computed bridges from DB — instant, no API call
+      bridges = dbRow.bridges;
+      rawGraph = `Pre-computed pairings for ${epicureKey}: bridges=[${bridges.join(', ')}]`;
+    } else {
+      // Fall back to live Epicure API
+      try {
+        const result = await getPairings([protein]);
+        if (!result) return;
+        bridges = result.bridges;
+        rawGraph = result.rawText;
+      } catch (e) {
+        console.error(`[meal-plan] Epicure error for ${protein}:`, e);
+        return;
+      }
     }
+
+    // Find bridge ingredients that we actually stock
+    const available = bridges
+      .filter(b => {
+        return catalogueNames.has(b) || catalogueNames.has(b.replace(/_/g, ' ')) ||
+          [...catalogueNames].some(c => c.includes(b) || b.includes(c.split(' ')[0]));
+      })
+      .slice(0, 6);
+
+    clusters.push({
+      protein,
+      epicureName: epicureKey,
+      bridges,
+      availableInCatalogue: available,
+      rawGraph,
+    });
   }));
 
   return clusters;

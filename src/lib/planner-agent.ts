@@ -419,20 +419,59 @@ export function makePlannerTools(subscriberId: string | null) {
       },
     }),
     get_flavour_pairings: tool({
-      description: `Query the Epicure ingredient embedding model (trained on 4.14M recipes) to find what ingredients pair well with a given set of ingredients. Returns a cluster graph of primary pairings and BRIDGES — ingredients that connect multiple clusters, which are the best non-obvious additions to a dish or meal plan. Use this when:
+      description: `Query the Epicure flavour model (trained on 4.14M recipes) to find what ingredients pair well with a set of ingredients. Returns BRIDGES — ingredients that connect multiple flavour clusters — which are the best non-obvious additions to a dish or meal plan. Use this when:
 - Suggesting what else to add to a meal (e.g. "you have chicken and garlic, you'll also want...")
 - Building a meal plan around specific hero ingredients
 - Suggesting accompaniments or complementary sides
 - The user asks "what goes well with X?"
-Always cross-reference results against the Irish price catalogue — only suggest items we actually stock.`,
+Always cross-reference results against our catalogue — only suggest items we actually stock. The catalogue has ~2,500 products so most bridges will be available.`,
       inputSchema: z.object({
-        ingredients: z.array(z.string()).describe('1–4 ingredient names (canonical names from catalogue, or simple names like "chicken", "beef", "pasta")'),
+        ingredients: z.array(z.string()).describe('1–4 ingredient names (use simple names: "chicken", "beef", "pasta", "salmon" — not full canonical names)'),
       }),
       execute: async ({ ingredients }: { ingredients: string[] }) => {
+        // 1. Try DB lookup first (pre-computed, fast)
+        const dbResults = await supabaseAdmin
+          .from('product_pairings')
+          .select('canonical_name, epicure_key, bridges, primaries')
+          .eq('found', true)
+          .or(ingredients.map(i => `epicure_key.eq.${i.toLowerCase()}`).join(','));
+
+        if (dbResults.data && dbResults.data.length > 0) {
+          // Merge bridges across all matched ingredients
+          const allBridges = [...new Set(dbResults.data.flatMap((r: { bridges: string[] }) => r.bridges))].slice(0, 10);
+          const allPrimaries = [...new Set(dbResults.data.flatMap((r: { primaries: string[] }) => r.primaries))].slice(0, 15);
+
+          // Cross-reference bridges against our catalogue
+          if (allBridges.length > 0) {
+            const { data: inCatalogue } = await supabaseAdmin
+              .from('product_pairings')
+              .select('canonical_name, epicure_key')
+              .in('epicure_key', allBridges)
+              .eq('found', true)
+              .limit(20);
+
+            const catalogueBridges = (inCatalogue ?? []).map((r: { canonical_name: string; epicure_key: string }) =>
+              `${r.epicure_key} (stocked as "${r.canonical_name}")`
+            );
+
+            return {
+              found: true,
+              source: 'db',
+              ingredients: ingredients.join(', '),
+              bridges: allBridges,
+              bridges_in_catalogue: catalogueBridges,
+              primaries: allPrimaries,
+              message: `Found ${allBridges.length} pairing bridges from pre-computed model. ${catalogueBridges.length} confirmed in catalogue.`,
+            };
+          }
+        }
+
+        // 2. Fall back to live Epicure API
         const result = await getPairings(ingredients);
         if (!result) return { found: false, message: 'Ingredients not found in flavour model' };
         return {
           found: true,
+          source: 'live',
           ingredient: result.ingredient,
           bridges: result.bridges,
           full_graph: result.rawText,
@@ -440,20 +479,59 @@ Always cross-reference results against the Irish price catalogue — only sugges
       },
     }),
     get_substitutes: tool({
-      description: `Query the Epicure ingredient embedding model to find the most similar/substitutable ingredients for a given item. Uses 300-dimensional recipe co-occurrence vectors — substitutes are ingredients that appear in similar recipe contexts, not just similar names.
-Use this when:
-- An item is expensive this week and you want to suggest a cheaper swap
+      description: `Find the most similar/substitutable ingredients for a given item, grounded in 4.14M recipes. Use this when:
+- An item is expensive this week and you want a cheaper swap
 - A user has a dietary restriction that rules out an ingredient
 - You want to suggest "if you don't like X, try Y instead"
-Always cross-reference against our price catalogue to confirm we stock the substitute and compare prices.`,
+Always cross-reference against our catalogue to confirm we stock the substitute and compare prices.`,
       inputSchema: z.object({
-        ingredient: z.string().describe('Single ingredient to find substitutes for (simple name like "chicken breast", "butter", "cheddar")'),
+        ingredient: z.string().describe('Single ingredient — use simple name like "chicken", "butter", "cheddar"'),
       }),
       execute: async ({ ingredient }: { ingredient: string }) => {
-        const result = await getSubstitutes(ingredient, 6);
+        const epicureKey = ingredient.toLowerCase().trim();
+
+        // 1. Try DB lookup — find products with similar epicure_key
+        const { data: similar } = await supabaseAdmin
+          .from('product_pairings')
+          .select('canonical_name, epicure_key, bridges')
+          .eq('found', true)
+          .neq('epicure_key', epicureKey)
+          .limit(20);
+
+        // Filter to those whose bridges overlap with the target ingredient's bridges
+        const { data: target } = await supabaseAdmin
+          .from('product_pairings')
+          .select('bridges, primaries')
+          .eq('found', true)
+          .ilike('epicure_key', `%${epicureKey.split(' ')[0]}%`)
+          .limit(3);
+
+        if (target && target.length > 0) {
+          const targetBridges = new Set((target as Array<{ bridges: string[] }>).flatMap(t => t.bridges));
+          const candidates = (similar ?? [])
+            .filter((s: { bridges: string[] }) => s.bridges.some((b: string) => targetBridges.has(b)))
+            .slice(0, 6);
+
+          if (candidates.length > 0) {
+            return {
+              found: true,
+              source: 'db',
+              ingredient: epicureKey,
+              substitutes: candidates.map((c: { canonical_name: string; epicure_key: string }) => ({
+                name: c.epicure_key,
+                canonical_name: c.canonical_name,
+                similarity: 'high', // recipe co-occurrence based
+              })),
+            };
+          }
+        }
+
+        // 2. Fall back to live Epicure API
+        const result = await getSubstitutes(epicureKey, 6);
         if (!result) return { found: false, message: 'Ingredient not found in flavour model' };
         return {
           found: true,
+          source: 'live',
           ingredient: result.ingredient,
           substitutes: result.substitutes,
         };
