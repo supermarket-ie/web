@@ -4,7 +4,7 @@ import { loadSession, loadProfile, saveProfile, type PlannerProfile, saveSession
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
 import { SmartRefreshCard, type RefreshData } from '@/components/SmartRefreshCard';
-import { SplitRecommendationCard, deriveRecommendation, type StoreRecommendation, type StoreTotalInput } from '@/components/SplitRecommendationCard';
+import { StoreComparisonCard, deriveRecommendation, type StoreRecommendation, type StoreTotalInput } from '@/components/SplitRecommendationCard';
 import { SwapSuggestionCard, parseSwapSuggestions, stripSwapMarkers, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -517,6 +517,7 @@ export function HomePlanner() {
   const [showRefreshCard, setShowRefreshCard] = useState(false);
   const [splitRecommendation, setSplitRecommendation] = useState<StoreRecommendation>(null);
   const [swapSuggestions, setSwapSuggestions] = useState<SwapSuggestion[]>([]);
+  const [savedListId, setSavedListId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -575,6 +576,7 @@ export function HomePlanner() {
       });
       const listData = listRes.ok ? await listRes.json() : null;
       const listId = listData?.list?.id ?? null;
+      if (listId) setSavedListId(listId);
 
       // Create conversation
       const convRes = await fetch('/api/conversations', {
@@ -885,9 +887,13 @@ export function HomePlanner() {
         <SwapSuggestionCard swaps={swapSuggestions} />
       )}
 
-      {/* Split Recommendation Card — only for unlocked users */}
-      {hasGeneratedList && listContent && !isGenerating && isUnlocked && splitRecommendation && (
-        <SplitRecommendationCard recommendation={splitRecommendation} />
+      {/* Store Comparison Card — only for unlocked users */}
+      {hasGeneratedList && listContent && !isGenerating && isUnlocked && (
+        <StoreComparisonCard
+          token={loadSession()?.token ?? null}
+          listId={savedListId}
+          storeTotals={parseStoreTotals(listContent) as StoreTotalInput[]}
+        />
       )}
 
       {/* Unlock CTA for non-signed-in users after list is generated */}

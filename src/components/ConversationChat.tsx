@@ -7,7 +7,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
-import { SplitRecommendationCard, deriveRecommendation, type StoreRecommendation, type StoreTotalInput } from '@/components/SplitRecommendationCard';
+import { StoreComparisonCard, deriveRecommendation, type StoreRecommendation, type StoreTotalInput } from '@/components/SplitRecommendationCard';
 import { SwapSuggestionCard, parseSwapSuggestions, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -139,6 +139,7 @@ export function ConversationChat({ conversationId }: { conversationId: string })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [token, setToken] = useState<string | null>(null);
+  const [convListId, setConvListId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | undefined>(undefined);
   const [input, setInput] = useState('');
 
@@ -187,6 +188,7 @@ export function ConversationChat({ conversationId }: { conversationId: string })
         const data = await res.json();
         const conv = data.conversation;
         setTitle(conv.title);
+        if (conv.list_id) setConvListId(conv.list_id);
 
         // Convert stored messages to UIMessage format
         const storedMsgs = (conv.messages ?? []) as Array<{ role: string; content: string; timestamp?: string }>;
@@ -312,15 +314,24 @@ export function ConversationChat({ conversationId }: { conversationId: string })
                   <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)', whiteSpace: 'pre-wrap' }}>{text}</p>
                 )}
               </div>
-              {/* Swap + split cards for completed assistant messages */}
+              {/* Swap + store comparison cards for completed assistant messages */}
               {m.role === 'assistant' && !isStreaming && (() => {
                 const swaps: SwapSuggestion[] = parseSwapSuggestions(text);
-                const split: StoreRecommendation = deriveRecommendation(parseStoreTotals(text) as StoreTotalInput[]);
-                if (swaps.length === 0 && !split) return null;
+                const storeTotals = parseStoreTotals(text) as StoreTotalInput[];
+                const hasStoreTotals = storeTotals.length >= 2;
+                // Only show store comparison card on the last assistant message with store totals
+                const isLastAssistant = m.id === [...messages].reverse().find(msg => msg.role === 'assistant')?.id;
+                if (swaps.length === 0 && !hasStoreTotals) return null;
                 return (
                   <div className="max-w-[85%] mt-1">
                     {swaps.length > 0 && <SwapSuggestionCard swaps={swaps} />}
-                    {split && <SplitRecommendationCard recommendation={split} />}
+                    {hasStoreTotals && isLastAssistant && (
+                      <StoreComparisonCard
+                        token={token}
+                        listId={convListId}
+                        storeTotals={storeTotals}
+                      />
+                    )}
                   </div>
                 );
               })()}

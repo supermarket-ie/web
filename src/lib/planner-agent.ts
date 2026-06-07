@@ -495,13 +495,13 @@ Always cross-reference against our price catalogue to confirm we stock the subst
           category: z.string().optional(),
           store_product_name: z.string().optional(),
           on_promotion: z.boolean().optional(),
-        })),
+        })).describe('Every item on the list with canonical_name, store, and price. This is required — do not pass an empty array.'),
         store_totals: z.array(z.object({
           store: z.string(),
           total: z.number(),
           item_count: z.number(),
         })),
-        recommended_store: z.string().optional().describe('The store you recommend for the main shop'),
+        recommended_store: z.string().optional().describe('The single best store for the whole shop'),
       }),
       execute: async ({ name, items, store_totals, recommended_store }) => {
         if (!subscriberId) return { saved: false, reason: 'User not signed in', list_id: null };
@@ -533,12 +533,15 @@ Always cross-reference against our price catalogue to confirm we stock the subst
             .select('id')
             .single();
           if (error || !data) return { saved: false, reason: error?.message ?? 'Unknown error', list_id: null };
-          // Write list_items for history/memory
-          if (items.length > 0) {
-            supabaseAdmin.from('list_items').insert(
-              items.map(item => ({
+          const listId = (data as { id: string }).id;
+          // Write list_items for history/memory — use passed items if available, 
+          // otherwise fall back to recently written list_items with null list_id
+          const itemsToWrite = items.length > 0 ? items : [];
+          if (itemsToWrite.length > 0) {
+            await supabaseAdmin.from('list_items').insert(
+              itemsToWrite.map(item => ({
                 subscriber_id: subscriberId,
-                list_id: (data as { id: string }).id,
+                list_id: listId,
                 canonical_name: item.canonical_name,
                 store: item.store,
                 price_paid: item.price,
@@ -546,9 +549,15 @@ Always cross-reference against our price catalogue to confirm we stock the subst
                 category: item.category ?? null,
                 observed_at: new Date().toISOString(),
               }))
-            ).then(() => {});
+            );
+          } else {
+            // Back-fill list_id on recently orphaned list_items (null list_id for this subscriber)
+            await supabaseAdmin.from('list_items')
+              .update({ list_id: listId })
+              .eq('subscriber_id', subscriberId)
+              .is('list_id', null);
           }
-          return { saved: true, list_id: (data as { id: string }).id };
+          return { saved: true, list_id: listId };
         } catch (err) {
           console.error('[save_list] error:', err);
           return { saved: false, reason: 'Unexpected error', list_id: null };
