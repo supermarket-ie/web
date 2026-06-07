@@ -7,6 +7,8 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
+import { SplitRecommendationCard, parseSplitRecommendation, type StoreRecommendation } from '@/components/SplitRecommendationCard';
+import { SwapSuggestionCard, parseSwapSuggestions, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -77,8 +79,14 @@ function RichText({ text }: { text: string }) {
 
 function FormattedMessage({ content }: { content: string }) {
   if (!content) return null;
-  const storeTotals = parseStoreTotals(content);
-  const lines = content.split('\n');
+  // Strip structured markers before rendering
+  const cleanContent = content
+    .replace(/\[\[split\|[^\]]+\]\]/g, '')
+    .replace(/\[\[single\|[^\]]+\]\]/g, '')
+    .replace(/\[\[swap\|[^\]]+\]\]/g, '')
+    .replace(/\n{3,}/g, '\n\n');
+  const storeTotals = parseStoreTotals(cleanContent);
+  const lines = cleanContent.split('\n');
   return (
     <div className="space-y-2">
       {lines.map((line, i) => {
@@ -304,6 +312,18 @@ export function ConversationChat({ conversationId }: { conversationId: string })
                   <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)', whiteSpace: 'pre-wrap' }}>{text}</p>
                 )}
               </div>
+              {/* Swap + split cards for completed assistant messages */}
+              {m.role === 'assistant' && !isStreaming && (() => {
+                const swaps: SwapSuggestion[] = parseSwapSuggestions(text);
+                const split: StoreRecommendation = parseSplitRecommendation(text);
+                if (swaps.length === 0 && !split) return null;
+                return (
+                  <div className="max-w-[85%] mt-1">
+                    {swaps.length > 0 && <SwapSuggestionCard swaps={swaps} />}
+                    {split && <SplitRecommendationCard recommendation={split} />}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

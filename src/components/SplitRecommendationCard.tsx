@@ -175,3 +175,36 @@ export function SplitRecommendationCard({ recommendation }: SplitRecommendationC
     </div>
   );
 }
+// ─── Parser (exported for use in other components) ───────────────────────────
+
+export function parseSplitRecommendation(content: string): StoreRecommendation {
+  const splitMatch = content.match(/\[\[split\|([^\]]+)\]\]/);
+  if (splitMatch) {
+    const params = Object.fromEntries(
+      splitMatch[1].split('|').map(p => p.split(':') as [string, string])
+    );
+    return {
+      type: 'split',
+      mainStore: params.mainStore,
+      mainTotal: parseFloat(params.mainTotal),
+      mainItems: parseInt(params.mainItems, 10),
+      splitStore: params.splitStore,
+      splitTotal: parseFloat(params.splitTotal),
+      savings: parseFloat(params.savings),
+      splitItems: params.splitItems ? params.splitItems.split(',').map(s => s.trim()) : [],
+    };
+  }
+  const singleMatch = content.match(/\[\[single\|([^\]]+)\]\]/);
+  if (singleMatch) {
+    const params = Object.fromEntries(
+      singleMatch[1].split('|').map(p => p.split(':') as [string, string])
+    );
+    return {
+      type: 'single',
+      store: params.store,
+      total: parseFloat(params.total),
+      reason: params.savings ? `Splitting only saves €${parseFloat(params.savings).toFixed(2)}, not worth the extra trip` : undefined,
+    };
+  }
+  return null;
+}

@@ -4,7 +4,7 @@ import { loadSession, loadProfile, saveProfile, type PlannerProfile, saveSession
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
 import { SmartRefreshCard, type RefreshData } from '@/components/SmartRefreshCard';
-import { SplitRecommendationCard, type StoreRecommendation } from '@/components/SplitRecommendationCard';
+import { SplitRecommendationCard, parseSplitRecommendation, type StoreRecommendation } from '@/components/SplitRecommendationCard';
 import { SwapSuggestionCard, parseSwapSuggestions, stripSwapMarkers, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -152,42 +152,6 @@ function parseListItems(content: string): { canonical_name: string; category: st
     }
   }
   return items;
-}
-
-function parseSplitRecommendation(content: string): StoreRecommendation {
-  // Look for [[split|...]] marker
-  const splitMatch = content.match(/\[\[split\|([^\]]+)\]\]/);
-  if (splitMatch) {
-    const params = Object.fromEntries(
-      splitMatch[1].split("|").map(p => p.split(":") as [string, string])
-    );
-    return {
-      type: "split",
-      mainStore: params.mainStore,
-      mainTotal: parseFloat(params.mainTotal),
-      mainItems: parseInt(params.mainItems, 10),
-      splitStore: params.splitStore,
-      splitTotal: parseFloat(params.splitTotal),
-      savings: parseFloat(params.savings),
-      splitItems: params.splitItems ? params.splitItems.split(",").map(s => s.trim()) : [],
-    };
-  }
-
-  // Look for [[single|...]] marker
-  const singleMatch = content.match(/\[\[single\|([^\]]+)\]\]/);
-  if (singleMatch) {
-    const params = Object.fromEntries(
-      singleMatch[1].split("|").map(p => p.split(":") as [string, string])
-    );
-    return {
-      type: "single",
-      store: params.store,
-      total: parseFloat(params.total),
-      reason: params.savings ? `Splitting only saves €${parseFloat(params.savings).toFixed(2)}, not worth the extra trip` : undefined,
-    };
-  }
-
-  return null;
 }
 
 function calcSavings(totals: StoreTotal[]): number | null {
