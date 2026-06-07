@@ -24,6 +24,63 @@ interface SingleRecommendation {
 
 export type StoreRecommendation = SplitRecommendation | SingleRecommendation | null;
 
+// ─── Derived recommendation from store_totals ────────────────────────────────
+//
+// This is the reliable path: the agent always saves store_totals to the DB
+// and embeds them in the list text. We compute the split recommendation
+// from that data directly rather than relying on the LLM to emit markers.
+//
+// Logic:
+//   1. Find the cheapest single store (lowest total)
+//   2. Find the second store with the biggest gap vs cheapest
+//   3. If gap > €5 and total basket > €40 → recommend split
+//   4. Otherwise → recommend single store
+
+export interface StoreTotalInput {
+  store: string;
+  total: number;
+  items?: number;
+}
+
+export function deriveRecommendation(storeTotals: StoreTotalInput[]): StoreRecommendation {
+  if (!storeTotals || storeTotals.length < 2) return null;
+
+  const sorted = [...storeTotals].sort((a, b) => a.total - b.total);
+  const cheapest = sorted[0];
+  const total = sorted.reduce((sum, s) => sum + s.total, 0) / sorted.length; // approx basket size
+
+  // Find the store with the second-largest total that has meaningful savings
+  // The "split" scenario: buy most things at main store, divert a few items elsewhere
+  // We approximate this as: cheapest store for bulk + one other store that's cheaper on subset
+  // Since we don't have per-item breakdown in store_totals, we use the gap between stores
+
+  const secondCheapest = sorted[1];
+  const savings = secondCheapest.total - cheapest.total;
+
+  // Not worth recommending if basket is tiny or savings are marginal
+  if (cheapest.total < 40) return null;
+  if (savings < 5) {
+    return {
+      type: 'single',
+      store: cheapest.store,
+      total: cheapest.total,
+      reason: savings > 0 ? `${storeDisplayName(secondCheapest.store)} is only €${savings.toFixed(2)} more — not worth a second trip` : undefined,
+    };
+  }
+
+  // Split recommendation: main shop at cheapest, note the savings vs next best
+  return {
+    type: 'split',
+    mainStore: cheapest.store,
+    mainTotal: cheapest.total,
+    mainItems: cheapest.items ?? 0,
+    splitStore: secondCheapest.store,
+    splitItems: [], // we don't have per-item data here — shown as general saving
+    splitTotal: secondCheapest.total,
+    savings,
+  };
+}
+
 // ─── Store Badge Colors ─────────────────────────────────────────────────
 
 function getStoreBadgeStyle(store: string) {
@@ -50,37 +107,28 @@ interface SplitRecommendationCardProps {
 }
 
 export function SplitRecommendationCard({ recommendation }: SplitRecommendationCardProps) {
-  const [selectedMode, setSelectedMode] = useState<'split' | 'single'>('split');
-
   if (!recommendation) return null;
 
-  // Single store recommendation
+  // Single store — cleanest option, not worth splitting
   if (recommendation.type === 'single') {
     return (
       <div className="rounded-xl p-4 mb-4 border border-green-200" style={{ background: 'var(--surface-container-low)' }}>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-green-600 font-semibold">✓</span>
           <span className="text-sm font-medium" style={{ color: 'var(--on-surface)' }}>
-            Best value: one stop shopping
+            Best value: one stop
           </span>
         </div>
-
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span
-              className="px-3 py-1 rounded-full text-sm font-semibold"
-              style={getStoreBadgeStyle(recommendation.store)}
-            >
-              {storeDisplayName(recommendation.store)}
-            </span>
-            <span className="font-bold text-lg" style={{ color: 'var(--on-surface)' }}>
-              €{recommendation.total.toFixed(2)}
-            </span>
-          </div>
+        <div className="flex items-center gap-3">
+          <span className="px-3 py-1 rounded-full text-sm font-semibold" style={getStoreBadgeStyle(recommendation.store)}>
+            {storeDisplayName(recommendation.store)}
+          </span>
+          <span className="font-bold text-lg" style={{ color: 'var(--on-surface)' }}>
+            €{recommendation.total.toFixed(2)}
+          </span>
         </div>
-
         {recommendation.reason && (
-          <p className="text-xs mt-2 opacity-70" style={{ color: 'var(--on-surface-variant)' }}>
+          <p className="text-xs mt-2" style={{ color: 'var(--on-surface-variant)', opacity: 0.75 }}>
             {recommendation.reason}
           </p>
         )}
@@ -88,90 +136,54 @@ export function SplitRecommendationCard({ recommendation }: SplitRecommendationC
     );
   }
 
-  // Split shop recommendation
+  // Split scenario — show cheapest vs next best with savings callout
   return (
     <div className="rounded-xl p-4 mb-4 border border-orange-200" style={{ background: 'var(--surface-container-low)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-orange-600 font-semibold">💡</span>
-        <span className="text-sm font-medium" style={{ color: 'var(--on-surface)' }}>
-          Smart split shopping
+        <span className="text-lg">🏪</span>
+        <span className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>
+          Store comparison
         </span>
-        <span className="ml-auto px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+        <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
           Save €{recommendation.savings.toFixed(2)}
         </span>
       </div>
 
-      {/* Main store */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-medium opacity-70" style={{ color: 'var(--on-surface-variant)' }}>
-            Main shop
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span
-            className="px-3 py-1 rounded-full text-sm font-semibold"
-            style={getStoreBadgeStyle(recommendation.mainStore)}
-          >
+      {/* Cheapest store */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1 rounded-full text-sm font-semibold" style={getStoreBadgeStyle(recommendation.mainStore)}>
             {storeDisplayName(recommendation.mainStore)}
           </span>
-          <span className="font-bold" style={{ color: 'var(--on-surface)' }}>
+          {recommendation.mainItems > 0 && (
+            <span className="text-xs" style={{ color: 'var(--on-surface-variant)', opacity: 0.7 }}>
+              {recommendation.mainItems} items
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-base" style={{ color: 'var(--on-surface)' }}>
             €{recommendation.mainTotal.toFixed(2)}
           </span>
-          <span className="text-sm opacity-70" style={{ color: 'var(--on-surface-variant)' }}>
-            {recommendation.mainItems} items
-          </span>
+          <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Cheapest</span>
         </div>
       </div>
 
-      {/* Split store */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-medium opacity-70" style={{ color: 'var(--on-surface-variant)' }}>
-            Quick pickup
-          </span>
-        </div>
-        <div className="flex items-center gap-3 mb-2">
-          <span
-            className="px-3 py-1 rounded-full text-sm font-semibold"
-            style={getStoreBadgeStyle(recommendation.splitStore)}
-          >
+      {/* Next store */}
+      <div className="flex items-center justify-between mb-3 opacity-70">
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1 rounded-full text-sm font-semibold" style={getStoreBadgeStyle(recommendation.splitStore)}>
             {storeDisplayName(recommendation.splitStore)}
           </span>
-          <span className="font-bold" style={{ color: 'var(--on-surface)' }}>
-            €{recommendation.splitTotal.toFixed(2)}
-          </span>
         </div>
-        {recommendation.splitItems.length > 0 && (
-          <div className="text-xs opacity-70" style={{ color: 'var(--on-surface-variant)' }}>
-            {recommendation.splitItems.join(', ')}
-          </div>
-        )}
+        <span className="font-medium text-base" style={{ color: 'var(--on-surface)' }}>
+          €{recommendation.splitTotal.toFixed(2)}
+        </span>
       </div>
 
-      {/* Toggle buttons */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setSelectedMode('single')}
-          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
-            selectedMode === 'single'
-              ? 'bg-gray-200 text-gray-800'
-              : 'bg-transparent border border-gray-300 text-gray-600 hover:bg-gray-50'
-          }`}
-        >
-          One stop
-        </button>
-        <button
-          onClick={() => setSelectedMode('split')}
-          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
-            selectedMode === 'split'
-              ? 'bg-orange-100 text-orange-800 border border-orange-300'
-              : 'bg-transparent border border-gray-300 text-gray-600 hover:bg-gray-50'
-          }`}
-        >
-          Split ✓
-        </button>
-      </div>
+      <p className="text-xs" style={{ color: 'var(--on-surface-variant)', opacity: 0.8 }}>
+        Your list priced at each store's best available prices. Items are already assigned to the cheapest store above.
+      </p>
     </div>
   );
 }

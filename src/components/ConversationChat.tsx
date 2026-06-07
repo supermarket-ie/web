@@ -7,7 +7,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
-import { SplitRecommendationCard, parseSplitRecommendation, type StoreRecommendation } from '@/components/SplitRecommendationCard';
+import { SplitRecommendationCard, deriveRecommendation, type StoreRecommendation, type StoreTotalInput } from '@/components/SplitRecommendationCard';
 import { SwapSuggestionCard, parseSwapSuggestions, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -315,7 +315,7 @@ export function ConversationChat({ conversationId }: { conversationId: string })
               {/* Swap + split cards for completed assistant messages */}
               {m.role === 'assistant' && !isStreaming && (() => {
                 const swaps: SwapSuggestion[] = parseSwapSuggestions(text);
-                const split: StoreRecommendation = parseSplitRecommendation(text);
+                const split: StoreRecommendation = deriveRecommendation(parseStoreTotals(text) as StoreTotalInput[]);
                 if (swaps.length === 0 && !split) return null;
                 return (
                   <div className="max-w-[85%] mt-1">

@@ -4,7 +4,7 @@ import { loadSession, loadProfile, saveProfile, type PlannerProfile, saveSession
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
 import { SmartRefreshCard, type RefreshData } from '@/components/SmartRefreshCard';
-import { SplitRecommendationCard, parseSplitRecommendation, type StoreRecommendation } from '@/components/SplitRecommendationCard';
+import { SplitRecommendationCard, deriveRecommendation, type StoreRecommendation, type StoreTotalInput } from '@/components/SplitRecommendationCard';
 import { SwapSuggestionCard, parseSwapSuggestions, stripSwapMarkers, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -745,7 +745,7 @@ export function HomePlanner() {
             }
 
             // Parse split recommendation
-            const splitRec = parseSplitRecommendation(content);
+            const splitRec = deriveRecommendation(parseStoreTotals(content) as StoreTotalInput[]);
             setSplitRecommendation(splitRec);
             // Parse swap suggestions
             const swaps = parseSwapSuggestions(content);
@@ -771,7 +771,7 @@ export function HomePlanner() {
       if (parseStoreTotals(content).length > 0 && isUnlocked) {
         setListContent(content);
         setHasGeneratedList(true);
-        const splitRec = parseSplitRecommendation(content);
+        const splitRec = deriveRecommendation(parseStoreTotals(content) as StoreTotalInput[]);
         setSplitRecommendation(splitRec);
         const swaps = parseSwapSuggestions(content);
         if (swaps.length > 0) setSwapSuggestions(swaps);
