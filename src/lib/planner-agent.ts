@@ -2,6 +2,7 @@ import { ToolLoopAgent, tool, stepCountIs } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase';
+import { getPairings, getSubstitutes } from '@/lib/epicure-client';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -417,6 +418,47 @@ export function makePlannerTools(subscriberId: string | null) {
         }));
       },
     }),
+    get_flavour_pairings: tool({
+      description: `Query the Epicure ingredient embedding model (trained on 4.14M recipes) to find what ingredients pair well with a given set of ingredients. Returns a cluster graph of primary pairings and BRIDGES — ingredients that connect multiple clusters, which are the best non-obvious additions to a dish or meal plan. Use this when:
+- Suggesting what else to add to a meal (e.g. "you have chicken and garlic, you'll also want...")
+- Building a meal plan around specific hero ingredients
+- Suggesting accompaniments or complementary sides
+- The user asks "what goes well with X?"
+Always cross-reference results against the Irish price catalogue — only suggest items we actually stock.`,
+      inputSchema: z.object({
+        ingredients: z.array(z.string()).describe('1–4 ingredient names (canonical names from catalogue, or simple names like "chicken", "beef", "pasta")'),
+      }),
+      execute: async ({ ingredients }: { ingredients: string[] }) => {
+        const result = await getPairings(ingredients);
+        if (!result) return { found: false, message: 'Ingredients not found in flavour model' };
+        return {
+          found: true,
+          ingredient: result.ingredient,
+          bridges: result.bridges,
+          full_graph: result.rawText,
+        };
+      },
+    }),
+    get_substitutes: tool({
+      description: `Query the Epicure ingredient embedding model to find the most similar/substitutable ingredients for a given item. Uses 300-dimensional recipe co-occurrence vectors — substitutes are ingredients that appear in similar recipe contexts, not just similar names.
+Use this when:
+- An item is expensive this week and you want to suggest a cheaper swap
+- A user has a dietary restriction that rules out an ingredient
+- You want to suggest "if you don't like X, try Y instead"
+Always cross-reference against our price catalogue to confirm we stock the substitute and compare prices.`,
+      inputSchema: z.object({
+        ingredient: z.string().describe('Single ingredient to find substitutes for (simple name like "chicken breast", "butter", "cheddar")'),
+      }),
+      execute: async ({ ingredient }: { ingredient: string }) => {
+        const result = await getSubstitutes(ingredient, 6);
+        if (!result) return { found: false, message: 'Ingredient not found in flavour model' };
+        return {
+          found: true,
+          ingredient: result.ingredient,
+          substitutes: result.substitutes,
+        };
+      },
+    }),
     save_household_profile: tool({
       description: 'Persists household preferences for future weeks. Call once you have enough household details (minimum: number of people + any dietary needs). Do this BEFORE generating the list.',
       inputSchema: z.object({
@@ -651,8 +693,10 @@ If the user states ANY dietary requirement (vegetarian, vegan, gluten-free, hala
 3. Call get_prices_by_category for each relevant category
 4. Use get_product for specific lookups if needed
 5. For returning users: call get_user_history and get_price_changes
-6. **FINAL CHECK: Re-read the user's dietary requirements and verify EVERY item complies. Remove any that don't.**
-7. Call save_list with all items, store_totals, and a short descriptive name. Do this BEFORE writing the markdown output. For "Same Again", call update_list with the list_id from get_last_list instead of save_list.
+6. **FLAVOUR INTELLIGENCE: For 2–3 hero ingredients in the planned meals (e.g. the protein + a vegetable), call get_flavour_pairings. Use the BRIDGES from the result to suggest non-obvious but recipe-grounded accompaniments that we actually stock. This is what makes you feel smarter than a basic list tool.**
+7. **SUBSTITUTIONS: If any item on the list is expensive (>€5) or if there's a significantly cheaper alternative, call get_substitutes to find a recipe-grounded swap. Cross-reference against prices to confirm the substitute is actually cheaper before suggesting it.**
+8. **FINAL CHECK: Re-read the user's dietary requirements and verify EVERY item complies. Remove any that don't.**
+9. Call save_list with all items, store_totals, and a short descriptive name. Do this BEFORE writing the markdown output. For "Same Again", call update_list with the list_id from get_last_list instead of save_list.
 
 Rules:
 - Only use products from the catalogue. Do not invent products.
@@ -662,6 +706,7 @@ Rules:
 - Never mention tool calls to the user.
 - Gather ALL data via tools before writing any output.
 - Always call save_list (or update_list for Same Again) before writing the markdown output. Never skip this step.
+- When you use a flavour pairing bridge to add an item, naturally weave it in: "Garlic pairs brilliantly with the chicken here" not "the model suggested garlic".
 
 ## Output Format (when generating the list)
 
@@ -781,7 +826,9 @@ ${!profile.preferredStores.includes('all') ? `- Products from stores they didn't
 4. get_product(canonical_name) — for specific product lookups.
 5. get_user_history — call for signed-in users to personalise.
 6. get_price_changes — call for returning users to highlight savings.
-7. save_list — call with all items and store_totals BEFORE writing output. For Same Again, call update_list instead.
+7. **FLAVOUR INTELLIGENCE: For 2–3 hero ingredients in the planned meals, call get_flavour_pairings. Use the BRIDGES to suggest non-obvious recipe-grounded accompaniments we actually stock. This is what makes you feel smarter than a basic list tool.**
+8. **SUBSTITUTIONS: If any item is expensive (>€5) or has a clearly cheaper alternative, call get_substitutes. Only suggest the swap if our catalogue confirms it's cheaper.**
+9. save_list — call with all items and store_totals BEFORE writing output. For Same Again, call update_list instead.
 
 Rules:
 - Gather ALL data via tools before writing any output.
@@ -791,6 +838,7 @@ Rules:
 ${!profile.preferredStores.includes('all') ? `- ONLY show prices from: ${storesPref}. Ignore other stores entirely.` : ''}
 - Never mention tool calls to the user.
 - Always call save_list (or update_list for Same Again) before writing output.
+- When you use a flavour pairing to add an item, weave it in naturally: "Garlic goes brilliantly with the chicken here" — not "the model suggested it".
 ${profile.dietary.length > 0 ? `- **FINAL CHECK before outputting:** Re-read dietary requirements (${profile.dietary.join(', ')}). Verify EVERY item on your list complies. Remove any that violate.` : ''}
 
 ## Returning user personalisation
