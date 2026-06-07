@@ -58,7 +58,10 @@ async function getProduct(slug: string) {
     return score(b) - score(a);
   })[0] ?? null;
 
-  const brand = product.brand ?? (storeRows ?? []).find(r => !r.is_own_brand && r.brand)?.brand ?? null;
+  // Never surface store names or own-label brands as the product brand
+  const BRAND_DENYLIST = new Set(['supervalu', 'tesco', 'dunnes stores', 'aldi', 'lidl', 'dunnes']);
+  const resolvedBrand = product.brand ?? (storeRows ?? []).find(r => !r.is_own_brand && r.brand)?.brand ?? null;
+  const brand = resolvedBrand && !BRAND_DENYLIST.has(resolvedBrand.toLowerCase()) ? resolvedBrand : null;
 
   return { product, stores, nutrition: bestNutrition, brand };
 }
