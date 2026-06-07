@@ -3,6 +3,7 @@ import { generateText } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getAllLatestPrices } from '@/lib/price-data';
+import { getPairings, toEpicureName } from '@/lib/epicure-client';
 import jwt from 'jsonwebtoken';
 import type { MealSlot } from '@/app/api/plan/weekly/route';
 
@@ -44,11 +45,119 @@ async function getWeeklyData() {
     }
 
     const cheapest = [...byCategory.values()].flat();
-    return { cheapest, promotions: promotions.slice(0, 30) };
+    return { cheapest, promotions: promotions.slice(0, 30), all: bestList };
   } catch (err) {
     console.error('[meal-plan] getWeeklyData error:', err);
-    return { cheapest: [], promotions: [] };
+    return { cheapest: [], promotions: [], all: [] };
   }
+}
+
+// ── Epicure flavour enrichment ────────────────────────────────────────────────
+
+// Canonical names that map cleanly to Epicure's vocabulary
+const PROTEIN_KEYWORDS = ['chicken', 'beef', 'pork', 'lamb', 'mince', 'salmon', 'cod', 'fish', 'turkey', 'bacon'];
+
+function pickHeroProteins(
+  cheapest: Array<{ canonical_name: string; category: string; price: number; store: string }>,
+  dietary: string[],
+  n = 3
+): string[] {
+  const isVegan = dietary.some(d => ['vegan', 'plant-based'].includes(d.toLowerCase()));
+  const isVegetarian = dietary.some(d => ['vegetarian'].includes(d.toLowerCase()));
+  if (isVegan || isVegetarian) return []; // skip meat proteins for veg/vegan
+
+  return cheapest
+    .filter(p => {
+      const name = p.canonical_name.toLowerCase();
+      return PROTEIN_KEYWORDS.some(k => name.includes(k)) &&
+        !name.includes('sausage') && !name.includes('nugget') &&
+        !name.includes('ready') && !name.includes('processed') &&
+        !name.includes('pudding') && !name.includes('kabanos');
+    })
+    .sort((a, b) => a.price - b.price)
+    .slice(0, n)
+    .map(p => p.canonical_name);
+}
+
+interface FlavourCluster {
+  protein: string;
+  epicureName: string;
+  bridges: string[];
+  availableInCatalogue: string[];
+  rawGraph: string;
+}
+
+async function buildFlavourClusters(
+  proteins: string[],
+  allPrices: Array<{ canonical_name: string }>
+): Promise<FlavourCluster[]> {
+  const catalogueNames = new Set(allPrices.map(p => toEpicureName(p.canonical_name)));
+  const clusters: FlavourCluster[] = [];
+
+  // Run Epicure calls in parallel for speed
+  await Promise.all(proteins.map(async (protein) => {
+    try {
+      const result = await getPairings([protein]);
+      if (!result) return;
+
+      // Find bridge ingredients that we actually stock
+      const available = result.bridges
+        .filter(b => {
+          // Check if any catalogue item maps to this Epicure name
+          return catalogueNames.has(b) || catalogueNames.has(b.replace(/_/g, ' ')) ||
+            [...catalogueNames].some(c => c.includes(b) || b.includes(c.split(' ')[0]));
+        })
+        .slice(0, 6);
+
+      clusters.push({
+        protein,
+        epicureName: result.ingredient,
+        bridges: result.bridges,
+        availableInCatalogue: available,
+        rawGraph: result.rawText,
+      });
+    } catch (e) {
+      console.error(`[meal-plan] Epicure error for ${protein}:`, e);
+    }
+  }));
+
+  return clusters;
+}
+
+function buildFlavourContext(clusters: FlavourCluster[]): string {
+  if (clusters.length === 0) return '';
+
+  const lines: string[] = [
+    '## Flavour Intelligence (from 4.14M recipe analysis)',
+    'Build this week\'s meals around these ingredient clusters — they are recipe-grounded, not random.\n',
+  ];
+
+  for (const c of clusters) {
+    lines.push(`**${c.protein}** pairs naturally with:`);
+    // Pull top pairings from first cluster section
+    const clusterMatch = c.rawGraph.match(/CLUSTERS[^:]*:([\s\S]*?)(?:CONNECTIONS|$)/);
+    if (clusterMatch) {
+      const topPairs = clusterMatch[1]
+        .match(/\b([a-z][a-z\s]+?)\s*\([\d.]+\)/g)
+        ?.slice(0, 6)
+        .map(m => m.replace(/\s*\([\d.]+\)/, '').trim())
+        .filter(Boolean) ?? [];
+      if (topPairs.length > 0) lines.push(`  Core: ${topPairs.join(', ')}`);
+    }
+    if (c.bridges.length > 0) {
+      lines.push(`  🌉 Bridge ingredients (non-obvious but recipe-proven): ${c.bridges.slice(0, 5).join(', ')}`);
+    }
+    if (c.availableInCatalogue.length > 0) {
+      lines.push(`  ✅ Available in catalogue this week: ${c.availableInCatalogue.join(', ')}`);
+    }
+    lines.push('');
+  }
+
+  lines.push('Use these clusters to design coherent meal plans where ingredients cross multiple dishes.');
+  lines.push('A chicken week should use the same garlic, tomatoes, and herbs across multiple dinners — reducing waste.');
+  lines.push('Bridge ingredients are your opportunity to suggest something a user wouldn\'t have thought of but will love.\n');
+
+  return lines.join('\n');
 }
 
 // POST /api/agents/meal-plan — generate a meal plan
@@ -79,7 +188,14 @@ export async function POST(req: NextRequest) {
   const preferences = config?.preferences ?? '';
 
   // Get this week's data
-  const { cheapest, promotions } = await getWeeklyData();
+  const { cheapest, promotions, all } = await getWeeklyData();
+
+  // Build Epicure flavour clusters (parallel with price data, non-blocking)
+  const heroProteins = pickHeroProteins(cheapest, dietary);
+  const flavourClusters = heroProteins.length > 0
+    ? await buildFlavourClusters(heroProteins, all)
+    : [];
+  const flavourContext = buildFlavourContext(flavourClusters);
 
   const promoSummary = promotions.slice(0, 20).map(p =>
     `${p.canonical_name} — ${p.store} €${p.price.toFixed(2)}${p.was_price ? ` (was €${p.was_price.toFixed(2)})` : ''}`
@@ -116,13 +232,16 @@ ${promoSummary || 'None available'}
 ## Cheapest Available Ingredients
 ${cheapSummary}
 
+${flavourContext}
 ## Rules
 - ONLY use products from the ingredient lists above
 - Build meals AROUND what's cheap and on promotion this week
+- Use the Flavour Intelligence clusters above to make meals cohesive — share ingredients across days to reduce waste
 - Show the estimated cost per lunch
 - Include a total ingredients list at the end with store + price
 - If dietary restrictions are stated, they are ABSOLUTE — never violate them
 - Be practical. Irish audience. No exotic ingredients.
+- When you use a bridge ingredient, weave it in naturally — don't cite the model
 
 ## Output Format
 ### 🥪 Your ${days} Lunch Plan
@@ -162,14 +281,18 @@ ${promoSummary || 'None available'}
 ## Cheapest Available Ingredients
 ${cheapSummary}
 
+${flavourContext}
 ## Rules
 - ONLY use products from the ingredient lists above
 - Build meals AROUND what's cheap and on promotion this week — this is the key differentiator
+- Use the Flavour Intelligence clusters above: design the week so ingredients work across multiple meals (e.g. same garlic + tomatoes used in 3 dishes). This reduces waste and cost.
+- Bridge ingredients are your secret weapon — use them to create one surprising but coherent dish per week
 - Show the estimated cost per meal
 - Include a total ingredients list at the end with store + price
 - If dietary restrictions are stated, they are ABSOLUTE — never violate them
 - Be practical. Irish audience. Think shepherd's pie, stir fry, pasta bake — not restaurant food.
 - Suggest batch-cooking opportunities (e.g. "cook double, leftovers for Tuesday lunch")
+- When you use a bridge ingredient, weave it in naturally — don't cite the model
 
 ## Output Format
 ### 🍽️ Your ${days}-Dinner Plan
