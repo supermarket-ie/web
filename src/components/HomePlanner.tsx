@@ -5,6 +5,7 @@ import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
 import { SmartRefreshCard, type RefreshData } from '@/components/SmartRefreshCard';
 import { SplitRecommendationCard, type StoreRecommendation } from '@/components/SplitRecommendationCard';
+import { SwapSuggestionCard, parseSwapSuggestions, stripSwapMarkers, type SwapSuggestion } from '@/components/SwapSuggestionCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -120,11 +121,12 @@ function parseButtonSuggestions(content: string): { text: string; buttons: ChatB
   return { text, buttons };
 }
 
-/** Strip split/single recommendation markers from content for display */
+/** Strip split/single/swap recommendation markers from content for display */
 function stripRecommendationMarkers(content: string): string {
   return content
     .replace(/\[\[split\|[^\]]+\]\]/g, '')
     .replace(/\[\[single\|[^\]]+\]\]/g, '')
+    .replace(/\[\[swap\|[^\]]+\]\]/g, '')
     .replace(/\n\s*\n\s*\n/g, '\n\n'); // Clean up extra blank lines
 }
 
@@ -550,6 +552,7 @@ export function HomePlanner() {
   const [refreshData, setRefreshData] = useState<RefreshData | null>(null);
   const [showRefreshCard, setShowRefreshCard] = useState(false);
   const [splitRecommendation, setSplitRecommendation] = useState<StoreRecommendation>(null);
+  const [swapSuggestions, setSwapSuggestions] = useState<SwapSuggestion[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -780,6 +783,9 @@ export function HomePlanner() {
             // Parse split recommendation
             const splitRec = parseSplitRecommendation(content);
             setSplitRecommendation(splitRec);
+            // Parse swap suggestions
+            const swaps = parseSwapSuggestions(content);
+            if (swaps.length > 0) setSwapSuggestions(swaps);
           }
           // Parse button suggestions from the streamed content and strip recommendation markers
           const { text: displayText, buttons } = parseButtonSuggestions(content);
@@ -803,6 +809,8 @@ export function HomePlanner() {
         setHasGeneratedList(true);
         const splitRec = parseSplitRecommendation(content);
         setSplitRecommendation(splitRec);
+        const swaps = parseSwapSuggestions(content);
+        if (swaps.length > 0) setSwapSuggestions(swaps);
         const updatedMessages = [...allMessages, { id: streamId, role: 'assistant' as const, content }];
         autoSaveConversation(content, updatedMessages);
       }
@@ -907,6 +915,11 @@ export function HomePlanner() {
           </div>
         )}
       </div>
+
+      {/* Swap Suggestion Cards — only for unlocked users */}
+      {hasGeneratedList && listContent && !isGenerating && isUnlocked && swapSuggestions.length > 0 && (
+        <SwapSuggestionCard swaps={swapSuggestions} />
+      )}
 
       {/* Split Recommendation Card — only for unlocked users */}
       {hasGeneratedList && listContent && !isGenerating && isUnlocked && splitRecommendation && (
