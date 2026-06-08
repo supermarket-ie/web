@@ -91,7 +91,7 @@ const CATEGORY_META: Record<string, {
     emoji: '🧴',
     keywords: ['condiments prices Ireland', 'ketchup price Ireland', 'sauce prices Tesco Dunnes'],
   },
-  'pasta & rice': {
+  'pasta-and-rice': {
     title: 'Pasta & Rice Prices Ireland',
     description: 'Compare pasta, rice, noodles and grains prices across Tesco, Dunnes and SuperValu in Ireland.',
     emoji: '🍝',
@@ -130,7 +130,9 @@ const CATEGORY_META: Record<string, {
 };
 
 function slugToCategory(slug: string): string {
-  return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  return slug
+    .replace(/-and-/g, ' & ')
+    .split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 function categoryToSlug(cat: string): string {

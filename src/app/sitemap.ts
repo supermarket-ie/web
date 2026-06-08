@@ -12,7 +12,7 @@ const BLOG_SLUGS = [
 
 const CATEGORY_SLUGS = [
   'dairy', 'meat', 'vegetables', 'fruit', 'bakery', 'breakfast',
-  'pasta-&-rice', 'tinned', 'condiments', 'beverages', 'snacks',
+  'pasta-and-rice', 'tinned', 'condiments', 'beverages', 'snacks',
   'frozen', 'dairy-alternatives', 'household', 'personal-care',
   'baking', 'spreads', 'fish',
 ];
