@@ -22,6 +22,54 @@ interface MagicLinkPayload {
   familySize: string;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Extracts the actual grocery list content from conversation messages.
+ * Filters out AI narration / planning commentary.
+ * Returns the last assistant message that looks like a real grocery list.
+ */
+function extractListContent(messages: Array<{ role: string; content: string }>): string | null {
+  // Walk backward to find the last assistant message that contains a real list
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== 'assistant' || !msg.content || msg.content.length < 100) continue;
+
+    const content = msg.content;
+
+    // Skip pure narration messages
+    const narrationPatterns = [
+      /^(Now let me|Perfect,? I have|Let me (get|check|look|find)|I('ll| will) now|Great,? (let|I)|OK,? (let|I)|Alright,? (let|I))/i,
+      /^(I'm going to|I need to|First,? (let|I)|Here's what I'm)/i,
+    ];
+    const firstLine = content.split('\n')[0].trim();
+    if (narrationPatterns.some(p => p.test(firstLine))) {
+      // But if it also has store totals or many list items, keep it
+      const hasStoreSection = /🏪|store total/i.test(content);
+      const listItemCount = (content.match(/^- /gm) || []).length;
+      if (!hasStoreSection && listItemCount < 5) continue;
+    }
+
+    // Check if this looks like a grocery list:
+    // Has store totals emoji/section, OR has at least 5 list items
+    const hasStoreMarker = /🏪|Store total/i.test(content);
+    const listItems = (content.match(/^- /gm) || []).length;
+
+    if (hasStoreMarker || listItems >= 5) {
+      return content;
+    }
+  }
+
+  // Fallback: return the last long assistant message
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant' && messages[i].content?.length > 200) {
+      return messages[i].content;
+    }
+  }
+
+  return null;
+}
+
 // ── Error pages ───────────────────────────────────────────────────────────────
 
 function ExpiredPage() {
@@ -108,7 +156,7 @@ export default async function ListPage({
     return <EmptyListPage token={token!} />;
   }
 
-  // Get the conversation linked to this list (to get the full AI-generated content)
+  // Get the conversation linked to this list (for fallback content)
   const { data: conversation } = await supabaseAdmin
     .from('conversations')
     .select('id, messages')
@@ -118,39 +166,23 @@ export default async function ListPage({
     .limit(1)
     .single();
 
-  // Extract the last assistant message (the generated list) from conversation
+  // Extract list content using the narration-stripping helper
   let listContent: string | null = null;
   let conversationId: string | null = null;
 
   if (conversation) {
     conversationId = conversation.id;
     const messages = (conversation.messages ?? []) as Array<{ role: string; content: string }>;
-    // Find last assistant message (typically the generated list)
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant' && messages[i].content?.length > 100) {
-        listContent = messages[i].content;
-        break;
-      }
-    }
+    listContent = extractListContent(messages);
   }
 
-  // If no conversation content, try the items field on saved_lists
-  if (!listContent && activeList.items && Array.isArray(activeList.items) && activeList.items.length > 0) {
-    // Items might be stored as array of objects — build markdown from them
-    listContent = activeList.items.map((item: any) => {
-      if (typeof item === 'string') return `- ${item}`;
-      if (item.canonical_name) return `- **${item.canonical_name}** — ${item.store ?? ''} €${item.price?.toFixed(2) ?? '?'}`;
-      return `- ${JSON.stringify(item)}`;
-    }).join('\n');
-  }
-
-  const storeTotals = (activeList.store_totals ?? []) as Array<{ store: string; total: number }>;
-
-  // Structured items from saved_lists.items (new format from save_list tool)
+  // Structured items from saved_lists.items
   const structuredItems = (activeList.items && Array.isArray(activeList.items) && activeList.items.length > 0 &&
     typeof activeList.items[0] === 'object' && 'canonical_name' in activeList.items[0])
     ? activeList.items as Array<{ canonical_name: string; store: string; price: number; quantity?: number; category?: string; store_product_name?: string; on_promotion?: boolean }>
     : null;
+
+  const storeTotals = (activeList.store_totals ?? []) as Array<{ store: string; total: number; item_count?: number }>;
 
   // Household memory for intelligence section
   const { data: householdData } = await supabaseAdmin
@@ -175,7 +207,7 @@ export default async function ListPage({
         allLists={lists.map(l => ({
           id: l.id,
           name: l.name,
-          store_totals: (l.store_totals ?? []) as Array<{ store: string; total: number }>,
+          store_totals: (l.store_totals ?? []) as Array<{ store: string; total: number; item_count?: number }>,
           created_at: l.created_at,
         }))}
         activeListId={activeList.id}

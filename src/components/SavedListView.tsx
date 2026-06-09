@@ -55,19 +55,34 @@ interface Props {
 
 function fmt(n: number) { return `€${n.toFixed(2)}`; }
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const h = Math.floor(diff / 3600000);
-  if (h < 1) return 'Just now';
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d === 1) return 'Yesterday';
-  if (d < 7) return `${d} days ago`;
+function shortDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
 }
 
-function shortDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+/** Determine full/partial match stores and best basket */
+function analyseStoreTotals(storeTotals: StoreTotal[], totalItems: number) {
+  const threshold = Math.ceil(totalItems * 0.9);
+  const annotated = storeTotals.map(st => ({
+    ...st,
+    itemCount: st.item_count ?? 0,
+    isFullMatch: (st.item_count ?? 0) >= threshold,
+  }));
+
+  // Sort full matches by price, partial by item count desc then price
+  const fullMatches = annotated.filter(s => s.isFullMatch).sort((a, b) => a.total - b.total);
+  const partialMatches = annotated.filter(s => !s.isFullMatch).sort((a, b) => b.itemCount - a.itemCount || a.total - b.total);
+
+  const best = fullMatches[0] ?? partialMatches[0] ?? null;
+  const isBestPartial = !fullMatches.length && !!partialMatches.length;
+
+  // Sorted for display: full matches first (by price), then partial (by item count desc)
+  const sorted = [...fullMatches, ...partialMatches];
+
+  return { sorted, best, isBestPartial, fullMatches, partialMatches };
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
@@ -84,65 +99,69 @@ function Section({ title, children, action }: { title: string; children: React.R
   );
 }
 
-// ─── Header card ─────────────────────────────────────────────────────────────
+// ─── Hero card ───────────────────────────────────────────────────────────────
 
-function ListHeaderCard({
-  listName, createdAt, storeTotals, itemCount, onUpdateList, token, activeListId,
+function HeroCard({
+  listName, createdAt, storeTotals, totalItems, onUpdateList, onShare,
 }: {
   listName: string;
   createdAt: string;
   storeTotals: StoreTotal[];
-  itemCount: number;
+  totalItems: number;
   onUpdateList: () => void;
-  token: string;
-  activeListId: string;
+  onShare: () => void;
 }) {
-  const sorted = [...storeTotals].sort((a, b) => a.total - b.total);
-  const cheapest = sorted[0] ?? null;
-  const mostExpensive = sorted[sorted.length - 1] ?? null;
-  const saving = (cheapest && mostExpensive && sorted.length > 1 && cheapest.total / mostExpensive.total >= 0.7)
-    ? Math.round((mostExpensive.total - cheapest.total) * 100) / 100
-    : 0;
+  const { sorted, best, isBestPartial } = analyseStoreTotals(storeTotals, totalItems);
+  const matchedCount = best?.itemCount ?? 0;
 
   return (
     <div className="rounded-2xl overflow-hidden mb-6"
       style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
       {/* Green header */}
-      <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#00944A' }}>
-        <div>
-          <h1 className="text-white font-bold text-base leading-tight">{listName}</h1>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            {timeAgo(createdAt)}{itemCount > 0 ? ` · ${itemCount} items` : ''}
-          </p>
-        </div>
-        {cheapest && (
-          <div className="text-right">
-            <div className="text-white text-2xl font-extrabold">{fmt(cheapest.total)}</div>
-            <div className="text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>{storeDisplayName(cheapest.store)}</div>
+      <div className="px-4 py-4" style={{ background: '#00944A' }}>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-white font-bold text-lg leading-tight">This Week&apos;s Shop</h1>
+            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {totalItems > 0 ? `${totalItems} items` : ''}{totalItems > 0 && ' · '}{formatDate(createdAt)}
+            </p>
           </div>
+          {best && (
+            <div className="text-right">
+              <div className="text-white text-2xl font-extrabold">{fmt(best.total)}</div>
+              <div className="text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                {storeDisplayName(best.store)}{isBestPartial ? ' (partial)' : ''}
+              </div>
+            </div>
+          )}
+        </div>
+        {totalItems > 0 && (
+          <p className="text-xs mt-2 font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>
+            {matchedCount}/{totalItems} items matched
+          </p>
         )}
       </div>
 
       {/* Store totals strip */}
       {sorted.length > 0 && (
-        <div className="flex" style={{ borderTop: '1px solid var(--surface-container)' }}>
+        <div className="flex flex-wrap" style={{ borderTop: '1px solid var(--surface-container)' }}>
           {sorted.map((st, i) => {
             const s = storeStyle(st.store);
-            const isBest = i === 0;
+            const isBest = i === 0 && st.isFullMatch;
             return (
               <div key={st.store} className="flex-1 px-3 py-2.5 text-center min-w-0"
-                style={{ borderRight: i < sorted.length - 1 ? '1px solid var(--surface-container)' : 'none' }}>
+                style={{ borderRight: i < sorted.length - 1 ? '1px solid var(--surface-container)' : 'none', minWidth: '33%' }}>
                 <div className="text-xs font-semibold truncate" style={{ color: isBest ? s.bg : 'var(--on-surface-variant)' }}>
                   {storeDisplayName(st.store)}
                 </div>
                 <div className="text-sm font-bold mt-0.5" style={{ color: isBest ? s.bg : 'var(--on-surface)' }}>
                   {fmt(st.total)}
                 </div>
-                {isBest && saving > 0 && (
-                  <div className="text-[10px] font-semibold mt-0.5" style={{ color: '#16a34a' }}>
-                    Save {fmt(saving)}
-                  </div>
-                )}
+                <div className="text-[10px] mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>
+                  {st.itemCount}/{totalItems} items
+                  {isBest && <span className="ml-1 font-bold" style={{ color: '#16a34a' }}>[Best]</span>}
+                  {!st.isFullMatch && <span className="ml-1 font-bold" style={{ color: '#e85d04' }}>[Partial]</span>}
+                </div>
               </div>
             );
           })}
@@ -152,30 +171,17 @@ function ListHeaderCard({
       {/* Actions */}
       <div className="flex gap-2 px-4 py-3" style={{ borderTop: '1px solid var(--surface-container)' }}>
         <button onClick={onUpdateList}
-          className="flex-1 py-2 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
           style={{ background: '#00944A' }}>
           Update Shop
         </button>
-        <CopyButton storeTotals={storeTotals} listName={listName} />
+        <button onClick={onShare}
+          className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-opacity hover:opacity-80"
+          style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}>
+          Share
+        </button>
       </div>
     </div>
-  );
-}
-
-function CopyButton({ storeTotals, listName }: { storeTotals: StoreTotal[]; listName: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      onClick={() => {
-        const text = `${listName}\n${storeTotals.map(t => `${storeDisplayName(t.store)}: ${fmt(t.total)}`).join(' · ')}`;
-        navigator.clipboard?.writeText(text).catch(() => {});
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }}
-      className="px-4 py-2 rounded-xl text-sm font-semibold transition-opacity hover:opacity-80"
-      style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}>
-      {copied ? '✓' : 'Share'}
-    </button>
   );
 }
 
@@ -186,14 +192,13 @@ const QUICK_ACTIONS = [
   { label: 'Add packed lunches', prompt: 'Add packed lunches for the week.' },
   { label: 'Add household essentials', prompt: 'Add household essentials — cleaning, toiletries, etc.' },
   { label: 'Make healthier', prompt: 'Make the list healthier — swap some items for better alternatives.' },
-  { label: 'Make gluten-free', prompt: 'Make this list gluten-free.' },
   { label: 'Use Aldi where possible', prompt: 'Optimise towards Aldi where possible.' },
-  { label: "Add this week's offers", prompt: 'Add items currently on promotion that fit our usual shop.' },
+  { label: 'Compare stores', prompt: 'Compare all stores for this list — show me where each item is cheapest.' },
 ];
 
 function QuickActions({ conversationId, token }: { conversationId: string | null; token: string }) {
   return (
-    <Section title="Continue with your Grocery Assistant">
+    <Section title="Quick actions">
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' } as React.CSSProperties}>
         {QUICK_ACTIONS.map(({ label, prompt }) => {
           const dest = conversationId
@@ -201,14 +206,37 @@ function QuickActions({ conversationId, token }: { conversationId: string | null
             : `/?prefill=${encodeURIComponent(prompt)}&token=${encodeURIComponent(token)}`;
           return (
             <Link key={label} href={dest}
-              className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-80"
-              style={{ background: 'var(--surface-container-lowest)', color: 'var(--on-surface)', border: '1px solid var(--surface-container)' }}>
+              className="flex-shrink-0 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-80"
+              style={{ background: 'var(--surface-container-lowest)', color: 'var(--on-surface)', border: '1px solid var(--outline-variant)' }}>
               {label}
             </Link>
           );
         })}
       </div>
     </Section>
+  );
+}
+
+// ─── Progress bar (sticky) ───────────────────────────────────────────────────
+
+function ProgressBar({ checked, total }: { checked: number; total: number }) {
+  if (total === 0) return null;
+  const pct = Math.round((checked / total) * 100);
+  return (
+    <div className="sticky top-0 z-10 py-2 px-4 -mx-4 mb-4" style={{ background: 'var(--surface)' }}>
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-xs font-medium" style={{ color: 'var(--on-surface-variant)' }}>
+          {checked === 0 ? `${total} items` : checked === total ? '✅ All done!' : `${checked} of ${total} items`}
+        </span>
+        {checked > 0 && checked < total && (
+          <span className="text-xs font-semibold" style={{ color: '#00944A' }}>{pct}%</span>
+        )}
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-container)' }}>
+        <div className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${pct}%`, background: checked === total ? '#16a34a' : '#00944A' }} />
+      </div>
+    </div>
   );
 }
 
@@ -227,23 +255,29 @@ function ShoppingList({ items, listId, token }: { items: StructuredItem[]; listI
   }, [token, listId]);
 
   const toggle = useCallback((name: string) => {
-    const next = !checks[name];
-    setChecks(prev => ({ ...prev, [name]: next }));
-    clearTimeout(pendingRef.current[name]);
-    pendingRef.current[name] = setTimeout(() => {
-      fetch('/api/list/checks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, list_id: listId, canonical_name: name, checked: next }),
-      }).catch(() => {});
-    }, 400);
-  }, [checks, token, listId]);
+    setChecks(prev => {
+      const next = !prev[name];
+      const updated = { ...prev, [name]: next };
+
+      clearTimeout(pendingRef.current[name]);
+      pendingRef.current[name] = setTimeout(() => {
+        fetch('/api/list/checks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, list_id: listId, canonical_name: name, checked: next }),
+        }).catch(() => {});
+      }, 400);
+
+      return updated;
+    });
+  }, [token, listId]);
 
   const clearAll = useCallback(() => {
     setChecks({});
     fetch(`/api/list/checks?token=${encodeURIComponent(token)}&list_id=${listId}`, { method: 'DELETE' }).catch(() => {});
   }, [token, listId]);
 
+  // Group by category
   const grouped = new Map<string, StructuredItem[]>();
   for (const item of items) {
     const cat = item.category ?? 'Other';
@@ -256,43 +290,30 @@ function ShoppingList({ items, listId, token }: { items: StructuredItem[]; listI
 
   return (
     <Section
-      title="My Shop"
+      title="Shopping List"
       action={checkedCount > 0 ? (
         <button onClick={clearAll} className="text-xs font-medium" style={{ color: 'var(--on-surface-variant)' }}>Reset</button>
       ) : undefined}
     >
-      {/* Progress bar */}
-      {loaded && totalItems > 0 && (
-        <div className="mb-3">
-          <div className="flex justify-between items-center mb-1.5">
-            <span className="text-xs font-medium" style={{ color: 'var(--on-surface-variant)' }}>
-              {checkedCount === 0 ? `${totalItems} items` : checkedCount === totalItems ? '✅ All done!' : `${checkedCount} of ${totalItems} items`}
-            </span>
-            {checkedCount > 0 && checkedCount < totalItems && (
-              <span className="text-xs font-semibold" style={{ color: '#00944A' }}>
-                {Math.round((checkedCount / totalItems) * 100)}%
-              </span>
-            )}
-          </div>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-container)' }}>
-            <div className="h-full rounded-full transition-all duration-300"
-              style={{ width: `${(checkedCount / totalItems) * 100}%`, background: checkedCount === totalItems ? '#16a34a' : '#00944A' }} />
-          </div>
-        </div>
-      )}
+      {loaded && <ProgressBar checked={checkedCount} total={totalItems} />}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([cat, catItems]) => (
           <div key={cat}>
-            <h4 className="text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--on-surface-variant)' }}>{cat}</h4>
-            <div className="space-y-0.5">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider mb-2 px-1" style={{ color: 'var(--on-surface-variant)' }}>{cat}</h4>
+            <div className="space-y-1">
               {catItems.map(item => {
                 const isChecked = !!checks[item.canonical_name];
                 const s = storeStyle(item.store);
                 return (
                   <button key={item.canonical_name} onClick={() => toggle(item.canonical_name)}
-                    className="w-full flex items-center gap-3 py-2.5 px-3 rounded-xl text-left transition-all"
-                    style={{ background: isChecked ? 'var(--surface-container-low)' : 'var(--surface-container-lowest)', opacity: isChecked ? 0.55 : 1 }}>
+                    className="w-full flex items-center gap-3 rounded-xl text-left transition-all"
+                    style={{
+                      background: isChecked ? 'var(--surface-container)' : 'var(--surface-container-lowest)',
+                      opacity: isChecked ? 0.55 : 1,
+                      minHeight: '44px',
+                      padding: '10px 12px',
+                    }}>
                     {/* Checkbox */}
                     <span className="flex-shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all"
                       style={{ borderColor: isChecked ? '#00944A' : 'var(--outline-variant)', background: isChecked ? '#00944A' : 'transparent' }}>
@@ -302,16 +323,19 @@ function ShoppingList({ items, listId, token }: { items: StructuredItem[]; listI
                         </svg>
                       )}
                     </span>
+                    {/* Product name */}
                     <span className="flex-1 text-sm font-medium truncate"
                       style={{ color: 'var(--on-background)', textDecoration: isChecked ? 'line-through' : 'none' }}>
                       {item.store_product_name ?? item.canonical_name}
                       {item.on_promotion && !isChecked && (
-                        <span className="ml-1.5 text-[9px] font-bold px-1 py-0.5 rounded text-white align-middle" style={{ background: '#e85d04' }}>DEAL</span>
+                        <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded text-white align-middle" style={{ background: '#e85d04' }}>DEAL</span>
                       )}
                     </span>
+                    {/* Store badge */}
                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-white flex-shrink-0" style={{ background: s.bg }}>
                       {storeDisplayName(item.store)}
                     </span>
+                    {/* Price */}
                     <span className="text-sm font-bold flex-shrink-0" style={{ color: 'var(--on-background)' }}>
                       {fmt(item.price)}
                     </span>
@@ -326,35 +350,30 @@ function ShoppingList({ items, listId, token }: { items: StructuredItem[]; listI
   );
 }
 
-// ─── Markdown fallback ────────────────────────────────────────────────────────
+// ─── Fallback (no structured items) ──────────────────────────────────────────
 
-function MarkdownList({ content }: { content: string }) {
-  function RichText({ text }: { text: string }) {
-    return (
-      <span>
-        {text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-          part.startsWith('**') && part.endsWith('**')
-            ? <strong key={i} style={{ color: 'var(--on-background)' }}>{part.slice(2, -2)}</strong>
-            : <span key={i}>{part}</span>
-        )}
-      </span>
-    );
-  }
-
+function FallbackCard({ listContent }: { listContent: string | null }) {
   return (
-    <Section title="My Shop">
-      <div className="rounded-2xl p-4 space-y-1" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-        {content.split('\n').map((line, i) => {
-          if (!line.trim()) return <div key={i} className="h-1" />;
-          if (line.startsWith('## ') || line.startsWith('### '))
-            return <h4 key={i} className="text-xs font-bold uppercase tracking-wider mt-3 mb-1" style={{ color: 'var(--primary)' }}>{line.replace(/^#+\s/, '')}</h4>;
-          if (line.startsWith('**') && line.endsWith('**'))
-            return <h4 key={i} className="text-xs font-bold uppercase tracking-wider mt-3 mb-1" style={{ color: 'var(--primary)' }}>{line.slice(2, -2)}</h4>;
-          if (line.startsWith('- ') || line.startsWith('* '))
-            return <p key={i} className="text-sm py-0.5" style={{ color: 'var(--on-surface)' }}><RichText text={line.slice(2)} /></p>;
-          if (line.match(/^\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?/i) || /store total|🏪/i.test(line)) return null;
-          return <p key={i} className="text-sm" style={{ color: 'var(--on-surface)' }}><RichText text={line} /></p>;
-        })}
+    <Section title="Shopping List">
+      <div className="rounded-2xl p-5" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+        <p className="text-sm mb-4" style={{ color: 'var(--on-surface-variant)' }}>
+          We couldn&apos;t create the full shopping-list view for this plan yet.
+        </p>
+        {listContent && (
+          <details className="mt-2">
+            <summary className="text-sm font-medium cursor-pointer" style={{ color: 'var(--primary)' }}>
+              View original plan
+            </summary>
+            <div className="mt-3 text-sm whitespace-pre-wrap" style={{ color: 'var(--on-surface)' }}>
+              {listContent}
+            </div>
+          </details>
+        )}
+        {!listContent && (
+          <Link href="/" className="text-sm font-semibold" style={{ color: '#00944A' }}>
+            Plan a new shop →
+          </Link>
+        )}
       </div>
     </Section>
   );
@@ -388,12 +407,22 @@ function HouseholdIntelligence({ memory, currentItems }: { memory: HouseholdMemo
 
 // ─── Checkout card ────────────────────────────────────────────────────────────
 
-function CheckoutCard({ storeTotals, listName }: { storeTotals: StoreTotal[]; listName: string }) {
+function CheckoutCard({ structuredItems, storeTotals, listName }: { structuredItems?: StructuredItem[] | null; storeTotals: StoreTotal[]; listName: string }) {
   const [copied, setCopied] = useState(false);
 
-  function handleExport() {
-    const text = `${listName}\n\n${storeTotals.map(t => `${storeDisplayName(t.store)}: ${fmt(t.total)}`).join('\n')}`;
-    navigator.clipboard?.writeText(text).catch(() => {});
+  function buildPlainText() {
+    if (structuredItems && structuredItems.length > 0) {
+      const lines = structuredItems.map(item =>
+        `${item.store_product_name ?? item.canonical_name} — ${storeDisplayName(item.store)} ${fmt(item.price)}`
+      );
+      const totals = storeTotals.map(t => `${storeDisplayName(t.store)}: ${fmt(t.total)}`).join(' · ');
+      return `${listName}\n\n${lines.join('\n')}\n\n${totals}`;
+    }
+    return `${listName}\n\n${storeTotals.map(t => `${storeDisplayName(t.store)}: ${fmt(t.total)}`).join('\n')}`;
+  }
+
+  function handleCopy() {
+    navigator.clipboard?.writeText(buildPlainText()).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -401,22 +430,22 @@ function CheckoutCard({ storeTotals, listName }: { storeTotals: StoreTotal[]; li
   return (
     <Section title="Checkout">
       <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
-        <div className="flex items-center justify-between px-4 py-3.5"
-          style={{ background: 'var(--surface-container-lowest)', borderBottom: '1px solid var(--surface-container)' }}>
+        {/* SuperValu integration */}
+        <div className="flex items-center justify-between px-4"
+          style={{ background: 'var(--surface-container-lowest)', borderBottom: '1px solid var(--surface-container)', minHeight: '56px' }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: '#e4003b' }}>SV</div>
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>Send to SuperValu</p>
-              <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Direct checkout integration</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>Send to SuperValu checkout</p>
+              <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Coming soon / pilot integration</p>
             </div>
           </div>
-          <span className="text-xs font-semibold px-2 py-1 rounded-full"
-            style={{ background: 'var(--surface-container)', color: 'var(--on-surface-variant)' }}>Coming soon</span>
         </div>
 
-        <button onClick={handleExport}
-          className="w-full flex items-center justify-between px-4 py-3.5 text-left transition-opacity hover:opacity-80"
-          style={{ background: 'var(--surface-container-lowest)', borderBottom: '1px solid var(--surface-container)' }}>
+        {/* Copy list */}
+        <button onClick={handleCopy}
+          className="w-full flex items-center justify-between px-4 text-left transition-opacity hover:opacity-80"
+          style={{ background: 'var(--surface-container-lowest)', borderBottom: '1px solid var(--surface-container)', minHeight: '52px' }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--surface-container)' }}>
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -424,7 +453,7 @@ function CheckoutCard({ storeTotals, listName }: { storeTotals: StoreTotal[]; li
               </svg>
             </div>
             <span className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>
-              {copied ? '✓ Copied' : 'Copy list'}
+              {copied ? '✓ Copied to clipboard' : 'Copy list'}
             </span>
           </div>
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: 'var(--on-surface-variant)' }}>
@@ -432,9 +461,10 @@ function CheckoutCard({ storeTotals, listName }: { storeTotals: StoreTotal[]; li
           </svg>
         </button>
 
+        {/* Email list */}
         <button onClick={() => alert('Email list — coming soon!')}
-          className="w-full flex items-center justify-between px-4 py-3.5 text-left transition-opacity hover:opacity-80"
-          style={{ background: 'var(--surface-container-lowest)' }}>
+          className="w-full flex items-center justify-between px-4 text-left transition-opacity hover:opacity-80"
+          style={{ background: 'var(--surface-container-lowest)', minHeight: '52px' }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--surface-container)' }}>
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -464,10 +494,10 @@ function HistorySwitcher({ allLists, activeListId, token }: { allLists: ListSumm
           const cheapest = [...(list.store_totals ?? [])].sort((a, b) => a.total - b.total)[0];
           return (
             <Link key={list.id} href={`/list?token=${encodeURIComponent(token)}&list=${list.id}`}
-              className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all"
+              className="flex-shrink-0 px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all"
               style={isActive
                 ? { background: '#00944A', color: '#fff' }
-                : { background: 'var(--surface-container-lowest)', color: 'var(--on-surface)', border: '1px solid var(--surface-container)' }}>
+                : { background: 'var(--surface-container-lowest)', color: 'var(--on-surface)', border: '1px solid var(--outline-variant)' }}>
               {shortDate(list.created_at)}
               {cheapest && <span className="ml-1.5 opacity-75">{fmt(cheapest.total)}</span>}
             </Link>
@@ -486,40 +516,53 @@ export function SavedListView({
 }: Props) {
   const router = useRouter();
   const hasStructured = (structuredItems?.length ?? 0) > 0;
-  const itemCount = hasStructured ? structuredItems!.length : 0;
+  const totalItems = hasStructured ? structuredItems!.length : 0;
   const currentItemNames = hasStructured ? structuredItems!.map(i => i.canonical_name) : [];
 
   function handleUpdateList() {
     router.push(conversationId ? `/dashboard/chat/${conversationId}` : `/?token=${encodeURIComponent(token)}`);
   }
 
+  function handleShare() {
+    const text = `${listName} — ${totalItems} items`;
+    if (navigator.share) {
+      navigator.share({ title: listName, text, url: window.location.href }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(window.location.href).catch(() => {});
+    }
+  }
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
       <main className="max-w-2xl mx-auto px-4 pb-24 pt-6">
-        <ListHeaderCard
-          listName={listName} createdAt={createdAt} storeTotals={storeTotals}
-          itemCount={itemCount} onUpdateList={handleUpdateList}
-          token={token} activeListId={activeListId}
+        {/* Hero card */}
+        <HeroCard
+          listName={listName}
+          createdAt={createdAt}
+          storeTotals={storeTotals}
+          totalItems={totalItems}
+          onUpdateList={handleUpdateList}
+          onShare={handleShare}
         />
+
+        {/* Quick actions */}
         <QuickActions conversationId={conversationId} token={token} />
+
+        {/* Shopping list or fallback */}
         {hasStructured
           ? <ShoppingList items={structuredItems!} listId={activeListId} token={token} />
-          : listContent
-          ? <MarkdownList content={listContent} />
-          : (
-            <Section title="My Shop">
-              <div className="rounded-2xl p-6 text-center" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-                <p className="text-sm mb-3" style={{ color: 'var(--on-surface-variant)' }}>No items in this list yet.</p>
-                <Link href="/" className="text-sm font-semibold" style={{ color: '#00944A' }}>Plan a new shop →</Link>
-              </div>
-            </Section>
-          )}
+          : <FallbackCard listContent={listContent} />
+        }
+
+        {/* Household intelligence */}
         {householdMemory && currentItemNames.length > 0 && (
           <HouseholdIntelligence memory={householdMemory} currentItems={currentItemNames} />
         )}
-        {storeTotals.length > 0 && (
-          <CheckoutCard storeTotals={storeTotals} listName={listName} />
-        )}
+
+        {/* Checkout card */}
+        <CheckoutCard structuredItems={structuredItems} storeTotals={storeTotals} listName={listName} />
+
+        {/* History switcher */}
         <HistorySwitcher allLists={allLists} activeListId={activeListId} token={token} />
       </main>
     </div>
