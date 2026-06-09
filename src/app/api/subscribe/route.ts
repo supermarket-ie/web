@@ -24,7 +24,7 @@ async function notifyTelegram(text: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, familySize } = await request.json();
+    const { email, familySize, savedListId } = await request.json();
 
     if (!email) {
       return NextResponse.json(
@@ -104,7 +104,9 @@ export async function POST(request: NextRequest) {
       );
 
       // Send "your list is ready" email with magic link
-      const magicLink = `${process.env.NEXT_PUBLIC_SITE_URL}/list?token=${jwtToken}`;
+      // If a specific list was just created, link directly to it
+      const listParam = savedListId ? `&list=${savedListId}` : '';
+      const magicLink = `${process.env.NEXT_PUBLIC_SITE_URL}/list?token=${jwtToken}${listParam}`;
       const unsubscribeUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`;
 
     await resend.emails.send({

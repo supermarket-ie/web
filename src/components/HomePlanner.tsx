@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { loadSession, loadProfile, saveProfile, type PlannerProfile, saveSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
@@ -415,42 +416,99 @@ function ShareButton({ text }: { text: string }) {
   );
 }
 
-function UnlockCTA({ householdSize, savings, onUnlocked }: {
+function UnlockCTA({ householdSize, savings, listContent, familySize, onUnlocked }: {
   householdSize: number;
   savings: number | null;
-  onUnlocked: () => void;
+  listContent: string;
+  familySize: string;
+  onUnlocked: (token: string, listId: string | null) => void;
 }) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
     setError('');
+    setSaveFailed(false);
+
+    trackEvent('unlock_started');
+
     try {
-      const res = await fetch('/api/subscribe', {
+      // Step 1: subscribe / sign in
+      const subRes = await fetch('/api/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, familySize: householdSize }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      if (!subRes.ok) {
+        const data = await subRes.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to sign up');
       }
-      const data = await res.json();
-      if (data.token) {
-        saveSession({ token: data.token, email, familySize: String(householdSize), expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 });
+      const subData = await subRes.json();
+      const token: string = subData.token;
+
+      if (token) {
+        saveSession({ token, email, familySize: String(householdSize), expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 });
       }
-      trackEvent('signup_completed', undefined, data.token);
-      onUnlocked();
+
+      trackEvent('unlock_success', undefined, token);
+
+      // Step 2: save the planner list as a structured saved_list
+      let listId: string | null = null;
+      try {
+        const saveRes = await fetch('/api/lists/save-from-planner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, markdown: listContent, family_size: familySize }),
+        });
+        if (saveRes.ok) {
+          const saveData = await saveRes.json();
+          listId = saveData.list_id ?? null;
+          if (listId) {
+            trackEvent('planner_list_saved', { list_id: listId }, token);
+            // Step 3: re-send subscribe email with the correct list ID embedded
+            // (fire-and-forget — don't block the redirect)
+            fetch('/api/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, familySize: householdSize, savedListId: listId }),
+            }).then(() => trackEvent('magic_link_sent_for_saved_list', { list_id: listId }, token))
+              .catch(() => {});
+          }
+        } else {
+          trackEvent('planner_list_save_failed', { status: saveRes.status }, token);
+          setSaveFailed(true);
+        }
+      } catch (saveErr) {
+        console.warn('[unlock] save-from-planner failed:', saveErr);
+        trackEvent('planner_list_save_failed', { error: String(saveErr) }, token);
+        setSaveFailed(true);
+      }
+
+      onUnlocked(token, listId);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
   };
+
+  if (saveFailed) {
+    return (
+      <div className="rounded-2xl p-4 mb-3" style={{ background: 'var(--surface-container)', border: '1px solid var(--outline-variant)' }}>
+        <p className="text-sm font-semibold mb-1" style={{ color: 'var(--on-surface)' }}>
+          ✅ Your prices are unlocked.
+        </p>
+        <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+          We couldn&apos;t create the full shopping-list view yet, but your list is still available here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl p-4 mb-3" style={{ background: 'var(--primary-container)', border: '1px solid var(--primary)' }}>
@@ -500,6 +558,7 @@ function StreamingDots({ message }: { message: string }) {
 // ─── Main Component ─────────────────────────────────────────────────────
 
 export function HomePlanner() {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -619,6 +678,17 @@ export function HomePlanner() {
       console.error('Auto-save failed:', err);
     }
   }, [profile]);
+
+  // ── After unlock: redirect to the saved list view ──
+  const handleUnlocked = useCallback((token: string, listId: string | null) => {
+    setIsUnlocked(true);
+    if (listId) {
+      const dest = `/list?token=${encodeURIComponent(token)}&list=${listId}`;
+      trackEvent('redirected_to_saved_list', { list_id: listId }, token);
+      router.push(dest);
+    }
+    // If no listId (save failed), stay on page — UnlockCTA shows fallback message
+  }, [router]);
 
   // ── Auto-save after unlock ──
   useEffect(() => {
@@ -769,14 +839,44 @@ export function HomePlanner() {
         m.id === streamId ? { ...m, content: cleanFinalText, buttons: finalButtons.length > 0 ? finalButtons : undefined } : m
       ));
 
-      // If list was generated and user is already unlocked, auto-save
+      // If list was generated and user is already unlocked, auto-save then redirect
       if (parseStoreTotals(content).length > 0 && isUnlocked) {
         setListContent(content);
         setHasGeneratedList(true);
         const swaps = parseSwapSuggestions(content);
         if (swaps.length > 0) setSwapSuggestions(swaps);
         const updatedMessages = [...allMessages, { id: streamId, role: 'assistant' as const, content }];
+        // Save conversation (background) and also save structured list → redirect
         autoSaveConversation(content, updatedMessages);
+        // Save as structured list and redirect
+        const session = loadSession();
+        if (session?.token) {
+          try {
+            const saveRes = await fetch('/api/lists/save-from-planner', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token: session.token,
+                markdown: content,
+                family_size: String(profile.adults + profile.children),
+              }),
+            });
+            if (saveRes.ok) {
+              const saveData = await saveRes.json();
+              const listId: string | null = saveData.list_id ?? null;
+              if (listId) {
+                trackEvent('planner_list_saved', { list_id: listId }, session.token);
+                trackEvent('redirected_to_saved_list', { list_id: listId }, session.token);
+                router.push(`/list?token=${encodeURIComponent(session.token)}&list=${listId}`);
+              }
+            } else {
+              trackEvent('planner_list_save_failed', { status: saveRes.status }, session.token);
+            }
+          } catch (saveErr) {
+            console.warn('[HomePlanner] save-from-planner failed:', saveErr);
+            trackEvent('planner_list_save_failed', { error: String(saveErr) }, session.token);
+          }
+        }
       }
 
     } catch (err) {
@@ -898,7 +998,9 @@ export function HomePlanner() {
         <UnlockCTA
           householdSize={profile.adults + profile.children}
           savings={calcSavings(parseStoreTotals(listContent))}
-          onUnlocked={() => setIsUnlocked(true)}
+          listContent={listContent}
+          familySize={String(profile.adults + profile.children)}
+          onUnlocked={handleUnlocked}
         />
       )}
 
