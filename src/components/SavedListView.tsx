@@ -107,7 +107,7 @@ function Section({ title, children, action }: { title: string; children: React.R
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--on-surface-variant)' }}>{title}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#00DCFF', textShadow: '0 0 12px rgba(0,220,255,0.3)' }}>{title}</h3>
         {action}
       </div>
       {children}
@@ -133,25 +133,37 @@ function HeroCard({
     <div className="rounded-2xl overflow-hidden mb-6"
       style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
       {/* Green header */}
-      <div className="px-4 py-4" style={{ background: '#00944A' }}>
-        <div className="flex items-start justify-between">
+      <div className="px-4 py-4 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #006A35 0%, #00944A 60%, #00a854 100%)' }}>
+        {/* Subtle cyan glow blob */}
+        <div className="absolute pointer-events-none" style={{
+          width: 200, height: 200, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(0,220,255,0.12) 0%, transparent 70%)',
+          top: -60, right: -40,
+        }} />
+        <div className="relative flex items-start justify-between">
           <div>
-            <h1 className="text-white font-bold text-lg leading-tight">This Week&apos;s Shop</h1>
-            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
+            <h1 className="font-bold text-lg leading-tight" style={{
+              background: 'linear-gradient(135deg, #ffffff, #6BFE9C)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            }}>This Week&apos;s Shop</h1>
+            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
               {totalItems > 0 ? `${totalItems} items` : ''}{totalItems > 0 && ' · '}{formatDate(createdAt)}
             </p>
           </div>
           {best && (
             <div className="text-right">
-              <div className="text-white text-2xl font-extrabold">{fmt(best.total)}</div>
-              <div className="text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              <div className="text-2xl font-extrabold" style={{
+                background: 'linear-gradient(135deg, #ffffff, #6BFE9C)',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+              }}>{fmt(best.total)}</div>
+              <div className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
                 {storeDisplayName(best.store)}
               </div>
             </div>
           )}
         </div>
         {hasItemCounts && totalItems > 0 && best && (
-          <p className="text-xs mt-2 font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>
+          <p className="text-xs mt-2 font-medium relative" style={{ color: 'rgba(255,255,255,0.85)' }}>
             {best.itemCount}/{totalItems} items matched
           </p>
         )}
@@ -224,7 +236,7 @@ function QuickActions({ conversationId, token }: { conversationId: string | null
           return (
             <Link key={label} href={dest}
               className="flex-shrink-0 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-80"
-              style={{ background: 'var(--surface-container-lowest)', color: 'var(--on-surface)', border: '1px solid var(--outline-variant)' }}>
+              style={{ background: 'rgba(0,220,255,0.07)', color: 'var(--on-surface)', border: '1px solid rgba(0,220,255,0.28)' }}>
               {label}
             </Link>
           );
@@ -549,8 +561,22 @@ export function SavedListView({
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
-      <main className="max-w-2xl mx-auto px-4 pb-24 pt-6">
+    <div className="min-h-screen relative overflow-hidden noise-bg" style={{ background: 'var(--surface)' }}>
+      {/* Background blobs — same language as homepage */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="gradient-blob" style={{
+          width: 500, height: 500,
+          background: 'linear-gradient(135deg, rgba(0,106,53,0.10), rgba(107,254,156,0.07))',
+          top: -200, left: -100,
+        }} />
+        <div className="gradient-blob" style={{
+          width: 400, height: 400,
+          background: 'linear-gradient(135deg, rgba(0,220,255,0.06), rgba(107,254,156,0.04))',
+          top: '40%', right: -150,
+        }} />
+        <div className="absolute inset-0 dot-grid opacity-40" />
+      </div>
+      <main className="relative z-10 max-w-2xl mx-auto px-4 pb-24 pt-6">
         {/* Hero card */}
         <HeroCard
           listName={listName}
