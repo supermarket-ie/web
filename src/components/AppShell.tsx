@@ -85,6 +85,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (token && pathname === '/dashboard') {
       router.replace(`/list?token=${encodeURIComponent(token)}`);
     }
+
+    // TokenPersist (on /list, /dashboard etc.) writes the token to localStorage
+    // and fires this event so we can show the nav without a full re-mount.
+    function handleSessionReady(e: Event) {
+      const newToken = (e as CustomEvent<{ token: string }>).detail?.token ?? null;
+      if (newToken && newToken !== token) {
+        setListToken(newToken);
+        setReady(true);
+      }
+    }
+    window.addEventListener('sm:session-ready', handleSessionReady);
+    return () => window.removeEventListener('sm:session-ready', handleSessionReady);
   }, [pathname, router]);
 
   const hideNav = HIDDEN_ON.some(p => pathname.startsWith(p));
