@@ -65,48 +65,40 @@ function formatDate(dateStr: string) {
 
 /** Determine full/partial match stores and best basket */
 function analyseStoreTotals(storeTotals: StoreTotal[], totalItems: number) {
-  if (!storeTotals.length) return { sorted: [], best: null, isBestPartial: false, fullMatches: [], partialMatches: [], hasItemCounts: false };
+  if (!storeTotals.length) return { sorted: [], best: null, fullMatches: [], partialMatches: [], hasItemCounts: false };
 
-  // Do we have meaningful item_count data?
   const hasItemCounts = storeTotals.some(st => (st.item_count ?? 0) > 0);
-
-  // Sanity check: if a store's total is <20% of the highest total, it's obviously partial
-  // regardless of what item_count says
   const maxTotal = Math.max(...storeTotals.map(s => s.total));
+  const maxItemCount = hasItemCounts ? Math.max(...storeTotals.map(s => s.item_count ?? 0)) : 0;
+  const threshold = totalItems > 0 ? Math.ceil(totalItems * 0.9)
+    : hasItemCounts ? Math.ceil(maxItemCount * 0.9)
+    : 0;
 
   const annotated = storeTotals.map(st => {
     const itemCount = st.item_count ?? 0;
-
-    // Three ways a store can be flagged partial:
-    // 1. item_count data exists and it's below 90% of totalItems
-    // 2. item_count data exists and it's below 90% of the best store's item_count
-    // 3. total is suspiciously low (<20% of the highest total) — sanity check
-    const maxItemCount = hasItemCounts ? Math.max(...storeTotals.map(s => s.item_count ?? 0)) : 0;
-    const threshold = totalItems > 0 ? Math.ceil(totalItems * 0.9)
-      : hasItemCounts ? Math.ceil(maxItemCount * 0.9)
-      : 0;
-
+    // A store is partial if:
+    // (a) its total is <20% of the highest total (sanity check — catches €3.28 vs €74.44), OR
+    // (b) item_count data exists and it's below the 90% threshold
     const isSuspiciouslyLow = maxTotal > 0 && (st.total / maxTotal) < 0.2;
     const isBelowThreshold = hasItemCounts && threshold > 0 && itemCount < threshold;
-
-    const isFullMatch = !isSuspiciouslyLow && !isBelowThreshold && (hasItemCounts ? itemCount >= threshold : true);
-
+    const isFullMatch = !isSuspiciouslyLow && !isBelowThreshold;
     return { ...st, itemCount, isFullMatch };
   });
 
-  // If item_count data is absent for all stores, we can't determine coverage.
-  // Apply sanity check only — flag outliers as partial, but don't crown a "Best".
   const fullMatches = annotated.filter(s => s.isFullMatch).sort((a, b) => a.total - b.total);
-  const partialMatches = annotated.filter(s => !s.isFullMatch).sort((a, b) => b.itemCount - a.itemCount || a.total - b.total);
+  const partialMatches = annotated.filter(s => !s.isFullMatch);
 
-  // Only pick a "best" if we have real coverage data or all stores look comparable
-  const canPickBest = hasItemCounts || (fullMatches.length === annotated.length);
-  const best = canPickBest ? (fullMatches[0] ?? null) : null;
-  const isBestPartial = false; // we only ever show full matches as best
+  // Only crown a best when we have real item_count data
+  const best = hasItemCounts ? (fullMatches[0] ?? null) : null;
 
-  const sorted = [...fullMatches, ...partialMatches];
+  // In the display strip: show full matches always; only show partial matches
+  // when we have item_count data (so we can label them clearly). Without
+  // item_count, partial stores are just noise — hide them.
+  const sorted = hasItemCounts
+    ? [...fullMatches, ...partialMatches.sort((a, b) => b.itemCount - a.itemCount)]
+    : fullMatches;  // hide suspiciously-low stores when we can't label them
 
-  return { sorted, best, isBestPartial, fullMatches, partialMatches, hasItemCounts };
+  return { sorted, best, fullMatches, partialMatches, hasItemCounts };
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
