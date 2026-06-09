@@ -434,10 +434,9 @@ function CheckoutCard({ structuredItems, storeTotals, listName }: { structuredIt
         <div className="flex items-center justify-between px-4"
           style={{ background: 'var(--surface-container-lowest)', borderBottom: '1px solid var(--surface-container)', minHeight: '56px' }}>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: '#e4003b' }}>SV</div>
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>Send to SuperValu checkout</p>
-              <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Coming soon / pilot integration</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>Send to checkout</p>
+              <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Coming soon</p>
             </div>
           </div>
         </div>
