@@ -21,11 +21,13 @@ export async function GET(req: Request) {
   const subscriberId = getSubscriberId(token);
   if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
 
+  // Deliberately exclude `items` (large JSONB) — dashboard only needs metadata
   const { data, error } = await supabaseAdmin
     .from('saved_lists')
-    .select('id, name, meals_prompt, family_size, store_totals, is_default, created_at, generated_at')
+    .select('id, name, meals_prompt, family_size, store_totals, is_default, created_at, generated_at, conversation_id')
     .eq('subscriber_id', subscriberId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(10);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ lists: data ?? [] });

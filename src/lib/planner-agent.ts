@@ -557,6 +557,12 @@ Always cross-reference against our price catalogue to confirm we stock the subst
               .eq('subscriber_id', subscriberId)
               .is('list_id', null);
           }
+          // Invalidate refresh cache so dashboard recomputes on next visit
+          supabaseAdmin
+            .from('subscribers')
+            .update({ refresh_cache: null, refresh_cache_at: null })
+            .eq('id', subscriberId)
+            .then(() => {});
           return { saved: true, list_id: listId };
         } catch (err) {
           console.error('[save_list] error:', err);
@@ -615,6 +621,12 @@ Always cross-reference against our price catalogue to confirm we stock the subst
               }))
             ).then(() => {});
           }
+          // Invalidate refresh cache so dashboard recomputes on next visit
+          supabaseAdmin
+            .from('subscribers')
+            .update({ refresh_cache: null, refresh_cache_at: null })
+            .eq('id', subscriberId)
+            .then(() => {});
           return { saved: true, list_id };
         } catch (err) {
           console.error('[update_list] error:', err);
