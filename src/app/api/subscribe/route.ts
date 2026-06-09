@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { resend } from '@/lib/resend';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { parseMarkdownList } from '@/lib/parse-planner-markdown';
 
 const SECRET = process.env.MAGIC_LINK_SECRET;
 if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
@@ -24,7 +25,7 @@ async function notifyTelegram(text: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, familySize, savedListId } = await request.json();
+    const { email, familySize, plannerMarkdown } = await request.json();
 
     if (!email) {
       return NextResponse.json(
@@ -93,6 +94,9 @@ export async function POST(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('subscribed', true);
 
+    // Track the saved list ID to return to the client
+    let savedListId: string | null = null;
+
     // Only notify Telegram and send welcome email for genuinely new signups
     // Returning active users just get a fresh token silently
     if (!isReturningUser) {
@@ -104,7 +108,64 @@ export async function POST(request: NextRequest) {
       );
 
       // Send "your list is ready" email with magic link
-      // If a specific list was just created, link directly to it
+      // If the user just built a list in the planner, save it now so the
+      // email link goes straight to their exact list — single call, no race conditions.
+      if (plannerMarkdown) {
+        try {
+          const { items, storeTotals } = parseMarkdownList(plannerMarkdown as string);
+          if (items.length > 0) {
+            // Cap at 10 lists
+            const { data: existingLists } = await supabaseAdmin
+              .from('saved_lists')
+              .select('id, created_at')
+              .eq('subscriber_id', subscriberId)
+              .order('created_at', { ascending: true });
+            if (existingLists && existingLists.length >= 10) {
+              const toDelete = existingLists.slice(0, existingLists.length - 9);
+              await supabaseAdmin.from('saved_lists').delete().in('id', toDelete.map(r => r.id));
+            }
+            const { data: newList } = await supabaseAdmin
+              .from('saved_lists')
+              .insert({
+                subscriber_id: subscriberId,
+                name: 'Weekly grocery list',
+                family_size: familySize ?? '2',
+                items: items.map(i => ({
+                  canonical_name: i.canonical_name,
+                  category: i.category,
+                  store: i.store,
+                  price: i.price,
+                  quantity: i.quantity,
+                  on_promotion: i.on_promotion,
+                })),
+                store_totals: storeTotals,
+                is_default: true,
+                generated_at: new Date().toISOString(),
+              })
+              .select('id')
+              .single();
+            if (newList?.id) {
+              savedListId = newList.id as string;
+              // Write list_items for history
+              await supabaseAdmin.from('list_items').insert(
+                items.map(i => ({
+                  subscriber_id: subscriberId,
+                  list_id: savedListId,
+                  canonical_name: i.canonical_name,
+                  category: i.category,
+                  store: i.store,
+                  price_paid: i.price,
+                  quantity: i.quantity,
+                  observed_at: new Date().toISOString(),
+                }))
+              );
+            }
+          }
+        } catch (parseErr) {
+          console.warn('[subscribe] planner list save failed (non-fatal):', parseErr);
+        }
+      }
+
       const listParam = savedListId ? `&list=${savedListId}` : '';
       const magicLink = `${process.env.NEXT_PUBLIC_SITE_URL}/list?token=${jwtToken}${listParam}`;
       const unsubscribeUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`;
@@ -256,7 +317,57 @@ Unsubscribe: ${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribe
     });
     } // end if (!isReturningUser)
 
-    return NextResponse.json({ success: true, token: jwtToken });
+    // Save the planner list for ALL users (new + returning) if markdown provided.
+    // For new users this was already done inside the block above; for returning
+    // users we do it here so they also get redirected to the right list.
+    if (isReturningUser && plannerMarkdown) {
+      try {
+        const { items, storeTotals } = parseMarkdownList(plannerMarkdown as string);
+        if (items.length > 0) {
+          const { data: existingLists } = await supabaseAdmin
+            .from('saved_lists')
+            .select('id, created_at')
+            .eq('subscriber_id', subscriberId)
+            .order('created_at', { ascending: true });
+          if (existingLists && existingLists.length >= 10) {
+            const toDelete = existingLists.slice(0, existingLists.length - 9);
+            await supabaseAdmin.from('saved_lists').delete().in('id', toDelete.map(r => r.id));
+          }
+          await supabaseAdmin.from('saved_lists').update({ is_default: false }).eq('subscriber_id', subscriberId);
+          const { data: newList } = await supabaseAdmin
+            .from('saved_lists')
+            .insert({
+              subscriber_id: subscriberId,
+              name: 'Weekly grocery list',
+              family_size: familySize ?? '2',
+              items: items.map(i => ({
+                canonical_name: i.canonical_name, category: i.category,
+                store: i.store, price: i.price, quantity: i.quantity, on_promotion: i.on_promotion,
+              })),
+              store_totals: storeTotals,
+              is_default: true,
+              generated_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+          if (newList?.id) {
+            savedListId = newList.id as string;
+            await supabaseAdmin.from('list_items').insert(
+              items.map(i => ({
+                subscriber_id: subscriberId, list_id: savedListId,
+                canonical_name: i.canonical_name, category: i.category,
+                store: i.store, price_paid: i.price, quantity: i.quantity,
+                observed_at: new Date().toISOString(),
+              }))
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('[subscribe] returning user list save failed (non-fatal):', e);
+      }
+    }
+
+    return NextResponse.json({ success: true, token: jwtToken, list_id: savedListId ?? null });
   } catch (error) {
     console.error('Subscribe error:', error);
     return NextResponse.json(

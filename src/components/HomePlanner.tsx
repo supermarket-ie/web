@@ -438,11 +438,11 @@ function UnlockCTA({ householdSize, savings, listContent, familySize, onUnlocked
     trackEvent('unlock_started');
 
     try {
-      // Step 1: subscribe / sign in
+      // Single call: subscribe + list save happen server-side together
       const subRes = await fetch('/api/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, familySize: householdSize }),
+        body: JSON.stringify({ email, familySize: householdSize, plannerMarkdown: listContent }),
       });
       if (!subRes.ok) {
         const data = await subRes.json().catch(() => ({}));
@@ -450,42 +450,17 @@ function UnlockCTA({ householdSize, savings, listContent, familySize, onUnlocked
       }
       const subData = await subRes.json();
       const token: string = subData.token;
+      const listId: string | null = subData.list_id ?? null;
 
       if (token) {
         saveSession({ token, email, familySize: String(householdSize), expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 });
       }
 
       trackEvent('unlock_success', undefined, token);
-
-      // Step 2: save the planner list as a structured saved_list
-      let listId: string | null = null;
-      try {
-        const saveRes = await fetch('/api/lists/save-from-planner', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, markdown: listContent, family_size: familySize }),
-        });
-        if (saveRes.ok) {
-          const saveData = await saveRes.json();
-          listId = saveData.list_id ?? null;
-          if (listId) {
-            trackEvent('planner_list_saved', { list_id: listId }, token);
-            // Step 3: re-send subscribe email with the correct list ID embedded
-            // (fire-and-forget — don't block the redirect)
-            fetch('/api/subscribe', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, familySize: householdSize, savedListId: listId }),
-            }).then(() => trackEvent('magic_link_sent_for_saved_list', { list_id: listId }, token))
-              .catch(() => {});
-          }
-        } else {
-          trackEvent('planner_list_save_failed', { status: saveRes.status }, token);
-          setSaveFailed(true);
-        }
-      } catch (saveErr) {
-        console.warn('[unlock] save-from-planner failed:', saveErr);
-        trackEvent('planner_list_save_failed', { error: String(saveErr) }, token);
+      if (listId) {
+        trackEvent('planner_list_saved', { list_id: listId }, token);
+      } else {
+        trackEvent('planner_list_save_failed', {}, token);
         setSaveFailed(true);
       }
 

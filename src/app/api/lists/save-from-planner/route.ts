@@ -1,97 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import jwt from 'jsonwebtoken';
+import { parseMarkdownList } from '@/lib/parse-planner-markdown';
 
 const SECRET = process.env.MAGIC_LINK_SECRET;
 if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
-
-// ── Markdown parser — same logic as HomePlanner's parseListItems but richer ──
-
-interface ParsedItem {
-  canonical_name: string;
-  category: string;
-  store: string;
-  price: number;
-  quantity: number;
-  on_promotion: boolean;
-}
-
-interface ParsedStoreTotal {
-  store: string;
-  total: number;
-  item_count: number;
-}
-
-function parseMarkdownList(content: string): { items: ParsedItem[]; storeTotals: ParsedStoreTotal[] } {
-  const lines = content.split('\n');
-  const items: ParsedItem[] = [];
-  let currentCategory = '';
-
-  // Track store item counts
-  const storeCounts: Record<string, number> = {};
-
-  for (const line of lines) {
-    // Category headers: **Dairy & Eggs** or ## Dairy
-    const catMatch = line.match(/^\*\*(.+?)\*\*\s*$/) ?? line.match(/^#{1,3}\s+(.+)$/);
-    if (catMatch) {
-      const candidate = catMatch[1].trim();
-      // Only treat as category if it doesn't look like a store total line
-      if (!candidate.match(/^(tesco|dunnes|supervalu|aldi|lidl)/i) && !candidate.includes('€')) {
-        currentCategory = candidate;
-        continue;
-      }
-    }
-
-    // Item lines: "- Chicken Fillets — Tesco €4.99" or "- **Chicken Fillets** — Dunnes €3.50"
-    // Also handle: "- Chicken Fillets (on offer) — SuperValu €3.99 ~~€5.99~~"
-    const itemMatch = line.match(
-      /^[-•]\s+\*?\*?(.+?)\*?\*?\s+[—–-]+\s+(Tesco|Dunnes|SuperValu|Aldi|Lidl)\s+€(\d+(?:\.\d{1,2})?)/i
-    );
-    if (itemMatch) {
-      const name = itemMatch[1].replace(/\s*\(.*?\)\s*/g, '').trim(); // strip parenthetical notes
-      const store = itemMatch[2].toLowerCase();
-      const price = parseFloat(itemMatch[3]);
-      const isPromo = /on (offer|sale|promotion|promo)|was €|~~€/i.test(line);
-
-      if (name && store && !isNaN(price)) {
-        items.push({
-          canonical_name: name,
-          category: currentCategory || 'Other',
-          store,
-          price,
-          quantity: 1,
-          on_promotion: isPromo,
-        });
-        storeCounts[store] = (storeCounts[store] ?? 0) + 1;
-      }
-    }
-  }
-
-  // Parse store totals section
-  const storeTotals: ParsedStoreTotal[] = [];
-  let inTotals = false;
-  for (const line of lines) {
-    if (/store total|🏪/i.test(line)) { inTotals = true; continue; }
-    if (inTotals && line.trim() === '') break;
-    if (inTotals) {
-      const m = line.match(/\*?\*?(tesco|dunnes|supervalu|aldi|lidl)\*?\*?:?\s*€?(\d+(?:\.\d{2})?)\s*(?:\((\d+)\s*items?\))?/i);
-      if (m) {
-        const store = m[1].toLowerCase();
-        const total = parseFloat(m[2]);
-        const explicitCount = m[3] ? parseInt(m[3], 10) : undefined;
-        if (!isNaN(total)) {
-          storeTotals.push({
-            store,
-            total,
-            item_count: explicitCount ?? storeCounts[store] ?? 0,
-          });
-        }
-      }
-    }
-  }
-
-  return { items, storeTotals };
-}
 
 // ── Route handler ────────────────────────────────────────────────────────────
 
