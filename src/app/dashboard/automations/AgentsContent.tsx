@@ -65,7 +65,7 @@ function MealPlannerCard({ token, agent }: { token: string; agent: UserAgent | n
     <div className="rounded-2xl overflow-hidden mb-4"
       style={{ border: '1px solid var(--surface-container)', background: 'var(--surface-container-lowest)' }}>
       <div className="px-4 py-3 flex items-center justify-between"
-        style={{ background: '#00944A' }}>
+        style={{ background: 'linear-gradient(135deg, #006A35, #00944A)' }}>
         <div className="flex items-center gap-2">
           <span className="text-lg">🍽️</span>
           <span className="text-white text-sm font-bold">Meal planner</span>
@@ -209,9 +209,11 @@ export default function AgentsPage() {
 
   if (loading) {
     return (
-      <div className="px-4 py-8 max-w-2xl mx-auto">
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-28 rounded-2xl animate-pulse" style={{ background: 'var(--surface-container-low)' }} />)}
+      <div className="min-h-screen relative overflow-hidden noise-bg" style={{ background: 'var(--surface)' }}>
+        <div className="relative z-10 max-w-2xl mx-auto px-4 pt-6 pb-24 space-y-3">
+          <div className="h-24 rounded-2xl animate-pulse" style={{ background: 'var(--surface-container-lowest)' }} />
+          <div className="h-40 rounded-2xl animate-pulse" style={{ background: 'var(--surface-container-lowest)' }} />
+          <div className="h-20 rounded-2xl animate-pulse" style={{ background: 'var(--surface-container-lowest)' }} />
         </div>
       </div>
     );
@@ -221,72 +223,112 @@ export default function AgentsPage() {
   const lunchAgent = userAgents.find(a => a.agent_type === 'lunch_planner') ?? null;
 
   return (
-    <div className="px-4 py-8 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--on-background)' }}>Your agents</h1>
-      <p className="text-sm mb-6" style={{ color: 'var(--on-surface-variant)' }}>
-        Agents that work for you — planning meals, watching prices, and keeping you informed.
-      </p>
+    <div className="min-h-screen relative overflow-hidden noise-bg" style={{ background: 'var(--surface)' }}>
+      {/* Background blobs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="gradient-blob" style={{
+          width: 500, height: 500,
+          background: 'linear-gradient(135deg, rgba(0,106,53,0.10), rgba(107,254,156,0.07))',
+          top: -200, left: -100,
+        }} />
+        <div className="gradient-blob" style={{
+          width: 350, height: 350,
+          background: 'linear-gradient(135deg, rgba(0,220,255,0.06), rgba(107,254,156,0.04))',
+          top: '50%', right: -120,
+        }} />
+        <div className="absolute inset-0 dot-grid opacity-40" />
+      </div>
 
-      {/* Main agents */}
-      <MealPlannerCard token={token!} agent={mealAgent || lunchAgent} />
-
-      {/* Background agents */}
-      <h2 className="text-xs font-bold uppercase tracking-wider mt-8 mb-3" style={{ color: 'var(--on-surface-variant)' }}>
-        Background agents
-      </h2>
-
-      {status && (
-        <>
-          <BackgroundAgentCard
-            title="Weekly digest"
-            emoji="📧"
-            description="Personalised email with price changes, deals, and a one-click 'same again' link."
-            schedule="Sunday 09:00"
-            enabled={status.weeklyDigest.enabled}
-            onToggle={v => toggleAgent('weeklyDigestEnabled', v)}
-          />
-          <BackgroundAgentCard
-            title="Price watchdog"
-            emoji="📊"
-            description="Monitors your usual items daily. Alerts you when your basket gets meaningfully cheaper."
-            schedule="Daily 08:30"
-            enabled={status.watchdog.enabled}
-            lastSent={status.watchdog.lastSent}
-            onToggle={v => toggleAgent('watchdogEnabled', v)}
-          />
-        </>
-      )}
-
-      {/* Custom agent input */}
-      <div className="mt-8 rounded-2xl px-4 py-4"
-        style={{ background: 'var(--surface-container-low)', border: '1px dashed var(--surface-container)' }}>
-        <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--on-surface-variant)' }}>
-          Add an agent
-        </p>
-        <p className="text-sm mb-3" style={{ color: 'var(--on-surface-variant)' }}>
-          Tell me what you want and I'll set it up — alerts, reminders, recurring plans, anything.
-        </p>
-        <div className="flex gap-2">
-          <input
-            value={customInput}
-            onChange={e => setCustomInput(e.target.value)}
-            placeholder="e.g. Alert me when butter drops below €2.50"
-            className="flex-1 px-3 py-2.5 rounded-xl text-sm border-0 outline-none"
-            style={{ background: 'var(--surface-container-lowest)', color: 'var(--on-surface)' }}
-          />
-          <button className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
-            style={{ background: '#00944A' }}>
-            Go
-          </button>
+      <div className="relative z-10 max-w-2xl mx-auto px-4 pt-6 pb-24">
+        {/* Header card */}
+        <div className="rounded-2xl overflow-hidden mb-6"
+          style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+          <div className="px-5 py-4 relative overflow-hidden"
+            style={{ background: 'linear-gradient(135deg, #006A35 0%, #00944A 60%, #00a854 100%)' }}>
+            <div className="absolute pointer-events-none" style={{
+              width: 200, height: 200, borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(0,220,255,0.12) 0%, transparent 70%)',
+              top: -60, right: -40,
+            }} />
+            <div className="relative">
+              <h1 className="font-bold text-xl leading-tight" style={{
+                background: 'linear-gradient(135deg, #ffffff, #6BFE9C)',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+              }}>Automations</h1>
+              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                Agents that work in the background — planning meals, watching prices, keeping you informed.
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 mt-3">
-          {['Alert when eggs drop below €3', 'Thursday planning reminder', 'Cheapest basket this week'].map(s => (
-            <button key={s} onClick={() => setCustomInput(s)}
-              className="text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-80"
-              style={{ background: 'var(--surface-container)', color: 'var(--on-surface-variant)' }}>
-              {s}
+
+        {/* Section label */}
+        <h2 className="text-xs font-bold uppercase tracking-wider mb-3"
+          style={{ color: '#00DCFF', textShadow: '0 0 10px rgba(0,220,255,0.3)' }}>
+          On demand
+        </h2>
+
+        <MealPlannerCard token={token!} agent={mealAgent || lunchAgent} />
+
+        <h2 className="text-xs font-bold uppercase tracking-wider mt-8 mb-3"
+          style={{ color: '#00DCFF', textShadow: '0 0 10px rgba(0,220,255,0.3)' }}>
+          Background agents
+        </h2>
+
+        {status && (
+          <>
+            <BackgroundAgentCard
+              title="Weekly digest"
+              emoji="📧"
+              description="Personalised email with price changes, deals, and a one-click 'same again' link."
+              schedule="Sunday 09:00"
+              enabled={status.weeklyDigest.enabled}
+              onToggle={v => toggleAgent('weeklyDigestEnabled', v)}
+            />
+            <BackgroundAgentCard
+              title="Price watchdog"
+              emoji="📊"
+              description="Monitors your usual items daily. Alerts you when your basket gets meaningfully cheaper."
+              schedule="Daily 08:30"
+              enabled={status.watchdog.enabled}
+              lastSent={status.watchdog.lastSent}
+              onToggle={v => toggleAgent('watchdogEnabled', v)}
+            />
+          </>
+        )}
+
+        {/* Add an agent */}
+        <h2 className="text-xs font-bold uppercase tracking-wider mt-8 mb-3"
+          style={{ color: '#00DCFF', textShadow: '0 0 10px rgba(0,220,255,0.3)' }}>
+          Add an agent
+        </h2>
+        <div className="rounded-2xl px-4 py-4"
+          style={{ background: 'var(--surface-container-lowest)', border: '1px solid rgba(0,220,255,0.2)' }}>
+          <p className="text-sm mb-3" style={{ color: 'var(--on-surface-variant)' }}>
+            Tell me what you want and I&apos;ll set it up — alerts, reminders, recurring plans, anything.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={customInput}
+              onChange={e => setCustomInput(e.target.value)}
+              placeholder="e.g. Alert me when butter drops below €2.50"
+              className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: 'var(--surface-container)', color: 'var(--on-surface)', border: '1px solid var(--surface-container-high)' }}
+            />
+            <button className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+              style={{ background: '#00944A' }}>
+              Go
             </button>
-          ))}
+          </div>
+          <div className="flex flex-wrap gap-2 mt-3">
+            {['Alert when eggs drop below €3', 'Thursday planning reminder', 'Cheapest basket this week'].map(s => (
+              <button key={s} onClick={() => setCustomInput(s)}
+                className="text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-80"
+                style={{ background: 'rgba(0,220,255,0.07)', color: 'var(--on-surface)', border: '1px solid rgba(0,220,255,0.25)' }}>
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
