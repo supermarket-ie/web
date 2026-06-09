@@ -152,6 +152,14 @@ export default async function ListPage({
     ? activeList.items as Array<{ canonical_name: string; store: string; price: number; quantity?: number; category?: string; store_product_name?: string; on_promotion?: boolean }>
     : null;
 
+  // Household memory for intelligence section
+  const { data: householdData } = await supabaseAdmin
+    .from('households')
+    .select('memory')
+    .eq('subscriber_id', payload.subscriberId)
+    .single();
+  const householdMemory = householdData?.memory ?? null;
+
   return (
     <>
       <SiteHeader />
@@ -171,6 +179,7 @@ export default async function ListPage({
           created_at: l.created_at,
         }))}
         activeListId={activeList.id}
+        householdMemory={householdMemory}
       />
       <SiteFooter />
     </>
