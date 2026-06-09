@@ -1,27 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { loadSession } from '@/lib/session';
-import { WeeklyCommandCentre } from '@/components/WeeklyCommandCentre';
+import { HomePlanner } from '@/components/HomePlanner';
+import { PlannerSSRShell } from '@/components/PlannerSSRShell';
+import { HideAfterHydration } from '@/components/HideAfterHydration';
 
-export function PlanPage() {
-  const [isSignedIn, setIsSignedIn] = useState(false);
+// Shown to logged-in users in place of the full marketing hero.
+// Same visual language as My Shop / Household / Automations.
+export function LoggedInPlanner() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const session = loadSession();
-    const signedIn = !!session?.token;
-    setIsSignedIn(signedIn);
+    setIsLoggedIn(!!session?.token);
     setReady(true);
-
-    if (signedIn) {
-      const el = document.getElementById('homepage-marketing');
-      if (el) el.style.display = 'none';
-    }
   }, []);
 
-  if (!ready || !isSignedIn) return null;
+  // During SSR / hydration — render nothing (HeroSection handles SSR)
+  if (!ready) return null;
 
+  // Guest — let HeroSection render the full marketing view
+  if (!isLoggedIn) return null;
+
+  // Logged-in user — show clean planner page
   return (
     <div className="min-h-screen relative overflow-hidden noise-bg" style={{ background: 'var(--surface)' }}>
       {/* Background blobs */}
@@ -56,13 +59,22 @@ export function PlanPage() {
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
               }}>Planner</h1>
               <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                Plan your weekly shop — prices tracked across every major Irish supermarket.
+                Plan your weekly shop — prices updated across every major Irish supermarket.
               </p>
             </div>
           </div>
         </div>
 
-        <WeeklyCommandCentre />
+        {/* Chat interface */}
+        <div className="rounded-2xl overflow-hidden"
+          style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)', minHeight: 480 }}>
+          <div className="p-4 sm:p-5">
+            <HideAfterHydration>
+              <PlannerSSRShell />
+            </HideAfterHydration>
+            <HomePlanner />
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -368,7 +368,7 @@ export function WeeklyCommandCentre() {
       {/* Header */}
       <div className="flex items-center justify-between pt-1">
         <div>
-          <h2 className="text-base font-bold" style={{ color: 'var(--on-surface)' }}>This week</h2>
+          <h2 className="text-base font-bold" style={{ color: '#00DCFF', textShadow: '0 0 10px rgba(0,220,255,0.3)' }}>This week</h2>
           <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{weekLabel}</p>
         </div>
         <span
@@ -420,7 +420,7 @@ export function WeeklyCommandCentre() {
             border: '1px solid var(--surface-container)',
           }}
         >
-          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--on-surface-variant)' }}>
+          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#00DCFF', textShadow: '0 0 10px rgba(0,220,255,0.3)' }}>
             Agent insights
           </p>
           <ul className="space-y-1.5">
