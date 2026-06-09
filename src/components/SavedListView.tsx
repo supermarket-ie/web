@@ -65,24 +65,48 @@ function formatDate(dateStr: string) {
 
 /** Determine full/partial match stores and best basket */
 function analyseStoreTotals(storeTotals: StoreTotal[], totalItems: number) {
-  const threshold = Math.ceil(totalItems * 0.9);
-  const annotated = storeTotals.map(st => ({
-    ...st,
-    itemCount: st.item_count ?? 0,
-    isFullMatch: (st.item_count ?? 0) >= threshold,
-  }));
+  if (!storeTotals.length) return { sorted: [], best: null, isBestPartial: false, fullMatches: [], partialMatches: [], hasItemCounts: false };
 
-  // Sort full matches by price, partial by item count desc then price
+  // Do we have meaningful item_count data?
+  const hasItemCounts = storeTotals.some(st => (st.item_count ?? 0) > 0);
+
+  // Sanity check: if a store's total is <20% of the highest total, it's obviously partial
+  // regardless of what item_count says
+  const maxTotal = Math.max(...storeTotals.map(s => s.total));
+
+  const annotated = storeTotals.map(st => {
+    const itemCount = st.item_count ?? 0;
+
+    // Three ways a store can be flagged partial:
+    // 1. item_count data exists and it's below 90% of totalItems
+    // 2. item_count data exists and it's below 90% of the best store's item_count
+    // 3. total is suspiciously low (<20% of the highest total) — sanity check
+    const maxItemCount = hasItemCounts ? Math.max(...storeTotals.map(s => s.item_count ?? 0)) : 0;
+    const threshold = totalItems > 0 ? Math.ceil(totalItems * 0.9)
+      : hasItemCounts ? Math.ceil(maxItemCount * 0.9)
+      : 0;
+
+    const isSuspiciouslyLow = maxTotal > 0 && (st.total / maxTotal) < 0.2;
+    const isBelowThreshold = hasItemCounts && threshold > 0 && itemCount < threshold;
+
+    const isFullMatch = !isSuspiciouslyLow && !isBelowThreshold && (hasItemCounts ? itemCount >= threshold : true);
+
+    return { ...st, itemCount, isFullMatch };
+  });
+
+  // If item_count data is absent for all stores, we can't determine coverage.
+  // Apply sanity check only — flag outliers as partial, but don't crown a "Best".
   const fullMatches = annotated.filter(s => s.isFullMatch).sort((a, b) => a.total - b.total);
   const partialMatches = annotated.filter(s => !s.isFullMatch).sort((a, b) => b.itemCount - a.itemCount || a.total - b.total);
 
-  const best = fullMatches[0] ?? partialMatches[0] ?? null;
-  const isBestPartial = !fullMatches.length && !!partialMatches.length;
+  // Only pick a "best" if we have real coverage data or all stores look comparable
+  const canPickBest = hasItemCounts || (fullMatches.length === annotated.length);
+  const best = canPickBest ? (fullMatches[0] ?? null) : null;
+  const isBestPartial = false; // we only ever show full matches as best
 
-  // Sorted for display: full matches first (by price), then partial (by item count desc)
   const sorted = [...fullMatches, ...partialMatches];
 
-  return { sorted, best, isBestPartial, fullMatches, partialMatches };
+  return { sorted, best, isBestPartial, fullMatches, partialMatches, hasItemCounts };
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
@@ -111,8 +135,7 @@ function HeroCard({
   onUpdateList: () => void;
   onShare: () => void;
 }) {
-  const { sorted, best, isBestPartial } = analyseStoreTotals(storeTotals, totalItems);
-  const matchedCount = best?.itemCount ?? 0;
+  const { sorted, best, hasItemCounts } = analyseStoreTotals(storeTotals, totalItems);
 
   return (
     <div className="rounded-2xl overflow-hidden mb-6"
@@ -130,14 +153,14 @@ function HeroCard({
             <div className="text-right">
               <div className="text-white text-2xl font-extrabold">{fmt(best.total)}</div>
               <div className="text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                {storeDisplayName(best.store)}{isBestPartial ? ' (partial)' : ''}
+                {storeDisplayName(best.store)}
               </div>
             </div>
           )}
         </div>
-        {totalItems > 0 && (
+        {hasItemCounts && totalItems > 0 && best && (
           <p className="text-xs mt-2 font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>
-            {matchedCount}/{totalItems} items matched
+            {best.itemCount}/{totalItems} items matched
           </p>
         )}
       </div>
@@ -147,7 +170,7 @@ function HeroCard({
         <div className="flex flex-wrap" style={{ borderTop: '1px solid var(--surface-container)' }}>
           {sorted.map((st, i) => {
             const s = storeStyle(st.store);
-            const isBest = i === 0 && st.isFullMatch;
+            const isBest = st.isFullMatch && i === sorted.findIndex(s => s.isFullMatch);
             return (
               <div key={st.store} className="flex-1 px-3 py-2.5 text-center min-w-0"
                 style={{ borderRight: i < sorted.length - 1 ? '1px solid var(--surface-container)' : 'none', minWidth: '33%' }}>
@@ -157,11 +180,13 @@ function HeroCard({
                 <div className="text-sm font-bold mt-0.5" style={{ color: isBest ? s.bg : 'var(--on-surface)' }}>
                   {fmt(st.total)}
                 </div>
-                <div className="text-[10px] mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>
-                  {st.itemCount}/{totalItems} items
-                  {isBest && <span className="ml-1 font-bold" style={{ color: '#16a34a' }}>[Best]</span>}
-                  {!st.isFullMatch && <span className="ml-1 font-bold" style={{ color: '#e85d04' }}>[Partial]</span>}
-                </div>
+                {hasItemCounts && (
+                  <div className="text-[10px] mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>
+                    {st.itemCount}/{totalItems > 0 ? totalItems : '?'} items
+                    {isBest && <span className="ml-1 font-bold" style={{ color: '#16a34a' }}> Best</span>}
+                    {!st.isFullMatch && <span className="ml-1 font-bold" style={{ color: '#e85d04' }}> Partial</span>}
+                  </div>
+                )}
               </div>
             );
           })}
