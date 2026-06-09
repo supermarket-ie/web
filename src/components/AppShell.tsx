@@ -250,15 +250,27 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ── Mobile bottom bar ── */}
       {showNav && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex"
-          style={{ background: '#fff', borderTop: '1px solid #eaeaea', height: 56 }}>
+          style={{ background: '#0E1A12', borderTop: '1px solid rgba(107,254,156,0.15)', height: 64, paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {NAV_ITEMS.map(item => {
             const active = item.match(pathname);
             return (
               <Link key={item.href} href={resolveHref(item.href)}
-                className="flex-1 flex flex-col items-center justify-center gap-0.5"
-                style={{ textDecoration: 'none', color: '#000' }}>
-                <span style={{ opacity: active ? 1 : 0.4 }}>{item.icon}</span>
-                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, opacity: active ? 1 : 0.5 }}>
+                className="flex-1 flex flex-col items-center justify-center gap-1 relative"
+                style={{ textDecoration: 'none' }}>
+                {/* Active indicator pill */}
+                {active && (
+                  <span className="absolute top-1.5 left-1/2 -translate-x-1/2 rounded-full"
+                    style={{ width: 32, height: 3, background: '#6BFE9C' }} />
+                )}
+                <span style={{ color: active ? '#6BFE9C' : 'rgba(255,255,255,0.45)', marginTop: active ? 4 : 0 }}>
+                  {item.icon}
+                </span>
+                <span style={{
+                  fontSize: 11,
+                  fontWeight: active ? 700 : 400,
+                  color: active ? '#ffffff' : 'rgba(255,255,255,0.45)',
+                  letterSpacing: '-0.01em',
+                }}>
                   {item.label}
                 </span>
               </Link>
