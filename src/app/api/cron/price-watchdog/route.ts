@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     // Check for nudge parameter (Thursday nudge has lower thresholds)
     const url = new URL(request.url);
-    const nudge = url.searchParams.get('nudge');
+    const nudge = url.searchParams.get('nudge') ?? undefined;
     const isThursdayNudge = nudge === 'thursday';
 
     const minSavings = isThursdayNudge ? 1.50 : MIN_SAVINGS_EUR;
