@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     // --- Fetch eligible subscribers respecting cooldown ---
     const { data: subscribers, error: subError } = await supabaseAdmin
       .from('subscribers')
-      .select('id, email, unsubscribe_token, last_watchdog_sent')
+      .select('id, email, unsubscribe_token, last_watchdog_sent, last_list_planned_at')
       .eq('subscribed', true)
       .in('id', eligibleIds)
       .or(`last_watchdog_sent.is.null,last_watchdog_sent.lt.${cooldownDate}`)
@@ -115,6 +115,7 @@ export async function GET(request: NextRequest) {
 
     let sent = 0;
     let skipped = 0;
+    let skippedAlreadyPlanned = 0;
     let failed = 0;
 
     for (const subscriber of subscribers as {
@@ -122,8 +123,19 @@ export async function GET(request: NextRequest) {
       email: string;
       unsubscribe_token: string;
       last_watchdog_sent: string | null;
+      last_list_planned_at: string | null;
     }[]) {
       try {
+        // --- Skip if already planned this week (they're on top of it) ---
+        if (subscriber.last_list_planned_at) {
+          const lastPlanned = new Date(subscriber.last_list_planned_at);
+          const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+          if (lastPlanned > threeDaysAgo) {
+            skippedAlreadyPlanned++;
+            console.log(`[price-watchdog] Skip ${subscriber.email}: already planned within 3 days (${subscriber.last_list_planned_at})`);
+            continue;
+          }
+        }
         // Get price comparisons for this subscriber's usual items
         const priceChanges = (await queryPriceChanges(subscriber.id)) as PriceChange[];
         const cheaperItems: WatchdogItem[] = priceChanges
@@ -197,7 +209,7 @@ export async function GET(request: NextRequest) {
         );
 
         // 200ms delay between sends
-        if (sent + failed + skipped < subscribers.length) {
+        if (sent + failed + skipped + skippedAlreadyPlanned < subscribers.length) {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
       } catch (subscriberError) {
@@ -207,9 +219,9 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(
-      `[price-watchdog] Done: ${sent} sent, ${skipped} skipped, ${failed} failed`,
+      `[price-watchdog] Done: ${sent} sent, ${skipped} skipped, ${skippedAlreadyPlanned} skipped_already_planned, ${failed} failed`,
     );
-    return NextResponse.json({ sent, skipped, failed });
+    return NextResponse.json({ sent, skipped, skippedAlreadyPlanned, failed });
   } catch (error) {
     console.error('[price-watchdog] Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

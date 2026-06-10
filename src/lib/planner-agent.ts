@@ -733,6 +733,12 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
             .update({ refresh_cache: null, refresh_cache_at: null })
             .eq('id', subscriberId)
             .then(() => {});
+          // Track when user last planned a list (for retention targeting)
+          supabaseAdmin
+            .from('subscribers')
+            .update({ last_list_planned_at: new Date().toISOString() })
+            .eq('id', subscriberId)
+            .then(() => {});
           return {
             saved: true,
             list_id: listId,
@@ -808,6 +814,12 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
           supabaseAdmin
             .from('subscribers')
             .update({ refresh_cache: null, refresh_cache_at: null })
+            .eq('id', subscriberId)
+            .then(() => {});
+          // Track when user last planned a list (for retention targeting)
+          supabaseAdmin
+            .from('subscribers')
+            .update({ last_list_planned_at: new Date().toISOString() })
             .eq('id', subscriberId)
             .then(() => {});
           return {

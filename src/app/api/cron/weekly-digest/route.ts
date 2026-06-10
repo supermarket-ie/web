@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     // Fetch all active subscribers
     const { data: subscribers, error: subscribersError } = await supabaseAdmin
       .from('subscribers')
-      .select('id, email, family_size, unsubscribe_token')
+      .select('id, email, family_size, unsubscribe_token, last_list_planned_at')
       .eq('subscribed', true)
       .limit(50); // max 50 per batch
 
@@ -143,10 +143,22 @@ export async function GET(request: NextRequest) {
 
     let sent = 0;
     let failed = 0;
+    let skippedAlreadyPlanned = 0;
     const tiers = { t1: 0, t2: 0, t3: 0 };
 
     for (const subscriber of subscribers) {
       try {
+        // --- Skip if already planned this week ---
+        if (subscriber.last_list_planned_at) {
+          const lastPlanned = new Date(subscriber.last_list_planned_at);
+          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+          if (lastPlanned > sevenDaysAgo) {
+            skippedAlreadyPlanned++;
+            console.log(`[weekly-digest] Skipped ${subscriber.email}: already planned within 7 days (${subscriber.last_list_planned_at})`);
+            continue;
+          }
+        }
+
         // --- Determine tier ---
         const [{ data: household }, { count: itemCount }] = await Promise.all([
           supabaseAdmin
@@ -251,8 +263,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`[weekly-digest] Done: ${sent} sent, ${failed} failed | tiers: t1=${tiers.t1} t2=${tiers.t2} t3=${tiers.t3}`);
-    return NextResponse.json({ sent, failed, tiers });
+    console.log(`[weekly-digest] Done: ${sent} sent, ${failed} failed, ${skippedAlreadyPlanned} skipped_already_planned | tiers: t1=${tiers.t1} t2=${tiers.t2} t3=${tiers.t3}`);
+    return NextResponse.json({ sent, failed, skippedAlreadyPlanned, tiers });
 
   } catch (error) {
     console.error('[weekly-digest] Unexpected error:', error);
