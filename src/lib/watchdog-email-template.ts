@@ -23,6 +23,7 @@ export interface WatchdogEmailParams {
   storeSplit: StoreSplitInfo;
   dashboardUrl: string;
   unsubscribeUrl: string;
+  nudge?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,12 +172,17 @@ function storeSplitHTML(storeSplit: StoreSplitInfo): string {
 // ---------------------------------------------------------------------------
 
 export function generateWatchdogEmail(params: WatchdogEmailParams): { subject: string; html: string } {
-  const { cheaperItems, totalSavings, storeSplit, dashboardUrl, unsubscribeUrl } = params;
+  const { cheaperItems, totalSavings, storeSplit, dashboardUrl, unsubscribeUrl, nudge } = params;
   const itemCount = cheaperItems.length;
 
-  const subject = totalSavings >= 5
-    ? `\uD83D\uDCB0 Your agent found ${formatPrice(totalSavings)} savings on your usual items`
-    : `\uD83D\uDD14 Price drops on ${itemCount} item${itemCount !== 1 ? 's' : ''} from your last shop`;
+  let subject: string;
+  if (nudge === 'thursday') {
+    subject = 'Planning your shop this week? \uD83D\uDED2';
+  } else if (totalSavings >= 5) {
+    subject = `\uD83D\uDCB0 Your agent found ${formatPrice(totalSavings)} savings on your usual items`;
+  } else {
+    subject = `\uD83D\uDD14 Price drops on ${itemCount} item${itemCount !== 1 ? 's' : ''} from your last shop`;
+  }
 
   const heroSubtitle = `${itemCount} of your usual item${itemCount !== 1 ? 's are' : ' is'} cheaper right now &mdash; potential saving of ${formatPrice(totalSavings)}.`;
 

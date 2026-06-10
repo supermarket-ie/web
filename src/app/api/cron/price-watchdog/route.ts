@@ -62,6 +62,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid authorization token' }, { status: 401 });
     }
 
+    // Check for nudge parameter (Thursday nudge has lower thresholds)
+    const url = new URL(request.url);
+    const nudge = url.searchParams.get('nudge');
+    const isThursdayNudge = nudge === 'thursday';
+
+    const minSavings = isThursdayNudge ? 1.50 : MIN_SAVINGS_EUR;
+    const minCheaperItems = isThursdayNudge ? 1 : MIN_CHEAPER_ITEMS;
+
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
     const cooldownDate = new Date(
       Date.now() - COOLDOWN_DAYS * 24 * 60 * 60 * 1000,
@@ -151,7 +159,7 @@ export async function GET(request: NextRequest) {
           }));
 
         // --- Threshold checks ---
-        if (cheaperItems.length < MIN_CHEAPER_ITEMS) {
+        if (cheaperItems.length < minCheaperItems) {
           console.log(
             `[price-watchdog] Skip ${subscriber.email}: only ${cheaperItems.length} cheaper item(s)`,
           );
@@ -163,9 +171,9 @@ export async function GET(request: NextRequest) {
           cheaperItems.reduce((sum, c) => sum + Math.abs(c.change), 0).toFixed(2),
         );
 
-        if (totalSavings < MIN_SAVINGS_EUR) {
+        if (totalSavings < minSavings) {
           console.log(
-            `[price-watchdog] Skip ${subscriber.email}: savings €${totalSavings.toFixed(2)} < €${MIN_SAVINGS_EUR.toFixed(2)}`,
+            `[price-watchdog] Skip ${subscriber.email}: savings €${totalSavings.toFixed(2)} < €${minSavings.toFixed(2)}`,
           );
           skipped++;
           continue;
@@ -184,6 +192,7 @@ export async function GET(request: NextRequest) {
           storeSplit,
           dashboardUrl,
           unsubscribeUrl,
+          nudge,
         });
 
         await resend.emails.send({
