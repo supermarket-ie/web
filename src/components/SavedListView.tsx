@@ -50,7 +50,6 @@ interface Props {
   activeListId: string;
   householdMemory?: HouseholdMemory | null;
   intent?: string;
-  targetListId?: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -593,7 +592,7 @@ function HistorySwitcher({ allLists, activeListId, token }: { allLists: ListSumm
 export function SavedListView({
   listContent, structuredItems, storeTotals, listName, createdAt,
   conversationId, token, allLists, activeListId, householdMemory,
-  intent, targetListId,
+  intent,
 }: Props) {
   const router = useRouter();
   const [showSameAgainBanner, setShowSameAgainBanner] = useState(intent === 'same-again');
