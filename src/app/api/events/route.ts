@@ -1,7 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
+import { getSubscriberId } from '@/lib/auth';
 
 const ALLOWED_EVENT_TYPES = new Set([
   'planner_started',
@@ -29,13 +27,7 @@ export async function POST(req: Request) {
   }
 
   // Extract subscriber_id from JWT if present
-  let subscriberId: string | null = null;
-  if (token && SECRET) {
-    try {
-      const payload = jwt.verify(token, SECRET) as { subscriberId: string };
-      subscriberId = payload.subscriberId;
-    } catch {}
-  }
+  const subscriberId: string | null = getSubscriberId(token);
 
   // Await the insert — serverless functions kill the process after response,
   // so fire-and-forget never actually executes.

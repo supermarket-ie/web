@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { verifySessionToken, type SessionPayload } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
 
-const SECRET = process.env.MAGIC_LINK_SECRET;
-if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
 const VALID_FAMILY_SIZES = new Set(['1', '2', '3-4', '5+']);
-
-interface MagicLinkPayload {
-  email: string;
-  subscriberId: string;
-  familySize: string;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,10 +12,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token required' }, { status: 400 });
     }
 
-    let payload: MagicLinkPayload;
-    try {
-      payload = jwt.verify(token, SECRET!) as MagicLinkPayload;
-    } catch {
+    const payload: SessionPayload | null = verifySessionToken(token);
+    if (!payload) {
       return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
     }
 

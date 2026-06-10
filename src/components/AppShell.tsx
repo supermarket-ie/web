@@ -78,6 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     const session = loadSession();
     const token = session?.token ?? null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setListToken(token);
     setReady(true);
 

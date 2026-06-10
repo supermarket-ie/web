@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
+import { getSubscriberId } from '@/lib/auth';
 
 export async function GET(
   req: NextRequest,
@@ -11,8 +9,8 @@ export async function GET(
   const { productId } = await params;
   const token = req.nextUrl.searchParams.get('token');
 
-  const payload = token ? (() => { try { return jwt.verify(token, SECRET!) as { subscriberId: string }; } catch { return null; } })() : null;
-  if (!payload) {
+  const subscriberId = getSubscriberId(token);
+  if (!subscriberId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

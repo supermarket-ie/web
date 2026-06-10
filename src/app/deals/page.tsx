@@ -42,7 +42,7 @@ function fmt(n: number) { return `€${n.toFixed(2)}`; }
 function pct(was: number, now: number) { return Math.round(((was - now) / was) * 100); }
 
 async function getDeals(): Promise<Deal[]> {
-  let allRows: Deal[] = [];
+  const allRows: Deal[] = [];
   let offset = 0;
   const PAGE = 1000;
 

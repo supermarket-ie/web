@@ -234,7 +234,7 @@ async function getAlertsWithPrices(): Promise<AlertWithLatestPrice[]> {
   const lowestPrices = new Map<string, { price: number; store: string; store_product_name: string }>();
 
   for (const price of priceData || []) {
-    const storeProduct = price.store_products as any;
+    const storeProduct = price.store_products as unknown as { product_id: string; store: string; store_product_name: string };
     const productId = storeProduct.product_id;
 
     if (!lowestPrices.has(productId) || price.price! < lowestPrices.get(productId)!.price) {
@@ -248,8 +248,8 @@ async function getAlertsWithPrices(): Promise<AlertWithLatestPrice[]> {
 
   // Combine alerts with price info
   const result: AlertWithLatestPrice[] = alerts.map(alert => {
-    const subscriber = alert.subscribers as any;
-    const product = alert.products as any;
+    const subscriber = alert.subscribers as unknown as { email: string; unsubscribe_token: string | null };
+    const product = alert.products as unknown as { canonical_name: string; category: string | null };
     const priceInfo = lowestPrices.get(alert.product_id);
 
     return {

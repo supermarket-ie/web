@@ -13,6 +13,7 @@ export function AppNavSpacer({ children }: { children: ReactNode }) {
   useEffect(() => {
     const session = loadSession();
     const hidden = HIDDEN_ON.some(p => pathname.startsWith(p));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setHasNav(!!session?.token && !hidden);
   }, [pathname]);
 

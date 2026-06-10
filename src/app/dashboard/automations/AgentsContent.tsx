@@ -78,7 +78,7 @@ function MealPlannerCard({ token, agent }: { token: string; agent: UserAgent | n
       </div>
       <div className="px-4 py-4">
         <p className="text-sm mb-3" style={{ color: 'var(--on-surface)' }}>
-          Generates dinner or lunch plans built around this week's cheapest items and promotions at Irish supermarkets. Uses your household profile.
+          Generates dinner or lunch plans built around this week&apos;s cheapest items and promotions at Irish supermarkets. Uses your household profile.
         </p>
 
         {!output && !loading && (
@@ -100,7 +100,7 @@ function MealPlannerCard({ token, agent }: { token: string; agent: UserAgent | n
           <div className="py-6 text-center">
             <div className="inline-block w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#00944A', borderTopColor: 'transparent' }} />
             <p className="text-xs mt-2" style={{ color: 'var(--on-surface-variant)' }}>
-              Analysing this week's prices and building your plan...
+              Analysing this week&apos;s prices and building your plan...
             </p>
           </div>
         )}
@@ -181,6 +181,7 @@ export default function AgentsPage() {
   useEffect(() => {
     const session = loadSession();
     if (!session?.token) { router.push('/'); return; }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setToken(session.token);
 
     Promise.all([

@@ -1,7 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
+import { getSubscriberId } from '@/lib/auth';
 
 interface HistoryItem {
   name: string;
@@ -42,13 +40,6 @@ async function getUserHistory(subscriberId: string): Promise<HistoryItem[]> {
 }
 
 export async function GET(request: Request) {
-  if (!SECRET) {
-    return new Response(JSON.stringify({ error: 'Server configuration error' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
   const { searchParams } = new URL(request.url);
   const token = searchParams.get('token');
 
@@ -59,18 +50,16 @@ export async function GET(request: Request) {
     });
   }
 
+  // Verify JWT and extract subscriber ID
+  const subscriberId = getSubscriberId(token);
+  if (!subscriberId) {
+    return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
-    // Verify JWT and extract subscriber ID
-    const payload = jwt.verify(token, SECRET) as { subscriberId: string };
-    const subscriberId = payload.subscriberId;
-
-    if (!subscriberId) {
-      return new Response(JSON.stringify({ error: 'Invalid token' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
     const items = await getUserHistory(subscriberId);
 
     return new Response(JSON.stringify({ items }), {

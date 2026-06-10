@@ -7,6 +7,7 @@ export function CookieBanner() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     if (!localStorage.getItem('cookieConsent')) setShow(true);
   }, []);
 

@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { queryPriceChanges, queryUserHistory } from '@/lib/planner-agent';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
+import { getSubscriberId } from '@/lib/auth';
 
 // Cache TTL: 1 hour (prices update twice a week, no need to recompute per-visit)
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -11,13 +9,10 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get('token');
-  if (!token || !SECRET) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  let subscriberId: string;
-  try {
-    const payload = jwt.verify(token, SECRET!) as { subscriberId: string };
-    subscriberId = payload.subscriberId;
-  } catch {
+  const subscriberId = getSubscriberId(token);
+  if (!subscriberId) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 

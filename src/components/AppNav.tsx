@@ -61,6 +61,7 @@ export function AppNav() {
 
   useEffect(() => {
     const session = loadSession();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setListToken(session?.token ?? null);
     setReady(true);
   }, []);

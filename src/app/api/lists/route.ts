@@ -1,16 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
-if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
-
-function getSubscriberId(token: string): string | null {
-  try {
-    const p = jwt.verify(token, SECRET!) as { subscriberId: string };
-    return p.subscriberId ?? null;
-  } catch { return null; }
-}
+import { getSubscriberId } from '@/lib/auth';
 
 // GET /api/lists?token=xxx — fetch all saved lists for subscriber
 export async function GET(req: Request) {

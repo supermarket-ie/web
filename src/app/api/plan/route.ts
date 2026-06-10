@@ -1,11 +1,9 @@
 import { createAgentUIStreamResponse, UIMessage } from 'ai';
 import { createPlannerAgent, updateHouseholdMemory, type PlannerProfile } from '@/lib/planner-agent';
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
+import { getSubscriberId } from '@/lib/auth';
 
 export const maxDuration = 60;
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
 
 // A list was generated when the agent successfully called save_list or
 // update_list — detected from the tool parts of the response, not by
@@ -36,14 +34,8 @@ export async function POST(req: Request) {
   const body = await req.json();
 
   // ── Auth ──
-  let subscriberId: string | null = null;
   const token = body.token as string | undefined;
-  if (token && SECRET) {
-    try {
-      const payload = jwt.verify(token, SECRET!) as { subscriberId: string };
-      subscriberId = payload.subscriberId;
-    } catch {}
-  }
+  const subscriberId: string | null = getSubscriberId(token);
 
   // ── Extract request data ──
   const conversationId = body.conversationId as string | undefined;

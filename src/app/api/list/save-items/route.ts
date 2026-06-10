@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
+import { getSubscriberId } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -13,11 +11,8 @@ export async function POST(req: NextRequest) {
 
   if (!token || !items?.length) return NextResponse.json({ ok: false }, { status: 400 });
 
-  let subscriberId: string;
-  try {
-    const payload = jwt.verify(token, SECRET!) as { subscriberId: string };
-    subscriberId = payload.subscriberId;
-  } catch {
+  const subscriberId = getSubscriberId(token);
+  if (!subscriberId) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 

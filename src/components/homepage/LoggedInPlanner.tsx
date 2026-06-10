@@ -14,6 +14,7 @@ export function LoggedInPlanner() {
 
   useEffect(() => {
     const session = loadSession();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setIsLoggedIn(!!session?.token);
     setReady(true);
   }, []);

@@ -120,6 +120,7 @@ export function HouseholdEditor({ onSaved }: { onSaved?: () => void }) {
 
   useEffect(() => {
     const session = loadSession();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     if (!session?.token) { setLoading(false); return; }
     fetch(`/api/household?token=${session.token}`)
       .then(r => r.json())

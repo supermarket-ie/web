@@ -364,7 +364,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
         ) : (
           <div className="bg-white rounded-2xl p-8 text-center text-[#5c5b5b] mb-8" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
             <p className="text-lg mb-2">Prices coming soon</p>
-            <p className="text-sm">We're adding {categoryName.toLowerCase()} products — check back shortly.</p>
+            <p className="text-sm">We&apos;re adding {categoryName.toLowerCase()} products — check back shortly.</p>
           </div>
         )}
 

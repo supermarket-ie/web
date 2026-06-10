@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
+import { verifySessionToken } from '@/lib/auth';
 import { parseMarkdownList } from '@/lib/parse-planner-markdown';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
-if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
 
 // ── Route handler ────────────────────────────────────────────────────────────
 
@@ -22,10 +19,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify JWT
-    let decoded: { subscriberId: string; email: string; familySize?: string };
-    try {
-      decoded = jwt.verify(body.token, SECRET!) as typeof decoded;
-    } catch {
+    const decoded = verifySessionToken(body.token);
+    if (!decoded) {
       return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
     }
 

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { queryPriceChanges } from '@/lib/planner-agent';
-import jwt from 'jsonwebtoken';
+import { getSubscriberId } from '@/lib/auth';
 
 export const maxDuration = 30;
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,14 +52,6 @@ export interface WeeklyPlanState {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function getSubscriberId(token: string): string | null {
-  if (!SECRET) return null;
-  try {
-    const p = jwt.verify(token, SECRET) as { subscriberId: string };
-    return p.subscriberId ?? null;
-  } catch { return null; }
-}
-
 function getCurrentWeekStart(): string {
   const now = new Date();
   const day = now.getDay(); // 0=Sun, 1=Mon…
@@ -84,7 +74,7 @@ function computeStatus(meals: { dinners: MealSlot[]; lunches: MealSlot[] }): 'em
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
-  if (!token || !SECRET) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const subscriberId = getSubscriberId(token);
   if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
@@ -92,6 +82,7 @@ export async function GET(req: NextRequest) {
   const weekStart = getCurrentWeekStart();
 
   // Find or create weekly plan
+  // eslint-disable-next-line prefer-const -- plan is reassigned below when a new plan is created; selectErr is not
   let { data: plan, error: selectErr } = await supabaseAdmin
     .from('weekly_plans')
     .select('*')
@@ -221,7 +212,7 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
-  if (!token || !SECRET) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const subscriberId = getSubscriberId(token);
   if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });

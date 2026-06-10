@@ -125,7 +125,7 @@ function AgentNoticeCard({ data, token }: { data: RefreshData; token: string }) 
           {stale && (
             <div className="flex items-center gap-2 text-sm">
               <span>⏱️</span>
-              <span style={{ color: 'var(--on-surface-variant)' }}>It's been {daysSince} days — anything changed?</span>
+              <span style={{ color: 'var(--on-surface-variant)' }}>It&apos;s been {daysSince} days — anything changed?</span>
             </div>
           )}
         </div>
@@ -220,7 +220,7 @@ function HouseholdMemoryCard({ profile }: { profile: HouseholdProfile }) {
           )}
           {!hasMemory && (
             <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
-              Complete your first shop and I'll start learning your habits.
+              Complete your first shop and I&apos;ll start learning your habits.
             </p>
           )}
           <div className="pt-1">
@@ -247,7 +247,7 @@ function FirstTimeCard() {
       </div>
       <div className="px-4 py-5">
         <p className="text-sm mb-1" style={{ color: 'var(--on-background)' }}>
-          <strong>Tell me about your household</strong> and I'll build your first priced weekly list — across Tesco, Dunnes, SuperValu and Aldi.
+          <strong>Tell me about your household</strong> and I&apos;ll build your first priced weekly list — across Tesco, Dunnes, SuperValu and Aldi.
         </p>
         <p className="text-xs mb-4" style={{ color: 'var(--on-surface-variant)' }}>
           Takes about 2 minutes. The more I know, the better the list.

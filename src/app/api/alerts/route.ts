@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
-if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
+import { verifySessionToken } from '@/lib/auth';
 
 interface CreateAlertRequest {
   token: string;
@@ -14,18 +11,6 @@ interface CreateAlertRequest {
 interface DeleteAlertRequest {
   token: string;
   alert_id: string;
-}
-
-function verifyToken(token: string): { subscriberId: string; email: string; familySize: string } {
-  try {
-    return jwt.verify(token, SECRET!) as {
-      subscriberId: string;
-      email: string;
-      familySize: string;
-    };
-  } catch (error) {
-    throw new Error('Invalid or expired token');
-  }
 }
 
 // POST - Create a new price alert
@@ -48,10 +33,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify JWT token
-    let decoded;
-    try {
-      decoded = verifyToken(body.token);
-    } catch (error) {
+    const decoded = verifySessionToken(body.token);
+    if (!decoded) {
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -145,10 +128,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify JWT token
-    let decoded;
-    try {
-      decoded = verifyToken(token);
-    } catch (error) {
+    const decoded = verifySessionToken(token);
+    if (!decoded) {
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -180,7 +161,7 @@ export async function GET(request: NextRequest) {
     }
 
     const formattedAlerts = (alerts || []).map(alert => {
-      const product = alert.products as any;
+      const product = alert.products as unknown as { canonical_name: string };
       return {
         id: alert.id,
         product_id: alert.product_id,
@@ -214,10 +195,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Verify JWT token
-    let decoded;
-    try {
-      decoded = verifyToken(body.token);
-    } catch (error) {
+    const decoded = verifySessionToken(body.token);
+    if (!decoded) {
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }

@@ -188,6 +188,7 @@ export function ShoppingList({
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setRemoved(new Set([...(savedRemovedItems ?? []), ...loadLocal<string[]>(STORAGE_KEY, [])]));
     setAdded([...(savedAddedItems ?? []), ...loadLocal<string[]>(STORAGE_ADDED_KEY, [])].filter((v, i, a) => a.indexOf(v) === i));
     setStoreOverrides({ ...loadLocal<Record<string,string>>(STORAGE_OVERRIDES_KEY, {}), ...(savedStoreOverrides ?? {}) });

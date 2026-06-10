@@ -57,8 +57,8 @@ async function getTopDeals(limit = 5): Promise<Deal[]> {
 
   return deals
     .map(deal => {
-      const storeProduct = deal.store_products as any;
-      const product = storeProduct?.products as any;
+      const storeProduct = deal.store_products as unknown as { store: string; store_product_name: string; products: { canonical_name: string; category: string | null } | null } | null;
+      const product = storeProduct?.products;
       if (!deal.price || !deal.was_price || !storeProduct || !product) return null;
       const saving = deal.was_price - deal.price;
       if (saving <= 0) return null;

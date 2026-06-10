@@ -1,16 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
-
-function getSubscriberId(token: string): string | null {
-  if (!SECRET) return null;
-  try {
-    const p = jwt.verify(token, SECRET) as { subscriberId: string };
-    return p.subscriberId ?? null;
-  } catch { return null; }
-}
+import { getSubscriberId } from '@/lib/auth';
 
 // GET /api/conversations?token=xxx — list conversations for subscriber
 export async function GET(req: Request) {
@@ -31,7 +21,7 @@ export async function GET(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Return conversations with message_count instead of full messages
-  const conversations = (data ?? []).map((c: any) => ({
+  const conversations = (data ?? []).map((c: { id: string; title: string | null; list_id: string | null; created_at: string; updated_at: string | null; messages: unknown }) => ({
     id: c.id,
     title: c.title,
     list_id: c.list_id,
@@ -61,7 +51,7 @@ export async function POST(req: Request) {
 
   if (existing && existing.length >= 20) {
     const toDelete = existing.slice(0, existing.length - 19);
-    await supabaseAdmin.from('conversations').delete().in('id', toDelete.map((r: any) => r.id));
+    await supabaseAdmin.from('conversations').delete().in('id', toDelete.map((r: { id: string }) => r.id));
   }
 
   const { data, error } = await supabaseAdmin

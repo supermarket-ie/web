@@ -38,6 +38,7 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
 
   useEffect(() => {
     if (!token) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setLoading(true);
     fetch('/api/plan/reprice', {
       method: 'POST',

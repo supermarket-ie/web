@@ -1,16 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
-
-function getSubscriberId(token: string): string | null {
-  if (!SECRET) return null;
-  try {
-    const p = jwt.verify(token, SECRET) as { subscriberId: string };
-    return p.subscriberId ?? null;
-  } catch { return null; }
-}
+import { getSubscriberId } from '@/lib/auth';
 
 // GET /api/conversations/[id]?token=xxx — get single conversation with messages
 export async function GET(
@@ -59,7 +49,7 @@ export async function PATCH(
 
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (messages !== undefined) updates.messages = messages;
   if (title !== undefined) updates.title = title;
   if (list_id !== undefined) updates.list_id = list_id;

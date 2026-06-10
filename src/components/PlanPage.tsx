@@ -11,6 +11,7 @@ export function PlanPage() {
   useEffect(() => {
     const session = loadSession();
     const signedIn = !!session?.token;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setIsSignedIn(signedIn);
     setReady(true);
 

@@ -2,8 +2,14 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { supabaseAdmin } from './supabase';
 
-const SECRET = process.env.VENDOR_MAGIC_LINK_SECRET ?? process.env.MAGIC_LINK_SECRET;
-if (!SECRET) throw new Error('VENDOR_MAGIC_LINK_SECRET or MAGIC_LINK_SECRET environment variable is required');
+// Vendor tokens MUST use their own secret — falling back to the user-session
+// secret would let a misconfigured deployment mint tokens valid in both
+// realms. Read lazily so only vendor-auth code paths require the env var.
+function vendorSecret(): string {
+  const s = process.env.VENDOR_MAGIC_LINK_SECRET;
+  if (!s) throw new Error('VENDOR_MAGIC_LINK_SECRET not configured');
+  return s;
+}
 
 export interface VendorTokenPayload {
   vendorId: string;
@@ -12,12 +18,12 @@ export interface VendorTokenPayload {
 }
 
 export function signVendorToken(payload: VendorTokenPayload): string {
-  return jwt.sign(payload, SECRET!, { expiresIn: '7d' });
+  return jwt.sign(payload, vendorSecret(), { expiresIn: '7d' });
 }
 
 export function verifyVendorToken(token: string): VendorTokenPayload | null {
   try {
-    return jwt.verify(token, SECRET!) as VendorTokenPayload;
+    return jwt.verify(token, vendorSecret()) as VendorTokenPayload;
   } catch {
     return null;
   }

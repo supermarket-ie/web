@@ -31,6 +31,7 @@ export function ProductPrices({ productId, stores }: { productId: string; stores
   useEffect(() => {
     const session = loadSession();
     if (session?.token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
       setLoggedIn(true);
       setToken(session.token);
       // Fetch live prices

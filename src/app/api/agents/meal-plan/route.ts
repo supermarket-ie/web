@@ -4,20 +4,10 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getAllLatestPrices } from '@/lib/price-data';
 import { getPairings, toEpicureName } from '@/lib/epicure-client';
-import jwt from 'jsonwebtoken';
+import { getSubscriberId } from '@/lib/auth';
 import type { MealSlot } from '@/app/api/plan/weekly/route';
 
 export const maxDuration = 60;
-
-const SECRET = process.env.MAGIC_LINK_SECRET;
-if (!SECRET) throw new Error('MAGIC_LINK_SECRET required');
-
-function getSubscriberId(token: string): string | null {
-  try {
-    const p = jwt.verify(token, SECRET!) as { subscriberId: string };
-    return p.subscriberId ?? null;
-  } catch { return null; }
-}
 
 // Fetch this week's cheapest products by category + promotions
 async function getWeeklyData() {

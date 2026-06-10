@@ -48,6 +48,7 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
 
   useEffect(() => {
     const session = loadSession();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     if (session?.token) setListUrl(`/list?token=${session.token}`);
     // Initialise category from URL param
     const cat = searchParams.get('category');
