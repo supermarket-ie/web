@@ -7,6 +7,31 @@ export const maxDuration = 60;
 
 const SECRET = process.env.MAGIC_LINK_SECRET;
 
+// A list was generated when the agent successfully called save_list or
+// update_list — detected from the tool parts of the response, not by
+// matching markdown phrasing. Returns the saved list_id, or null.
+function extractSavedListId(parts: UIMessage['parts']): string | null {
+  for (const part of parts) {
+    const p = part as { type: string; state?: string; output?: { saved?: boolean; list_id?: string | null } };
+    if (
+      (p.type === 'tool-save_list' || p.type === 'tool-update_list') &&
+      p.state === 'output-available' &&
+      p.output?.saved &&
+      p.output.list_id
+    ) {
+      return p.output.list_id;
+    }
+  }
+  return null;
+}
+
+function extractText(parts: UIMessage['parts']): string {
+  return parts
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map(p => p.text)
+    .join('');
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
 
@@ -73,10 +98,7 @@ export async function POST(req: Request) {
       uiMessages: allMessages,
       onFinish: async ({ responseMessage }) => {
         try {
-          const assistantText = responseMessage.parts
-            .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-            .map(p => p.text)
-            .join('');
+          const assistantText = extractText(responseMessage.parts);
 
           const userMsg = [...incomingMessages].reverse().find(m => m.role === 'user');
           const userText = userMsg?.parts
@@ -96,29 +118,22 @@ export async function POST(req: Request) {
             .eq('id', conversationId)
             .eq('subscriber_id', subscriberId);
 
-          // Update household memory when a grocery list is generated
-          if (assistantText.includes('🛒 Your weekly grocery list')) {
+          // Update household memory when a grocery list is generated.
+          // Primary signal: a successful save_list/update_list tool call.
+          // Fallback: the markdown heading, in case the agent skipped the tool.
+          const savedListId = extractSavedListId(responseMessage.parts);
+          if (savedListId || assistantText.includes('🛒 Your weekly grocery list')) {
             updateHouseholdMemory(subscriberId!).catch((error) => {
               console.error('[/api/plan] Memory update failed:', error);
             });
             // Link conversation to the list the agent just saved
-            supabaseAdmin
-              .from('saved_lists')
-              .select('id')
-              .eq('subscriber_id', subscriberId!)
-              .gte('generated_at', new Date(Date.now() - 120000).toISOString())
-              .order('generated_at', { ascending: false })
-              .limit(1)
-              .single()
-              .then(({ data: recentList }) => {
-                if (recentList) {
-                  supabaseAdmin
-                    .from('conversations')
-                    .update({ list_id: recentList.id })
-                    .eq('id', conversationId)
-                    .then(() => {});
-                }
-              });
+            if (savedListId) {
+              supabaseAdmin
+                .from('conversations')
+                .update({ list_id: savedListId })
+                .eq('id', conversationId)
+                .then(() => {});
+            }
           }
         } catch (err) {
           console.error('[/api/plan] conversation save error:', err);
@@ -220,36 +235,24 @@ export async function POST(req: Request) {
       // Update household memory when a grocery list is generated
       if (subscriberId && intakeMode) {
         try {
-          const assistantText = responseMessage.parts
-            .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-            .map(p => p.text)
-            .join('');
+          const assistantText = extractText(responseMessage.parts);
 
-          // Only update memory + link conversation when a list was generated
-          if (assistantText.includes('🛒 Your weekly grocery list')) {
+          // Only update memory + link conversation when a list was generated.
+          // Primary signal: a successful save_list/update_list tool call.
+          // Fallback: the markdown heading, in case the agent skipped the tool.
+          const savedListId = extractSavedListId(responseMessage.parts);
+          if (savedListId || assistantText.includes('🛒 Your weekly grocery list')) {
             updateHouseholdMemory(subscriberId).catch((error) => {
               console.error('[/api/plan] Memory update failed:', error);
             });
             // Link conversation to the list the agent just saved (intake mode)
             const bodyConversationId = body.conversationId as string | undefined;
-            if (bodyConversationId) {
+            if (bodyConversationId && savedListId) {
               supabaseAdmin
-                .from('saved_lists')
-                .select('id')
-                .eq('subscriber_id', subscriberId)
-                .gte('generated_at', new Date(Date.now() - 120000).toISOString())
-                .order('generated_at', { ascending: false })
-                .limit(1)
-                .single()
-                .then(({ data: recentList }) => {
-                  if (recentList) {
-                    supabaseAdmin
-                      .from('conversations')
-                      .update({ list_id: recentList.id })
-                      .eq('id', bodyConversationId)
-                      .then(() => {});
-                  }
-                });
+                .from('conversations')
+                .update({ list_id: savedListId })
+                .eq('id', bodyConversationId)
+                .then(() => {});
             }
           }
         } catch (error) {

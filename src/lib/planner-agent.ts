@@ -3,6 +3,13 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getPairings, getSubstitutes } from '@/lib/epicure-client';
+import {
+  findDietaryViolations,
+  reconcilePrices,
+  recomputeStoreTotals,
+  type ValidatedListItem,
+  type CataloguePriceRow,
+} from '@/lib/list-validation';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -148,7 +155,7 @@ export async function queryUserHistory(subscriberId: string) {
     .order('observed_at', { ascending: false })
     .limit(200);
   const map = new Map<string, { store: string; price_paid: number; quantity: number; times_bought: number; last_bought: string }>();
-  for (const r of (data ?? []) as any[]) {
+  for (const r of (data ?? []) as Array<{ canonical_name: string; store: string; price_paid: number; quantity: number; observed_at: string }>) {
     if (!map.has(r.canonical_name)) {
       map.set(r.canonical_name, { store: r.store, price_paid: r.price_paid, quantity: r.quantity, times_bought: 1, last_bought: r.observed_at });
     } else {
@@ -252,8 +259,8 @@ export async function updateHouseholdMemory(subscriberId: string): Promise<void>
       const totalSpends: number[] = [];
       for (const list of savedLists) {
         if (list.store_totals && Array.isArray(list.store_totals)) {
-          const listTotal = list.store_totals.reduce((sum: number, store: any) => {
-            return sum + (parseFloat(store.total) || 0);
+          const listTotal = list.store_totals.reduce((sum: number, store: { total?: number | string }) => {
+            return sum + (parseFloat(String(store.total)) || 0);
           }, 0);
           if (listTotal > 0) totalSpends.push(listTotal);
         }
@@ -302,9 +309,9 @@ export async function updateHouseholdMemory(subscriberId: string): Promise<void>
       let lastTotal = 0;
       let itemCount = 0;
       if (lastList.store_totals && Array.isArray(lastList.store_totals)) {
-        lastTotal = lastList.store_totals.reduce((sum: number, store: any) => {
+        lastTotal = lastList.store_totals.reduce((sum: number, store: { total?: number | string; item_count?: number }) => {
           itemCount += store.item_count || 0;
-          return sum + (parseFloat(store.total) || 0);
+          return sum + (parseFloat(String(store.total)) || 0);
         }, 0);
       }
 
@@ -347,6 +354,85 @@ export async function updateHouseholdMemory(subscriberId: string): Promise<void>
 // ---------------------------------------------------------------------------
 
 export function makePlannerTools(subscriberId: string | null) {
+  // Dietary requirements observed during this session (via save_household_profile),
+  // so intake-mode validation works even before the DB row is readable.
+  let sessionDietary: string[] | null = null;
+  // After 2 rejections we stop bouncing the agent and strip violators instead,
+  // so a stuck loop can never burn all its steps without saving.
+  let dietaryRejections = 0;
+
+  async function resolveDietary(): Promise<string[]> {
+    if (sessionDietary && sessionDietary.length > 0) return sessionDietary;
+    if (!subscriberId) return sessionDietary ?? [];
+    const { data } = await supabaseAdmin
+      .from('households')
+      .select('dietary')
+      .eq('subscriber_id', subscriberId)
+      .single();
+    return (data?.dietary as string[] | null) ?? sessionDietary ?? [];
+  }
+
+  // Shared enforcement for save_list / update_list: dietary screen, price
+  // verification against latest_prices, and recomputed store totals.
+  async function validateListPayload(items: ValidatedListItem[]): Promise<
+    | { rejected: { saved: false; reason: string; violations: ReturnType<typeof findDietaryViolations>; instruction: string } }
+    | {
+        prepared: {
+          items: ValidatedListItem[];
+          store_totals: ReturnType<typeof recomputeStoreTotals>;
+          price_corrections: ReturnType<typeof reconcilePrices>['corrections'];
+          unverified_items: string[];
+          removed_items: string[];
+        };
+      }
+  > {
+    const dietary = await resolveDietary();
+    const violations = findDietaryViolations(items, dietary);
+
+    if (violations.length > 0 && dietaryRejections < 2) {
+      dietaryRejections++;
+      return {
+        rejected: {
+          saved: false,
+          reason: 'dietary_violation',
+          violations,
+          instruction: `These items violate the household's dietary requirements (${dietary.join(', ')}). Replace or remove them, then call this tool again with the corrected list.`,
+        },
+      };
+    }
+
+    let cleanItems = items;
+    let removedItems: string[] = [];
+    if (violations.length > 0) {
+      const bad = new Set(violations.map(v => v.canonical_name));
+      removedItems = [...bad];
+      cleanItems = items.filter(i => !bad.has(i.canonical_name));
+    }
+
+    const names = [...new Set(cleanItems.map(i => i.canonical_name))];
+    const { data: catalogueRows } = names.length > 0
+      ? await supabaseAdmin
+          .from('latest_prices')
+          .select('canonical_name, store, price, on_promotion')
+          .in('canonical_name', names)
+      : { data: [] };
+
+    const { items: reconciled, corrections, unverified } = reconcilePrices(
+      cleanItems,
+      (catalogueRows ?? []) as unknown as CataloguePriceRow[],
+    );
+
+    return {
+      prepared: {
+        items: reconciled,
+        store_totals: recomputeStoreTotals(reconciled),
+        price_corrections: corrections,
+        unverified_items: unverified,
+        removed_items: removedItems,
+      },
+    };
+  }
+
   return {
     get_categories: tool({
       description: 'Returns all product categories. Call first to discover valid category names.',
@@ -552,6 +638,7 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
         extra_context: z.string().optional(),
       }),
       execute: async (fields) => {
+        if (fields.dietary) sessionDietary = fields.dietary;
         if (!subscriberId) return { saved: false, reason: 'User not signed in' };
         await supabaseAdmin.from('households').upsert(
           { subscriber_id: subscriberId, ...fields },
@@ -562,7 +649,7 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
     }),
 
     save_list: tool({
-      description: 'Saves the completed grocery list to the database as structured data. Call this ONCE after building the complete list and BEFORE writing the markdown summary to the user. Returns list_id.',
+      description: 'Saves the completed grocery list to the database as structured data. Call this ONCE after building the complete list and BEFORE writing the markdown summary to the user. Verifies every price against the live catalogue, enforces dietary requirements, and recomputes store totals — the returned store_totals and price_corrections are authoritative; use them in your markdown output. May reject with dietary_violation, in which case fix the items and call again. Returns list_id.',
       inputSchema: z.object({
         name: z.string().describe('Short descriptive name e.g. "Weekly shop · 3 Jun" or "Family of 4 · vegetarian"'),
         items: z.array(z.object({
@@ -581,9 +668,14 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
         })),
         recommended_store: z.string().optional().describe('The single best store for the whole shop'),
       }),
-      execute: async ({ name, items, store_totals, recommended_store }) => {
+      execute: async ({ name, items, recommended_store }) => {
         if (!subscriberId) return { saved: false, reason: 'User not signed in', list_id: null };
         try {
+          const validation = await validateListPayload(items);
+          if ('rejected' in validation) return { ...validation.rejected, list_id: null };
+          const { store_totals, price_corrections, unverified_items, removed_items } = validation.prepared;
+          items = validation.prepared.items as typeof items;
+
           // Cap at 10 lists — delete oldest if needed
           const { data: existing } = await supabaseAdmin
             .from('saved_lists')
@@ -641,7 +733,15 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
             .update({ refresh_cache: null, refresh_cache_at: null })
             .eq('id', subscriberId)
             .then(() => {});
-          return { saved: true, list_id: listId };
+          return {
+            saved: true,
+            list_id: listId,
+            store_totals,
+            price_corrections,
+            unverified_items,
+            removed_items,
+            note: 'Prices verified against the live catalogue. Use these store_totals and corrected prices in your markdown output — do not use your own arithmetic.',
+          };
         } catch (err) {
           console.error('[save_list] error:', err);
           return { saved: false, reason: 'Unexpected error', list_id: null };
@@ -650,7 +750,7 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
     }),
 
     update_list: tool({
-      description: 'Replaces items in an existing saved list with updated prices. Use for "Same Again" — pass the list_id from get_last_list. Do NOT call save_list when updating an existing list.',
+      description: 'Replaces items in an existing saved list with updated prices. Use for "Same Again" — pass the list_id from get_last_list. Do NOT call save_list when updating an existing list. Verifies prices against the live catalogue, enforces dietary requirements, and recomputes store totals — use the returned store_totals in your markdown output. May reject with dietary_violation.',
       inputSchema: z.object({
         list_id: z.string().describe('The ID of the list to update, from get_last_list'),
         items: z.array(z.object({
@@ -669,9 +769,14 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
         })),
         recommended_store: z.string().optional(),
       }),
-      execute: async ({ list_id, items, store_totals, recommended_store }) => {
+      execute: async ({ list_id, items, recommended_store }) => {
         if (!subscriberId) return { saved: false, reason: 'User not signed in' };
         try {
+          const validation = await validateListPayload(items);
+          if ('rejected' in validation) return validation.rejected;
+          const { store_totals, price_corrections, unverified_items, removed_items } = validation.prepared;
+          items = validation.prepared.items as typeof items;
+
           const { error } = await supabaseAdmin
             .from('saved_lists')
             .update({
@@ -705,7 +810,15 @@ Always cross-reference against our catalogue to confirm we stock the substitute 
             .update({ refresh_cache: null, refresh_cache_at: null })
             .eq('id', subscriberId)
             .then(() => {});
-          return { saved: true, list_id };
+          return {
+            saved: true,
+            list_id,
+            store_totals,
+            price_corrections,
+            unverified_items,
+            removed_items,
+            note: 'Prices verified against the live catalogue. Use these store_totals and corrected prices in your markdown output — do not use your own arithmetic.',
+          };
         } catch (err) {
           console.error('[update_list] error:', err);
           return { saved: false, reason: 'Unexpected error' };
@@ -796,6 +909,7 @@ If the user states ANY dietary requirement (vegetarian, vegan, gluten-free, hala
 7. **SUBSTITUTIONS: If any item on the list is expensive (>€5) or if there's a significantly cheaper alternative, call get_substitutes to find a recipe-grounded swap. Cross-reference against prices to confirm the substitute is actually cheaper. When you find a valid swap, mention it naturally in the list (e.g. 'Pork Mince 500g (swap for Beef Mince — saves €1.80, works just as well in bolognese)').**
 8. **FINAL CHECK: Re-read the user's dietary requirements and verify EVERY item complies. Remove any that don't.**
 9. Call save_list with all items, store_totals, and a short descriptive name. Do this BEFORE writing the markdown output. For "Same Again", call update_list with the list_id from get_last_list instead of save_list.
+10. save_list verifies every price against the live catalogue and returns authoritative store_totals and price_corrections. ALWAYS use those returned values in your markdown output — never your own arithmetic. If it rejects with dietary_violation, replace the flagged items and call it again.
 
 Rules:
 - Only use products from the catalogue. Do not invent products.
@@ -915,7 +1029,7 @@ ${!profile.preferredStores.includes('all') ? `- Products from stores they didn't
 6. get_price_changes — call for returning users to highlight savings.
 7. **FLAVOUR INTELLIGENCE: For 2–3 hero ingredients in the planned meals, call get_flavour_pairings. Use the BRIDGES to suggest non-obvious recipe-grounded accompaniments we actually stock. This is what makes you feel smarter than a basic list tool.**
 8. **SUBSTITUTIONS: If any item is expensive (>€5) or has a clearly cheaper alternative, call get_substitutes. Only suggest the swap if our catalogue confirms it's cheaper. Mention valid swaps naturally in the list (e.g. 'Pork Mince 500g (cheaper swap for Beef Mince — saves €1.80)').**
-9. save_list — call with all items and store_totals BEFORE writing output. For Same Again, call update_list instead.
+9. save_list — call with all items and store_totals BEFORE writing output. For Same Again, call update_list instead. The tool verifies prices against the live catalogue and returns authoritative store_totals and price_corrections — ALWAYS use those returned values in your markdown output, never your own arithmetic. If it rejects with dietary_violation, replace the flagged items and call it again.
 
 Rules:
 - Gather ALL data via tools before writing any output.
@@ -962,7 +1076,7 @@ ${profile.weeklyBudget ? `**Budget:** €X.XX of €${profile.weeklyBudget} (€
 // ---------------------------------------------------------------------------
 
 export function buildLegacyPrompt(householdSize: number): string {
-  let prompt = `You are an AI grocery assistant for supermarket.ie — Ireland's smartest grocery planning platform.
+  const prompt = `You are an AI grocery assistant for supermarket.ie — Ireland's smartest grocery planning platform.
 
 Your job: take a description of what the user wants to cook or eat this week and return a complete, priced shopping list using products from our catalogue.
 
