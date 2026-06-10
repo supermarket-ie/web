@@ -187,7 +187,7 @@ export async function GET(request: NextRequest) {
             .limit(1)
             .single();
           if (lastList) {
-            sameAgainLink = `${siteUrl}/dashboard?intent=same-again&list_id=${lastList.id}&source=weekly-email`;
+            sameAgainLink = `${siteUrl}/list?token=${jwtToken}&intent=same-again&list_id=${lastList.id}&source=weekly-email`;
           }
         }
 
