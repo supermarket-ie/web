@@ -123,9 +123,9 @@ function EmptyListPage({ token }: { token: string }) {
 export default async function ListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string; list?: string }>;
+  searchParams: Promise<{ token?: string; list?: string; intent?: string; list_id?: string }>;
 }) {
-  const { token, list: listId } = await searchParams;
+  const { token, list: listId, intent, list_id } = await searchParams;
 
   // Auth
   let payload: MagicLinkPayload | null = null;
@@ -212,6 +212,8 @@ export default async function ListPage({
         }))}
         activeListId={activeList.id}
         householdMemory={householdMemory}
+        intent={intent}
+        targetListId={list_id}
       />
       <SiteFooter />
     </>

@@ -49,6 +49,8 @@ interface Props {
   allLists: ListSummary[];
   activeListId: string;
   householdMemory?: HouseholdMemory | null;
+  intent?: string;
+  targetListId?: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -111,6 +113,56 @@ function Section({ title, children, action }: { title: string; children: React.R
         {action}
       </div>
       {children}
+    </div>
+  );
+}
+
+// ─── Same Again Banner ────────────────────────────────────────────────────────
+
+function SameAgainBanner({ listName, token, onDismiss }: { listName: string; token: string; onDismiss: () => void }) {
+  const router = useRouter();
+
+  function handleSameAgain() {
+    router.push(`/?sameAgain=1&token=${encodeURIComponent(token)}`);
+  }
+
+  return (
+    <div className="rounded-2xl overflow-hidden mb-4" style={{ background: 'linear-gradient(135deg, #006A35 0%, #00944A 60%, #00a854 100%)', border: '1px solid var(--surface-container)' }}>
+      <div className="px-4 py-4 relative overflow-hidden">
+        {/* Subtle cyan glow blob */}
+        <div className="absolute pointer-events-none" style={{
+          width: 150, height: 150, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(0,220,255,0.15) 0%, transparent 70%)',
+          top: -30, right: -30,
+        }} />
+        <div className="relative flex items-center justify-between">
+          <div className="flex-1">
+            <h2 className="font-bold text-lg leading-tight mb-1" style={{
+              background: 'linear-gradient(135deg, #ffffff, #6BFE9C)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            }}>Same Again?</h2>
+            <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              Reprice &amp; rebuild your list from last week
+            </p>
+            <button
+              onClick={handleSameAgain}
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all hover:opacity-90"
+              style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', backdropFilter: 'blur(10px)' }}
+            >
+              Build List →
+            </button>
+          </div>
+          <button
+            onClick={onDismiss}
+            className="ml-3 w-6 h-6 rounded-full flex items-center justify-center transition-all hover:opacity-80"
+            style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -541,8 +593,10 @@ function HistorySwitcher({ allLists, activeListId, token }: { allLists: ListSumm
 export function SavedListView({
   listContent, structuredItems, storeTotals, listName, createdAt,
   conversationId, token, allLists, activeListId, householdMemory,
+  intent, targetListId,
 }: Props) {
   const router = useRouter();
+  const [showSameAgainBanner, setShowSameAgainBanner] = useState(intent === 'same-again');
   const hasStructured = (structuredItems?.length ?? 0) > 0;
   const totalItems = hasStructured ? structuredItems!.length : 0;
   const currentItemNames = hasStructured ? structuredItems!.map(i => i.canonical_name) : [];
@@ -586,6 +640,15 @@ export function SavedListView({
           onUpdateList={handleUpdateList}
           onShare={handleShare}
         />
+
+        {/* Same Again Banner */}
+        {showSameAgainBanner && (
+          <SameAgainBanner
+            listName={listName}
+            token={token}
+            onDismiss={() => setShowSameAgainBanner(false)}
+          />
+        )}
 
         {/* Quick actions */}
         <QuickActions conversationId={conversationId} token={token} />
