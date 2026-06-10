@@ -80,19 +80,33 @@ async function getTopDeals(limit = 5): Promise<Deal[]> {
 // ---------------------------------------------------------------------------
 
 async function generateAiContent(
-  profile: Record<string, unknown>,
+  household: Record<string, unknown>,
   userHistory: unknown[],
   priceChanges: unknown[],
   topDeals: Deal[],
 ): Promise<string> {
+  // Extract household details for better prompting
+  const preferredStores = (household.preferred_stores as string[])?.join(', ') || 'SuperValu, Tesco';
+  const dietary = (household.dietary as string[])?.join(', ') || 'none specified';
+  const weeklyBudget = household.weekly_budget ? `€${household.weekly_budget}` : 'not specified';
+  const meals = household.meals as Record<string, boolean> | undefined;
+  const mealPlanning = meals ? Object.entries(meals).filter(([_, included]) => included).map(([meal, _]) => meal).join(', ') : 'breakfast, lunch, dinner, snacks';
+  const batchCooking = household.batch_cooking ? 'They do batch cooking' : '';
+
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 500,
+    max_tokens: 800,
     messages: [{
       role: 'user',
       content: `You are a personal grocery agent for a household in Ireland. Write a SHORT, friendly weekly email (3-4 paragraphs max) highlighting this week's relevant deals and savings for this household:
 
-Household: ${JSON.stringify(profile)}
+Household details:
+- They usually shop at: ${preferredStores}
+- Dietary requirements: ${dietary}
+- Weekly budget: ${weeklyBudget}
+- They plan: ${mealPlanning}
+${batchCooking ? `- ${batchCooking}` : ''}
+
 Their usual items: ${JSON.stringify(userHistory.slice(0, 15))}
 Price changes on their items: ${JSON.stringify(priceChanges)}
 Top deals this week: ${JSON.stringify(topDeals)}
