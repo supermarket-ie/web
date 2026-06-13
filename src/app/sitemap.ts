@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next';
 import { POSTS } from '@/lib/blog';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // ── Source of truth ──────────────────────────────────────────────────────────
 // Blog slugs + dates: src/lib/blog.ts (POSTS array)
@@ -26,11 +27,46 @@ const MATCHUP_SLUGS = [
 
 const STORE_SLUGS = ['tesco', 'dunnes', 'supervalu', 'aldi'];
 
+// Fetch product slugs for /browse/[slug] pages (products in all 3 main stores)
+async function getBrowseSlugs(): Promise<string[]> {
+  const MAIN = ['tesco', 'dunnes', 'supervalu'];
+  const storeMap = new Map<string, Set<string>>();
+  let from = 0;
+  while (true) {
+    const { data } = await supabaseAdmin
+      .from('store_products')
+      .select('product_id, store')
+      .eq('url_status', 'resolved')
+      .in('store', MAIN)
+      .range(from, from + 999);
+    if (!data || data.length === 0) break;
+    for (const r of data) {
+      if (!storeMap.has(r.product_id)) storeMap.set(r.product_id, new Set());
+      storeMap.get(r.product_id)!.add(r.store);
+    }
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  const ids = [...storeMap.entries()].filter(([, s]) => MAIN.every(m => s.has(m))).map(([id]) => id);
+  if (ids.length === 0) return [];
+  const slugs: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < ids.length; i += 500) {
+    const { data: products } = await supabaseAdmin.from('products').select('canonical_name').in('id', ids.slice(i, i + 500));
+    for (const p of products ?? []) {
+      const s = p.canonical_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (!seen.has(s)) { seen.add(s); slugs.push(s); }
+    }
+  }
+  return slugs;
+}
+
 // Site-wide last-scraped date — updated when data refreshes (Mon/Thu).
 // More meaningful than new Date() on every build.
 const DATA_FRESHNESS = new Date('2026-06-10');
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const browseSlugs = await getBrowseSlugs();
   return [
     { url: BASE_URL, changeFrequency: 'weekly', priority: 1.0 },
     { url: `${BASE_URL}/compare/supermarket-prices-ireland`, lastModified: DATA_FRESHNESS, changeFrequency: 'weekly', priority: 0.9 },
@@ -74,5 +110,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // /api/products removed — JSON API endpoints should not be in the sitemap
     { url: `${BASE_URL}/privacy`, changeFrequency: 'yearly' as const, priority: 0.3 },
     { url: `${BASE_URL}/terms`, changeFrequency: 'yearly' as const, priority: 0.3 },
+
+    // Product pages — server-rendered with live public prices (/browse/[slug])
+    // Source: store_products with url_status=resolved in all 3 main stores
+    ...browseSlugs.map(slug => ({
+      url: `${BASE_URL}/browse/${slug}`,
+      lastModified: DATA_FRESHNESS,
+      changeFrequency: 'weekly' as const,
+      priority: 0.75,
+    })),
   ];
 }
