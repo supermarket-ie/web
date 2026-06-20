@@ -18,10 +18,42 @@
 
 const { chromium } = require('playwright');
 const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const SUPABASE_URL = 'https://ytyzwiqnobxehdqrnzhx.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BASE_URL = 'https://www.tesco.ie';
+
+// Lockfile — prevent concurrent Tesco scrape runs
+const LOCKFILE = path.join(os.tmpdir(), 'tesco_scraper.lock');
+
+function acquireLock() {
+  if (fs.existsSync(LOCKFILE)) {
+    const age = Date.now() - fs.statSync(LOCKFILE).mtimeMs;
+    if (age < 4 * 60 * 60 * 1000) { // lock younger than 4h = another run is active
+      console.error(`[lock] Another Tesco scrape is running (lock age: ${Math.round(age/60000)}min). Exiting.`);
+      process.exit(0);
+    }
+    console.log('[lock] Stale lockfile found — removing.');
+  }
+  fs.writeFileSync(LOCKFILE, String(process.pid));
+}
+
+function releaseLock() {
+  try { fs.unlinkSync(LOCKFILE); } catch {}
+}
+
+// Rotate user agents across runs to vary fingerprint
+const USER_AGENTS = [
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+];
+const USER_AGENT = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
 // ============================================================
 // Browser setup — Akamai WAF evasion
@@ -38,8 +70,7 @@ async function launchBrowser() {
   });
 
   const context = await browser.newContext({
-    userAgent:
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    userAgent: USER_AGENT,
     locale: 'en-IE',
     viewport: { width: 1920, height: 1080 },
     extraHTTPHeaders: { 'Accept-Language': 'en-IE,en;q=0.9' },
@@ -615,6 +646,8 @@ async function refreshMode({ limit, category, offset = 0 }) {
   let updated = 0;
   let errors = 0;
   let batchNum = 0;
+  let consecutiveNoResults = 0;
+  const CONSECUTIVE_ABORT_THRESHOLD = 10; // IP blocked if 10 in a row return nothing
 
   for (let batchStart = 0; batchStart < filtered.length; batchStart += BATCH_SIZE) {
     const batch = filtered.slice(batchStart, batchStart + BATCH_SIZE);
@@ -665,8 +698,16 @@ async function refreshMode({ limit, category, offset = 0 }) {
         if (products.length === 0) {
           console.log(`  ✗ ${name.substring(0, 50)} → No search results`);
           errors++;
+          consecutiveNoResults++;
+          if (consecutiveNoResults >= CONSECUTIVE_ABORT_THRESHOLD) {
+            console.log(`\n  🛑 ${consecutiveNoResults} consecutive empty results — IP likely blocked. Aborting run.`);
+            try { await browser.close(); } catch {}
+            console.log(`\n=== Updated ${updated}/${filtered.length} prices, ${errors} errors (aborted — IP block detected) ===`);
+            return;
+          }
           continue;
         }
+        consecutiveNoResults = 0; // reset on any successful result
 
         // Find best match by name — no fallback to first result
         const match = fuzzyMatch(name, products);
@@ -838,7 +879,7 @@ async function main() {
     return singlePrice(url);
   }
 
-  // Batch modes
+  // Batch modes — acquire lockfile to prevent concurrent runs
   const resolve = args.includes('--resolve');
   const refresh = args.includes('--refresh');
 
@@ -856,6 +897,11 @@ async function main() {
     console.log('  xvfb-run node tesco_scraper.js --price "https://www.tesco.ie/shop/en-IE/products/260776455"');
     process.exit(0);
   }
+
+  acquireLock();
+  process.on('exit', releaseLock);
+  process.on('SIGINT', () => { releaseLock(); process.exit(130); });
+  process.on('SIGTERM', () => { releaseLock(); process.exit(143); });
 
   const limitIdx = args.indexOf('--limit');
   const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1]) : 0;
