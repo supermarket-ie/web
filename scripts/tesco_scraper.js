@@ -523,8 +523,8 @@ async function resolveMode({ limit, category }) {
         resolved++;
         priced++;
 
-        // Small delay between products
-        await page.waitForTimeout(1500);
+        // Delay between products — randomised to appear human (3–6s)
+        await page.waitForTimeout(3000 + Math.floor(Math.random() * 3000));
       } catch (e) {
         console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
         errors++;
@@ -555,10 +555,10 @@ async function resolveMode({ limit, category }) {
     try { await browser.close(); } catch {}
     console.log(`  Batch ${batchNum} done. Running total: ${resolved} resolved, ${priced} priced, ${errors} errors`);
 
-    // Wait between batches to avoid rate limiting
+    // Wait between batches — longer cooldown to avoid rate limiting
     if (batchStart + BATCH_SIZE < toResolve.length) {
-      console.log('  ⏳ 10s cooldown...');
-      await new Promise((r) => setTimeout(r, 10000));
+      console.log('  ⏳ 30s cooldown between batches...');
+      await new Promise((r) => setTimeout(r, 30000));
     }
   }
 
