@@ -45,8 +45,9 @@ function msgId() {
 }
 
 /** Parse SSE text-delta events from AI SDK v6 UIMessage stream */
-function parseSSETextDelta(chunk: string): string {
+function parseSSETextDelta(chunk: string): { text: string; error?: string } {
   let text = '';
+  let error: string | undefined;
   for (const line of chunk.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('data: ')) continue;
@@ -56,10 +57,12 @@ function parseSSETextDelta(chunk: string): string {
       const part = JSON.parse(payload);
       if (part.type === 'text-delta' && part.delta) {
         text += part.delta;
+      } else if (part.type === 'error') {
+        error = part.errorText || part.message || 'Something went wrong';
       }
     } catch {}
   }
-  return text;
+  return { text, error };
 }
 
 function parseStoreTotals(content: string): StoreTotal[] {
@@ -236,7 +239,7 @@ function ListItemLine({ text, unlocked }: { text: string; unlocked: boolean }) {
   return <RichText text={text} style={{ color: 'var(--on-surface)' }} />;
 }
 
-function FormattedMessage({ content, unlocked = true }: { content: string; unlocked?: boolean }) {
+function FormattedMessage({ content, unlocked = true, onRequestUnlock }: { content: string; unlocked?: boolean; onRequestUnlock?: () => void }) {
   // Strip split/single recommendation markers
   const cleanedContent = content
     .replace(/^\[\[(split|single)\|[^\]]+\]\]$/gm, '')
@@ -246,13 +249,23 @@ function FormattedMessage({ content, unlocked = true }: { content: string; unloc
   const elements: React.ReactNode[] = [];
   let listBuffer: string[] = [];
   let i = 0;
+  let totalListItems = 0;
+  let visibleListItems = 0;
+  const PREVIEW_ITEMS = 4; // Show first 4 items before gating
+  const isListMessage = /🛒|store total/i.test(content) || (content.match(/^- /gm) || []).length >= 5;
+  const gateList = !unlocked && isListMessage;
+
+  // Count total list items for the gate message
+  if (gateList) {
+    totalListItems = (cleanedContent.match(/^- .+/gm) || []).length;
+  }
 
   const flushList = () => {
     if (listBuffer.length === 0) return;
     elements.push(
       <ul key={elements.length} className="space-y-1 my-1">
         {listBuffer.map((item, idx) => (
-          <li key={idx}><ListItemLine text={item} unlocked={unlocked} /></li>
+          <li key={idx}><ListItemLine text={item} unlocked={true} /></li>
         ))}
       </ul>
     );
@@ -338,10 +351,52 @@ function FormattedMessage({ content, unlocked = true }: { content: string; unloc
       flushList();
       i = parseTable(i);
     } else if (line.startsWith('- ') || line.startsWith('• ')) {
-      listBuffer.push(line);
+      if (gateList) {
+        visibleListItems++;
+        if (visibleListItems <= PREVIEW_ITEMS) {
+          listBuffer.push(line);
+        } else if (visibleListItems === PREVIEW_ITEMS + 1) {
+          // Flush the preview items and insert the gate
+          flushList();
+          const remaining = totalListItems - PREVIEW_ITEMS;
+          elements.push(
+            <div key={`gate-${elements.length}`} className="my-3 py-4 px-4 rounded-2xl text-center relative overflow-hidden"
+              style={{ background: 'linear-gradient(180deg, var(--surface-container-lowest) 0%, var(--primary-container) 100%)', border: '1px solid var(--primary)' }}>
+              <div className="absolute inset-0 opacity-5" style={{ background: 'repeating-linear-gradient(45deg, transparent, transparent 10px, var(--primary) 10px, var(--primary) 11px)' }} />
+              <p className="text-lg font-bold mb-1 relative" style={{ color: 'var(--on-primary-container)' }}>
+                +{remaining} more items ready
+              </p>
+              <p className="text-sm mb-3 relative" style={{ color: 'var(--on-primary-container)', opacity: 0.8 }}>
+                Your full list with store-by-store prices is waiting
+              </p>
+              {onRequestUnlock && (
+                <button onClick={onRequestUnlock}
+                  className="relative px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-transform hover:scale-105"
+                  style={{ background: 'var(--primary)' }}>
+                  Get my full list →
+                </button>
+              )}
+              <p className="text-xs mt-2 relative opacity-60" style={{ color: 'var(--on-primary-container)' }}>
+                Free · 5 seconds · No card needed
+              </p>
+            </div>
+          );
+          // Skip remaining list items — they're gated
+        }
+        // else: skip (past the gate)
+      } else {
+        listBuffer.push(line);
+      }
     } else {
       flushList();
+      // If gated and we've passed the preview, skip all remaining content
+      if (gateList && visibleListItems > PREVIEW_ITEMS) {
+        i++;
+        continue;
+      }
       if (line.startsWith('### ')) {
+        // If gated, category headers after the preview are hidden
+        if (gateList && visibleListItems >= PREVIEW_ITEMS) { i++; continue; }
         elements.push(<h3 key={elements.length} className="font-bold mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>{line.slice(4)}</h3>);
       } else if (line.startsWith('## ')) {
         elements.push(<h2 key={elements.length} className="font-bold text-base mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>{line.slice(3)}</h2>);
@@ -357,12 +412,10 @@ function FormattedMessage({ content, unlocked = true }: { content: string; unloc
             <div key={elements.length} className={`flex justify-between items-center py-1 px-2 rounded ${isCheapest ? 'ring-1 ring-green-500/30' : ''}`}
               style={{ background: isCheapest ? 'var(--primary-container)' : 'transparent' }}>
               <span className="font-medium" style={{ color: storeStyle(store).bg }}>{storeDisplayName(store)}</span>
-              <BlurredText unlocked={unlocked}>
-                <span className="font-bold" style={{ color: isCheapest ? 'var(--primary)' : 'var(--on-surface)' }}>
-                  <AnimatedPrice target={total} />
-                  {isCheapest && ' ✓'}
-                </span>
-              </BlurredText>
+              <span className="font-bold" style={{ color: isCheapest ? 'var(--primary)' : 'var(--on-surface)' }}>
+                <AnimatedPrice target={total} />
+                {isCheapest && ' ✓'}
+              </span>
             </div>
           );
         }
@@ -489,8 +542,8 @@ function UnlockCTA({ householdSize, savings, listContent, familySize, onUnlocked
     <div className="rounded-2xl p-4 mb-3" style={{ background: 'var(--primary-container)', border: '1px solid var(--primary)' }}>
       <p className="text-sm font-semibold mb-2" style={{ color: 'var(--on-primary-container)' }}>
         {savings
-          ? `🔓 Sign up to see which store saves you €${savings.toFixed(2)} this week`
-          : '🔓 Sign up to unlock store-by-store prices'}
+          ? `📋 Your full list saves €${savings.toFixed(2)} this week — enter your email to unlock it`
+          : '📋 Your personalised grocery list is ready — enter your email to see it'}
       </p>
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
@@ -560,6 +613,7 @@ export function HomePlanner() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const sameAgainModeRef = useRef(false);
+  const unlockRef = useRef<HTMLDivElement>(null);
 
   // ── Auto-scroll ──
   useEffect(() => {
@@ -780,7 +834,10 @@ export function HomePlanner() {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        const delta = parseSSETextDelta(chunk);
+        const { text: delta, error: streamError } = parseSSETextDelta(chunk);
+        if (streamError) {
+          throw new Error(streamError);
+        }
         if (delta) {
           content += delta;
           // Check if this looks like a grocery list (has store totals)
@@ -931,7 +988,7 @@ export function HomePlanner() {
                 : { background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }
               }>
               {m.role === 'assistant' && (m.content.includes('**') || m.content.includes('###') || m.content.includes('- ')) ? (
-                <FormattedMessage content={m.content} unlocked={isUnlocked} />
+                <FormattedMessage content={m.content} unlocked={isUnlocked} onRequestUnlock={() => unlockRef.current?.scrollIntoView({ behavior: 'smooth' })} />
               ) : (
                 <p style={{ color: m.role === 'user' ? undefined : 'var(--on-surface)', whiteSpace: 'pre-wrap' }}>{m.content}</p>
               )}
@@ -970,13 +1027,15 @@ export function HomePlanner() {
 
       {/* Unlock CTA for non-signed-in users after list is generated */}
       {hasGeneratedList && listContent && !isGenerating && !isUnlocked && (
-        <UnlockCTA
-          householdSize={profile.adults + profile.children}
-          savings={calcSavings(parseStoreTotals(listContent))}
-          listContent={listContent}
-          familySize={String(profile.adults + profile.children)}
-          onUnlocked={handleUnlocked}
-        />
+        <div ref={unlockRef}>
+          <UnlockCTA
+            householdSize={profile.adults + profile.children}
+            savings={calcSavings(parseStoreTotals(listContent))}
+            listContent={listContent}
+            familySize={String(profile.adults + profile.children)}
+            onUnlocked={handleUnlocked}
+          />
+        </div>
       )}
 
       {/* Share button — only for unlocked users */}
