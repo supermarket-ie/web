@@ -45,13 +45,8 @@ export DISPLAY=:99
 
 run_tesco() {
   local log="$LOG_DIR/tesco_${TIMESTAMP}.log"
-  # Rolling offset — splits 1000 products across 5 days (200/day)
-  # day 0=Mon offset 0, day 1=Tue offset 200, ... day 4=Sat offset 800
-  # Sun/day 6 repeats Mon's batch (offset 0) for a weekly full refresh
-  local day_of_week=$(date +%u) # 1=Mon ... 7=Sun
-  local tesco_offset=$(( ((day_of_week - 1) % 5) * 200 ))
-  echo "[$(date -u)] === TESCO REFRESH (offset=${tesco_offset}, limit=200) ==="
-  node scripts/tesco_scraper.js --refresh --limit 200 --offset ${tesco_offset} > "$log" 2>&1 || true
+  echo "[$(date -u)] === TESCO REFRESH (limit=1000) ==="
+  node scripts/tesco_scraper.js --refresh --limit 1000 > "$log" 2>&1 || true
   local result=$(grep -E '(Updated|=== )' "$log" | tail -1)
   echo "[$(date -u)] Tesco done: ${result:-unknown}"
 }
