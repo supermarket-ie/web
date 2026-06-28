@@ -1,22 +1,20 @@
 #!/usr/bin/env node
 /**
- * Tesco Ireland Scraper
- * Uses Playwright to scrape product prices from tesco.ie.
- * Zero ScrapingBee credits — bypasses Akamai WAF via xvfb + headed Chromium.
+ * Tesco Ireland Scraper (ScrapingBee edition)
+ * Uses ScrapingBee API with premium proxies to bypass Akamai WAF.
+ * No local browser needed — all rendering done server-side.
  *
- * MUST run under xvfb-run for headed mode:
- *   xvfb-run node scripts/tesco_scraper.js --resolve
- *   xvfb-run node scripts/tesco_scraper.js --refresh
- *   xvfb-run node scripts/tesco_scraper.js --refresh --limit 10
+ * Usage:
+ *   node scripts/tesco_scraper.js --refresh --limit 200
+ *   node scripts/tesco_scraper.js --resolve --limit 50
+ *   node scripts/tesco_scraper.js --search "Frozen Peas"
  *
- * Or call from Python pipeline which handles xvfb wrapper.
+ * Requires:
+ *   - .env.local with SUPABASE_SERVICE_ROLE_KEY and SCRAPINGBEE_API_KEY
  *
- * Single-product lookup (stdout JSON, for pipeline integration):
- *   xvfb-run node scripts/tesco_scraper.js --search "Whole Milk 2L"
- *   xvfb-run node scripts/tesco_scraper.js --price "https://www.tesco.ie/shop/en-IE/products/260776455"
+ * Credit cost: 25 credits per request (render_js + premium_proxy)
  */
 
-const { chromium } = require('playwright');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const os = require('os');
@@ -24,6 +22,7 @@ const path = require('path');
 
 const SUPABASE_URL = 'https://ytyzwiqnobxehdqrnzhx.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SCRAPINGBEE_KEY = process.env.SCRAPINGBEE_API_KEY;
 const BASE_URL = 'https://www.tesco.ie';
 
 // Lockfile — prevent concurrent Tesco scrape runs
@@ -32,7 +31,7 @@ const LOCKFILE = path.join(os.tmpdir(), 'tesco_scraper.lock');
 function acquireLock() {
   if (fs.existsSync(LOCKFILE)) {
     const age = Date.now() - fs.statSync(LOCKFILE).mtimeMs;
-    if (age < 4 * 60 * 60 * 1000) { // lock younger than 4h = another run is active
+    if (age < 4 * 60 * 60 * 1000) {
       console.error(`[lock] Another Tesco scrape is running (lock age: ${Math.round(age/60000)}min). Exiting.`);
       process.exit(0);
     }
@@ -45,277 +44,134 @@ function releaseLock() {
   try { fs.unlinkSync(LOCKFILE); } catch {}
 }
 
-// Rotate user agents across runs to vary fingerprint
-const USER_AGENTS = [
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-];
-const USER_AGENT = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-
-// ============================================================
-// Browser setup — Akamai WAF evasion
-// ============================================================
-
-async function launchBrowser() {
-  const browser = await chromium.launch({
-    headless: false, // headed mode required to bypass Akamai
-    args: [
-      '--disable-blink-features=AutomationControlled',
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-    ],
-  });
-
-  const context = await browser.newContext({
-    userAgent: USER_AGENT,
-    locale: 'en-IE',
-    viewport: { width: 1920, height: 1080 },
-    extraHTTPHeaders: { 'Accept-Language': 'en-IE,en;q=0.9' },
-  });
-
-  // Remove automation traces
-  await context.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    window.chrome = { runtime: {} };
-    Object.defineProperty(navigator, 'plugins', {
-      get: () => [1, 2, 3, 4, 5],
-    });
-    Object.defineProperty(navigator, 'languages', {
-      get: () => ['en-IE', 'en'],
-    });
-  });
-
-  return { browser, context };
-}
-
-/**
- * Load Tesco homepage to obtain Akamai clearance cookies.
- * Must be called once per browser session before any other requests.
- */
-async function warmUp(page) {
-  await page.goto(`${BASE_URL}/`, {
-    waitUntil: 'domcontentloaded',
-    timeout: 45000,
-  });
-  // Wait for Akamai scripts to set cookies
-  await page.waitForTimeout(6000);
-
-  const title = await page.title();
-  if (title.includes('Access Denied')) {
-    throw new Error('Akamai blocked homepage — try again in a few minutes');
-  }
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
 
 // ============================================================
-// Search — find product SKU + name + price from search results
+// ScrapingBee fetch — handles Tesco with JS rendering + premium proxy
 // ============================================================
 
-async function searchProduct(page, query) {
-  const url = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(query)}`;
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(4000);
+async function scrapingBeeFetch(url, opts = {}) {
+  const { wait = 7000, retries = 2 } = opts;
 
-  const html = await page.content();
-
-  if (html.includes('Access Denied')) {
-    return { error: 'Access Denied on search' };
-  }
-
-  // Extract products with prices directly from DOM
-  // This is more reliable than text-only parsing as it navigates the tile structure
-  const products = await page.evaluate(() => {
-    const results = [];
-    const seen = new Set();
-    const productLinks = document.querySelectorAll('a[href*="/products/"]');
-
-    productLinks.forEach((a) => {
-      const href = a.getAttribute('href');
-      const match = href.match(/\/products\/(\d+)/);
-      if (!match || seen.has(match[1])) return;
-      seen.add(match[1]);
-
-      // Walk up DOM to find the product tile container with name + price
-      let container = a;
-      let price = null;
-      let name = '';
-      for (let i = 0; i < 10 && container; i++) {
-        container = container.parentElement;
-        if (!container) break;
-        // Look for price element
-        if (!price) {
-          const pEl = container.querySelector('[class*="priceText"]');
-          if (pEl) {
-            const priceMatch = pEl.textContent.match(/(\d+\.\d{2})/);
-            if (priceMatch) price = parseFloat(priceMatch[1]);
-          }
-        }
-        // Look for product name
-        if (!name) {
-          const h = container.querySelector('h2, h3');
-          if (h && h.textContent.trim().length > 3) {
-            name = h.textContent.trim();
-          }
-        }
-        if (price && name) break;
-      }
-
-      if (!name) {
-        name = a.textContent?.trim()?.substring(0, 100) || '';
-      }
-
-      const cleanHref = href.split('?')[0];
-      const fullUrl = cleanHref.startsWith('http')
-        ? cleanHref
-        : `${location.origin}${cleanHref}`;
-      results.push({
-        sku: match[1],
-        name,
-        price,
-        url: fullUrl,
-      });
-    });
-    return results;
+  const params = new URLSearchParams({
+    api_key: SCRAPINGBEE_KEY,
+    url: url,
+    render_js: 'true',
+    premium_proxy: 'true',
+    country_code: 'ie',
+    wait: String(wait),
   });
 
-  return { products };
-}
-
-// ============================================================
-// Product page — extract price from schema.org JSON-LD
-// ============================================================
-
-async function getProductPrice(page, productUrl) {
-  // Normalise old URLs
-  productUrl = productUrl.replace('/groceries/en-IE/', '/shop/en-IE/');
-
-  await page.goto(productUrl, {
-    waitUntil: 'domcontentloaded',
-    timeout: 30000,
-  });
-  await page.waitForTimeout(4000);
-
-  const html = await page.content();
-
-  if (html.includes('Access Denied')) {
-    return { error: 'Access Denied on product page' };
-  }
-
-  // Extract product name from the page (h1 or og:title)
-  const pageName = await page.evaluate(() => {
-    const h1 = document.querySelector('h1');
-    if (h1 && h1.textContent.trim().length > 3) return h1.textContent.trim();
-    const og = document.querySelector('meta[property="og:title"]');
-    if (og) return og.getAttribute('content') || '';
-    return '';
-  }).catch(() => '');
-
-  // 1. Try schema.org JSON-LD — check @graph array for Product type
-  const jsonLdMatches = [...html.matchAll(
-    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g
-  )];
-  for (const jsonLdMatch of jsonLdMatches) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const ld = JSON.parse(jsonLdMatch[1]);
-      // Handle @graph array (Tesco uses this)
-      const entries = ld['@graph'] || [ld];
-      const product = entries.find(e => e['@type'] === 'Product');
-      if (product) {
-        const offer = product.offers || {};
-        const price = parseFloat(offer.price || product.price || 0);
-        if (price > 0) {
-          return {
-            price,
-            name: product.name || pageName || '',
-            sku: product.sku || '',
-            gtin: product.gtin13 || '',
-            url: productUrl,
-          };
+      const res = await fetch('https://app.scrapingbee.com/api/v1?' + params.toString(), {
+        signal: AbortSignal.timeout(60000),
+      });
+
+      const creditCost = res.headers.get('Spb-Cost') || '?';
+
+      if (res.status === 200) {
+        const html = await res.text();
+        const blocked = html.includes('Access Denied') || html.includes('security checks') ||
+          (html.includes('not right') && html.includes('security'));
+        if (blocked) {
+          if (attempt < retries) {
+            console.log(`    ⚠ Akamai block detected (attempt ${attempt}/${retries}), retrying...`);
+            await sleep(5000);
+            continue;
+          }
+          return { ok: false, error: 'Akamai blocked', creditCost };
         }
+        return { ok: true, html, creditCost };
+      } else if (res.status === 429) {
+        console.log(`    ⚠ ScrapingBee rate limit (attempt ${attempt}/${retries}), waiting 10s...`);
+        await sleep(10000);
+        continue;
+      } else {
+        const body = await res.text().catch(() => '');
+        if (attempt < retries) {
+          await sleep(3000);
+          continue;
+        }
+        return { ok: false, error: `HTTP ${res.status}: ${body.substring(0, 100)}`, creditCost };
       }
-    } catch {}
-  }
-
-  // 2. Fallback — regex for "price":X.XX in any script (covers inline data)
-  const pricePatterns = [
-    /"price"\s*:\s*"?([\d.]+)"?/g,
-    /"priceCurrency"\s*:\s*"(?:EUR|GBP)"\s*,\s*"price"\s*:\s*([\d.]+)/,
-  ];
-  for (const pattern of pricePatterns) {
-    const matches = [...html.matchAll(pattern instanceof RegExp && pattern.global ? pattern : new RegExp(pattern.source, 'g'))];
-    for (const m of matches) {
-      const p = parseFloat(m[1]);
-      if (p > 0 && p < 500) {
-        return {
-          price: p,
-          name: pageName || '',
-          url: productUrl,
-        };
+    } catch (e) {
+      if (attempt < retries) {
+        await sleep(3000);
+        continue;
       }
+      return { ok: false, error: e.message, creditCost: '0' };
     }
   }
-
-  // 3. Fallback — euro prices in HTML (skip €0.00)
-  const euros = [...html.matchAll(/€(\d+\.\d{2})/g)]
-    .map((m) => parseFloat(m[1]))
-    .filter((p) => p > 0);
-  if (euros.length > 0) {
-    return {
-      price: euros[0],
-      name: pageName || '',
-      url: productUrl,
-    };
-  }
-
-  return { error: 'No price found', url: productUrl };
-}
-
-/**
- * Detect promotion / Clubcard / was-price from product page HTML.
- * Call after getProductPrice on the same page.
- */
-async function detectPromotion(page) {
-  const html = await page.content();
-
-  let wasPrice = null;
-  let onPromotion = false;
-  let promoLabel = null;
-
-  // Clubcard price
-  const clubcard = html.match(
-    /[Cc]lubcard\s*[Pp]rice[^€]*€\s*(\d+\.\d{2})/
-  );
-  if (clubcard) {
-    promoLabel = 'Clubcard Price';
-    onPromotion = true;
-  }
-
-  // "Was €X.XX" or "was €X.XX"
-  const wasMatch = html.match(/[Ww]as\s*€\s*(\d+\.\d{2})/);
-  if (wasMatch) {
-    wasPrice = parseFloat(wasMatch[1]);
-    onPromotion = true;
-    if (!promoLabel) promoLabel = 'Was Price';
-  }
-
-  // Generic offer/promo text
-  if (!onPromotion) {
-    const offerMatch = html.match(
-      /(?:save|offer|deal|reduced|special)[^<]{0,60}€\s*(\d+\.\d{2})/i
-    );
-    if (offerMatch) {
-      onPromotion = true;
-      promoLabel = 'Offer';
-    }
-  }
-
-  return { wasPrice, onPromotion, promoLabel };
+  return { ok: false, error: 'Max retries exceeded', creditCost: '0' };
 }
 
 // ============================================================
-// Fuzzy matching — same approach as aldi_scraper.js
+// Search — parse product results from Tesco search HTML
+// ============================================================
+
+function parseSearchResults(html) {
+  const products = [];
+  const seen = new Set();
+
+  // Step 1: Find all product tile headings with positions
+  const tileRegex = /<h2[^>]*product-heading[^>]*>.*?<a[^>]*href="[^"]*\/products\/(\d+)"[^>]*>([^<]+)<\/a><\/h2>/g;
+  const tiles = [];
+  let match;
+  while ((match = tileRegex.exec(html)) !== null) {
+    if (seen.has(match[1])) continue;
+    seen.add(match[1]);
+    tiles.push({ sku: match[1], name: match[2].trim(), pos: match.index });
+  }
+
+  // Step 2: Find all price positions (priceText class elements)
+  const priceRegex = /priceText[^>]*>€(\d+\.\d{2})<\/p>/g;
+  const prices = [];
+  while ((match = priceRegex.exec(html)) !== null) {
+    prices.push({ price: parseFloat(match[1]), pos: match.index });
+  }
+
+  // Step 3: For each tile, find the first price AFTER it but BEFORE the next tile
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i];
+    const nextTilePos = i + 1 < tiles.length ? tiles[i + 1].pos : Infinity;
+    const tilePrice = prices.find(p => p.pos > tile.pos && p.pos < nextTilePos);
+
+    // Detect promotions in the region between this tile and next
+    const tileHtml = html.substring(tile.pos, Math.min(html.length, nextTilePos));
+    let onPromotion = false;
+    let wasPrice = null;
+    let promoLabel = null;
+
+    if (/Clubcard Price/i.test(tileHtml)) {
+      onPromotion = true;
+      promoLabel = 'Clubcard Price';
+    }
+    const wasMatch = tileHtml.match(/was\s*€(\d+\.\d{2})/i);
+    if (wasMatch) {
+      wasPrice = parseFloat(wasMatch[1]);
+      onPromotion = true;
+      if (!promoLabel) promoLabel = 'Was Price';
+    }
+
+    products.push({
+      sku: tile.sku,
+      url: `${BASE_URL}/shop/en-IE/products/${tile.sku}`,
+      name: tile.name,
+      price: tilePrice ? tilePrice.price : null,
+      onPromotion,
+      wasPrice,
+      promoLabel,
+    });
+  }
+
+  return products;
+}
+
+// ============================================================
+// Fuzzy matching — optimised for generic canonical names vs branded store names
 // ============================================================
 
 function fuzzyMatch(searchName, candidates) {
@@ -326,38 +182,41 @@ function fuzzyMatch(searchName, candidates) {
   let bestScore = 0;
 
   for (const c of candidates) {
-    const cName = (c.name || c.canonical_name || '').toLowerCase();
+    const cName = (c.name || '').toLowerCase();
     if (!cName) continue;
 
-    if (
-      searchName === cName ||
-      searchName.includes(cName) ||
-      cName.includes(searchName)
-    ) {
-      if (1.0 > bestScore) {
-        bestScore = 1.0;
-        bestMatch = c;
-      }
+    // Exact or substring match
+    if (searchName === cName || searchName.includes(cName) || cName.includes(searchName)) {
+      if (1.0 > bestScore) { bestScore = 1.0; bestMatch = c; }
       continue;
     }
 
-    const searchWords = searchName.split(/\s+/).filter((w) => w.length > 2);
-    const cWords = cName.split(/\s+/).filter((w) => w.length > 2);
+    const searchWords = searchName.split(/\s+/).filter(w => w.length > 2);
+    const cWords = cName.split(/\s+/).filter(w => w.length > 2);
 
-    let cInSearch = 0;
-    for (const w of cWords) {
-      if (searchName.includes(w)) cInSearch++;
-    }
+    // How many of our search words appear in the candidate?
     let searchInC = 0;
     for (const w of searchWords) {
       if (cName.includes(w)) searchInC++;
     }
+    // How many candidate words appear in our search?
+    let cInSearch = 0;
+    for (const w of cWords) {
+      if (searchName.includes(w)) cInSearch++;
+    }
 
-    const s1 = cWords.length > 0 ? cInSearch / cWords.length : 0;
-    const s2 = searchWords.length > 0 ? searchInC / searchWords.length : 0;
-    const score = Math.min(s1, s2);
+    // Key insight: if ALL our search words appear in the candidate, it's a good match
+    // even if the candidate has extra brand/size words we don't have.
+    // Use the proportion of search words found in candidate as primary score.
+    const searchCoverage = searchWords.length > 0 ? searchInC / searchWords.length : 0;
+    
+    // Secondary: what fraction of candidate words are in our search (penalises wild mismatches)
+    const candidateCoverage = cWords.length > 0 ? cInSearch / cWords.length : 0;
+    
+    // Score: primarily reward coverage of our search terms, with some weight on candidate coverage
+    const score = searchCoverage * 0.7 + candidateCoverage * 0.3;
 
-    if (score > bestScore && score >= 0.6) {
+    if (score > bestScore && score >= 0.45) {
       bestScore = score;
       bestMatch = c;
     }
@@ -371,18 +230,13 @@ function fuzzyMatch(searchName, candidates) {
 // ============================================================
 
 async function resolveMode({ limit, category }) {
-  if (!SUPABASE_KEY) {
-    console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not set');
-    process.exit(1);
-  }
+  if (!SUPABASE_KEY) { console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not set'); process.exit(1); }
+  if (!SCRAPINGBEE_KEY) { console.error('ERROR: SCRAPINGBEE_API_KEY not set'); process.exit(1); }
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  console.log('=== TESCO RESOLVE MODE (Playwright) ===\n');
+  console.log('=== TESCO RESOLVE MODE (ScrapingBee) ===\n');
 
-  // Get Tesco store_products that need resolving:
-  // 1. pending status
-  // 2. resolved but still on old /groceries/ search URLs
-  // Fetch ALL rows (Supabase default limit is 1000, we need all ~1800+)
+  // Fetch all Tesco store products
   let allTesco = [];
   let from = 0;
   const pageSize = 1000;
@@ -392,463 +246,261 @@ async function resolveMode({ limit, category }) {
       .select('id, product_id, store_product_name, store_url, url_status')
       .eq('store', 'tesco')
       .range(from, from + pageSize - 1);
-    if (pageErr) {
-      console.error('DB error:', pageErr);
-      return;
-    }
+    if (pageErr) { console.error('DB error:', pageErr); return; }
     allTesco = allTesco.concat(page || []);
     if (!page || page.length < pageSize) break;
     from += pageSize;
   }
-  const spErr = null;
-  if (spErr) {
-    console.error('DB error:', spErr);
-    return;
-  }
 
-  // Filter: pending OR resolved-but-still-on-search-URLs
-  let toResolve = allTesco.filter(
-    (sp) =>
-      sp.url_status === 'pending' ||
-      sp.url_status === 'failed' ||
-      (sp.url_status === 'resolved' &&
-        sp.store_url &&
-        (sp.store_url.includes('/search?') || sp.store_url.includes('/groceries/')))
+  // Filter: pending/failed or resolved-but-stale URLs
+  let toResolve = allTesco.filter(sp =>
+    sp.url_status === 'pending' ||
+    sp.url_status === 'failed' ||
+    (sp.url_status === 'resolved' && sp.store_url &&
+      (sp.store_url.includes('/search?') || sp.store_url.includes('/groceries/')))
   );
 
   if (category) {
-    const { data: catProducts } = await supabase
-      .from('products')
-      .select('id')
-      .eq('category', category);
-    const catIds = new Set((catProducts || []).map((p) => p.id));
-    toResolve = toResolve.filter((sp) => catIds.has(sp.product_id));
+    const { data: catProducts } = await supabase.from('products').select('id').eq('category', category);
+    const catIds = new Set((catProducts || []).map(p => p.id));
+    toResolve = toResolve.filter(sp => catIds.has(sp.product_id));
   }
 
   if (limit > 0) toResolve = toResolve.slice(0, limit);
 
   console.log(`Products to resolve: ${toResolve.length}`);
-  if (toResolve.length === 0) {
-    console.log('Nothing to resolve!');
-    return;
-  }
+  if (toResolve.length === 0) { console.log('Nothing to resolve!'); return; }
 
-  // Process in batches with browser restarts to avoid Akamai blocking
-  const BATCH_SIZE = 50;
-  let resolved = 0;
-  let priced = 0;
-  let errors = 0;
-  let batchNum = 0;
+  let resolved = 0, priced = 0, errors = 0;
+  let totalCredits = 0;
 
-  for (let batchStart = 0; batchStart < toResolve.length; batchStart += BATCH_SIZE) {
-    const batch = toResolve.slice(batchStart, batchStart + BATCH_SIZE);
-    batchNum++;
-    console.log(`\n--- Batch ${batchNum} (products ${batchStart + 1}–${batchStart + batch.length} of ${toResolve.length}) ---`);
+  for (let i = 0; i < toResolve.length; i++) {
+    const sp = toResolve[i];
+    const name = sp.store_product_name;
 
-    let browser, context, page;
-    try {
-      ({ browser, context } = await launchBrowser());
-      page = await context.newPage();
-      console.log('  Warming up...');
-      await warmUp(page);
-    } catch (e) {
-      console.log(`  ✗ Browser launch/warmup failed: ${e.message}`);
-      console.log('  ⏳ Waiting 30s before retry...');
-      await new Promise((r) => setTimeout(r, 30000));
-      try {
-        if (browser) await browser.close().catch(() => {});
-        ({ browser, context } = await launchBrowser());
-        page = await context.newPage();
-        await warmUp(page);
-      } catch (e2) {
-        console.log(`  ✗✗ Retry failed: ${e2.message} — skipping batch`);
-        errors += batch.length;
-        continue;
-      }
+    const searchUrl = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(name)}`;
+    const result = await scrapingBeeFetch(searchUrl);
+    totalCredits += parseInt(result.creditCost) || 0;
+
+    if (!result.ok) {
+      console.log(`  ✗ ${name.substring(0, 50)} → ${result.error}`);
+      await supabase.from('store_products').update({ url_status: 'failed' }).eq('id', sp.id);
+      errors++;
+      continue;
     }
 
-    for (const sp of batch) {
-      const name = sp.store_product_name;
-      try {
-        // Search for the product
-        const searchResult = await searchProduct(page, name);
-
-        if (searchResult.error) {
-          console.log(`  ✗ ${name.substring(0, 50)} → ${searchResult.error}`);
-          errors++;
-          await supabase
-            .from('store_products')
-            .update({ url_status: 'failed' })
-            .eq('id', sp.id);
-          if (searchResult.error.includes('Access Denied')) {
-            console.log('    ⏳ Waiting 30s after block...');
-            await page.waitForTimeout(30000);
-            try { await warmUp(page); } catch {}
-          }
-          continue;
-        }
-
-        const products = searchResult.products || [];
-        if (products.length === 0) {
-          console.log(`  ✗ ${name.substring(0, 50)} → No products found`);
-          errors++;
-          await supabase
-            .from('store_products')
-            .update({ url_status: 'failed' })
-            .eq('id', sp.id);
-          continue;
-        }
-
-        // Find best fuzzy match — no fallback to first result (causes bad matches)
-        const match = fuzzyMatch(name, products);
-        if (!match) {
-          console.log(`  ✗ ${name.substring(0, 50)} → No confident match (best < 0.5), marking failed`);
-          await supabase.from('store_products').update({ url_status: 'failed' }).eq('id', sp.id);
-          errors++;
-          continue;
-        }
-        const picked = match.product;
-        const matchNote = `(score ${match.score.toFixed(2)})`;
-
-        // Use price directly from search results (product pages no longer have prices)
-        if (!picked.price || picked.price <= 0) {
-          console.log(
-            `  ⚠ ${name.substring(0, 50)} → URL found but no price in search results`
-          );
-          await supabase
-            .from('store_products')
-            .update({
-              store_url: picked.url,
-              store_sku: picked.sku,
-              store_product_name: picked.name || name,
-              url_status: 'resolved',
-            })
-            .eq('id', sp.id);
-          resolved++;
-          continue;
-        }
-
-        // Update store_product
-        await supabase
-          .from('store_products')
-          .update({
-            store_url: picked.url,
-            store_sku: picked.sku,
-            store_product_name: picked.name || name,
-            url_status: 'resolved',
-          })
-          .eq('id', sp.id);
-
-        // Insert price observation
-        await supabase.from('price_observations').insert({
-          store_product_id: sp.id,
-          price: picked.price,
-          was_price: null,
-          on_promotion: false,
-          observed_at: new Date().toISOString(),
-        });
-
-        console.log(
-          `  ✓ ${name.substring(0, 45)} → €${picked.price.toFixed(2)} ${matchNote}`
-        );
-        resolved++;
-        priced++;
-
-        // Delay between products — randomised to appear human (3–6s)
-        await page.waitForTimeout(3000 + Math.floor(Math.random() * 3000));
-      } catch (e) {
-        console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
-        errors++;
-        // If browser/page crashed, break out of this batch and restart
-        if (
-          e.message.includes('Target page, context or browser has been closed') ||
-          e.message.includes('Target closed') ||
-          e.message.includes('Browser closed') ||
-          e.message.includes('Navigation failed because page was closed')
-        ) {
-          console.log('    💥 Browser crashed — ending batch early');
-          break;
-        }
-        if (e.message.includes('Access Denied')) {
-          console.log('    ⏳ Waiting 30s after block...');
-          try {
-            await page.waitForTimeout(30000);
-            await warmUp(page);
-          } catch {
-            console.log('    💥 Recovery failed — ending batch early');
-            break;
-          }
-        }
-      }
+    const products = parseSearchResults(result.html);
+    if (products.length === 0) {
+      console.log(`  ✗ ${name.substring(0, 50)} → No products found`);
+      await supabase.from('store_products').update({ url_status: 'failed' }).eq('id', sp.id);
+      errors++;
+      continue;
     }
 
-    // Close browser to free memory before next batch
-    try { await browser.close(); } catch {}
-    console.log(`  Batch ${batchNum} done. Running total: ${resolved} resolved, ${priced} priced, ${errors} errors`);
-
-    // Wait between batches — longer cooldown to avoid rate limiting
-    if (batchStart + BATCH_SIZE < toResolve.length) {
-      console.log('  ⏳ 30s cooldown between batches...');
-      await new Promise((r) => setTimeout(r, 30000));
+    const match = fuzzyMatch(name, products);
+    if (!match) {
+      console.log(`  ✗ ${name.substring(0, 50)} → No confident match (best < 0.6)`);
+      await supabase.from('store_products').update({ url_status: 'failed' }).eq('id', sp.id);
+      errors++;
+      continue;
     }
+
+    const picked = match.product;
+
+    // Update store_product
+    await supabase.from('store_products').update({
+      store_url: picked.url,
+      store_sku: picked.sku,
+      store_product_name: picked.name || name,
+      url_status: 'resolved',
+    }).eq('id', sp.id);
+    resolved++;
+
+    // Insert price if available
+    if (picked.price && picked.price > 0) {
+      await supabase.from('price_observations').insert({
+        store_product_id: sp.id,
+        price: picked.price,
+        was_price: null,
+        on_promotion: false,
+        observed_at: new Date().toISOString(),
+      });
+      priced++;
+      console.log(`  ✓ ${name.substring(0, 45)} → €${picked.price.toFixed(2)} (score ${match.score.toFixed(2)})`);
+    } else {
+      console.log(`  ⚠ ${name.substring(0, 45)} → resolved but no price`);
+    }
+
+    // Delay between requests — 2-4s (be respectful of ScrapingBee rate limits)
+    await sleep(2000 + Math.floor(Math.random() * 2000));
   }
 
   console.log(`\n=== Results: ${resolved} resolved, ${priced} priced, ${errors} errors ===`);
+  console.log(`  Credits used: ~${totalCredits}`);
 }
 
 async function refreshMode({ limit, category, offset = 0 }) {
-  if (!SUPABASE_KEY) {
-    console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not set');
-    process.exit(1);
-  }
+  if (!SUPABASE_KEY) { console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not set'); process.exit(1); }
+  if (!SCRAPINGBEE_KEY) { console.error('ERROR: SCRAPINGBEE_API_KEY not set'); process.exit(1); }
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  console.log('=== TESCO REFRESH MODE (Playwright) ===\n');
+  console.log('=== TESCO REFRESH MODE (ScrapingBee) ===\n');
 
-  let query = supabase
+  const { data: storeProducts, error: spErr } = await supabase
     .from('store_products')
-    .select(
-      'id, product_id, store_product_name, store_url, store_sku, products(canonical_name, category)'
-    )
+    .select('id, product_id, store_product_name, store_url, store_sku, products(canonical_name, category)')
     .eq('store', 'tesco')
     .eq('url_status', 'resolved');
 
-  const { data: storeProducts, error: spErr } = await query;
-  if (spErr) {
-    console.error('DB error:', spErr);
-    return;
-  }
+  if (spErr) { console.error('DB error:', spErr); return; }
 
-  // Skip products with search URLs — they need resolve first
-  let filtered = storeProducts.filter(
-    (sp) =>
-      sp.store_url &&
-      !sp.store_url.includes('/search?') &&
-      !sp.store_url.includes('/groceries/')
+  // Skip products with search/old URLs
+  let filtered = storeProducts.filter(sp =>
+    sp.store_url && !sp.store_url.includes('/search?') && !sp.store_url.includes('/groceries/')
   );
 
   if (category) {
-    filtered = filtered.filter((sp) => sp.products?.category === category);
+    filtered = filtered.filter(sp => sp.products?.category === category);
   }
+
+  // Order by stalest first
+  const CHUNK = 200;
+  const lastObsMap = new Map();
+  for (let i = 0; i < filtered.length; i += CHUNK) {
+    const chunk = filtered.slice(i, i + CHUNK);
+    const ids = chunk.map(sp => sp.id);
+    const { data: obs } = await supabase
+      .from('price_observations')
+      .select('store_product_id, observed_at')
+      .in('store_product_id', ids)
+      .order('observed_at', { ascending: false });
+
+    if (obs) {
+      for (const o of obs) {
+        if (!lastObsMap.has(o.store_product_id)) {
+          lastObsMap.set(o.store_product_id, o.observed_at);
+        }
+      }
+    }
+  }
+
+  filtered.sort((a, b) => {
+    const aObs = lastObsMap.get(a.id) || '1970-01-01';
+    const bObs = lastObsMap.get(b.id) || '1970-01-01';
+    return aObs.localeCompare(bObs);
+  });
+  console.log(`  Sorted by stalest-first (${lastObsMap.size} products have price history)`);
+
   if (offset > 0) filtered = filtered.slice(offset);
   if (limit > 0) filtered = filtered.slice(0, limit);
 
-  console.log(
-    `Products to refresh: ${filtered.length} (of ${storeProducts.length} total resolved)`
-  );
-  if (filtered.length === 0) {
-    console.log('Nothing to refresh!');
-    return;
-  }
+  console.log(`Products to refresh: ${filtered.length} (of ${storeProducts.length} total resolved)`);
+  if (filtered.length === 0) { console.log('Nothing to refresh!'); return; }
 
-  // Process in batches with browser restarts to avoid memory bloat / Akamai expiry
-  const BATCH_SIZE = 100;
-  let updated = 0;
-  let errors = 0;
-  let batchNum = 0;
-  let consecutiveNoResults = 0;
-  const CONSECUTIVE_ABORT_THRESHOLD = 10; // IP blocked if 10 in a row return nothing
+  let updated = 0, errors = 0;
+  let totalCredits = 0;
+  let consecutiveErrors = 0;
+  const ABORT_THRESHOLD = 15;
 
-  for (let batchStart = 0; batchStart < filtered.length; batchStart += BATCH_SIZE) {
-    const batch = filtered.slice(batchStart, batchStart + BATCH_SIZE);
-    batchNum++;
-    console.log(`\n--- Batch ${batchNum} (products ${batchStart + 1}–${batchStart + batch.length} of ${filtered.length}) ---`);
+  for (let i = 0; i < filtered.length; i++) {
+    const sp = filtered[i];
+    const name = sp.products?.canonical_name || sp.store_product_name;
 
-    let browser, context, page;
-    try {
-      ({ browser, context } = await launchBrowser());
-      page = await context.newPage();
-      console.log('  Warming up...');
-      await warmUp(page);
-    } catch (e) {
-      console.log(`  ✗ Browser launch/warmup failed: ${e.message}`);
-      console.log('  ⏳ Waiting 30s before retry...');
-      await new Promise((r) => setTimeout(r, 30000));
-      try {
-        if (browser) await browser.close().catch(() => {});
-        ({ browser, context } = await launchBrowser());
-        page = await context.newPage();
-        await warmUp(page);
-      } catch (e2) {
-        console.log(`  ✗✗ Retry failed: ${e2.message} — skipping batch`);
-        errors += batch.length;
-        continue;
+    const searchUrl = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(name)}`;
+    const result = await scrapingBeeFetch(searchUrl);
+    totalCredits += parseInt(result.creditCost) || 0;
+
+    if (!result.ok) {
+      console.log(`  ✗ ${name.substring(0, 50)} → ${result.error}`);
+      errors++;
+      consecutiveErrors++;
+      if (consecutiveErrors >= ABORT_THRESHOLD) {
+        console.log(`\n  🛑 ${consecutiveErrors} consecutive errors — aborting run.`);
+        break;
       }
+      continue;
     }
 
-    for (const sp of batch) {
-      const name = sp.products?.canonical_name || sp.store_product_name;
-      try {
-        // Search by product name and extract price from search results
-        // Product pages no longer contain pricing data (Tesco removed JSON-LD/price elements)
-        const searchResult = await searchProduct(page, name);
-
-        if (searchResult.error) {
-          console.log(`  ✗ ${name.substring(0, 50)} → ${searchResult.error}`);
-          errors++;
-          if (searchResult.error.includes('Access Denied')) {
-            console.log('    ⏳ Waiting 30s after block...');
-            await page.waitForTimeout(30000);
-            try { await warmUp(page); } catch {}
-          }
-          continue;
-        }
-
-        const products = searchResult.products || [];
-        if (products.length === 0) {
-          console.log(`  ✗ ${name.substring(0, 50)} → No search results`);
-          errors++;
-          consecutiveNoResults++;
-          if (consecutiveNoResults >= CONSECUTIVE_ABORT_THRESHOLD) {
-            console.log(`\n  🛑 ${consecutiveNoResults} consecutive empty results — IP likely blocked. Aborting run.`);
-            try { await browser.close(); } catch {}
-            console.log(`\n=== Updated ${updated}/${filtered.length} prices, ${errors} errors (aborted — IP block detected) ===`);
-            return;
-          }
-          continue;
-        }
-        consecutiveNoResults = 0; // reset on any successful result
-
-        // Find best match by name — no fallback to first result
-        const match = fuzzyMatch(name, products);
-        if (!match) {
-          console.log(`  ✗ ${name.substring(0, 50)} → No confident match in refresh, skipping`);
-          errors++;
-          continue;
-        }
-        const picked = match.product;
-
-        if (!picked.price || picked.price <= 0) {
-          console.log(`  ✗ ${name.substring(0, 50)} → No price in search results`);
-          errors++;
-          continue;
-        }
-
-        // Update stored URL/SKU if they've changed (Tesco re-keys product IDs)
-        if (picked.sku && picked.url && picked.url !== sp.store_url) {
-          await supabase
-            .from('store_products')
-            .update({
-              store_url: picked.url,
-              store_sku: picked.sku,
-              store_product_name: picked.name || name,
-            })
-            .eq('id', sp.id);
-        }
-
-        // Insert price observation
-        await supabase.from('price_observations').insert({
-          store_product_id: sp.id,
-          price: picked.price,
-          was_price: null,
-          on_promotion: false,
-          observed_at: new Date().toISOString(),
-        });
-
-        console.log(
-          `  ✓ ${name.substring(0, 50)} → €${picked.price.toFixed(2)}`
-        );
-        updated++;
-
-        await page.waitForTimeout(1500);
-      } catch (e) {
-        console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
-        errors++;
-        // If browser/page crashed, break out of this batch and restart
-        if (
-          e.message.includes('Target page, context or browser has been closed') ||
-          e.message.includes('Target closed') ||
-          e.message.includes('Browser closed') ||
-          e.message.includes('Navigation failed because page was closed')
-        ) {
-          console.log('    💥 Browser crashed — ending batch early');
-          break;
-        }
-        if (e.message.includes('Access Denied')) {
-          console.log('    ⏳ Waiting 30s after block...');
-          try {
-            await page.waitForTimeout(30000);
-            await warmUp(page);
-          } catch {
-            console.log('    💥 Recovery failed — ending batch early');
-            break;
-          }
-        }
+    const products = parseSearchResults(result.html);
+    if (products.length === 0) {
+      console.log(`  ✗ ${name.substring(0, 50)} → No search results`);
+      errors++;
+      consecutiveErrors++;
+      if (consecutiveErrors >= ABORT_THRESHOLD) {
+        console.log(`\n  🛑 ${consecutiveErrors} consecutive empty results — aborting run.`);
+        break;
       }
+      continue;
+    }
+    consecutiveErrors = 0;
+
+    // Find best match
+    const match = fuzzyMatch(name, products);
+    if (!match) {
+      console.log(`  ✗ ${name.substring(0, 50)} → No confident match, skipping`);
+      errors++;
+      continue;
     }
 
-    // Close browser to free memory before next batch
-    try {
-      await browser.close();
-    } catch {}
-    console.log(`  Batch ${batchNum} done. Running total: ${updated} updated, ${errors} errors`);
+    const picked = match.product;
+
+    if (!picked.price || picked.price <= 0) {
+      console.log(`  ✗ ${name.substring(0, 50)} → No price in results`);
+      errors++;
+      continue;
+    }
+
+    // Update stored URL/SKU if changed
+    if (picked.sku && picked.url && picked.url !== sp.store_url) {
+      await supabase.from('store_products').update({
+        store_url: picked.url,
+        store_sku: picked.sku,
+        store_product_name: picked.name || name,
+      }).eq('id', sp.id);
+    }
+
+    // Insert price observation
+    await supabase.from('price_observations').insert({
+      store_product_id: sp.id,
+      price: picked.price,
+      was_price: null,
+      on_promotion: false,
+      observed_at: new Date().toISOString(),
+    });
+
+    console.log(`  ✓ ${name.substring(0, 50)} → €${picked.price.toFixed(2)}`);
+    updated++;
+
+    // Delay 2-4s between requests
+    await sleep(2000 + Math.floor(Math.random() * 2000));
   }
 
   console.log(`\n=== Updated ${updated}/${filtered.length} prices, ${errors} errors ===`);
+  console.log(`  Credits used: ~${totalCredits}`);
 }
 
 // ============================================================
-// Single-product modes — for pipeline integration
+// Single-product mode
 // ============================================================
 
 async function singleSearch(query) {
-  const { browser, context } = await launchBrowser();
-  const page = await context.newPage();
-  try {
-    await warmUp(page);
-    const result = await searchProduct(page, query);
-    if (result.error) {
-      console.log(JSON.stringify({ error: result.error }));
-    } else if (!result.products || result.products.length === 0) {
-      console.log(JSON.stringify({ error: 'No products found' }));
-    } else {
-      // Get price for first result
-      const product = result.products[0];
-      const priceResult = await getProductPrice(page, product.url);
-      const promo = await detectPromotion(page);
-      console.log(
-        JSON.stringify({
-          sku: product.sku,
-          name: priceResult.name || product.name,
-          price: priceResult.price || null,
-          url: product.url,
-          onPromotion: promo.onPromotion,
-          wasPrice: promo.wasPrice,
-          promotionLabel: promo.promoLabel,
-          error: priceResult.error || null,
-        })
-      );
-    }
-  } catch (e) {
-    console.log(JSON.stringify({ error: e.message }));
-  } finally {
-    await browser.close();
-  }
-}
+  if (!SCRAPINGBEE_KEY) { console.error('ERROR: SCRAPINGBEE_API_KEY not set'); process.exit(1); }
 
-async function singlePrice(productUrl) {
-  const { browser, context } = await launchBrowser();
-  const page = await context.newPage();
-  try {
-    await warmUp(page);
-    const result = await getProductPrice(page, productUrl);
-    const promo = await detectPromotion(page);
-    console.log(
-      JSON.stringify({
-        price: result.price || null,
-        name: result.name || '',
-        url: productUrl,
-        onPromotion: promo.onPromotion,
-        wasPrice: promo.wasPrice,
-        promotionLabel: promo.promoLabel,
-        error: result.error || null,
-      })
-    );
-  } catch (e) {
-    console.log(JSON.stringify({ error: e.message }));
-  } finally {
-    await browser.close();
+  const searchUrl = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(query)}`;
+  const result = await scrapingBeeFetch(searchUrl);
+
+  if (!result.ok) {
+    console.log(JSON.stringify({ error: result.error }));
+    return;
   }
+
+  const products = parseSearchResults(result.html);
+  if (products.length === 0) {
+    console.log(JSON.stringify({ error: 'No products found' }));
+    return;
+  }
+
+  console.log(JSON.stringify({ products: products.slice(0, 10), credits: result.creditCost }));
 }
 
 // ============================================================
@@ -858,43 +510,30 @@ async function singlePrice(productUrl) {
 async function main() {
   const args = process.argv.slice(2);
 
-  // Single-product modes
   const searchIdx = args.indexOf('--search');
   if (searchIdx >= 0) {
     const query = args[searchIdx + 1];
-    if (!query) {
-      console.error('Usage: --search "product name"');
-      process.exit(1);
-    }
+    if (!query) { console.error('Usage: --search "product name"'); process.exit(1); }
     return singleSearch(query);
   }
 
-  const priceIdx = args.indexOf('--price');
-  if (priceIdx >= 0) {
-    const url = args[priceIdx + 1];
-    if (!url) {
-      console.error('Usage: --price "https://www.tesco.ie/shop/en-IE/products/XXX"');
-      process.exit(1);
-    }
-    return singlePrice(url);
-  }
-
-  // Batch modes — acquire lockfile to prevent concurrent runs
   const resolve = args.includes('--resolve');
   const refresh = args.includes('--refresh');
 
   if (!resolve && !refresh) {
-    console.log('Tesco Ireland Playwright Scraper');
+    console.log('Tesco Ireland Scraper (ScrapingBee)');
     console.log('');
-    console.log('Batch modes (require SUPABASE_SERVICE_ROLE_KEY):');
-    console.log('  xvfb-run node tesco_scraper.js --resolve              Resolve pending/old URLs');
-    console.log('  xvfb-run node tesco_scraper.js --refresh              Refresh prices');
-    console.log('  xvfb-run node tesco_scraper.js --resolve --limit 10   Limit products');
-    console.log('  xvfb-run node tesco_scraper.js --refresh --category "Dairy"');
+    console.log('Batch modes (require SUPABASE_SERVICE_ROLE_KEY + SCRAPINGBEE_API_KEY):');
+    console.log('  node tesco_scraper.js --resolve              Resolve pending/old URLs');
+    console.log('  node tesco_scraper.js --refresh              Refresh prices');
+    console.log('  node tesco_scraper.js --resolve --limit 50   Limit products');
+    console.log('  node tesco_scraper.js --refresh --limit 200');
+    console.log('  node tesco_scraper.js --refresh --category "Dairy"');
     console.log('');
-    console.log('Single-product modes:');
-    console.log('  xvfb-run node tesco_scraper.js --search "Whole Milk 2L"');
-    console.log('  xvfb-run node tesco_scraper.js --price "https://www.tesco.ie/shop/en-IE/products/260776455"');
+    console.log('Single-product mode:');
+    console.log('  node tesco_scraper.js --search "Frozen Peas"');
+    console.log('');
+    console.log('Credit cost: 25 per search (render_js + premium_proxy)');
     process.exit(0);
   }
 
@@ -912,11 +551,11 @@ async function main() {
   const catIdx = args.indexOf('--category');
   const category = catIdx >= 0 ? args[catIdx + 1] : null;
 
-  if (resolve) await resolveMode({ limit, category, offset });
+  if (resolve) await resolveMode({ limit, category });
   if (refresh) await refreshMode({ limit, category, offset });
 }
 
-main().catch((e) => {
+main().catch(e => {
   console.error(e);
   process.exit(1);
 });
