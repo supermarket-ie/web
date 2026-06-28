@@ -45,8 +45,8 @@ export DISPLAY=:99
 
 run_tesco() {
   local log="$LOG_DIR/tesco_${TIMESTAMP}.log"
-  echo "[$(date -u)] === TESCO REFRESH (limit=1000) ==="
-  node scripts/tesco_scraper.js --refresh --limit 1000 > "$log" 2>&1 || true
+  echo "[$(date -u)] === TESCO REFRESH (limit=200, ScrapingBee) ==="
+  node scripts/tesco_scraper.js --refresh --limit 200 > "$log" 2>&1 || true
   local result=$(grep -E '(Updated|=== )' "$log" | tail -1)
   echo "[$(date -u)] Tesco done: ${result:-unknown}"
 }
