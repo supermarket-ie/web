@@ -20,6 +20,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Prevent unhandled rejections from crashing the process
+process.on('unhandledRejection', (err) => {
+  console.error(`  ⚠ Unhandled rejection: ${err.message || err}`);
+});
+
 const SUPABASE_URL = 'https://ytyzwiqnobxehdqrnzhx.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SCRAPINGBEE_KEY = process.env.SCRAPINGBEE_API_KEY;
@@ -66,9 +71,14 @@ async function scrapingBeeFetch(url, opts = {}) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+
       const res = await fetch('https://app.scrapingbee.com/api/v1?' + params.toString(), {
-        signal: AbortSignal.timeout(60000),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       const creditCost = res.headers.get('Spb-Cost') || '?';
 
