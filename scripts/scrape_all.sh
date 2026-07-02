@@ -93,50 +93,40 @@ echo "[$(date -u)] Starting scrape run: ${STORES_TO_RUN[*]}"
 echo ""
 
 # Execution strategy for 4GB RAM / 2 vCPU:
-#   Phase 1: Tesco ALONE (headed Chromium, ~1GB RAM, Akamai WAF)
-#   Phase 2: SuperValu + Dunnes + Aldi in parallel (headless/API, lighter)
+#   Tesco now uses ScrapingBee (HTTP only, no browser, low RAM)
+#   So all stores can run in parallel.
 #
-# This prevents OOM crashes from concurrent headed browsers.
+# Phase 1: ALL stores in parallel (Tesco is just HTTP now)
 
-# Separate into phases
-PHASE1=()  # Tesco only (heavy)
-PHASE2=()  # Everything else (lighter, can parallelise)
+# Separate into phases — all parallel now
+ALL_STORES=()
 
 for store in "${STORES_TO_RUN[@]}"; do
   case "$store" in
-    tesco) PHASE1+=("$store") ;;
-    supervalu|dunnes|aldi) PHASE2+=("$store") ;;
+    tesco|supervalu|dunnes|aldi) ALL_STORES+=("$store") ;;
     *) echo "Unknown store: $store" ;;
   esac
 done
 
-# --- Phase 1: Tesco alone (sequential, memory-intensive) ---
-if [ ${#PHASE1[@]} -gt 0 ]; then
-  echo "[$(date -u)] Phase 1 (sequential): ${PHASE1[*]}"
-  for store in "${PHASE1[@]}"; do
-    run_tesco
-  done
-  echo ""
-fi
-
-# --- Phase 2: Remaining stores in parallel ---
-if [ ${#PHASE2[@]} -gt 0 ]; then
-  echo "[$(date -u)] Phase 2 (parallel): ${PHASE2[*]}"
+# --- Run all stores in parallel ---
+if [ ${#ALL_STORES[@]} -gt 0 ]; then
+  echo "[$(date -u)] Running all stores in parallel: ${ALL_STORES[*]}"
   
-  PHASE2_PIDS=()
+  ALL_PIDS=()
   
-  for store in "${PHASE2[@]}"; do
+  for store in "${ALL_STORES[@]}"; do
     TMPFILE=$(mktemp)
     case "$store" in
+      tesco) run_tesco > "$TMPFILE" 2>&1 & ;;
       supervalu) run_supervalu > "$TMPFILE" 2>&1 & ;;
       dunnes) run_dunnes > "$TMPFILE" 2>&1 & ;;
       aldi) run_aldi > "$TMPFILE" 2>&1 & ;;
     esac
-    PHASE2_PIDS+=("$!:$store:$TMPFILE")
+    ALL_PIDS+=("$!:$store:$TMPFILE")
   done
   
-  # Wait for all phase 2 jobs
-  for entry in "${PHASE2_PIDS[@]}"; do
+  # Wait for all jobs
+  for entry in "${ALL_PIDS[@]}"; do
     IFS=':' read -r pid store tmpfile <<< "$entry"
     wait "$pid" 2>/dev/null || true
     result=$(cat "$tmpfile" 2>/dev/null || echo "$store:error")
