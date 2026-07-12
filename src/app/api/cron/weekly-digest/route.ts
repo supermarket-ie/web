@@ -27,6 +27,28 @@ const anthropic = new Anthropic(); // uses ANTHROPIC_API_KEY env
 // Top deals query (kept from original)
 // ---------------------------------------------------------------------------
 
+const MIN_SAVING_PCT = 0.15;       // must be at least 15% off
+const MAX_RATIO = 1.9;              // exclude likely-manufactured 2× "half price" promos
+const MAX_PER_STORE = 2;            // max deals from any single store
+const MAX_PER_CATEGORY = 2;         // max deals from any single category
+
+// Rough category inference from canonical product name (keeps us store-agnostic)
+function inferCategory(name: string): string {
+  const n = name.toLowerCase();
+  if (/toothpaste|toothbrush|mouthwash|floss|dental|oral.b|colgate/.test(n)) return 'oral-care';
+  if (/shampoo|conditioner|shower gel|body wash|soap|deodorant/.test(n)) return 'personal-care';
+  if (/washing|detergent|fabric|bleach|cleaner|toilet roll|kitchen roll|bin bag/.test(n)) return 'household';
+  if (/milk|butter|cheese|cream|yogurt|yoghurt/.test(n)) return 'dairy';
+  if (/chicken|beef|pork|lamb|mince|steak|sausage|bacon|ham/.test(n)) return 'meat';
+  if (/bread|roll|wrap|bagel|croissant|loaf/.test(n)) return 'bakery';
+  if (/apple|banana|orange|berry|grape|strawberry|melon/.test(n)) return 'fruit';
+  if (/carrot|onion|potato|tomato|lettuce|spinach|broccoli|pepper/.test(n)) return 'veg';
+  if (/pasta|rice|noodle|couscous/.test(n)) return 'dry-goods';
+  if (/coffee|tea|juice|water|drink|beer|wine|cider/.test(n)) return 'drinks';
+  if (/crisp|chocolate|biscuit|sweet|snack|cake/.test(n)) return 'snacks';
+  return 'other';
+}
+
 async function getTopDeals(limit = 5): Promise<Deal[]> {
   const { data: deals, error } = await supabaseAdmin
     .from('price_observations')
@@ -38,7 +60,8 @@ async function getTopDeals(limit = 5): Promise<Deal[]> {
         store,
         store_product_name,
         products!inner(
-          canonical_name
+          canonical_name,
+          category
         )
       )
     `)
@@ -55,24 +78,68 @@ async function getTopDeals(limit = 5): Promise<Deal[]> {
 
   if (!deals) return [];
 
-  return deals
+  // 1. Map to Deal objects, filtering out bad data and manufactured promos
+  const candidates = deals
     .map(deal => {
       const storeProduct = deal.store_products as unknown as { store: string; store_product_name: string; products: { canonical_name: string; category: string | null } | null } | null;
       const product = storeProduct?.products;
       if (!deal.price || !deal.was_price || !storeProduct || !product) return null;
       const saving = deal.was_price - deal.price;
       if (saving <= 0) return null;
+
+      const savingPct = saving / deal.was_price;
+
+      // Filter: must be at least MIN_SAVING_PCT genuine discount
+      if (savingPct < MIN_SAVING_PCT) return null;
+
+      // Filter: exclude likely-manufactured "half price" promos (was = exactly 2× current)
+      const ratio = deal.was_price / deal.price;
+      if (ratio >= MAX_RATIO) return null;
+
       return {
         product_name: product.canonical_name,
         store: storeProduct.store,
         current_price: deal.price,
         was_price: deal.was_price,
         saving,
+        _savingPct: savingPct,
+        _category: product.category ?? inferCategory(product.canonical_name),
       };
     })
-    .filter((d): d is Deal => d !== null)
-    .sort((a, b) => b.saving - a.saving)
-    .slice(0, limit);
+    .filter((d): d is NonNullable<typeof d> => d !== null)
+    .sort((a, b) => b.saving - a.saving);
+
+  // 2. Deduplicate by canonical product name — keep highest saving per product
+  const seenProducts = new Set<string>();
+  const deduped = candidates.filter(d => {
+    if (seenProducts.has(d.product_name)) return false;
+    seenProducts.add(d.product_name);
+    return true;
+  });
+
+  // 3. Apply store + category caps for diversity
+  const storeCounts: Record<string, number> = {};
+  const categoryCounts: Record<string, number> = {};
+  const result: Deal[] = [];
+
+  for (const d of deduped) {
+    if (result.length >= limit) break;
+    const store = d.store.toLowerCase();
+    const cat = d._category;
+    if ((storeCounts[store] ?? 0) >= MAX_PER_STORE) continue;
+    if ((categoryCounts[cat] ?? 0) >= MAX_PER_CATEGORY) continue;
+    storeCounts[store] = (storeCounts[store] ?? 0) + 1;
+    categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+    result.push({
+      product_name: d.product_name,
+      store: d.store,
+      current_price: d.current_price,
+      was_price: d.was_price,
+      saving: d.saving,
+    });
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

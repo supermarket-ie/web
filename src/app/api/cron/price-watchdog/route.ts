@@ -75,6 +75,19 @@ export async function GET(request: NextRequest) {
       Date.now() - COOLDOWN_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
 
+    // Skip on Sundays — the weekly digest runs at 08:00 UTC and we don't want
+    // subscribers getting a watchdog email on the same morning.
+    // Skip on Thursdays (non-nudge run) — the Thursday nudge at 09:00 UTC handles that day.
+    const todayUTC = new Date().getUTCDay(); // 0 = Sunday, 4 = Thursday
+    if (todayUTC === 0 && !isThursdayNudge) {
+      console.log('[price-watchdog] Skipping — Sunday is reserved for weekly digest');
+      return NextResponse.json({ sent: 0, skipped: 0, failed: 0, message: 'Skipped: Sunday reserved for weekly digest' });
+    }
+    if (todayUTC === 4 && !isThursdayNudge) {
+      console.log('[price-watchdog] Skipping daily run — Thursday nudge handles today');
+      return NextResponse.json({ sent: 0, skipped: 0, failed: 0, message: 'Skipped: Thursday nudge handles today' });
+    }
+
     console.log('[price-watchdog] Starting...');
 
     // --- Find subscriber IDs that have list_items (Tier 2+) ---
