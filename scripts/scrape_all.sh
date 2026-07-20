@@ -45,8 +45,12 @@ export DISPLAY=:99
 
 run_tesco() {
   local log="$LOG_DIR/tesco_${TIMESTAMP}.log"
-  echo "[$(date -u)] === TESCO REFRESH (ScrapingBee, full catalogue) ==="
-  node scripts/tesco_scraper.js --refresh > "$log" 2>&1 || true
+  # Limit to 500 products per run — keeps runtime to ~60-75min (2-4s/product via ScrapingBee).
+  # Stalest-first ordering means the full catalogue rotates every ~2 scrape runs.
+  # No limit was causing 2.5hr+ runs, leaving systemd stuck in 'activating'.
+  # 5400s (90min) hard timeout as a safety net.
+  echo "[$(date -u)] === TESCO REFRESH (ScrapingBee, 500 products stalest-first) ==="
+  timeout 5400 node scripts/tesco_scraper.js --refresh --limit 500 > "$log" 2>&1 || true
   local result=$(grep -E '(Updated|=== )' "$log" | tail -1)
   echo "[$(date -u)] Tesco done: ${result:-unknown}"
 }
