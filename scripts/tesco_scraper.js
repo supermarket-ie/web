@@ -19,6 +19,7 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const scrapeDb = require('./scrape-db');
 
 // Prevent unhandled rejections from crashing the process
 process.on('unhandledRejection', (err) => {
@@ -354,6 +355,9 @@ async function refreshMode({ limit, category, offset = 0 }) {
   if (!SCRAPINGBEE_KEY) { console.error('ERROR: SCRAPINGBEE_API_KEY not set'); process.exit(1); }
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+  // RUN_ID from env (set by scrape_all.sh) or generate one
+  const RUN_ID = process.env.SCRAPE_RUN_ID || new Date().toISOString().replace(/[-:T]/g, '').substring(0, 12);
+
   console.log('=== TESCO REFRESH MODE (ScrapingBee) ===\n');
 
   const { data: storeProducts, error: spErr } = await supabase
@@ -402,42 +406,94 @@ async function refreshMode({ limit, category, offset = 0 }) {
   console.log(`  Sorted by stalest-first (${lastObsMap.size} products have price history)`);
 
   if (offset > 0) filtered = filtered.slice(offset);
+
+  // -------------------------------------------------------
+  // Suppress permanent failures (failed in all last 3 runs)
+  // -------------------------------------------------------
+  const permanentFailures = await scrapeDb.getPermanentFailures('tesco');
+  const beforeSuppression = filtered.length;
+  if (permanentFailures.size > 0) {
+    filtered = filtered.filter(sp => {
+      const name = sp.products?.canonical_name || sp.store_product_name;
+      return !permanentFailures.has(name);
+    });
+    const suppressed = beforeSuppression - filtered.length;
+    if (suppressed > 0) {
+      console.log(`  Suppressed ${suppressed} permanent failures from target list`);
+    }
+  }
+
   if (limit > 0) filtered = filtered.slice(0, limit);
 
-  console.log(`Products to refresh: ${filtered.length} (of ${storeProducts.length} total resolved)`);
-  if (filtered.length === 0) { console.log('Nothing to refresh!'); return; }
+  const targetCount = filtered.length;
+  console.log(`Products to refresh: ${targetCount} (of ${storeProducts.length} total resolved)`);
+  if (targetCount === 0) { console.log('Nothing to refresh!'); return; }
 
-  let updated = 0, errors = 0;
-  let totalCredits = 0;
+  // Open observability run record
+  await scrapeDb.openRun('tesco', RUN_ID, targetCount);
+
+  // Counters
+  let attempted = 0, fetched = 0, extracted = 0, inserted = 0, unchanged = 0, failed = 0;
+  let sbRequests = 0, totalCredits = 0;
   let consecutiveErrors = 0;
   const ABORT_THRESHOLD = 15;
+  let aborted = false;
+
+  // Latest price cache to detect unchanged prices
+  const latestPriceMap = new Map();
+  {
+    const ids = filtered.map(sp => sp.id);
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK);
+      const { data: latest } = await supabase
+        .from('price_observations')
+        .select('store_product_id, price')
+        .in('store_product_id', chunk)
+        .order('observed_at', { ascending: false });
+      if (latest) {
+        for (const row of latest) {
+          if (!latestPriceMap.has(row.store_product_id)) {
+            latestPriceMap.set(row.store_product_id, row.price);
+          }
+        }
+      }
+    }
+  }
 
   for (let i = 0; i < filtered.length; i++) {
     const sp = filtered[i];
     const name = sp.products?.canonical_name || sp.store_product_name;
 
+    attempted++;
     const searchUrl = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(name)}`;
     const result = await scrapingBeeFetch(searchUrl);
-    totalCredits += parseInt(result.creditCost) || 0;
+    sbRequests++;
+    totalCredits += parseInt(result.creditCost) || 25; // 25 credits per request
 
     if (!result.ok) {
+      const reason = result.error?.includes('timeout') ? 'timeout' : 'http_error';
       console.log(`  ✗ ${name.substring(0, 50)} → ${result.error}`);
-      errors++;
+      failed++;
       consecutiveErrors++;
+      await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, reason, result.error);
       if (consecutiveErrors >= ABORT_THRESHOLD) {
         console.log(`\n  🛑 ${consecutiveErrors} consecutive errors — aborting run.`);
+        aborted = true;
         break;
       }
       continue;
     }
+    fetched++;
 
     const products = parseSearchResults(result.html);
     if (products.length === 0) {
       console.log(`  ✗ ${name.substring(0, 50)} → No search results`);
-      errors++;
+      failed++;
       consecutiveErrors++;
+      await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, 'no_search_results');
       if (consecutiveErrors >= ABORT_THRESHOLD) {
         console.log(`\n  🛑 ${consecutiveErrors} consecutive empty results — aborting run.`);
+        aborted = true;
         break;
       }
       continue;
@@ -448,7 +504,8 @@ async function refreshMode({ limit, category, offset = 0 }) {
     const match = fuzzyMatch(name, products);
     if (!match) {
       console.log(`  ✗ ${name.substring(0, 50)} → No confident match, skipping`);
-      errors++;
+      failed++;
+      await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, 'no_confident_match');
       continue;
     }
 
@@ -456,9 +513,11 @@ async function refreshMode({ limit, category, offset = 0 }) {
 
     if (!picked.price || picked.price <= 0) {
       console.log(`  ✗ ${name.substring(0, 50)} → No price in results`);
-      errors++;
+      failed++;
+      await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, 'no_price_in_results');
       continue;
     }
+    extracted++;
 
     // Update stored URL/SKU if changed
     if (picked.sku && picked.url && picked.url !== sp.store_url) {
@@ -467,6 +526,15 @@ async function refreshMode({ limit, category, offset = 0 }) {
         store_sku: picked.sku,
         store_product_name: picked.name || name,
       }).eq('id', sp.id);
+    }
+
+    // Check if price is unchanged vs latest observation
+    const prevPrice = latestPriceMap.get(sp.id);
+    if (prevPrice != null && Math.abs(prevPrice - picked.price) < 0.001) {
+      unchanged++;
+      // Still insert — keeps freshness timestamps current
+    } else {
+      inserted++;
     }
 
     // Insert price observation
@@ -479,14 +547,48 @@ async function refreshMode({ limit, category, offset = 0 }) {
     });
 
     console.log(`  ✓ ${name.substring(0, 50)} → €${picked.price.toFixed(2)}`);
-    updated++;
 
     // Delay 2-4s between requests
     await sleep(2000 + Math.floor(Math.random() * 2000));
   }
 
-  console.log(`\n=== Updated ${updated}/${filtered.length} prices, ${errors} errors ===`);
-  console.log(`  Credits used: ~${totalCredits}`);
+  // Silently skipped = target declared but never reached the loop
+  // (can happen if scraper exits early or due to pre-loop filtering)
+  const silentlySkipped = targetCount - attempted;
+
+  // Record any silently skipped as failures too (for diagnosis)
+  if (silentlySkipped > 0 && !aborted) {
+    const attempted_names = new Set(filtered.slice(0, attempted).map(sp => sp.products?.canonical_name || sp.store_product_name));
+    for (const sp of filtered) {
+      const name = sp.products?.canonical_name || sp.store_product_name;
+      if (!attempted_names.has(name)) {
+        await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, 'silently_skipped');
+      }
+    }
+  }
+
+  const totalPriced = inserted + unchanged;
+  console.log(`\n=== Updated ${totalPriced}/${targetCount} prices (${inserted} new, ${unchanged} unchanged), ${failed} errors ===`);
+  console.log(`  ScrapingBee: ${sbRequests} requests, ~${totalCredits} credits used`);
+  if (silentlySkipped > 0) console.log(`  ⚠ Silently skipped: ${silentlySkipped} products never attempted`);
+
+  // Close observability record
+  const result = await scrapeDb.closeRun(RUN_ID, 'tesco', {
+    attempted,
+    fetched,
+    extracted,
+    inserted: totalPriced,  // inserted = products with fresh price this run
+    unchanged,
+    failed,
+    silently_skipped: silentlySkipped,
+    scrapingbee_requests: sbRequests,
+    scrapingbee_credits: totalCredits,
+    error_summary: aborted ? `Aborted after ${ABORT_THRESHOLD} consecutive errors` : null,
+  });
+
+  if (result?.thresholdBreached) {
+    console.log(`  ⚠ Coverage ${result.coveragePct}% is below threshold ${result.threshold}%`);
+  }
 }
 
 // ============================================================

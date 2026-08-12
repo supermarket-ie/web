@@ -24,6 +24,9 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 LOG_DIR="/tmp/scrape_logs"
 TIMESTAMP=$(date +%Y%m%d_%H%M)
 
+# Shared run ID passed to all scrapers for observability (tesco_scraper.js reads SCRAPE_RUN_ID)
+export SCRAPE_RUN_ID="$TIMESTAMP"
+
 # Load env
 cd "$PROJECT_DIR"
 set -a
@@ -160,6 +163,42 @@ SUMMARY="$LOG_DIR/summary_${TIMESTAMP}.txt"
   echo ""
   echo "  Finished: $(date -u +%H:%M) UTC (${SECONDS}s elapsed)"
 } | tee "$SUMMARY"
+
+# --- Threshold breach alerts (query scrape_runs for this run_id) ---
+# Check via Supabase REST API if available, otherwise parse logs
+declare -A THRESHOLDS=( [tesco]=70 [supervalu]=85 [dunnes]=75 [aldi]=60 )
+declare -A STORE_COVERAGE=()
+
+# Parse coverage from logs as fallback (works without DB access)
+for store in "${STORES_TO_RUN[@]}"; do
+  local_log="$LOG_DIR/${store}_${TIMESTAMP}.log"
+  if [ -f "$local_log" ]; then
+    if [ "$store" = "tesco" ]; then
+      # Parse tesco: "Updated 330/415" from new format
+      nums=$(grep -oP 'Updated \K\d+/\d+' "$local_log" | tail -1)
+    else
+      nums=$(grep -oP 'Updated \K\d+/\d+' "$local_log" | tail -1)
+    fi
+    if [ -n "$nums" ]; then
+      got=$(echo "$nums" | cut -d/ -f1)
+      total=$(echo "$nums" | cut -d/ -f2)
+      if [ "$total" -gt 0 ] 2>/dev/null; then
+        pct=$(( got * 100 / total ))
+        STORE_COVERAGE[$store]=$pct
+        threshold=${THRESHOLDS[$store]:-70}
+        if [ "$pct" -lt "$threshold" ] 2>/dev/null; then
+          alert_msg="SCRAPE ALERT: $store coverage ${pct}% below threshold ${threshold}%"
+          echo "  ⚠ $alert_msg"
+          openclaw system event --text "$alert_msg" --mode now 2>/dev/null || true
+        fi
+      fi
+    fi
+  fi
+done
+
+# --- Log rotation: delete files older than 90 days ---
+find "$LOG_DIR" -name "*.log" -mtime +90 -delete 2>/dev/null || true
+find "$LOG_DIR" -name "*.txt" -mtime +90 -delete 2>/dev/null || true
 
 echo ""
 echo "[$(date -u)] All done."
