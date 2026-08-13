@@ -15,6 +15,7 @@
 
 const { chromium } = require('playwright');
 const { createClient } = require('@supabase/supabase-js');
+const scrapeDb = require('./scrape-db');
 
 const SUPABASE_URL = 'https://ytyzwiqnobxehdqrnzhx.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -472,6 +473,8 @@ async function refreshMode({ limit, category, offset = 0 }) {
   }
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+  const RUN_ID = process.env.SCRAPE_RUN_ID || new Date().toISOString().replace(/[^0-9]/g, '').substring(0, 12);
+
   console.log('=== SUPERVALU REFRESH MODE (Playwright) ===\n');
 
   const { data: storeProducts, error: spErr } = await supabase
@@ -484,6 +487,8 @@ async function refreshMode({ limit, category, offset = 0 }) {
 
   if (spErr) {
     console.error('DB error:', spErr);
+    await scrapeDb.openRun('supervalu', RUN_ID, 0, 'playwright');
+    await scrapeDb.closeRun(RUN_ID, 'supervalu', { aborted: true, error_summary: spErr.message });
     return;
   }
 
@@ -493,30 +498,41 @@ async function refreshMode({ limit, category, offset = 0 }) {
     filtered = filtered.filter((sp) => sp.products?.category === category);
   }
 
-  // Prioritise unpriced items: fetch all store_product_ids that have at least one price observation
+  // Prioritise unpriced items
   const { data: pricedRows } = await supabase
     .from('price_observations')
     .select('store_product_id');
   const pricedIds = new Set((pricedRows || []).map((r) => r.store_product_id));
 
   const unpriced = filtered.filter((sp) => !pricedIds.has(sp.id));
-  const priced = filtered.filter((sp) => pricedIds.has(sp.id));
-
-  // Put unpriced first, then priced (oldest-first would be better but this is good enough)
+  const priced   = filtered.filter((sp) =>  pricedIds.has(sp.id));
   filtered = [...unpriced, ...priced];
-  console.log(
-    `Priority: ${unpriced.length} unpriced items first, then ${priced.length} with existing prices`
-  );
+  console.log(`Priority: ${unpriced.length} unpriced items first, then ${priced.length} with existing prices`);
 
   if (offset > 0) filtered = filtered.slice(offset);
-  if (limit > 0) filtered = filtered.slice(0, limit);
+  if (limit > 0)  filtered = filtered.slice(0, limit);
 
-  console.log(
-    `Products to refresh: ${filtered.length} (of ${storeProducts.length} total resolved)`
-  );
-  if (filtered.length === 0) {
-    console.log('Nothing to refresh!');
-    return;
+  const targetCount = filtered.length;
+  console.log(`Products to refresh: ${targetCount} (of ${storeProducts.length} total resolved)`);
+  if (targetCount === 0) { console.log('Nothing to refresh!'); return; }
+
+  await scrapeDb.openRun('supervalu', RUN_ID, targetCount, 'playwright');
+
+  // Latest price cache for unchanged detection
+  const latestPriceMap = new Map();
+  const CHUNK = 200;
+  for (let i = 0; i < filtered.length; i += CHUNK) {
+    const chunk = filtered.slice(i, i + CHUNK).map(sp => sp.id);
+    const { data: obs } = await supabase
+      .from('price_observations')
+      .select('store_product_id, price')
+      .in('store_product_id', chunk)
+      .order('observed_at', { ascending: false });
+    if (obs) {
+      for (const o of obs) {
+        if (!latestPriceMap.has(o.store_product_id)) latestPriceMap.set(o.store_product_id, o.price);
+      }
+    }
   }
 
   const { browser: initBrowser, context: initContext } = await launchBrowser();
@@ -524,17 +540,13 @@ async function refreshMode({ limit, category, offset = 0 }) {
   let context = initContext;
   let page = await context.newPage();
 
-  let updated = 0;
-  let errors = 0;
-  let offers = 0;
-
+  let attempted = 0, fetched = 0, extracted = 0, inserted = 0, unchanged = 0, errors = 0, offers = 0;
   const BATCH_SIZE = 150;
 
   for (let i = 0; i < filtered.length; i++) {
-    // Restart browser every BATCH_SIZE products to prevent memory bloat
     if (i > 0 && i % BATCH_SIZE === 0) {
       try { await browser.close(); } catch {}
-      console.log(`\n  --- Batch restart (${i}/${filtered.length}) ---\n`);
+      console.log(`\n  --- Batch restart (${i}/${targetCount}) ---\n`);
       const launched = await launchBrowser();
       browser = launched.browser;
       context = launched.context;
@@ -543,27 +555,47 @@ async function refreshMode({ limit, category, offset = 0 }) {
 
     const sp = filtered[i];
     const name = sp.products?.canonical_name || sp.store_product_name;
+    attempted++;
+
     try {
       const result = await getProductPrice(page, sp.store_url);
 
       if (result.error) {
+        const isTimeout  = /timeout/i.test(result.error);
+        const isClosed   = /closed|Target/i.test(result.error);
+        const reason     = isTimeout ? 'timeout' : isClosed ? 'http_error' : 'page_loaded_no_price';
         console.log(`  ✗ ${name.substring(0, 50)} → ${result.error}`);
         errors++;
-        // If browser crashed, force a restart
-        if (result.error.includes('closed') || result.error.includes('Target')) {
+        await scrapeDb.recordFailure({
+          runId: RUN_ID, store: 'supervalu', canonicalName: name,
+          storeProductId: sp.id, storeUrl: sp.store_url,
+          failureStage: 'fetching', failureReason: reason, rawError: result.error,
+        });
+        if (isClosed) {
           try { await browser.close(); } catch {}
           console.log('  💥 Browser crashed — restarting...');
           const launched = await launchBrowser();
-          browser = launched.browser;
-          context = launched.context;
-          page = await context.newPage();
+          browser = launched.browser; context = launched.context; page = await context.newPage();
         }
         continue;
       }
+      fetched++;
+
+      if (!result.price || result.price <= 0) {
+        console.log(`  ✗ ${name.substring(0, 50)} → No price on page`);
+        errors++;
+        await scrapeDb.recordFailure({
+          runId: RUN_ID, store: 'supervalu', canonicalName: name,
+          storeProductId: sp.id, storeUrl: sp.store_url,
+          failureStage: 'parsing', failureReason: 'page_loaded_no_price',
+        });
+        continue;
+      }
+      extracted++;
 
       const promo = detectPromotion(result);
 
-      await supabase.from('price_observations').insert({
+      const { error: insertErr } = await supabase.from('price_observations').insert({
         store_product_id: sp.id,
         price: result.price,
         was_price: promo.wasPrice,
@@ -571,28 +603,51 @@ async function refreshMode({ limit, category, offset = 0 }) {
         observed_at: new Date().toISOString(),
       });
 
-      if (promo.onPromotion) offers++;
+      if (insertErr) {
+        console.log(`  ✗ ${name.substring(0, 50)} → DB error: ${insertErr.message}`);
+        errors++;
+        await scrapeDb.recordFailure({
+          runId: RUN_ID, store: 'supervalu', canonicalName: name,
+          storeProductId: sp.id, failureStage: 'storing',
+          failureReason: 'db_error', rawError: insertErr.message,
+        });
+        continue;
+      }
 
-      const promoNote = promo.onPromotion
-        ? ` 🏷️ ${promo.promoLabel || 'Offer'}`
-        : '';
-      console.log(
-        `  ✓ ${name.substring(0, 50)} → €${result.price.toFixed(2)}${promoNote}`
-      );
-      updated++;
+      const prevPrice = latestPriceMap.get(sp.id);
+      if (prevPrice != null && Math.abs(prevPrice - result.price) < 0.001) {
+        unchanged++;
+      } else {
+        inserted++;
+      }
+
+      if (promo.onPromotion) offers++;
+      const promoNote = promo.onPromotion ? ` 🏷️ ${promo.promoLabel || 'Offer'}` : '';
+      console.log(`  ✓ ${name.substring(0, 50)} → €${result.price.toFixed(2)}${promoNote}`);
 
       await page.waitForTimeout(1500);
     } catch (e) {
       console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
       errors++;
+      await scrapeDb.recordFailure({
+        runId: RUN_ID, store: 'supervalu', canonicalName: name,
+        storeProductId: sp.id, storeUrl: sp.store_url,
+        failureStage: 'fetching', failureReason: 'other', rawError: e.message,
+      });
     }
   }
 
-  await browser.close();
+  try { await browser.close(); } catch {}
 
-  console.log(
-    `\n=== Updated ${updated}/${filtered.length} prices (${offers} offers), ${errors} errors ===`
-  );
+  const silentlySkipped = targetCount - attempted;
+  console.log(`\n=== Updated ${inserted + unchanged}/${targetCount} prices (${offers} offers, ${unchanged} unchanged), ${errors} errors ===`);
+
+  await scrapeDb.closeRun(RUN_ID, 'supervalu', {
+    attempted, fetched, extracted,
+    inserted: inserted + unchanged,
+    unchanged, failed: errors,
+    silently_skipped: silentlySkipped,
+  });
 }
 
 // ============================================================

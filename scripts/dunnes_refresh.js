@@ -11,6 +11,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const scrapeDb = require('./scrape-db');
 
 const SUPABASE_URL = 'https://ytyzwiqnobxehdqrnzhx.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -90,6 +91,8 @@ async function searchProduct(query) {
 async function main() {
   console.log('=== DUNNES REFRESH MODE (direct API) ===\n');
 
+  const RUN_ID = process.env.SCRAPE_RUN_ID || new Date().toISOString().replace(/[^0-9]/g, '').substring(0, 12);
+
   // Fetch all resolved Dunnes store_products
   let query = supabase
     .from('store_products')
@@ -103,43 +106,78 @@ async function main() {
   const { data: storeProducts, error: dbErr } = await query;
   if (dbErr) {
     console.error('DB error:', dbErr);
+    await scrapeDb.openRun('dunnes', RUN_ID, 0, 'instacart_api');
+    await scrapeDb.closeRun(RUN_ID, 'dunnes', { failed: 0, error_summary: `DB fetch error: ${dbErr.message}`, aborted: true });
     process.exit(1);
   }
 
-  console.log(`Products to refresh: ${storeProducts.length}\n`);
-  if (storeProducts.length === 0) return;
+  const targetCount = storeProducts.length;
+  console.log(`Products to refresh: ${targetCount}\n`);
+  if (targetCount === 0) return;
 
-  let updated = 0;
-  let errors = 0;
-  let promotions = 0;
+  await scrapeDb.openRun('dunnes', RUN_ID, targetCount, 'instacart_api');
+
+  let attempted = 0, fetched = 0, extracted = 0, inserted = 0, unchanged = 0, errors = 0, promotions = 0;
+
+  // Build latest-price cache to detect unchanged
+  const latestPriceMap = new Map();
+  const CHUNK = 200;
+  const ids = storeProducts.map(sp => sp.id);
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const { data: obs } = await supabase
+      .from('price_observations')
+      .select('store_product_id, price')
+      .in('store_product_id', chunk)
+      .order('observed_at', { ascending: false });
+    if (obs) {
+      for (const o of obs) {
+        if (!latestPriceMap.has(o.store_product_id)) latestPriceMap.set(o.store_product_id, o.price);
+      }
+    }
+  }
 
   for (let i = 0; i < storeProducts.length; i++) {
     const sp = storeProducts[i];
     const name = sp.products?.canonical_name || sp.store_product_name;
 
+    attempted++;
     const { data, err } = await searchProduct(name);
 
     if (err || !data) {
+      const isHttp = err && /^HTTP\s*\d/.test(err);
+      const httpStatus = isHttp ? parseInt(err.replace(/\D/g, '')) : null;
+      const reason = isHttp ? 'http_error' : 'no_search_results';
       console.log(`  ✗ ${name.substring(0, 50)} → ${err || 'No results'}`);
       errors++;
-      // Back off on HTTP errors
-      if (err && err.startsWith('HTTP')) {
-        await new Promise(r => setTimeout(r, 2000));
-      }
+      await scrapeDb.recordFailure({
+        runId: RUN_ID, store: 'dunnes', canonicalName: name,
+        storeProductId: sp.id, storeUrl: sp.store_url,
+        failureStage: 'fetching', failureReason: reason,
+        httpStatus, rawError: err,
+      });
+      if (isHttp) await new Promise(r => setTimeout(r, 2000));
       continue;
     }
+    fetched++;
 
     const price = data.priceNumeric;
     if (!price || price <= 0) {
       console.log(`  ✗ ${name.substring(0, 50)} → No price`);
       errors++;
+      await scrapeDb.recordFailure({
+        runId: RUN_ID, store: 'dunnes', canonicalName: name,
+        storeProductId: sp.id, storeUrl: sp.store_url,
+        failureStage: 'parsing', failureReason: 'no_price_in_results',
+      });
       continue;
     }
+    extracted++;
 
     // Insert price observation
     const { error: insertErr } = await supabase.from('price_observations').insert({
       store_product_id: sp.id,
-      price: price,
+      price,
       was_price: data.wasPrice || null,
       on_promotion: data.onPromotion || false,
       observed_at: new Date().toISOString(),
@@ -148,15 +186,25 @@ async function main() {
     if (insertErr) {
       console.log(`  ✗ ${name.substring(0, 50)} → DB error: ${insertErr.message}`);
       errors++;
+      await scrapeDb.recordFailure({
+        runId: RUN_ID, store: 'dunnes', canonicalName: name,
+        storeProductId: sp.id, failureStage: 'storing',
+        failureReason: 'db_error', rawError: insertErr.message,
+      });
       continue;
+    }
+
+    const prevPrice = latestPriceMap.get(sp.id);
+    if (prevPrice != null && Math.abs(prevPrice - price) < 0.001) {
+      unchanged++;
+    } else {
+      inserted++;
     }
 
     const promoTag = data.onPromotion ? ' 🏷️' : '';
     console.log(`  ✓ ${name.substring(0, 50)} → €${price.toFixed(2)}${promoTag}`);
-    updated++;
     if (data.onPromotion) promotions++;
 
-    // Update store_url if changed
     if (data.url && data.url !== sp.store_url) {
       await supabase
         .from('store_products')
@@ -164,11 +212,19 @@ async function main() {
         .eq('id', sp.id);
     }
 
-    // Small delay between requests
     await new Promise(r => setTimeout(r, 200));
   }
 
-  console.log(`\n=== Updated ${updated}/${storeProducts.length} prices (${promotions} offers), ${errors} errors ===`);
+  const silentlySkipped = targetCount - attempted;
+
+  console.log(`\n=== Updated ${inserted + unchanged}/${targetCount} prices (${promotions} offers, ${unchanged} unchanged), ${errors} errors ===`);
+
+  await scrapeDb.closeRun(RUN_ID, 'dunnes', {
+    attempted, fetched, extracted,
+    inserted: inserted + unchanged,
+    unchanged, failed: errors,
+    silently_skipped: silentlySkipped,
+  });
 }
 
 main().catch(e => {
