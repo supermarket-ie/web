@@ -679,6 +679,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
     let pickedSku   = sp.store_sku || null;
     let pickedUrl   = sp.store_url || null;
     let retrievalPath = 'unknown';
+    let fetchedThisProduct = false;
 
     if (hasDirectUrl) {
       const directResult = await scrapingBeeFetch(sp.store_url);
@@ -686,20 +687,57 @@ async function refreshMode({ limit, category, offset = 0 }) {
       totalCredits += directResult.creditCost || 0;
 
       if (directResult.ok) {
+        // Count a product as fetched once when either the direct page or search
+        // successfully returns a response. A later fallback must not double-count.
+        fetchedThisProduct = true;
+        fetched++;
+
         const parsed = parseProductPage(directResult.html);
         if (parsed && parsed.price > 0) {
-          // Success via direct URL
-          pickedPrice    = parsed.price;
-          pickedName     = parsed.name || pickedName;
-          retrievalPath  = 'direct';
-          fetched++;
-          extracted++;
-          consecutiveErrors = 0;
-          console.log(`  ✓ ${name.substring(0, 44)} → €${parsed.price.toFixed(2)}  [direct, sku=${pickedSku}]`);
+          // Existing direct URLs are not inherently trusted: historic mappings
+          // can point at a different product. Validate the parsed page title with
+          // the same type, size and keyword guards used by search matching.
+          const directMatch = parsed.name
+            ? fuzzyMatch(name, [{
+                name: parsed.name,
+                price: parsed.price,
+                sku: pickedSku,
+                url: pickedUrl,
+              }])
+            : null;
+
+          if (directMatch) {
+            pickedPrice    = parsed.price;
+            pickedName     = parsed.name;
+            retrievalPath  = 'direct';
+            extracted++;
+            consecutiveErrors = 0;
+            console.log(
+              `  ✓ ${name.substring(0, 38)} → €${parsed.price.toFixed(2)}` +
+              `  [direct, sku=${pickedSku}, tesco="${parsed.name.substring(0, 35)}"]`
+            );
+          } else {
+            // Do not accept a price from a stale or incorrect stored mapping.
+            // Keep the existing URL unchanged unless guarded search finds a
+            // valid replacement below.
+            retrievalPath = 'direct_name_mismatch';
+            console.log(
+              `  ⚠ ${name.substring(0, 38)} → direct title mismatch` +
+              `  [sku=${pickedSku}, tesco="${(parsed.name || '').substring(0, 35)}"], trying search…`
+            );
+            await scrapeDb.recordFailure({
+              scrapeRunUuid,
+              store:          'tesco',
+              canonicalName:  name,
+              storeProductId: sp.id,
+              storeUrl:       sp.store_url,
+              failureStage:   'parsing',
+              failureReason:  'direct_name_mismatch',
+            });
+          }
         } else {
           // Page loaded but no price — product may be delisted; fall through to search
           console.log(`  ⚠ ${name.substring(0, 44)} → direct page has no price, trying search…`);
-          fetched++;
           retrievalPath = 'direct_no_price';
         }
       } else {
@@ -747,7 +785,10 @@ async function refreshMode({ limit, category, offset = 0 }) {
         await sleep(2000 + Math.floor(Math.random() * 2000));
         continue;
       }
-      if (!hasDirectUrl) fetched++;  // only count once if we didn't already count from direct
+      if (!fetchedThisProduct) {
+        fetchedThisProduct = true;
+        fetched++;
+      }
 
       const candidates = parseSearchResults(searchResult.html);
       if (candidates.length === 0) {
