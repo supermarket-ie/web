@@ -45,7 +45,7 @@ export async function GET(req: Request) {
     STORES.map(async (store: Store) => {
       const { data } = await supabase
         .from('scrape_runs')
-        .select('run_id, retrieval_method, started_at, finished_at, duration_seconds, status, target_count, attempted_count, inserted_count, unchanged_count, failed_count, silently_skipped_count, coverage_pct, threshold_pct, threshold_breached, scrapingbee_requests, scrapingbee_credits, error_summary')
+        .select('run_id, retrieval_method, started_at, finished_at, duration_seconds, status, target_count, attempted_count, fetched, extracted, inserted, unchanged_count, failed, silently_skipped_count, coverage_pct, threshold_pct, threshold_breached, scrapingbee_requests, scrapingbee_credits, error_summary')
         .eq('store', store)
         .order('started_at', { ascending: false })
         .limit(8);

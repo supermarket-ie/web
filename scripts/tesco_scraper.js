@@ -563,20 +563,39 @@ async function refreshMode({ limit, category, offset = 0 }) {
 
     // Classify: inserted (new price point) vs unchanged (same price, freshness update only)
     const prevPrice = latestPriceMap.get(sp.id);
-    if (prevPrice != null && Math.abs(prevPrice - picked.price) < 0.001) {
-      unchanged++;
-    } else {
-      inserted++;
-    }
+    const isUnchanged = prevPrice != null && Math.abs(prevPrice - picked.price) < 0.001;
 
-    // Write price_observation regardless (maintains freshness timestamps)
-    await supabase.from('price_observations').insert({
+    // Write price_observation — must succeed before counting as refreshed
+    const { error: insertErr } = await supabase.from('price_observations').insert({
       store_product_id: sp.id,
       price:            picked.price,
       was_price:        null,
       on_promotion:     false,
       observed_at:      new Date().toISOString(),
     });
+
+    if (insertErr) {
+      console.log(`  ✗ ${name.substring(0, 50)} → DB error: ${insertErr.message}`);
+      failed++;
+      await scrapeDb.recordFailure({
+        scrapeRunUuid,
+        store:          'tesco',
+        canonicalName:  name,
+        storeProductId: sp.id,
+        storeUrl:        sp.store_url,
+        failureStage:    'storing',
+        failureReason:   'db_error',
+        rawError:        insertErr.message,
+      });
+      await sleep(2000 + Math.floor(Math.random() * 2000));
+      continue;
+    }
+
+    if (isUnchanged) {
+      unchanged++;
+    } else {
+      inserted++;
+    }
 
     console.log(`  ✓ ${name.substring(0, 50)} → €${picked.price.toFixed(2)}`);
     await sleep(2000 + Math.floor(Math.random() * 2000));

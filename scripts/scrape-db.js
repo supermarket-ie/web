@@ -164,15 +164,24 @@ async function closeRun(runId, store, counts = {}) {
     let inserted  = counts.inserted  ?? 0;
     let unchanged = counts.unchanged ?? 0;
 
-    // Defensive invariant: successful count cannot exceed target
+    // Defensive invariant: successful count cannot exceed target.
+    // Independent rounding of both counters can leave their sum > targetCount,
+    // so we cap the sum and reduce unchanged (the less significant counter) to make up
+    // the exact remainder, keeping inserted intact.
     if (targetCount > 0 && (inserted + unchanged) > targetCount) {
       console.warn(
-        `  [scrape-db] closeRun invariant violation: inserted(${inserted}) + unchanged(${unchanged}) > target(${targetCount}) for ${store}/${runId}. Capping to target.`
+        `  [scrape-db] closeRun invariant violation: ` +
+        `inserted(${inserted}) + unchanged(${unchanged}) = ${inserted + unchanged} > target(${targetCount}) ` +
+        `for ${store}/${runId}. Counters are inconsistent — check scraper logic. Capping unchanged.`
       );
-      // Preserve the ratio but cap the sum
-      const total = inserted + unchanged;
-      inserted  = Math.round((inserted  / total) * targetCount);
-      unchanged = Math.round((unchanged / total) * targetCount);
+      // Cap: preserve inserted (new price points are higher-value), reduce unchanged to fit exactly.
+      // If inserted alone already exceeds target, cap inserted too and zero unchanged.
+      if (inserted > targetCount) {
+        inserted  = targetCount;
+        unchanged = 0;
+      } else {
+        unchanged = targetCount - inserted;
+      }
     }
 
     const priced      = inserted + unchanged;
