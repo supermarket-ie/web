@@ -4,17 +4,18 @@
  *
  * Provides openRun / closeRun / recordFailure / getPermanentFailures.
  * All DB operations are fail-safe: errors are logged to stderr but never thrown,
- * so a DB outage or misconfiguration never breaks a scrape run.
+ * so a DB outage never breaks a scrape run.
  *
- * SECURITY: never log API keys, tokens, cookies or credentials.
- * raw_error is truncated to 500 chars and sanitised before storage.
+ * SECURITY:
+ *   - API keys, tokens, cookies and credentials are never written to logs or DB.
+ *   - raw_error is sanitised before storage (credential patterns stripped).
+ *   - store_url has query params stripped before storage.
  *
- * Usage (CommonJS):
- *   const scrapeDb = require('./scrape-db');
- *   await scrapeDb.openRun('tesco', '20260810_0507', 500, 'scrapingbee');
- *   await scrapeDb.recordFailure({ runId, store, canonicalName, storeProductId,
- *     storeUrl, failureStage, failureReason, httpStatus, rawError });
- *   await scrapeDb.closeRun('20260810_0507', 'tesco', counts);
+ * Permanent-failure suppression is based on store_product_id (not canonical_name)
+ * and counts distinct failed run_ids, not failure rows.
+ *
+ * The scrape_failures unique constraint (run_id, store_product_id, failure_reason)
+ * prevents duplicate rows. recordFailure uses ON CONFLICT DO NOTHING.
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -29,27 +30,27 @@ const THRESHOLDS = {
   aldi:      60,
 };
 
-// Status classification by coverage %:
-//   >= threshold   → success
-//   >= threshold/2 → degraded
-//   < threshold/2  → failed
-function classifyStatus(coveragePct, threshold, timedOut, aborted) {
-  if (timedOut)       return 'timeout';
-  if (aborted && coveragePct === 0) return 'failed';
-  if (coveragePct >= threshold)     return 'success';
-  if (coveragePct >= threshold / 2) return 'degraded';
+// Status by coverage %:
+//   >= threshold          → success
+//   >= threshold * 0.5    → degraded  (significant failures, still usable)
+//   < threshold * 0.5     → failed
+function classifyStatus(coveragePct, threshold, { timedOut = false, aborted = false } = {}) {
+  if (timedOut)                          return 'timeout';
+  if (aborted && coveragePct === 0)      return 'failed';
+  if (coveragePct >= threshold)          return 'success';
+  if (coveragePct >= threshold * 0.5)   return 'degraded';
   return 'failed';
 }
 
-// Sanitise error strings — strip anything that looks like a credential
+// Strip credential-like patterns from error strings before storing
 const CREDENTIAL_PATTERNS = [
   /api[_-]?key[=:\s]+\S+/gi,
   /token[=:\s]+\S+/gi,
   /bearer\s+\S+/gi,
   /authorization[=:\s]+\S+/gi,
   /password[=:\s]+\S+/gi,
-  /cookie[=:\s]+\S+/gi,
-  /set-cookie[=:\s]+\S+/gi,
+  /cookie[:=]\s*\S+/gi,
+  /set-cookie[:=]\s*\S+/gi,
 ];
 
 function sanitiseError(raw) {
@@ -57,6 +58,19 @@ function sanitiseError(raw) {
   let s = String(raw).substring(0, 1000);
   for (const pat of CREDENTIAL_PATTERNS) s = s.replace(pat, '[REDACTED]');
   return s.substring(0, 500);
+}
+
+// Strip query parameters from URLs before storing — they may contain API keys or session tokens
+function sanitiseUrl(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    u.search = '';
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return url.split('?')[0];
+  }
 }
 
 function getClient() {
@@ -67,11 +81,13 @@ function getClient() {
 
 /**
  * Insert a scrape_runs row with status=running.
+ * Uses UPSERT so re-running a failed run is safe.
+ *
  * @param {string} store
- * @param {string} runId  - YYYYMMDD_HHMM format
+ * @param {string} runId  — YYYYMMDD_HHMM
  * @param {number} targetCount
- * @param {string} retrievalMethod - playwright | scrapingbee | instacart_api | direct_http
- * @returns {Promise<string|null>} uuid of inserted row, or null on error
+ * @param {string} retrievalMethod — playwright | scrapingbee | instacart_api | direct_http
+ * @returns {Promise<string|null>} uuid of row, or null on error
  */
 async function openRun(store, runId, targetCount, retrievalMethod = 'unknown') {
   try {
@@ -80,14 +96,14 @@ async function openRun(store, runId, targetCount, retrievalMethod = 'unknown') {
     const { data, error } = await supabase
       .from('scrape_runs')
       .upsert({
-        run_id: runId,
+        run_id:           runId,
         store,
         retrieval_method: retrievalMethod,
-        started_at: new Date().toISOString(),
-        status: 'running',
-        target_count: targetCount,
-        threshold_pct: threshold,
-      }, { onConflict: 'run_id,store', ignoreDuplicates: false })
+        started_at:       new Date().toISOString(),
+        status:           'running',
+        target_count:     targetCount,
+        threshold_pct:    threshold,
+      }, { onConflict: 'run_id,store' })
       .select('id')
       .single();
 
@@ -101,14 +117,13 @@ async function openRun(store, runId, targetCount, retrievalMethod = 'unknown') {
 
 /**
  * Update a scrape_runs row on completion.
+ *
  * @param {string} runId
  * @param {string} store
  * @param {Object} counts
- *   - attempted, fetched, extracted, inserted, unchanged, failed, silently_skipped
- *   - scrapingbee_requests (optional), scrapingbee_credits (optional)
- *   - error_summary (optional string)
- *   - timed_out (optional bool)
- *   - aborted (optional bool)
+ *   attempted, fetched, extracted, inserted, unchanged, failed, silently_skipped,
+ *   scrapingbee_requests, scrapingbee_credits, error_summary,
+ *   timed_out {bool}, aborted {bool}
  * @returns {Promise<{coveragePct, thresholdBreached, threshold, status}|null>}
  */
 async function closeRun(runId, store, counts = {}) {
@@ -116,7 +131,6 @@ async function closeRun(runId, store, counts = {}) {
     const supabase = getClient();
     const threshold = THRESHOLDS[store] ?? 70;
 
-    // Fetch stored target_count
     const { data: existing } = await supabase
       .from('scrape_runs')
       .select('target_count, started_at')
@@ -124,35 +138,37 @@ async function closeRun(runId, store, counts = {}) {
       .eq('store', store)
       .single();
 
-    const targetCount = existing?.target_count ?? counts.target ?? 0;
-    const inserted   = counts.inserted  ?? 0;
-    const unchanged  = counts.unchanged ?? 0;
-    const priced     = inserted + unchanged;
-    const coveragePct = targetCount > 0
+    const targetCount  = existing?.target_count ?? counts.target ?? 0;
+    const inserted     = counts.inserted  ?? 0;
+    const unchanged    = counts.unchanged ?? 0;
+    const priced       = inserted + unchanged;
+    const coveragePct  = targetCount > 0
       ? parseFloat(((priced / targetCount) * 100).toFixed(2))
       : 0;
     const thresholdBreached = coveragePct < threshold;
-    const status = classifyStatus(coveragePct, threshold, counts.timed_out, counts.aborted);
+    const status = classifyStatus(coveragePct, threshold, {
+      timedOut: !!counts.timed_out,
+      aborted:  !!counts.aborted,
+    });
 
-    // Duration
     let durationSeconds = null;
     if (existing?.started_at) {
       durationSeconds = Math.round((Date.now() - new Date(existing.started_at).getTime()) / 1000);
     }
 
     const update = {
-      finished_at:           new Date().toISOString(),
-      duration_seconds:      durationSeconds,
+      finished_at:            new Date().toISOString(),
+      duration_seconds:       durationSeconds,
       status,
-      attempted_count:        counts.attempted        ?? 0,
-      fetched_count:          counts.fetched          ?? 0,
-      extracted_count:        counts.extracted        ?? 0,
-      inserted_count:         inserted,
-      unchanged_count:        unchanged,
-      failed_count:           counts.failed           ?? 0,
-      silently_skipped_count: counts.silently_skipped ?? 0,
-      coverage_pct:           coveragePct,
-      threshold_breached:     thresholdBreached,
+      attempted_count:         counts.attempted         ?? 0,
+      fetched_count:           counts.fetched           ?? 0,
+      extracted_count:         counts.extracted         ?? 0,
+      inserted_count:          inserted,
+      unchanged_count:         unchanged,
+      failed_count:            counts.failed            ?? 0,
+      silently_skipped_count:  counts.silently_skipped  ?? 0,
+      coverage_pct:            coveragePct,
+      threshold_breached:      thresholdBreached,
     };
 
     if (counts.scrapingbee_requests != null) update.scrapingbee_requests = counts.scrapingbee_requests;
@@ -167,22 +183,22 @@ async function closeRun(runId, store, counts = {}) {
 
     if (error) console.warn(`  [scrape-db] closeRun: ${error.message}`);
 
-    // Emit structured JSON log line for external log processors
+    // Structured log line for external processors (no credentials)
     console.log(JSON.stringify({
-      event: 'scrape_run_complete',
-      run_id: runId,
+      event:                   'scrape_run_complete',
+      run_id:                  runId,
       store,
       status,
-      coverage_pct: coveragePct,
-      threshold_pct: threshold,
-      threshold_breached: thresholdBreached,
-      duration_seconds: durationSeconds,
-      target_count:   targetCount,
-      inserted_count: inserted,
-      unchanged_count: unchanged,
-      failed_count:   counts.failed ?? 0,
-      silently_skipped_count: counts.silently_skipped ?? 0,
-      scrapingbee_requests: counts.scrapingbee_requests ?? null,
+      coverage_pct:            coveragePct,
+      threshold_pct:           threshold,
+      threshold_breached:      thresholdBreached,
+      duration_seconds:        durationSeconds,
+      target_count:            targetCount,
+      inserted_count:          inserted,
+      unchanged_count:         unchanged,
+      failed_count:            counts.failed           ?? 0,
+      silently_skipped_count:  counts.silently_skipped ?? 0,
+      scrapingbee_requests:    counts.scrapingbee_requests ?? null,
     }));
 
     return { coveragePct, thresholdBreached, threshold, status };
@@ -194,23 +210,29 @@ async function closeRun(runId, store, counts = {}) {
 
 /**
  * Record a per-product failure.
+ * Uses ON CONFLICT DO NOTHING against the unique constraint
+ * (run_id, store_product_id, failure_reason), so calling this multiple times
+ * for the same product in the same run is safe.
+ *
  * @param {Object} opts
- *   - runId, store, canonicalName (required)
- *   - storeProductId (uuid|null)
- *   - storeUrl (string|null) — URL only, no credentials
- *   - failureStage: 'selected'|'fetching'|'parsing'|'storing'
- *   - failureReason: see schema comment for full list
- *   - httpStatus (int|null)
- *   - rawError (string|null) — sanitised before storage
+ *   runId, store, canonicalName (required)
+ *   storeProductId  uuid|null
+ *   storeUrl        string|null  — query params stripped before storage
+ *   failureStage    'selected'|'fetching'|'parsing'|'storing'
+ *   failureReason   see migration comment for full list
+ *   httpStatus      int|null
+ *   rawError        string|null  — sanitised before storage
  */
 async function recordFailure({
-  runId, store, canonicalName,
+  runId,
+  store,
+  canonicalName,
   storeProductId = null,
-  storeUrl = null,
-  failureStage = 'fetching',
+  storeUrl       = null,
+  failureStage   = 'fetching',
   failureReason,
-  httpStatus = null,
-  rawError = null,
+  httpStatus     = null,
+  rawError       = null,
 } = {}) {
   if (!runId || !store || !canonicalName || !failureReason) {
     console.warn('  [scrape-db] recordFailure: missing required fields');
@@ -219,93 +241,100 @@ async function recordFailure({
   try {
     const supabase = getClient();
 
-    // Count consecutive failures for this product (last 3 runs for this store)
-    const { data: recentRuns } = await supabase
-      .from('scrape_runs')
-      .select('run_id')
-      .eq('store', store)
-      .in('status', ['success','degraded','failed','timeout'])
-      .order('started_at', { ascending: false })
-      .limit(3);
-
+    // Consecutive-failure count: count distinct run_ids in which this store_product_id
+    // has a failure record. Falls back to canonical_name if store_product_id is null.
     let consecutiveFailures = 1;
-    if (recentRuns && recentRuns.length > 0) {
-      const recentRunIds = recentRuns.map(r => r.run_id);
-      const { data: prevFailures } = await supabase
-        .from('scrape_failures')
+    if (storeProductId) {
+      const { data: recentRuns } = await supabase
+        .from('scrape_runs')
         .select('run_id')
         .eq('store', store)
-        .eq('canonical_name', canonicalName)
-        .in('run_id', recentRunIds);
+        .in('status', ['success', 'degraded', 'failed', 'timeout'])
+        .order('started_at', { ascending: false })
+        .limit(3);
 
-      consecutiveFailures = (prevFailures?.length ?? 0) + 1;
+      if (recentRuns && recentRuns.length > 0) {
+        const recentRunIds = recentRuns.map(r => r.run_id);
+        // Count how many of those runs contain a failure for this product
+        const { data: prevFailures } = await supabase
+          .from('scrape_failures')
+          .select('run_id')
+          .eq('store_product_id', storeProductId)
+          .in('run_id', recentRunIds);
+
+        // Distinct run_ids (not row count)
+        const distinctRuns = new Set((prevFailures ?? []).map(f => f.run_id));
+        consecutiveFailures = distinctRuns.size + 1;
+      }
     }
 
     const isRetryable = consecutiveFailures < 3;
 
-    // Strip URL query params that might contain tokens
-    let safeUrl = null;
-    if (storeUrl) {
-      try {
-        const u = new URL(storeUrl);
-        u.search = '';  // remove all query params (may contain API keys)
-        safeUrl = u.toString();
-      } catch { safeUrl = storeUrl.split('?')[0]; }
-    }
+    // ON CONFLICT DO NOTHING: unique constraint is (run_id, store_product_id, failure_reason)
+    // When store_product_id is null the constraint won't fire, but that's an edge case
+    // (products without a resolved store_product_id are rare).
+    const { error } = await supabase
+      .from('scrape_failures')
+      .insert({
+        run_id:              runId,
+        store,
+        canonical_name:      canonicalName,
+        store_product_id:    storeProductId || null,
+        store_url:           sanitiseUrl(storeUrl),
+        failure_stage:       failureStage,
+        failure_reason:      failureReason,
+        http_status:         httpStatus,
+        is_retryable:        isRetryable,
+        consecutive_failures: consecutiveFailures,
+        raw_error:           sanitiseError(rawError),
+      }, { ignoreDuplicates: true });   // maps to ON CONFLICT DO NOTHING in PostgREST
 
-    await supabase.from('scrape_failures').insert({
-      run_id:              runId,
-      store,
-      canonical_name:      canonicalName,
-      store_product_id:    storeProductId || null,
-      store_url:           safeUrl,
-      failure_stage:       failureStage,
-      failure_reason:      failureReason,
-      http_status:         httpStatus,
-      is_retryable:        isRetryable,
-      consecutive_failures: consecutiveFailures,
-      raw_error:           sanitiseError(rawError),
-    });
+    if (error) console.warn(`  [scrape-db] recordFailure: ${error.message}`);
   } catch (err) {
     console.warn(`  [scrape-db] recordFailure error: ${err.message}`);
   }
 }
 
 /**
- * Returns a Set of canonical_names that have failed in ALL of the last 3 completed
- * runs for this store — these are permanent failures to suppress from the target list.
+ * Returns a Set of store_product_ids that have failed in all of the last 3
+ * completed runs for this store (counted by distinct run_id, not row count).
+ * These should be excluded from the target list.
  */
 async function getPermanentFailures(store) {
   try {
     const supabase = getClient();
+
     const { data: recentRuns } = await supabase
       .from('scrape_runs')
       .select('run_id')
       .eq('store', store)
-      .in('status', ['success','degraded','failed','timeout'])
+      .in('status', ['success', 'degraded', 'failed', 'timeout'])
       .order('started_at', { ascending: false })
       .limit(3);
 
     if (!recentRuns || recentRuns.length < 3) return new Set();
 
     const runIds = recentRuns.map(r => r.run_id);
+
     const { data: failures } = await supabase
       .from('scrape_failures')
-      .select('canonical_name, run_id')
+      .select('store_product_id, run_id')
       .eq('store', store)
-      .in('run_id', runIds);
+      .in('run_id', runIds)
+      .not('store_product_id', 'is', null);
 
     if (!failures || failures.length === 0) return new Set();
 
+    // Group by store_product_id, count distinct run_ids
     const runSets = new Map();
     for (const f of failures) {
-      if (!runSets.has(f.canonical_name)) runSets.set(f.canonical_name, new Set());
-      runSets.get(f.canonical_name).add(f.run_id);
+      if (!runSets.has(f.store_product_id)) runSets.set(f.store_product_id, new Set());
+      runSets.get(f.store_product_id).add(f.run_id);
     }
 
     const permanent = new Set();
-    for (const [name, runs] of runSets.entries()) {
-      if (runs.size >= 3) permanent.add(name);
+    for (const [id, runs] of runSets.entries()) {
+      if (runs.size >= 3) permanent.add(id);
     }
     return permanent;
   } catch (err) {

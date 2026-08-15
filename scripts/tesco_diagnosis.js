@@ -2,32 +2,40 @@
 /**
  * tesco_diagnosis.js — Phase 2 Tesco diagnostic run
  *
- * Classifies all 500 product outcomes into one of:
- *   success_direct        - product URL scraped directly (no search needed)
- *   success_search        - search returned confident match with price
+ * Classifies all (up to --limit) products into one of:
+ *   success_direct        - product URL scraped directly without a search (no search)
+ *   success_search        - search returned a confident match with price
  *   no_search_results     - search returned empty
- *   no_confident_match    - results found but score below threshold
- *   ambiguous_match       - score acceptable but multiple equally good matches
- *   blocked_challenge     - 403/Akamai/CAPTCHA or empty body despite 200
+ *   no_confident_match    - results found but best score below threshold
+ *   ambiguous_match       - two close matches, cannot confidently pick one
+ *   blocked_challenge     - 403 / Akamai / CAPTCHA / empty body on 200
  *   timeout               - request timed out
- *   page_loaded_no_price  - page loaded but price element absent
- *   no_price_in_results   - matched product but price field empty/zero
- *   permanent_failure     - in known permanent-failure set (3+ consecutive)
- *   duplicate_sku         - same Tesco SKU mapped to multiple canonical names
+ *   page_loaded_no_price  - direct product page loaded but price element absent
+ *   no_price_in_results   - search matched a product but price field empty/zero
+ *   permanent_failure     - excluded: store_product_id in known permanent-failure set
+ *   duplicate_sku         - same Tesco SKU maps to multiple canonical products
  *   other                 - catch-all
  *
- * Outputs:
- *   - Per-product classification table to stdout
- *   - Summary JSON to /tmp/scrape_logs/tesco_diagnosis_TIMESTAMP.json
- *   - scrape_runs row with retrieval_method=scrapingbee_diagnosis
+ * This script is DIAGNOSTIC ONLY:
+ *   - It does NOT insert price_observations rows.
+ *   - It does NOT record scrape_failures rows (would pollute consecutive-failure counts).
+ *   - It writes one scrape_runs row with retrieval_method='scrapingbee_diagnosis'.
+ *   - It writes a JSON report to /tmp/scrape_logs/tesco_diagnosis_TIMESTAMP.json.
+ *
+ * Direct URL vs. search:
+ *   If a resolved product has a known direct product URL (not a /search? URL),
+ *   it is attempted first via ScrapingBee. Only products without a direct URL
+ *   fall back to search.
+ *
+ * ScrapingBee credit cost:
+ *   Credits are read from the Spb-Cost response header and accumulated across
+ *   all attempts including retries. The report shows actual credits consumed.
  *
  * Usage:
- *   node scripts/tesco_diagnosis.js [--limit 100] [--sample-playwright]
+ *   node scripts/tesco_diagnosis.js [--limit 500]
  *
- * --sample-playwright: also test ~100 products via direct Playwright (no ScrapingBee)
- *                      for a side-by-side comparison. Adds ~30min to runtime.
- *
- * SECURITY: no API keys, tokens or credentials written to output files.
+ * Requires:
+ *   .env.local with SUPABASE_SERVICE_ROLE_KEY and SCRAPINGBEE_API_KEY
  */
 
 'use strict';
@@ -54,7 +62,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSessi
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ---- Reuse ScrapingBee fetch from tesco_scraper (inline to avoid coupling) ----
+// ---- ScrapingBee fetch (credits accumulated across retries) ----
 async function sbFetch(url, { wait = 7000, retries = 2 } = {}) {
   const params = new URLSearchParams({
     api_key: SCRAPINGBEE_KEY,
@@ -65,6 +73,8 @@ async function sbFetch(url, { wait = 7000, retries = 2 } = {}) {
     wait: String(wait),
   });
 
+  let totalCredits = 0;
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
@@ -72,52 +82,68 @@ async function sbFetch(url, { wait = 7000, retries = 2 } = {}) {
       const res = await fetch('https://app.scrapingbee.com/api/v1?' + params, { signal: controller.signal });
       clearTimeout(tid);
 
-      const creditCost = res.headers.get('spb-cost') || '25';
-      const remainingCredits = res.headers.get('spb-units-left') || null;
+      const attemptCost = parseInt(res.headers.get('Spb-Cost') || '25', 10);
+      totalCredits += isNaN(attemptCost) ? 25 : attemptCost;
 
       if (res.status === 429) {
         if (attempt < retries) { await sleep(10000); continue; }
-        return { ok: false, error: `ScrapingBee rate limit (429)`, status: 429, creditCost: 0, remainingCredits };
+        return { ok: false, error: 'rate_limited_429', status: 429, creditCost: totalCredits };
       }
       if (!res.ok) {
-        return { ok: false, error: `HTTP ${res.status}`, status: res.status, creditCost: 0, remainingCredits };
+        if (attempt < retries) { await sleep(3000); continue; }
+        return { ok: false, error: `http_${res.status}`, status: res.status, creditCost: totalCredits };
       }
 
       const html = await res.text();
-      // Blocked / challenge detection
-      if (html.length < 500 || /access denied|challenge|captcha/i.test(html.substring(0, 2000))) {
-        return { ok: false, error: 'blocked_challenge', status: res.status, html, creditCost: parseInt(creditCost), remainingCredits };
+      if (html.length < 500 || /access denied|akamai|captcha|security check/i.test(html.substring(0, 2000))) {
+        if (attempt < retries) { await sleep(5000); continue; }
+        return { ok: false, error: 'blocked_challenge', status: res.status, creditCost: totalCredits };
       }
 
-      return { ok: true, html, status: res.status, creditCost: parseInt(creditCost), remainingCredits };
+      return { ok: true, html, status: 200, creditCost: totalCredits };
     } catch (e) {
-      if (e.name === 'AbortError') return { ok: false, error: 'timeout', status: null, creditCost: 0 };
+      if (e.name === 'AbortError') return { ok: false, error: 'timeout', status: null, creditCost: totalCredits };
       if (attempt < retries) { await sleep(2000); continue; }
-      return { ok: false, error: e.message, status: null, creditCost: 0 };
+      return { ok: false, error: e.message, status: null, creditCost: totalCredits };
     }
   }
-  return { ok: false, error: 'max_retries', status: null, creditCost: 0 };
+  return { ok: false, error: 'max_retries', status: null, creditCost: totalCredits };
 }
 
-// Minimal price extractor — looks for the price in Tesco search results HTML
+// ---- Minimal price extractor for direct product page ----
+function extractDirectPrice(html) {
+  if (!html) return null;
+  // Tesco product page price patterns
+  const patterns = [
+    /data-auto="price"[^>]*>.*?([\d]+\.[\d]{2})/,
+    /"price"\s*:\s*([\d]+\.[\d]{2})/,
+    /class="[^"]*price[^"]*"[^>]*>.*?€\s*([\d]+\.[\d]{2})/,
+  ];
+  for (const pat of patterns) {
+    const m = html.match(pat);
+    if (m) return parseFloat(m[1]);
+  }
+  return null;
+}
+
+// ---- Minimal search result extractor ----
 function extractSearchResults(html) {
   if (!html) return [];
   const results = [];
-  // Match product cards
   const cardRe = /<li[^>]*data-auto="product-card"[^>]*>([\s\S]*?)<\/li>/gi;
   let m;
   while ((m = cardRe.exec(html)) !== null) {
     const card = m[1];
-    const nameMatch = card.match(/data-auto="product-title"[^>]*>([^<]+)</);
-    const priceMatch = card.match(/data-auto="price"[^>]*>.*?£?([\d]+\.[\d]{2})/);
-    const skuMatch = card.match(/\/products\/(\d+)\b/);
-    const urlMatch = card.match(/href="(\/shop\/en-IE\/product\/[^"]+)"/);
+    const nameMatch  = card.match(/data-auto="product-title"[^>]*>([^<]+)</);
+    const priceMatch = card.match(/data-auto="price"[^>]*>.*?([\d]+\.[\d]{2})/);
+    const skuMatch   = card.match(/\/products\/(\d+)\b/);
+    const urlMatch   = card.match(/href="(\/shop\/en-IE\/product\/[^"]+)"/);
     if (nameMatch && priceMatch) {
       results.push({
-        name: nameMatch[1].trim(),
+        name:  nameMatch[1].trim(),
         price: parseFloat(priceMatch[1]),
-        sku: skuMatch ? skuMatch[1] : null,
-        url: urlMatch ? BASE_URL + urlMatch[1] : null,
+        sku:   skuMatch ? skuMatch[1] : null,
+        url:   urlMatch ? BASE_URL + urlMatch[1] : null,
       });
     }
   }
@@ -128,19 +154,19 @@ function fuzzyScore(a, b) {
   a = a.toLowerCase().replace(/[^a-z0-9 ]/g, '');
   b = b.toLowerCase().replace(/[^a-z0-9 ]/g, '');
   if (a === b) return 1;
-  const aWords = new Set(a.split(' '));
-  const bWords = b.split(' ');
+  const aWords = new Set(a.split(' ').filter(Boolean));
+  const bWords = b.split(' ').filter(Boolean);
   const overlap = bWords.filter(w => aWords.has(w)).length;
   return overlap / Math.max(aWords.size, bWords.length);
 }
 
-// ---- Main diagnostic loop ----
-async function runDiagnosis({ limit = 500, samplePlaywright = false }) {
-  console.log(`=== TESCO DIAGNOSIS RUN (run_id=${RUN_ID}) ===\n`);
+// ---- Main ----
+async function runDiagnosis({ limit = 500 }) {
+  console.log(`=== TESCO DIAGNOSIS (run_id=${RUN_ID}) — diagnostic only, no DB writes ===\n`);
 
-  // Fetch permanent failures
-  const permanentFailures = await scrapeDb.getPermanentFailures('tesco');
-  console.log(`Known permanent failures: ${permanentFailures.size}\n`);
+  // Permanent failures (by store_product_id)
+  const permanentFailureIds = await scrapeDb.getPermanentFailures('tesco');
+  console.log(`Known permanent failures (by store_product_id): ${permanentFailureIds.size}\n`);
 
   // Fetch all resolved Tesco store_products
   const { data: storeProducts, error: spErr } = await supabase
@@ -151,29 +177,34 @@ async function runDiagnosis({ limit = 500, samplePlaywright = false }) {
 
   if (spErr) { console.error('DB error:', spErr); process.exit(1); }
 
-  // Filter out search/old URLs (same as refresh mode)
+  // Filter out old search/legacy URLs
   let filtered = storeProducts.filter(sp =>
     sp.store_url && !sp.store_url.includes('/search?') && !sp.store_url.includes('/groceries/')
   );
 
-  // Detect duplicate SKU mappings
+  // Detect duplicate SKU mappings (report only — not recorded as scrape failures)
   const skuToProducts = new Map();
   for (const sp of filtered) {
     if (sp.store_sku) {
       if (!skuToProducts.has(sp.store_sku)) skuToProducts.set(sp.store_sku, []);
-      skuToProducts.get(sp.store_sku).push(sp.products?.canonical_name || sp.store_product_name);
+      skuToProducts.get(sp.store_sku).push({ id: sp.id, name: sp.products?.canonical_name || sp.store_product_name });
     }
   }
-  const duplicateSkus = new Map([...skuToProducts.entries()].filter(([, names]) => names.length > 1));
+  const duplicateSkus = new Map([...skuToProducts.entries()].filter(([, v]) => v.length > 1));
+  const duplicateProductIds = new Set();
+  for (const products of duplicateSkus.values()) {
+    for (const p of products) duplicateProductIds.add(p.id);
+  }
+
   if (duplicateSkus.size > 0) {
-    console.log(`⚠ Duplicate SKU mappings: ${duplicateSkus.size} SKUs mapped to multiple products`);
-    for (const [sku, names] of [...duplicateSkus.entries()].slice(0, 5)) {
-      console.log(`  SKU ${sku}: ${names.join(' / ')}`);
+    console.log(`⚠ Duplicate SKU mappings: ${duplicateSkus.size} SKUs mapped to multiple products (${duplicateProductIds.size} products affected)`);
+    for (const [sku, products] of [...duplicateSkus.entries()].slice(0, 5)) {
+      console.log(`  SKU ${sku}: ${products.map(p => p.name).join(' / ')}`);
     }
     console.log('');
   }
 
-  // Sort stalest-first (same as refresh)
+  // Sort stalest-first
   const CHUNK = 200;
   const lastObsMap = new Map();
   for (let i = 0; i < filtered.length; i += CHUNK) {
@@ -192,10 +223,9 @@ async function runDiagnosis({ limit = 500, samplePlaywright = false }) {
   const targetCount = filtered.length;
   console.log(`Products to diagnose: ${targetCount}\n`);
 
+  // Open a diagnostic scrape_runs row (status will be set on close)
   await scrapeDb.openRun('tesco', RUN_ID, targetCount, 'scrapingbee_diagnosis');
 
-  // Outcome tracking
-  const outcomes = [];
   const counts = {
     success_direct: 0,
     success_search: 0,
@@ -211,174 +241,195 @@ async function runDiagnosis({ limit = 500, samplePlaywright = false }) {
     other: 0,
   };
 
-  let sbRequests = 0, sbCredits = 0, sbRemainingCredits = null;
+  const outcomes = [];
+  let sbRequests = 0, sbCredits = 0;
 
   for (let i = 0; i < filtered.length; i++) {
     const sp = filtered[i];
     const name = sp.products?.canonical_name || sp.store_product_name;
 
-    // Check permanent failure first (no API call)
-    if (permanentFailures.has(name)) {
+    // Pre-classify permanent failures without making any API call
+    if (permanentFailureIds.has(sp.id)) {
       counts.permanent_failure++;
-      outcomes.push({ name, classification: 'permanent_failure', price: null, sbRequests: 0, note: '3+ consecutive failures' });
-      console.log(`  [permanent] ${name.substring(0, 60)}`);
+      outcomes.push({ name, classification: 'permanent_failure', price: null, apiCalls: 0, note: '3+ consecutive run failures' });
+      console.log(`  [permanent       ] ${name.substring(0, 60)}`);
       continue;
     }
 
-    // Check duplicate SKU
-    const isDuplicate = sp.store_sku && duplicateSkus.has(sp.store_sku);
+    let classification, price = null, note = '', apiCalls = 0;
 
-    // Try search
-    const searchUrl = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(name)}`;
-    const result = await sbFetch(searchUrl);
-    sbRequests++;
-    sbCredits += result.creditCost || 25;
-    if (result.remainingCredits) sbRemainingCredits = result.remainingCredits;
+    // -----------------------------------------------------------------
+    // Step 1: Try direct product URL first (if available and not a search URL)
+    // A "direct URL" is a product page URL like /shop/en-IE/product/XXXX
+    // -----------------------------------------------------------------
+    const isDirectUrl = sp.store_url &&
+      !sp.store_url.includes('/search?') &&
+      sp.store_url.includes('/product/');
 
-    let classification, price = null, note = '';
+    if (isDirectUrl) {
+      const result = await sbFetch(sp.store_url);
+      sbRequests++;
+      sbCredits += result.creditCost;
+      apiCalls++;
 
-    if (!result.ok) {
-      if (result.error === 'blocked_challenge' || result.status === 403) {
-        classification = 'blocked_challenge';
-        note = `status=${result.status}`;
-      } else if (result.error === 'timeout') {
-        classification = 'timeout';
-      } else {
-        classification = 'other';
-        note = result.error;
-      }
-    } else {
-      const products = extractSearchResults(result.html);
-      if (products.length === 0) {
-        classification = 'no_search_results';
-      } else {
-        // Score all results
-        const scored = products.map(p => ({ ...p, score: fuzzyScore(name, p.name) })).sort((a, b) => b.score - a.score);
-        const best = scored[0];
-        const second = scored[1];
-
-        if (best.score < 0.4) {
-          classification = 'no_confident_match';
-          note = `best="${best.name}" score=${best.score.toFixed(2)}`;
-        } else if (second && (best.score - second.score) < 0.1 && best.score < 0.7) {
-          classification = 'ambiguous_match';
-          note = `best="${best.name}" (${best.score.toFixed(2)}) vs "${second.name}" (${second.score.toFixed(2)})`;
-        } else if (!best.price || best.price <= 0) {
-          classification = 'no_price_in_results';
-          note = `matched="${best.name}"`;
+      if (!result.ok) {
+        if (result.error === 'blocked_challenge') {
+          classification = 'blocked_challenge';
+          note = `direct_url status=${result.status}`;
+        } else if (result.error === 'timeout') {
+          classification = 'timeout';
+          note = 'direct_url';
         } else {
-          classification = isDuplicate ? 'duplicate_sku' : 'success_search';
-          price = best.price;
-          if (isDuplicate) note = `sku=${sp.store_sku}`;
+          // Direct URL failed — fall through to search below
+          classification = null;
+          note = `direct_url_failed:${result.error}`;
+        }
+      } else {
+        const directPrice = extractDirectPrice(result.html);
+        if (directPrice && directPrice > 0) {
+          // NOTE: diagnostic only — we do NOT insert a price_observation here
+          classification = duplicateProductIds.has(sp.id) ? 'duplicate_sku' : 'success_direct';
+          price = directPrice;
+          note = duplicateProductIds.has(sp.id) ? `sku=${sp.store_sku} (duplicate)` : '';
+        } else {
+          classification = 'page_loaded_no_price';
+          note = 'direct_url loaded but price absent';
         }
       }
     }
 
-    if (isDuplicate && classification === 'success_search') classification = 'duplicate_sku';
+    // -----------------------------------------------------------------
+    // Step 2: Fall back to search if direct URL unavailable or failed
+    // -----------------------------------------------------------------
+    if (!classification) {
+      const searchUrl = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(name)}`;
+      const result = await sbFetch(searchUrl);
+      sbRequests++;
+      sbCredits += result.creditCost;
+      apiCalls++;
 
-    counts[classification] = (counts[classification] || 0) + 1;
-    outcomes.push({ name, classification, price, sbRequests: 1, note, storeUrl: sp.store_url });
+      if (!result.ok) {
+        if (result.error === 'blocked_challenge') {
+          classification = 'blocked_challenge';
+          note = `search status=${result.status}`;
+        } else if (result.error === 'timeout') {
+          classification = 'timeout';
+        } else {
+          classification = 'other';
+          note = result.error;
+        }
+      } else {
+        const products = extractSearchResults(result.html);
+        if (products.length === 0) {
+          classification = 'no_search_results';
+        } else {
+          const scored = products
+            .map(p => ({ ...p, score: fuzzyScore(name, p.name) }))
+            .sort((a, b) => b.score - a.score);
+          const best   = scored[0];
+          const second = scored[1];
 
-    const icon = price ? '✓' : '✗';
-    const cls = classification.padEnd(24);
-    console.log(`  ${icon} [${cls}] ${name.substring(0, 50)}${price ? ` → €${price}` : ''}${note ? ` (${note})` : ''}`);
-
-    // Record failure for non-successes
-    if (!classification.startsWith('success_')) {
-      await scrapeDb.recordFailure({
-        runId: RUN_ID, store: 'tesco', canonicalName: name,
-        storeProductId: sp.id, storeUrl: sp.store_url,
-        failureStage: 'fetching', failureReason: classification,
-        httpStatus: result.status || null,
-        rawError: note || null,
-      });
+          if (best.score < 0.4) {
+            classification = 'no_confident_match';
+            note = `best="${best.name.substring(0,40)}" score=${best.score.toFixed(2)}`;
+          } else if (second && (best.score - second.score) < 0.1 && best.score < 0.7) {
+            classification = 'ambiguous_match';
+            note = `"${best.name.substring(0,30)}" (${best.score.toFixed(2)}) vs "${second.name.substring(0,30)}" (${second.score.toFixed(2)})`;
+          } else if (!best.price || best.price <= 0) {
+            classification = 'no_price_in_results';
+            note = `matched="${best.name.substring(0,40)}"`;
+          } else {
+            // NOTE: diagnostic only — no price_observation inserted
+            classification = duplicateProductIds.has(sp.id) ? 'duplicate_sku' : 'success_search';
+            price = best.price;
+            if (duplicateProductIds.has(sp.id)) note = `sku=${sp.store_sku} (duplicate)`;
+          }
+        }
+      }
     }
 
-    await sleep(1500 + Math.floor(Math.random() * 1500));
+    counts[classification] = (counts[classification] || 0) + 1;
+    outcomes.push({ name, classification, price, apiCalls, note });
+
+    const icon = price ? '✓' : '✗';
+    console.log(`  ${icon} [${classification.padEnd(20)}] ${name.substring(0, 50)}${price ? ` → €${price}` : ''}${note ? ` (${note})` : ''}`);
+
+    await sleep(1500 + Math.floor(Math.random() * 1000));
   }
 
   // ---- Summary ----
   const successTotal = counts.success_direct + counts.success_search;
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`TESCO DIAGNOSIS SUMMARY (run_id=${RUN_ID})`);
-  console.log(`${'='.repeat(60)}`);
-  console.log(`Total products: ${targetCount}`);
-  console.log(`ScrapingBee requests: ${sbRequests} (~${sbCredits} credits)`);
-  if (sbRemainingCredits) console.log(`Remaining credits: ${sbRemainingCredits}`);
-  console.log('');
-  console.log('Outcome breakdown:');
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`TESCO DIAGNOSIS SUMMARY — ${new Date().toISOString()}`);
+  console.log(`run_id: ${RUN_ID}   target: ${targetCount}   api_calls: ${sbRequests}   credits: ${sbCredits}`);
+  console.log(`${'='.repeat(70)}`);
   for (const [cls, count] of Object.entries(counts).sort((a, b) => b[1] - a[1])) {
     if (count > 0) {
       const pct = ((count / targetCount) * 100).toFixed(1);
-      console.log(`  ${cls.padEnd(28)} ${String(count).padStart(4)} (${pct}%)`);
+      console.log(`  ${cls.padEnd(26)} ${String(count).padStart(4)}  (${pct}%)`);
     }
   }
   console.log('');
-  console.log(`Success rate: ${successTotal}/${targetCount} = ${((successTotal / targetCount) * 100).toFixed(1)}%`);
-  console.log(`Permanent failures: ${counts.permanent_failure} (excluded from normal runs once 3x threshold reached)`);
-  console.log(`Duplicate SKUs detected: ${duplicateSkus.size}`);
-  if (sbRemainingCredits) console.log(`\n⚠ ScrapingBee remaining credits: ${sbRemainingCredits}`);
+  console.log(`Success rate:        ${successTotal}/${targetCount} = ${((successTotal / targetCount) * 100).toFixed(1)}%`);
+  console.log(`  of which direct URL: ${counts.success_direct}`);
+  console.log(`  of which search:     ${counts.success_search}`);
+  console.log(`Permanent failures:  ${counts.permanent_failure} (excluded from normal runs)`);
+  console.log(`Duplicate SKUs:      ${duplicateSkus.size} SKUs → ${duplicateProductIds.size} products`);
 
-  // ---- Recommendations ----
-  console.log('\nRECOMMENDATIONS:');
-  if (counts.permanent_failure > 0) {
-    console.log(`  • ${counts.permanent_failure} products are permanent failures — add to a repair queue or delist from catalogue`);
-  }
-  if (counts.no_confident_match + counts.ambiguous_match > 20) {
-    console.log(`  • ${counts.no_confident_match + counts.ambiguous_match} products have match issues — review canonical names or add Tesco-specific aliases`);
-  }
-  if (counts.blocked_challenge > 5) {
-    console.log(`  • ${counts.blocked_challenge} blocked responses — check ScrapingBee premium proxy config, consider direct URL scraping`);
-  }
-  if (duplicateSkus.size > 0) {
-    console.log(`  • ${duplicateSkus.size} duplicate SKU mappings — clean up store_products table to avoid wasted requests`);
-  }
+  console.log('\nRecommendations:');
+  if (counts.permanent_failure > 0)
+    console.log(`  • ${counts.permanent_failure} products are permanently failing — review in store_products and consider delisting or adding aliases`);
+  if (counts.no_confident_match + counts.ambiguous_match > 20)
+    console.log(`  • ${counts.no_confident_match + counts.ambiguous_match} match failures — consider adding Tesco-specific store_product_name overrides`);
+  if (counts.blocked_challenge > 5)
+    console.log(`  • ${counts.blocked_challenge} blocked — check ScrapingBee premium proxy settings; consider longer wait times`);
+  if (duplicateSkus.size > 0)
+    console.log(`  • ${duplicateSkus.size} duplicate SKU mappings — clean up store_products to avoid wasted requests and ambiguous data`);
+  if (counts.success_direct > 0)
+    console.log(`  • ${counts.success_direct} products have working direct URLs — direct-URL-first in production would save those search credits`);
 
-  // ---- Write JSON report ----
+  // ---- Write JSON report (no credentials) ----
   const reportPath = path.join(LOG_DIR, `tesco_diagnosis_${TIMESTAMP}.json`);
   const report = {
-    run_id: RUN_ID,
-    generated_at: new Date().toISOString(),
-    target_count: targetCount,
-    scrapingbee_requests: sbRequests,
-    scrapingbee_credits_used: sbCredits,
-    scrapingbee_credits_remaining: sbRemainingCredits,
-    duplicate_skus: duplicateSkus.size,
+    run_id:                    RUN_ID,
+    generated_at:              new Date().toISOString(),
+    target_count:              targetCount,
+    scrapingbee_requests:      sbRequests,
+    scrapingbee_credits_used:  sbCredits,
+    duplicate_skus_count:      duplicateSkus.size,
+    duplicate_products_count:  duplicateProductIds.size,
+    success_rate_pct:          parseFloat(((successTotal / targetCount) * 100).toFixed(1)),
     counts,
-    success_rate_pct: parseFloat(((successTotal / targetCount) * 100).toFixed(1)),
-    // Sanitise: no URLs with credentials, no API keys
     outcomes: outcomes.map(o => ({
-      name: o.name,
+      name:           o.name,
       classification: o.classification,
-      price: o.price,
-      note: o.note,
+      price:          o.price,
+      api_calls:      o.apiCalls,
+      note:           o.note,
     })),
   };
+  fs.mkdirSync(LOG_DIR, { recursive: true });
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-  console.log(`\nFull report: ${reportPath}`);
+  console.log(`\nJSON report: ${reportPath}`);
 
-  // ---- Close DB run ----
+  // ---- Close diagnostic run record ----
   await scrapeDb.closeRun(RUN_ID, 'tesco', {
-    attempted: sbRequests,
-    fetched: outcomes.filter(o => !['blocked_challenge','timeout','other'].includes(o.classification)).length,
-    extracted: successTotal,
-    inserted: successTotal,
-    unchanged: 0,
-    failed: targetCount - successTotal,
-    silently_skipped: 0,
+    attempted:            sbRequests,
+    fetched:              outcomes.filter(o => ['success_direct','success_search','page_loaded_no_price','no_price_in_results','ambiguous_match','no_confident_match'].includes(o.classification)).length,
+    extracted:            successTotal,
+    inserted:             0,   // diagnostic: nothing inserted
+    unchanged:            0,
+    failed:               targetCount - successTotal - counts.permanent_failure,
+    silently_skipped:     0,
     scrapingbee_requests: sbRequests,
-    scrapingbee_credits: sbCredits,
-    error_summary: counts.blocked_challenge > 10 ? `${counts.blocked_challenge} blocked responses` : null,
+    scrapingbee_credits:  sbCredits,
+    error_summary:        counts.blocked_challenge > 10 ? `${counts.blocked_challenge} blocked responses` : null,
   });
 }
 
 // ---- CLI ----
 const args = process.argv.slice(2);
 const limitIdx = args.indexOf('--limit');
-const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1]) : 500;
-const samplePlaywright = args.includes('--sample-playwright');
+const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1], 10) : 500;
 
-runDiagnosis({ limit, samplePlaywright }).catch(e => {
-  console.error('Fatal:', e);
-  process.exit(1);
-});
+runDiagnosis({ limit }).catch(e => { console.error('Fatal:', e); process.exit(1); });

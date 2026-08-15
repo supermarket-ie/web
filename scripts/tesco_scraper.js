@@ -70,6 +70,10 @@ async function scrapingBeeFetch(url, opts = {}) {
     wait: String(wait),
   });
 
+  // Accumulate credits across all attempts (including retries) — each attempt
+  // consumes credits whether it succeeds or not.
+  let totalCreditCost = 0;
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
@@ -81,7 +85,9 @@ async function scrapingBeeFetch(url, opts = {}) {
 
       clearTimeout(timeout);
 
-      const creditCost = res.headers.get('Spb-Cost') || '?';
+      // Credit cost is per-request; accumulate across retries
+      const attemptCost = parseInt(res.headers.get('Spb-Cost') || '25', 10);
+      totalCreditCost += isNaN(attemptCost) ? 25 : attemptCost;
 
       if (res.status === 200) {
         const html = await res.text();
@@ -93,9 +99,9 @@ async function scrapingBeeFetch(url, opts = {}) {
             await sleep(5000);
             continue;
           }
-          return { ok: false, error: 'Akamai blocked', creditCost };
+          return { ok: false, error: 'blocked_challenge', creditCost: totalCreditCost };
         }
-        return { ok: true, html, creditCost };
+        return { ok: true, html, creditCost: totalCreditCost };
       } else if (res.status === 429) {
         console.log(`    ⚠ ScrapingBee rate limit (attempt ${attempt}/${retries}), waiting 10s...`);
         await sleep(10000);
@@ -106,17 +112,17 @@ async function scrapingBeeFetch(url, opts = {}) {
           await sleep(3000);
           continue;
         }
-        return { ok: false, error: `HTTP ${res.status}: ${body.substring(0, 100)}`, creditCost };
+        return { ok: false, error: `HTTP ${res.status}: ${body.substring(0, 100)}`, creditCost: totalCreditCost };
       }
     } catch (e) {
       if (attempt < retries) {
         await sleep(3000);
         continue;
       }
-      return { ok: false, error: e.message, creditCost: '0' };
+      return { ok: false, error: e.message, creditCost: totalCreditCost };
     }
   }
-  return { ok: false, error: 'Max retries exceeded', creditCost: '0' };
+  return { ok: false, error: 'Max retries exceeded', creditCost: totalCreditCost };
 }
 
 // ============================================================
@@ -409,14 +415,12 @@ async function refreshMode({ limit, category, offset = 0 }) {
 
   // -------------------------------------------------------
   // Suppress permanent failures (failed in all last 3 runs)
+  // Keyed by store_product_id (uuid), not canonical_name.
   // -------------------------------------------------------
-  const permanentFailures = await scrapeDb.getPermanentFailures('tesco');
+  const permanentFailureIds = await scrapeDb.getPermanentFailures('tesco');
   const beforeSuppression = filtered.length;
-  if (permanentFailures.size > 0) {
-    filtered = filtered.filter(sp => {
-      const name = sp.products?.canonical_name || sp.store_product_name;
-      return !permanentFailures.has(name);
-    });
+  if (permanentFailureIds.size > 0) {
+    filtered = filtered.filter(sp => !permanentFailureIds.has(sp.id));
     const suppressed = beforeSuppression - filtered.length;
     if (suppressed > 0) {
       console.log(`  Suppressed ${suppressed} permanent failures from target list`);
@@ -430,7 +434,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
   if (targetCount === 0) { console.log('Nothing to refresh!'); return; }
 
   // Open observability run record
-  await scrapeDb.openRun('tesco', RUN_ID, targetCount);
+  await scrapeDb.openRun('tesco', RUN_ID, targetCount, 'scrapingbee');
 
   // Counters
   let attempted = 0, fetched = 0, extracted = 0, inserted = 0, unchanged = 0, failed = 0;

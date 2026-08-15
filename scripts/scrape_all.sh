@@ -3,15 +3,21 @@
 # scrape_all.sh — Runs all 4 store scrapers with parallelisation
 # Designed to run via systemd timer (no LLM agent needed)
 #
-# Each scraper now writes a scrape_runs record to Supabase with full counters.
-# Exit codes: 0 = all stores at or above threshold
-#             1 = one or more stores degraded/failed (logged, alerted; service still exits 0
-#                 to avoid systemd restart loops — see NOTE below)
+# Exit behaviour
+# --------------
+# This script always exits 0, regardless of individual store outcomes.
+# Rationale: systemd's Restart= policy triggers on non-zero exit codes;
+# a failed scrape run does not mean the service itself needs restarting.
+# Restarting would run all scrapers again immediately, wasting ScrapingBee
+# credits and hitting rate limits.
 #
-# NOTE: The systemd unit uses `|| true` historically to prevent restart loops.
-# This script now internally tracks per-store status and alerts, but the
-# overall exit is 0 for systemd compatibility. Review before removing || true
-# from the systemd ExecStart.
+# Degraded/failed runs are surfaced through two independent channels:
+#   1. Telegram alert via `openclaw system event` (fires in the alert block below).
+#   2. scrape_runs.status = 'degraded'|'failed' written by each scraper via scrape-db.js.
+#      Query /api/admin/scrape-health to review.
+#
+# If you want systemd to alert on failure, use OnFailure= in the unit file
+# pointing to a separate alerting unit — do NOT change this script's exit code.
 #
 # Usage:
 #   ./scripts/scrape_all.sh              # Run all stores
@@ -19,7 +25,7 @@
 #   ./scripts/scrape_all.sh supervalu dunnes  # Run specific stores
 #
 # Requirements:
-#   - Xvfb running on :99 (for Playwright scrapers)
+#   - Xvfb running on :99 (for Playwright scrapers: SuperValu, Aldi)
 #   - .env.local in the project root with SUPABASE_SERVICE_ROLE_KEY
 # =============================================================================
 
@@ -201,9 +207,24 @@ SUMMARY="$LOG_DIR/summary_${TIMESTAMP}.txt"
   echo "  Finished: $(date -u +%H:%M) UTC (${SECONDS}s elapsed)"
 } | tee "$SUMMARY"
 
-# --- Threshold breach alerts (log-based; DB-based check handled by scrape-db.js per scraper) ---
+# --- Threshold breach and non-zero exit alerts ---
+# Two independent alert triggers per store:
+#   (a) Coverage below store-specific threshold (parsed from log)
+#   (b) Scraper process exited non-zero
+#
+# Alerts are batched into a single Telegram message per run.
+# `openclaw system event` delivers the Telegram message.
+# If openclaw is unavailable, the alert is appended to the summary file only.
+# scrape_runs.status in Supabase is written independently by each scraper
+# via scrape-db.js and is not dependent on this alert path.
+
+ALERT_MSGS=()
+
 for store in "${STORES_TO_RUN[@]}"; do
   local_log="$LOG_DIR/${store}_${TIMESTAMP}.log"
+  exit_c="${STORE_EXIT[$store]:-0}"
+
+  # (a) Coverage check (log-based)
   if [ -f "$local_log" ]; then
     nums=$(grep -oP 'Updated \K\d+/\d+' "$local_log" | tail -1)
     if [ -n "$nums" ]; then
@@ -213,22 +234,25 @@ for store in "${STORES_TO_RUN[@]}"; do
         pct=$(( got * 100 / total ))
         threshold=${THRESHOLDS[$store]:-70}
         if [ "$pct" -lt "$threshold" ] 2>/dev/null; then
-          alert_msg="SCRAPE ALERT: $store coverage ${pct}% below threshold ${threshold}%"
-          echo "  ⚠ $alert_msg"
-          openclaw system event --text "$alert_msg" --mode now 2>/dev/null || true
+          ALERT_MSGS+=("$store coverage ${pct}% (threshold ${threshold}%)")
         fi
       fi
     fi
+  fi
 
-    # Alert on non-zero exit codes too
-    exit_c="${STORE_EXIT[$store]:-0}"
-    if [ "$exit_c" != "0" ] && [ "$exit_c" != "?" ]; then
-      alert_msg="SCRAPE ALERT: $store scraper exited with code $exit_c"
-      echo "  ⚠ $alert_msg"
-      openclaw system event --text "$alert_msg" --mode now 2>/dev/null || true
-    fi
+  # (b) Non-zero exit code
+  if [ "$exit_c" != "0" ] && [ "$exit_c" != "?" ]; then
+    ALERT_MSGS+=("$store scraper exited with code $exit_c")
   fi
 done
+
+if [ "${#ALERT_MSGS[@]}" -gt 0 ]; then
+  combined="SCRAPE ALERT run_id=$SCRAPE_RUN_ID: $(IFS='; '; echo "${ALERT_MSGS[*]}")"
+  echo "  ⚠ $combined" | tee -a "$SUMMARY"
+  # Primary channel: Telegram via openclaw
+  openclaw system event --text "$combined" --mode now 2>/dev/null \
+    || echo "  [alert] openclaw unavailable — alert written to $SUMMARY only" | tee -a "$SUMMARY"
+fi
 
 # --- Log rotation: delete files older than 60 days (configurable) ---
 LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-60}
