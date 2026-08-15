@@ -3,9 +3,9 @@ import { supabaseAdmin } from '@/lib/supabase';
 import {
   TransientTescoError,
   finalizePermanentFailure,
-  processTescoProduct,
   type TescoBatchMessage,
 } from '@/lib/tesco-queue-worker';
+import { processTescoProductDirect } from '@/lib/tesco-direct-worker';
 
 const MAX_TRANSIENT_DELIVERIES = 4;
 
@@ -40,8 +40,8 @@ export const POST = handleCallback<TescoBatchMessage>(
     if (process.env.TESCO_VERCEL_WORKER_ENABLED !== 'true') {
       throw new Error('TESCO_VERCEL_WORKER_ENABLED is not true');
     }
-    if (!process.env.SCRAPINGBEE_API_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Tesco queue worker credentials are not configured');
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Tesco queue worker Supabase credential is not configured');
     }
     if (!message?.runUuid || !Array.isArray(message.products) || message.products.length === 0) {
       throw new Error('Invalid Tesco queue message');
@@ -53,7 +53,7 @@ export const POST = handleCallback<TescoBatchMessage>(
       const product = message.products[index];
 
       // A queue batch can be delivered more than once. Check the durable receipt
-      // before making any paid ScrapingBee request so redelivery is both safe and cheap.
+      // before making any outbound Tesco request so redelivery is safe and cheap.
       if (await alreadyFinalized(message.runUuid, product.storeProductId)) {
         console.log('[tesco-queue] skipping already-finalized product', {
           runId: message.runId,
@@ -64,12 +64,12 @@ export const POST = handleCallback<TescoBatchMessage>(
       }
 
       try {
-        await processTescoProduct(message, product);
+        await processTescoProductDirect(message, product);
       } catch (error) {
         if (error instanceof TransientTescoError) {
           if (metadata.deliveryCount < MAX_TRANSIENT_DELIVERIES) {
             await recordRetryAttempt(message, error, metadata.deliveryCount);
-            console.warn('[tesco-queue] transient fetch failure; retrying batch', {
+            console.warn('[tesco-queue] transient direct-fetch failure; retrying batch', {
               runId: message.runId,
               batchIndex: message.batchIndex,
               storeProductId: product.storeProductId,
@@ -85,8 +85,8 @@ export const POST = handleCallback<TescoBatchMessage>(
             `transient_exhausted_${error.reason}`,
             error.message,
             0,
-            error.scrapingbeeRequests,
-            error.scrapingbeeCredits,
+            0,
+            0,
             'fetching',
           );
           console.warn('[tesco-queue] transient retries exhausted; product finalized as failure', {
@@ -103,7 +103,7 @@ export const POST = handleCallback<TescoBatchMessage>(
       if (index + 1 < message.products.length) await sleep(spacingMs);
     }
 
-    console.log('[tesco-queue] batch complete', {
+    console.log('[tesco-queue] direct batch complete', {
       runId: message.runId,
       batchIndex: message.batchIndex,
       totalBatches: message.totalBatches,
