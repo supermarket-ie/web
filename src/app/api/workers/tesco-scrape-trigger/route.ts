@@ -1,102 +1,109 @@
-/**
- * /api/workers/tesco-scrape-trigger — Vercel Cron trigger endpoint
- *
- * STATUS: DISABLED — returns 503 until TESCO_VERCEL_WORKER_ENABLED=true is set.
- * The EC2/systemd scraper remains the sole production scheduler.
- * Do not activate until:
- *   1. A real Vercel Queue consumer exists (no inline processing here).
- *   2. At least two parallel EC2 validation runs have completed successfully.
- *   3. Paul has explicitly approved the cutover in writing.
- *
- * Security requirements enforced:
- *   - TESCO_VERCEL_WORKER_ENABLED must be exactly 'true' or the endpoint returns 503.
- *   - SCRAPE_CRON_SECRET must be set or the endpoint returns 503.
- *   - Every request must supply Authorization: Bearer <SCRAPE_CRON_SECRET>.
- *   - Vercel Cron sends its own Authorization header; this endpoint validates it
- *     against SCRAPE_CRON_SECRET, NOT against Vercel's built-in cron auth token
- *     (which would require VERCEL_AUTOMATION_BYPASS_SECRET — a separate concern).
- *
- * Required environment variables (none yet set on Vercel):
- *   TESCO_VERCEL_WORKER_ENABLED  — must be 'true' to enable; anything else = 503
- *   SCRAPE_CRON_SECRET           — shared secret; must be set or endpoint returns 503
- *   TESCO_METHOD                 — 'scrapingbee' | 'playwright' (default: scrapingbee)
- *
- * Future environment variables (for Queue consumer, not yet implemented):
- *   VERCEL_QUEUE_URL             — Queue endpoint URL
- *   VERCEL_QUEUE_TOKEN           — Queue auth token
- *
- * Vercel cron config (add to vercel.json when activating — NOT YET ADDED):
- *   "crons": [
- *     { "path": "/api/workers/tesco-scrape-trigger", "schedule": "0 5 * * 1" },
- *     { "path": "/api/workers/tesco-scrape-trigger", "schedule": "0 5 * * 4" }
- *   ]
- */
+import { send } from '@vercel/queue';
+import { createTescoScrapeRun, selectTescoProducts, type TescoBatchMessage } from '@/lib/tesco-queue-worker';
+import { supabaseAdmin } from '@/lib/supabase';
 
-export async function POST(req: Request): Promise<Response> {
-  // ---- Guard 1: feature flag ----
-  // Returns 503 (not 401) so monitoring can distinguish "disabled" from "auth failure".
+const TOPIC = 'tesco-scrape-batches';
+
+function authorized(request: Request) {
+  const secret = process.env.CRON_SECRET;
+  const auth = request.headers.get('authorization');
+  return Boolean(secret && auth === `Bearer ${secret}`);
+}
+
+function parsePositiveInt(value: string | null, fallback: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+export async function GET(request: Request): Promise<Response> {
   if (process.env.TESCO_VERCEL_WORKER_ENABLED !== 'true') {
-    return Response.json(
-      { error: 'Worker not enabled', detail: 'Set TESCO_VERCEL_WORKER_ENABLED=true to activate.' },
-      { status: 503 }
-    );
+    return Response.json({ error: 'Worker disabled' }, { status: 503 });
   }
 
-  // ---- Guard 2: secret must be configured ----
-  const cronSecret = process.env.SCRAPE_CRON_SECRET;
-  if (!cronSecret) {
-    // Log server-side only; do not expose in response
-    console.error('[tesco-scrape-trigger] SCRAPE_CRON_SECRET is not set — rejecting all requests');
-    return Response.json(
-      { error: 'Worker misconfigured' },
-      { status: 503 }
-    );
+  if (!process.env.CRON_SECRET) {
+    console.error('[tesco-scrape-trigger] CRON_SECRET is not configured');
+    return Response.json({ error: 'Worker misconfigured' }, { status: 503 });
   }
 
-  // ---- Guard 3: authorisation ----
-  const authHeader = req.headers.get('authorization') ?? '';
-  const suppliedToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!suppliedToken || suppliedToken !== cronSecret) {
+  if (!authorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // ---- Stub: Queue not yet implemented ----
-  // When Vercel Queues are available, this block enqueues batches of products
-  // for the separate /api/workers/tesco-batch-worker consumer.
-  // No inline product processing occurs here — this endpoint only triggers the queue.
-  //
-  // Sketch of future implementation:
-  //
-  //   const runId = new Date().toISOString().replace(/[^0-9]/g,'').substring(0,12);
-  //   // ... fetch and sort products (stalest-first) ...
-  //   // ... split into batches of BATCH_SIZE (e.g. 50) ...
-  //   for (const [idx, batch] of batches.entries()) {
-  //     await fetch(process.env.VERCEL_QUEUE_URL!, {
-  //       method: 'POST',
-  //       headers: {
-  //         Authorization: `Bearer ${process.env.VERCEL_QUEUE_TOKEN}`,
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: JSON.stringify({
-  //         run_id: runId,
-  //         batch_index: idx,
-  //         total_batches: batches.length,
-  //         products: batch,
-  //       }),
-  //     });
-  //   }
-  //   return Response.json({ run_id: runId, batches_enqueued: batches.length });
+  if (!process.env.SCRAPINGBEE_API_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[tesco-scrape-trigger] Required server-side scraper credentials are missing');
+    return Response.json({ error: 'Worker misconfigured' }, { status: 503 });
+  }
 
-  return Response.json(
-    {
-      status: 'stub',
-      detail: 'Queue consumer not yet implemented. No work was performed.',
-    },
-    { status: 501 }
-  );
+  const url = new URL(request.url);
+  const configuredLimit = parsePositiveInt(process.env.TESCO_VERCEL_RUN_LIMIT ?? null, 500, 500);
+  const limit = parsePositiveInt(url.searchParams.get('limit'), configuredLimit, 500);
+  const batchSize = parsePositiveInt(process.env.TESCO_VERCEL_BATCH_SIZE ?? null, 3, 10);
+  const staggerSeconds = parsePositiveInt(process.env.TESCO_VERCEL_BATCH_STAGGER_SECONDS ?? null, 20, 300);
+  const query = url.searchParams.get('q')?.trim() || undefined;
+
+  const products = await selectTescoProducts(limit, query);
+  if (products.length === 0) {
+    return Response.json({ status: 'no_products', queued: 0 });
+  }
+
+  const runId = `vercel_tesco_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
+  const runUuid = await createTescoScrapeRun(runId, products.length);
+  const totalBatches = Math.ceil(products.length / batchSize);
+  let queued = 0;
+
+  try {
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+      const batch: TescoBatchMessage = {
+        runUuid,
+        runId,
+        batchIndex,
+        totalBatches,
+        products: products.slice(batchIndex * batchSize, (batchIndex + 1) * batchSize),
+      };
+
+      await send(TOPIC, batch, {
+        idempotencyKey: `${runUuid}:${batchIndex}`,
+        retentionSeconds: 86_400,
+        delaySeconds: batchIndex * staggerSeconds,
+      });
+      queued += batch.products.length;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[tesco-scrape-trigger] queue publish failed', { runId, queued, message });
+    await supabaseAdmin
+      .from('scrape_runs')
+      .update({
+        status: 'failed',
+        finished_at: new Date().toISOString(),
+        error_summary: `Queue publish failed after ${queued}/${products.length} products: ${message.slice(0, 300)}`,
+      })
+      .eq('id', runUuid);
+    return Response.json({ error: 'Queue publish failed', run_id: runId, queued }, { status: 502 });
+  }
+
+  console.log('[tesco-scrape-trigger] queued run', {
+    runId,
+    target: products.length,
+    batches: totalBatches,
+    batchSize,
+    staggerSeconds,
+    query: query ?? null,
+  });
+
+  return Response.json({
+    status: 'queued',
+    run_id: runId,
+    run_uuid: runUuid,
+    target_count: products.length,
+    batches_enqueued: totalBatches,
+    batch_size: batchSize,
+    stagger_seconds: staggerSeconds,
+    filter: query ?? null,
+  });
 }
 
-// Only POST is accepted — Vercel Cron uses POST.
-export async function GET(): Promise<Response> {
-  return Response.json({ error: 'Method not allowed' }, { status: 405 });
+export async function POST(): Promise<Response> {
+  return Response.json({ error: 'Method not allowed; use GET' }, { status: 405 });
 }
