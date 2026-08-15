@@ -505,7 +505,7 @@ async function refreshMode(categoryFilter) {
   console.log(`Resolved Aldi products to refresh: ${targetCount}`);
   if (targetCount === 0) return;
 
-  await scrapeDb.openRun('aldi', RUN_ID, targetCount, 'playwright');
+  const scrapeRunUuid = await scrapeDb.openRun('aldi', RUN_ID, targetCount, 'playwright');
 
   // Determine which categories we actually need to scrape
   const neededCats = new Set();
@@ -590,7 +590,7 @@ async function refreshMode(categoryFilter) {
       if (insertErr) {
         notFound++;
         await scrapeDb.recordFailure({
-          runId: RUN_ID, store: 'aldi', canonicalName: canonName,
+          scrapeRunUuid, store: 'aldi', canonicalName: canonName,
           storeProductId: sp.id, failureStage: 'storing',
           failureReason: 'db_error', rawError: insertErr.message,
         });
@@ -605,7 +605,7 @@ async function refreshMode(categoryFilter) {
     } else {
       notFound++;
       await scrapeDb.recordFailure({
-        runId: RUN_ID, store: 'aldi', canonicalName: canonName,
+        scrapeRunUuid, store: 'aldi', canonicalName: canonName,
         storeProductId: sp.id, failureStage: 'parsing',
         failureReason: 'no_search_results',
       });
@@ -622,7 +622,7 @@ async function refreshMode(categoryFilter) {
     attempted: targetCount,  // Aldi match loop processes all selected
     fetched: allAldiProducts.length,
     extracted: inserted + unchanged,
-    inserted: inserted + unchanged,
+    inserted,
     unchanged,
     failed: notFound,
     silently_skipped: 0,

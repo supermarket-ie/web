@@ -115,7 +115,7 @@ async function main() {
   console.log(`Products to refresh: ${targetCount}\n`);
   if (targetCount === 0) return;
 
-  await scrapeDb.openRun('dunnes', RUN_ID, targetCount, 'instacart_api');
+  const scrapeRunUuid = await scrapeDb.openRun('dunnes', RUN_ID, targetCount, 'instacart_api');
 
   let attempted = 0, fetched = 0, extracted = 0, inserted = 0, unchanged = 0, errors = 0, promotions = 0;
 
@@ -151,7 +151,7 @@ async function main() {
       console.log(`  ✗ ${name.substring(0, 50)} → ${err || 'No results'}`);
       errors++;
       await scrapeDb.recordFailure({
-        runId: RUN_ID, store: 'dunnes', canonicalName: name,
+        scrapeRunUuid, store: 'dunnes', canonicalName: name,
         storeProductId: sp.id, storeUrl: sp.store_url,
         failureStage: 'fetching', failureReason: reason,
         httpStatus, rawError: err,
@@ -166,7 +166,7 @@ async function main() {
       console.log(`  ✗ ${name.substring(0, 50)} → No price`);
       errors++;
       await scrapeDb.recordFailure({
-        runId: RUN_ID, store: 'dunnes', canonicalName: name,
+        scrapeRunUuid, store: 'dunnes', canonicalName: name,
         storeProductId: sp.id, storeUrl: sp.store_url,
         failureStage: 'parsing', failureReason: 'no_price_in_results',
       });
@@ -187,7 +187,7 @@ async function main() {
       console.log(`  ✗ ${name.substring(0, 50)} → DB error: ${insertErr.message}`);
       errors++;
       await scrapeDb.recordFailure({
-        runId: RUN_ID, store: 'dunnes', canonicalName: name,
+        scrapeRunUuid, store: 'dunnes', canonicalName: name,
         storeProductId: sp.id, failureStage: 'storing',
         failureReason: 'db_error', rawError: insertErr.message,
       });
@@ -221,7 +221,7 @@ async function main() {
 
   await scrapeDb.closeRun(RUN_ID, 'dunnes', {
     attempted, fetched, extracted,
-    inserted: inserted + unchanged,
+    inserted,
     unchanged, failed: errors,
     silently_skipped: silentlySkipped,
   });

@@ -361,7 +361,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
   if (!SCRAPINGBEE_KEY) { console.error('ERROR: SCRAPINGBEE_API_KEY not set'); process.exit(1); }
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  // RUN_ID from env (set by scrape_all.sh) or generate one
+  // RUN_ID: text external key (YYYYMMDD_HHMM), set by scrape_all.sh via SCRAPE_RUN_ID env var
   const RUN_ID = process.env.SCRAPE_RUN_ID || new Date().toISOString().replace(/[-:T]/g, '').substring(0, 12);
 
   console.log('=== TESCO REFRESH MODE (ScrapingBee) ===\n');
@@ -394,12 +394,9 @@ async function refreshMode({ limit, category, offset = 0 }) {
       .select('store_product_id, observed_at')
       .in('store_product_id', ids)
       .order('observed_at', { ascending: false });
-
     if (obs) {
       for (const o of obs) {
-        if (!lastObsMap.has(o.store_product_id)) {
-          lastObsMap.set(o.store_product_id, o.observed_at);
-        }
+        if (!lastObsMap.has(o.store_product_id)) lastObsMap.set(o.store_product_id, o.observed_at);
       }
     }
   }
@@ -413,18 +410,13 @@ async function refreshMode({ limit, category, offset = 0 }) {
 
   if (offset > 0) filtered = filtered.slice(offset);
 
-  // -------------------------------------------------------
-  // Suppress permanent failures (failed in all last 3 runs)
-  // Keyed by store_product_id (uuid), not canonical_name.
-  // -------------------------------------------------------
+  // Suppress permanent failures — keyed by store_product_id (uuid)
   const permanentFailureIds = await scrapeDb.getPermanentFailures('tesco');
   const beforeSuppression = filtered.length;
   if (permanentFailureIds.size > 0) {
     filtered = filtered.filter(sp => !permanentFailureIds.has(sp.id));
     const suppressed = beforeSuppression - filtered.length;
-    if (suppressed > 0) {
-      console.log(`  Suppressed ${suppressed} permanent failures from target list`);
-    }
+    if (suppressed > 0) console.log(`  Suppressed ${suppressed} permanent failures from target list`);
   }
 
   if (limit > 0) filtered = filtered.slice(0, limit);
@@ -433,17 +425,21 @@ async function refreshMode({ limit, category, offset = 0 }) {
   console.log(`Products to refresh: ${targetCount} (of ${storeProducts.length} total resolved)`);
   if (targetCount === 0) { console.log('Nothing to refresh!'); return; }
 
-  // Open observability run record
-  await scrapeDb.openRun('tesco', RUN_ID, targetCount, 'scrapingbee');
+  // Open observability row — store the returned UUID for use in recordFailure()
+  const scrapeRunUuid = await scrapeDb.openRun('tesco', RUN_ID, targetCount, 'scrapingbee');
 
-  // Counters
-  let attempted = 0, fetched = 0, extracted = 0, inserted = 0, unchanged = 0, failed = 0;
+  let attempted = 0, fetched = 0, extracted = 0;
+  // inserted: products where price changed (or no prior observation) — new price_observation row
+  // unchanged: products fetched where price is identical to latest observation
+  // Both still write a price_observation row (freshness tracking), but only
+  // inserted counts as a "new price point" for coverage.
+  let inserted = 0, unchanged = 0, failed = 0;
   let sbRequests = 0, totalCredits = 0;
   let consecutiveErrors = 0;
   const ABORT_THRESHOLD = 15;
   let aborted = false;
 
-  // Latest price cache to detect unchanged prices
+  // Latest price cache for unchanged detection
   const latestPriceMap = new Map();
   {
     const ids = filtered.map(sp => sp.id);
@@ -456,9 +452,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
         .order('observed_at', { ascending: false });
       if (latest) {
         for (const row of latest) {
-          if (!latestPriceMap.has(row.store_product_id)) {
-            latestPriceMap.set(row.store_product_id, row.price);
-          }
+          if (!latestPriceMap.has(row.store_product_id)) latestPriceMap.set(row.store_product_id, row.price);
         }
       }
     }
@@ -472,14 +466,26 @@ async function refreshMode({ limit, category, offset = 0 }) {
     const searchUrl = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(name)}`;
     const result = await scrapingBeeFetch(searchUrl);
     sbRequests++;
-    totalCredits += parseInt(result.creditCost) || 25; // 25 credits per request
+    // creditCost is already the accumulated total across retries (from scrapingBeeFetch)
+    totalCredits += result.creditCost || 0;
 
     if (!result.ok) {
-      const reason = result.error?.includes('timeout') ? 'timeout' : 'http_error';
+      const reason = result.error === 'blocked_challenge' ? 'blocked_challenge'
+        : result.error?.includes('timeout') ? 'timeout' : 'http_error';
       console.log(`  ✗ ${name.substring(0, 50)} → ${result.error}`);
       failed++;
       consecutiveErrors++;
-      await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, reason, result.error);
+      await scrapeDb.recordFailure({
+        scrapeRunUuid,
+        store:         'tesco',
+        canonicalName: name,
+        storeProductId: sp.id,
+        storeUrl:       sp.store_url,
+        failureStage:   'fetching',
+        failureReason:  reason,
+        httpStatus:     null,
+        rawError:       result.error,
+      });
       if (consecutiveErrors >= ABORT_THRESHOLD) {
         console.log(`\n  🛑 ${consecutiveErrors} consecutive errors — aborting run.`);
         aborted = true;
@@ -494,7 +500,15 @@ async function refreshMode({ limit, category, offset = 0 }) {
       console.log(`  ✗ ${name.substring(0, 50)} → No search results`);
       failed++;
       consecutiveErrors++;
-      await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, 'no_search_results');
+      await scrapeDb.recordFailure({
+        scrapeRunUuid,
+        store:          'tesco',
+        canonicalName:  name,
+        storeProductId: sp.id,
+        storeUrl:        sp.store_url,
+        failureStage:    'fetching',
+        failureReason:   'no_search_results',
+      });
       if (consecutiveErrors >= ABORT_THRESHOLD) {
         console.log(`\n  🛑 ${consecutiveErrors} consecutive empty results — aborting run.`);
         aborted = true;
@@ -504,12 +518,19 @@ async function refreshMode({ limit, category, offset = 0 }) {
     }
     consecutiveErrors = 0;
 
-    // Find best match
     const match = fuzzyMatch(name, products);
     if (!match) {
       console.log(`  ✗ ${name.substring(0, 50)} → No confident match, skipping`);
       failed++;
-      await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, 'no_confident_match');
+      await scrapeDb.recordFailure({
+        scrapeRunUuid,
+        store:          'tesco',
+        canonicalName:  name,
+        storeProductId: sp.id,
+        storeUrl:        sp.store_url,
+        failureStage:    'parsing',
+        failureReason:   'no_confident_match',
+      });
       continue;
     }
 
@@ -518,7 +539,15 @@ async function refreshMode({ limit, category, offset = 0 }) {
     if (!picked.price || picked.price <= 0) {
       console.log(`  ✗ ${name.substring(0, 50)} → No price in results`);
       failed++;
-      await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, 'no_price_in_results');
+      await scrapeDb.recordFailure({
+        scrapeRunUuid,
+        store:          'tesco',
+        canonicalName:  name,
+        storeProductId: sp.id,
+        storeUrl:        sp.store_url,
+        failureStage:    'parsing',
+        failureReason:   'no_price_in_results',
+      });
       continue;
     }
     extracted++;
@@ -526,72 +555,77 @@ async function refreshMode({ limit, category, offset = 0 }) {
     // Update stored URL/SKU if changed
     if (picked.sku && picked.url && picked.url !== sp.store_url) {
       await supabase.from('store_products').update({
-        store_url: picked.url,
-        store_sku: picked.sku,
+        store_url:          picked.url,
+        store_sku:          picked.sku,
         store_product_name: picked.name || name,
       }).eq('id', sp.id);
     }
 
-    // Check if price is unchanged vs latest observation
+    // Classify: inserted (new price point) vs unchanged (same price, freshness update only)
     const prevPrice = latestPriceMap.get(sp.id);
     if (prevPrice != null && Math.abs(prevPrice - picked.price) < 0.001) {
       unchanged++;
-      // Still insert — keeps freshness timestamps current
     } else {
       inserted++;
     }
 
-    // Insert price observation
+    // Write price_observation regardless (maintains freshness timestamps)
     await supabase.from('price_observations').insert({
       store_product_id: sp.id,
-      price: picked.price,
-      was_price: null,
-      on_promotion: false,
-      observed_at: new Date().toISOString(),
+      price:            picked.price,
+      was_price:        null,
+      on_promotion:     false,
+      observed_at:      new Date().toISOString(),
     });
 
     console.log(`  ✓ ${name.substring(0, 50)} → €${picked.price.toFixed(2)}`);
-
-    // Delay 2-4s between requests
     await sleep(2000 + Math.floor(Math.random() * 2000));
   }
 
-  // Silently skipped = target declared but never reached the loop
-  // (can happen if scraper exits early or due to pre-loop filtering)
+  // Silently skipped: in target list but never reached the fetch loop
   const silentlySkipped = targetCount - attempted;
-
-  // Record any silently skipped as failures too (for diagnosis)
-  if (silentlySkipped > 0 && !aborted) {
-    const attempted_names = new Set(filtered.slice(0, attempted).map(sp => sp.products?.canonical_name || sp.store_product_name));
+  if (silentlySkipped > 0 && !aborted && scrapeRunUuid) {
+    // Record each silently-skipped product; use a set of attempted ids to identify which ones
+    const attemptedIds = new Set(filtered.slice(0, attempted).map(sp => sp.id));
     for (const sp of filtered) {
-      const name = sp.products?.canonical_name || sp.store_product_name;
-      if (!attempted_names.has(name)) {
-        await scrapeDb.recordFailure(RUN_ID, 'tesco', name, sp.id, 'silently_skipped');
+      if (!attemptedIds.has(sp.id)) {
+        const name = sp.products?.canonical_name || sp.store_product_name;
+        await scrapeDb.recordFailure({
+          scrapeRunUuid,
+          store:          'tesco',
+          canonicalName:  name,
+          storeProductId: sp.id,
+          storeUrl:        sp.store_url,
+          failureStage:    'selected',
+          failureReason:   'silently_skipped',
+        });
       }
     }
   }
 
-  const totalPriced = inserted + unchanged;
-  console.log(`\n=== Updated ${totalPriced}/${targetCount} prices (${inserted} new, ${unchanged} unchanged), ${failed} errors ===`);
+  console.log(`\n=== Updated ${inserted + unchanged}/${targetCount} prices (${inserted} new, ${unchanged} unchanged), ${failed} errors ===`);
   console.log(`  ScrapingBee: ${sbRequests} requests, ~${totalCredits} credits used`);
   if (silentlySkipped > 0) console.log(`  ⚠ Silently skipped: ${silentlySkipped} products never attempted`);
 
-  // Close observability record
-  const result = await scrapeDb.closeRun(RUN_ID, 'tesco', {
+  // Coverage: inserted (new price points) + unchanged (confirmed fresh) / target
+  // unchanged IS included in coverage — the product was reached and confirmed.
+  // inserted and unchanged are passed separately; closeRun adds them internally.
+  const runResult = await scrapeDb.closeRun(RUN_ID, 'tesco', {
     attempted,
     fetched,
     extracted,
-    inserted: totalPriced,  // inserted = products with fresh price this run
-    unchanged,
+    inserted,    // genuinely new price points
+    unchanged,   // confirmed same price — closeRun sums these for coverage
     failed,
     silently_skipped: silentlySkipped,
     scrapingbee_requests: sbRequests,
-    scrapingbee_credits: totalCredits,
+    scrapingbee_credits:  totalCredits,
     error_summary: aborted ? `Aborted after ${ABORT_THRESHOLD} consecutive errors` : null,
+    aborted,
   });
 
-  if (result?.thresholdBreached) {
-    console.log(`  ⚠ Coverage ${result.coveragePct}% is below threshold ${result.threshold}%`);
+  if (runResult?.thresholdBreached) {
+    console.log(`  ⚠ Coverage ${runResult.coveragePct}% is below threshold ${runResult.threshold}%`);
   }
 }
 

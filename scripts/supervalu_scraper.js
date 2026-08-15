@@ -488,7 +488,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
   if (spErr) {
     console.error('DB error:', spErr);
     await scrapeDb.openRun('supervalu', RUN_ID, 0, 'playwright');
-    await scrapeDb.closeRun(RUN_ID, 'supervalu', { aborted: true, error_summary: spErr.message });
+    await scrapeDb.closeRun(RUN_ID, 'supervalu', { aborted: true, inserted: 0, unchanged: 0, error_summary: spErr.message });
     return;
   }
 
@@ -516,7 +516,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
   console.log(`Products to refresh: ${targetCount} (of ${storeProducts.length} total resolved)`);
   if (targetCount === 0) { console.log('Nothing to refresh!'); return; }
 
-  await scrapeDb.openRun('supervalu', RUN_ID, targetCount, 'playwright');
+  const scrapeRunUuid = await scrapeDb.openRun('supervalu', RUN_ID, targetCount, 'playwright');
 
   // Latest price cache for unchanged detection
   const latestPriceMap = new Map();
@@ -567,7 +567,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
         console.log(`  ✗ ${name.substring(0, 50)} → ${result.error}`);
         errors++;
         await scrapeDb.recordFailure({
-          runId: RUN_ID, store: 'supervalu', canonicalName: name,
+          scrapeRunUuid, store: 'supervalu', canonicalName: name,
           storeProductId: sp.id, storeUrl: sp.store_url,
           failureStage: 'fetching', failureReason: reason, rawError: result.error,
         });
@@ -585,7 +585,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
         console.log(`  ✗ ${name.substring(0, 50)} → No price on page`);
         errors++;
         await scrapeDb.recordFailure({
-          runId: RUN_ID, store: 'supervalu', canonicalName: name,
+          scrapeRunUuid, store: 'supervalu', canonicalName: name,
           storeProductId: sp.id, storeUrl: sp.store_url,
           failureStage: 'parsing', failureReason: 'page_loaded_no_price',
         });
@@ -607,7 +607,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
         console.log(`  ✗ ${name.substring(0, 50)} → DB error: ${insertErr.message}`);
         errors++;
         await scrapeDb.recordFailure({
-          runId: RUN_ID, store: 'supervalu', canonicalName: name,
+          scrapeRunUuid, store: 'supervalu', canonicalName: name,
           storeProductId: sp.id, failureStage: 'storing',
           failureReason: 'db_error', rawError: insertErr.message,
         });
@@ -630,7 +630,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
       console.log(`  ✗ ${name.substring(0, 50)} → Error: ${e.message}`);
       errors++;
       await scrapeDb.recordFailure({
-        runId: RUN_ID, store: 'supervalu', canonicalName: name,
+        scrapeRunUuid, store: 'supervalu', canonicalName: name,
         storeProductId: sp.id, storeUrl: sp.store_url,
         failureStage: 'fetching', failureReason: 'other', rawError: e.message,
       });
@@ -644,7 +644,7 @@ async function refreshMode({ limit, category, offset = 0 }) {
 
   await scrapeDb.closeRun(RUN_ID, 'supervalu', {
     attempted, fetched, extracted,
-    inserted: inserted + unchanged,
+    inserted,
     unchanged, failed: errors,
     silently_skipped: silentlySkipped,
   });
