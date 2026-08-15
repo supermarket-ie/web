@@ -50,4 +50,5 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
           RESEND_API_KEY: re_ci_placeholder
           MAGIC_LINK_SECRET: ci-placeholder-secret
+          CRON_SECRET: ci-placeholder-secret
           NEXT_PUBLIC_SITE_URL: https://example.com
