@@ -30,8 +30,8 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!process.env.SCRAPINGBEE_API_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('[tesco-scrape-trigger] Required server-side scraper credentials are missing');
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[tesco-scrape-trigger] SUPABASE_SERVICE_ROLE_KEY is missing');
     return Response.json({ error: 'Worker misconfigured' }, { status: 503 });
   }
 
@@ -83,7 +83,7 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: 'Queue publish failed', run_id: runId, queued }, { status: 502 });
   }
 
-  console.log('[tesco-scrape-trigger] queued run', {
+  console.log('[tesco-scrape-trigger] queued direct-fetch run', {
     runId,
     target: products.length,
     batches: totalBatches,
@@ -94,6 +94,7 @@ export async function GET(request: Request): Promise<Response> {
 
   return Response.json({
     status: 'queued',
+    transport: 'direct',
     run_id: runId,
     run_uuid: runUuid,
     target_count: products.length,
