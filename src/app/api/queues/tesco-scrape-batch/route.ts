@@ -24,6 +24,17 @@ async function recordRetryAttempt(message: TescoBatchMessage, error: TransientTe
   if (rpcError) throw new Error(`Failed recording Tesco retry attempt: ${rpcError.message}`);
 }
 
+async function alreadyFinalized(runUuid: string, storeProductId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('scrape_product_receipts')
+    .select('store_product_id')
+    .eq('run_id', runUuid)
+    .eq('store_product_id', storeProductId)
+    .maybeSingle();
+  if (error) throw new Error(`Failed checking Tesco idempotency receipt: ${error.message}`);
+  return Boolean(data);
+}
+
 export const POST = handleCallback<TescoBatchMessage>(
   async (message, metadata) => {
     if (process.env.TESCO_VERCEL_WORKER_ENABLED !== 'true') {
@@ -40,6 +51,18 @@ export const POST = handleCallback<TescoBatchMessage>(
 
     for (let index = 0; index < message.products.length; index += 1) {
       const product = message.products[index];
+
+      // A queue batch can be delivered more than once. Check the durable receipt
+      // before making any paid ScrapingBee request so redelivery is both safe and cheap.
+      if (await alreadyFinalized(message.runUuid, product.storeProductId)) {
+        console.log('[tesco-queue] skipping already-finalized product', {
+          runId: message.runId,
+          storeProductId: product.storeProductId,
+          deliveryCount: metadata.deliveryCount,
+        });
+        continue;
+      }
+
       try {
         await processTescoProduct(message, product);
       } catch (error) {
