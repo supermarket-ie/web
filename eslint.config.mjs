@@ -20,6 +20,15 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+  {
+    // The queue worker consumes an ungenerated Supabase relationship shape.
+    // Keep this exception scoped to the DB row adapters; generated database
+    // types can remove it later without weakening the rest of the project.
+    files: ["src/lib/tesco-queue-worker.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
