@@ -9,11 +9,62 @@ create table if not exists public.scrape_product_receipts (
   primary key (run_id, store_product_id)
 );
 
+create table if not exists public.scrape_fetch_attempts (
+  run_id uuid not null references public.scrape_runs(id) on delete cascade,
+  store_product_id uuid not null references public.store_products(id) on delete cascade,
+  delivery_count integer not null check (delivery_count > 0),
+  scrapingbee_requests integer not null default 0,
+  scrapingbee_credits integer not null default 0,
+  created_at timestamptz not null default now(),
+  primary key (run_id, store_product_id, delivery_count)
+);
+
 alter table public.scrape_product_receipts enable row level security;
+alter table public.scrape_fetch_attempts enable row level security;
 revoke all on public.scrape_product_receipts from anon, authenticated;
+revoke all on public.scrape_fetch_attempts from anon, authenticated;
 
 create index if not exists scrape_product_receipts_run_idx
   on public.scrape_product_receipts (run_id, created_at);
+create index if not exists scrape_fetch_attempts_run_idx
+  on public.scrape_fetch_attempts (run_id, created_at);
+
+create or replace function public.record_tesco_scrape_attempt(
+  p_run_uuid uuid,
+  p_store_product_id uuid,
+  p_delivery_count integer,
+  p_scrapingbee_requests integer,
+  p_scrapingbee_credits integer
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_inserted integer;
+begin
+  insert into public.scrape_fetch_attempts (
+    run_id, store_product_id, delivery_count, scrapingbee_requests, scrapingbee_credits
+  ) values (
+    p_run_uuid, p_store_product_id, p_delivery_count,
+    greatest(p_scrapingbee_requests, 0), greatest(p_scrapingbee_credits, 0)
+  )
+  on conflict (run_id, store_product_id, delivery_count) do nothing;
+
+  get diagnostics v_inserted = row_count;
+  if v_inserted = 0 then
+    return false;
+  end if;
+
+  update public.scrape_runs
+  set scrapingbee_requests = coalesce(scrapingbee_requests, 0) + greatest(p_scrapingbee_requests, 0),
+      scrapingbee_credits = coalesce(scrapingbee_credits, 0) + greatest(p_scrapingbee_credits, 0)
+  where id = p_run_uuid;
+
+  return true;
+end;
+$$;
 
 create or replace function public.finalize_tesco_scrape_product(
   p_run_uuid uuid,
@@ -45,7 +96,6 @@ declare
   v_target integer;
   v_inserted_count integer;
   v_unchanged_count integer;
-  v_failed_count integer;
   v_threshold numeric;
   v_coverage numeric;
   v_status text;
@@ -101,9 +151,9 @@ begin
       scrapingbee_requests = coalesce(scrapingbee_requests, 0) + greatest(p_scrapingbee_requests, 0),
       scrapingbee_credits = coalesce(scrapingbee_credits, 0) + greatest(p_scrapingbee_credits, 0)
   where id = p_run_uuid
-  returning attempted_count, target_count, inserted, unchanged_count, failed,
+  returning attempted_count, target_count, inserted, unchanged_count,
             coalesce(threshold_pct, 70)
-  into v_attempted, v_target, v_inserted_count, v_unchanged_count, v_failed_count, v_threshold;
+  into v_attempted, v_target, v_inserted_count, v_unchanged_count, v_threshold;
 
   if v_attempted >= coalesce(v_target, 0) and coalesce(v_target, 0) > 0 then
     v_coverage := round(((v_inserted_count + v_unchanged_count)::numeric / v_target::numeric) * 100, 2);
@@ -125,6 +175,11 @@ begin
   return true;
 end;
 $$;
+
+revoke all on function public.record_tesco_scrape_attempt(uuid, uuid, integer, integer, integer)
+  from public, anon, authenticated;
+grant execute on function public.record_tesco_scrape_attempt(uuid, uuid, integer, integer, integer)
+  to service_role;
 
 revoke all on function public.finalize_tesco_scrape_product(
   uuid, uuid, boolean, numeric, numeric, text, text, text,
