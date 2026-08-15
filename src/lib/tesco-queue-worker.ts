@@ -21,9 +21,17 @@ export type TescoBatchMessage = {
   products: TescoQueueProduct[];
 };
 
+type ScrapingBeeFailureReason =
+  | 'blocked_challenge'
+  | 'rate_limited'
+  | 'timeout'
+  | 'http_transient'
+  | 'http_permanent'
+  | 'network_error';
+
 type ScrapingBeeResult =
   | { ok: true; html: string; creditCost: number }
-  | { ok: false; reason: 'blocked_challenge' | 'rate_limited' | 'timeout' | 'http_error' | 'network_error'; error: string; creditCost: number };
+  | { ok: false; reason: ScrapingBeeFailureReason; error: string; creditCost: number };
 
 type Candidate = {
   sku: string | null;
@@ -221,8 +229,14 @@ async function scrapingBeeFetch(url: string): Promise<ScrapingBeeResult> {
       }
 
       const body = (await response.text().catch(() => '')).slice(0, 120);
-      if (response.status >= 500 && attempt < DEFAULT_FETCH_RETRIES) { await sleep(3_000); continue; }
-      return { ok: false, reason: response.status >= 500 ? 'http_error' : 'http_error', error: `HTTP ${response.status}: ${body}`, creditCost: credits };
+      const isTransientHttp = response.status === 408 || response.status === 425 || response.status >= 500;
+      if (isTransientHttp && attempt < DEFAULT_FETCH_RETRIES) { await sleep(3_000); continue; }
+      return {
+        ok: false,
+        reason: isTransientHttp ? 'http_transient' : 'http_permanent',
+        error: `HTTP ${response.status}: ${body}`,
+        creditCost: credits,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const timedOut = error instanceof Error && error.name === 'AbortError';
@@ -235,8 +249,8 @@ async function scrapingBeeFetch(url: string): Promise<ScrapingBeeResult> {
   return { ok: false, reason: 'network_error', error: 'Maximum attempts exceeded', creditCost: credits };
 }
 
-function isTransientFetchFailure(reason: ScrapingBeeResult extends infer _T ? string : never) {
-  return ['blocked_challenge', 'rate_limited', 'timeout', 'http_error', 'network_error'].includes(reason);
+function isTransientFetchFailure(reason: string) {
+  return ['blocked_challenge', 'rate_limited', 'timeout', 'http_transient', 'network_error'].includes(reason);
 }
 
 async function finalizeSuccess(
@@ -330,11 +344,10 @@ export async function processTescoProduct(message: TescoBatchMessage, product: T
       }
       console.warn(`[tesco-queue] direct_name_mismatch ${product.storeProductId}; using guarded search fallback`);
     }
-  } else if (!isTransientFetchFailure(directResult.reason)) {
-    await finalizePermanentFailure(message, product, directResult.reason, directResult.error, fetched, requests, credits);
-    return;
   }
 
+  // Any direct-page failure still gets one guarded search fallback. A stale or
+  // delisted stored URL is a mapping problem, not proof the canonical product is absent.
   const searchUrl = `${BASE_URL}/shop/en-IE/search?query=${encodeURIComponent(product.canonicalName)}`;
   const searchResult = await scrapingBeeFetch(searchUrl);
   requests += 1;
