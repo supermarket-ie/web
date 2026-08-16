@@ -6,13 +6,43 @@ function text(value: string) {
   return value.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function positiveNumbers(matches: IterableIterator<RegExpMatchArray>) {
+  const values: number[] = [];
+  for (const match of matches) {
+    const value = Number(match[1]);
+    if (Number.isFinite(value) && value > 0 && value < 1000 && !values.includes(value)) values.push(value);
+    if (values.length >= 12) break;
+  }
+  return values;
+}
+
 function parseHtml(html: string) {
   const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
-  const title = h1 ? text(h1) : null;
-  const price = html.match(/(?:itemprop=["']price["'][^>]*(?:content|value)=["']|"price"\s*:\s*["']?)(\d+(?:\.\d{1,2})?)/i)?.[1]
-    ?? html.match(/€\s*(\d+\.\d{2})/)?.[1]
-    ?? null;
-  return { title, price: price ? Number(price) : null };
+  const documentTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+  const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1]
+    ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)?.[1];
+  const metaPrice = html.match(/<meta[^>]+(?:property|itemprop)=["'](?:product:price:amount|price)["'][^>]+content=["'](\d+(?:\.\d{1,2})?)["']/i)?.[1]
+    ?? html.match(/<meta[^>]+content=["'](\d+(?:\.\d{1,2})?)["'][^>]+(?:property|itemprop)=["'](?:product:price:amount|price)["']/i)?.[1];
+
+  const euroPrices = positiveNumbers(html.matchAll(/€\s*(\d+(?:\.\d{1,2})?)/g));
+  const jsonPrices = positiveNumbers(html.matchAll(/["']price["']\s*:\s*["']?(\d+(?:\.\d{1,2})?)/gi));
+  const contentPrices = positiveNumbers(html.matchAll(/(?:content|value)=["'](\d+(?:\.\d{1,2})?)["'][^>]*(?:itemprop|property)=["'][^"']*price/gi));
+
+  const title = h1 ? text(h1) : documentTitle ? text(documentTitle) : ogTitle ? text(ogTitle) : null;
+  const price = metaPrice ? Number(metaPrice) : euroPrices[0] ?? jsonPrices[0] ?? contentPrices[0] ?? null;
+  return {
+    title,
+    price,
+    diagnostics: {
+      document_title: documentTitle ? text(documentTitle) : null,
+      og_title: ogTitle ? text(ogTitle) : null,
+      meta_price: metaPrice ? Number(metaPrice) : null,
+      euro_prices: euroPrices,
+      json_prices: jsonPrices,
+      content_prices: contentPrices,
+      json_ld_blocks: Array.from(html.matchAll(/<script[^>]*type=["']application\/ld\+json["']/gi)).length,
+    },
+  };
 }
 
 async function probeDunnes(canonicalName: string) {
