@@ -1,11 +1,10 @@
 import { send } from '@vercel/queue';
 import { createDunnesScrapeRun, type DunnesBatchMessage, type DunnesQueueProduct } from '@/lib/dunnes-queue-worker';
 import { createSupervaluScrapeRun, type SupervaluBatchMessage, type SupervaluQueueProduct } from '@/lib/supervalu-direct-worker';
-import { createAldiScrapeRun, type AldiBatchMessage, type AldiQueueProduct } from '@/lib/aldi-direct-worker';
 import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import { supabaseAdmin } from '@/lib/supabase';
 
-const SUPPORTED = ['dunnes', 'supervalu', 'aldi'] as const;
+const SUPPORTED = ['dunnes', 'supervalu'] as const;
 type Store = (typeof SUPPORTED)[number];
 
 function authorized(request: Request) {
@@ -16,8 +15,7 @@ function authorized(request: Request) {
 function enabled(store: Store) {
   if (process.env.NON_TESCO_VERCEL_WORKERS_ENABLED !== 'true') return false;
   if (store === 'dunnes') return process.env.DUNNES_VERCEL_WORKER_ENABLED === 'true';
-  if (store === 'supervalu') return process.env.SUPERVALU_VERCEL_WORKER_ENABLED === 'true';
-  return process.env.ALDI_VERCEL_WORKER_ENABLED === 'true';
+  return process.env.SUPERVALU_VERCEL_WORKER_ENABLED === 'true';
 }
 
 function parseStores(raw: string | null): Store[] {
@@ -111,42 +109,6 @@ async function queueSupervalu(limit: number) {
   return { store: 'supervalu' as const, status: 'queued', queued, run_id: runId, run_uuid: runUuid };
 }
 
-async function queueAldi(limit: number) {
-  const rows = await selectStoreProductsForRefresh('aldi', limit, { productUrlOnly: true });
-  const products: AldiQueueProduct[] = rows
-    .filter((row) => Boolean(row.store_url))
-    .map((row) => ({
-      storeProductId: row.store_product_id,
-      canonicalName: row.canonical_name,
-      storeProductName: row.store_product_name,
-      storeUrl: row.store_url as string,
-      storeSku: row.store_sku,
-      previousPrice: row.previous_price,
-    }));
-  if (!products.length) return { store: 'aldi' as const, status: 'no_products', queued: 0 };
-  const runId = `vercel_aldi_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
-  const runUuid = await createAldiScrapeRun(runId, products.length);
-  const batchSize = 3;
-  const totalBatches = Math.ceil(products.length / batchSize);
-  let queued = 0;
-  try {
-    for (let index = 0; index < totalBatches; index += 1) {
-      const message: AldiBatchMessage = {
-        runUuid, runId, batchIndex: index, totalBatches,
-        products: products.slice(index * batchSize, (index + 1) * batchSize),
-      };
-      await send('aldi-scrape-batches', message, {
-        idempotencyKey: `${runUuid}:${index}`, retentionSeconds: 86_400, delaySeconds: index * 2,
-      });
-      queued += message.products.length;
-    }
-  } catch (error) {
-    await markPublishFailure(runUuid, 'aldi', queued, products.length, error);
-    throw error;
-  }
-  return { store: 'aldi' as const, status: 'queued', queued, run_id: runId, run_uuid: runUuid };
-}
-
 export async function GET(request: Request) {
   if (!process.env.CRON_SECRET || !authorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -156,7 +118,14 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const stores = parseStores(url.searchParams.get('stores'));
+  const requestedStores = url.searchParams.get('stores');
+  if (requestedStores?.split(',').some((value) => value.trim().toLowerCase() === 'aldi')) {
+    return Response.json({
+      error: 'Aldi is intentionally unavailable on Vercel transport; use the GitHub Actions Playwright runner.',
+    }, { status: 409 });
+  }
+
+  const stores = parseStores(requestedStores);
   if (!stores.length) return Response.json({ error: 'No supported stores requested' }, { status: 400 });
   const limit = parseLimit(url.searchParams.get('limit'));
 
@@ -168,8 +137,7 @@ export async function GET(request: Request) {
     }
     try {
       if (store === 'dunnes') results.push(await queueDunnes(limit));
-      else if (store === 'supervalu') results.push(await queueSupervalu(limit));
-      else results.push(await queueAldi(limit));
+      else results.push(await queueSupervalu(limit));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       results.push({ store, status: 'error', error: message.slice(0, 300) });
