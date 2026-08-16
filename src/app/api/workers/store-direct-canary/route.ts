@@ -45,11 +45,11 @@ function parseHtml(html: string) {
   };
 }
 
-async function probeDunnes(canonicalName: string) {
+async function probeDunnes(queryName: string) {
   const storeId = 258;
   const base = 'https://storefrontgateway.dunnesstoresgrocery.com/api';
   const site = 'https://www.dunnesstoresgrocery.com';
-  const query = canonicalName.split(' ').slice(0, 5).join(' ').slice(0, 60);
+  const query = queryName.split(' ').slice(0, 5).join(' ').slice(0, 60);
   const url = `${base}/stores/${storeId}/search?q=${encodeURIComponent(query)}&take=5&page=1&skip=0`;
   const response = await fetch(url, {
     cache: 'no-store',
@@ -66,6 +66,7 @@ async function probeDunnes(canonicalName: string) {
   let candidates: Array<{ name?: string; priceNumeric?: number; sku?: string | number }> = [];
   try { candidates = (JSON.parse(body).items ?? []).slice(0, 5); } catch { /* return raw preview below */ }
   return {
+    query,
     transport_url: url,
     http_status: response.status,
     candidates: candidates.map((item) => ({ name: item.name ?? null, price: item.priceNumeric ?? null, sku: item.sku ?? null })),
@@ -103,7 +104,7 @@ export async function GET(request: Request) {
   };
 
   if (store === 'dunnes') {
-    return Response.json({ ...common, ...(await probeDunnes(product.canonical_name)) });
+    return Response.json({ ...common, ...(await probeDunnes(data.store_product_name || product.canonical_name)) });
   }
 
   if (!data.store_url) return Response.json({ ...common, error: 'Missing product URL' }, { status: 422 });
