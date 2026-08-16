@@ -1,0 +1,65 @@
+name: Store transport canary
+
+on:
+  push:
+    branches: [scrape-observability]
+    paths:
+      - '.github/workflows/store-transport-canary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for branch preview and probe stores
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://web-git-scrape-observability-supermarket-ie.vercel.app"
+
+          # The branch alias may still point at the previous deployment for a short period.
+          # Poll until the preview-only canary route is available.
+          for attempt in $(seq 1 30); do
+            status=$(curl -sS -o /tmp/probe.json -w '%{http_code}' "$base/api/workers/store-direct-canary?store=dunnes" || true)
+            if [ "$status" = "200" ]; then
+              break
+            fi
+            echo "Preview canary not ready yet (HTTP $status), attempt $attempt/30"
+            sleep 10
+          done
+
+          if [ "${status:-000}" != "200" ]; then
+            echo "Preview canary never became available"
+            cat /tmp/probe.json 2>/dev/null || true
+            exit 1
+          fi
+
+          for store in dunnes supervalu aldi; do
+            echo "=== $store ==="
+            body=$(curl -fsS "$base/api/workers/store-direct-canary?store=$store")
+            echo "$body" | jq .
+            http_status=$(echo "$body" | jq -r '.http_status // 0')
+            if [ "$http_status" != "200" ]; then
+              echo "$store transport returned retailer HTTP $http_status"
+              exit 1
+            fi
+
+            if [ "$store" = "dunnes" ]; then
+              count=$(echo "$body" | jq '.candidates | length')
+              if [ "$count" -lt 1 ]; then
+                echo "Dunnes returned no candidates"
+                exit 1
+              fi
+            else
+              title=$(echo "$body" | jq -r '.title // empty')
+              price=$(echo "$body" | jq -r '.price // empty')
+              if [ -z "$title" ] || [ -z "$price" ]; then
+                echo "$store page did not yield both title and price"
+                exit 1
+              fi
+            fi
+          done
