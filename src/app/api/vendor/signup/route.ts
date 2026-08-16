@@ -3,27 +3,62 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { resend } from '@/lib/resend';
 import { signVendorToken, slugify } from '@/lib/vendor-auth';
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, description, address, eircode, phone,
-            deliveryRadiusKm, minOrderValue, clickAndCollect, categories } = body;
+    const {
+      name,
+      email,
+      description,
+      address,
+      eircode,
+      deliveryRadiusKm,
+      minOrderValue,
+      clickAndCollect,
+      categories,
+    } = body;
 
     if (!name?.trim() || !email?.trim()) {
       return NextResponse.json({ error: 'Name and email are required' }, { status: 400 });
     }
 
-    // Check existing — return success to prevent email enumeration
+    const normalizedEmail = email.toLowerCase().trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return NextResponse.json({ error: 'Invalid email address' }, { status: 400 });
+    }
+
+    const normalizedCategories = Array.isArray(categories)
+      ? categories.filter((category): category is string => typeof category === 'string').slice(0, 20)
+      : [];
+
+    // Check existing — return the same response to prevent email enumeration.
+    // Existing vendors can use the normal sign-in flow to request a fresh link.
     const { data: existing } = await supabaseAdmin
-      .from('vendors').select('id').eq('email', email.toLowerCase().trim()).single();
+      .from('vendors')
+      .select('id')
+      .eq('email', normalizedEmail)
+      .single();
     if (existing) {
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, emailVerificationRequired: true });
     }
 
     // Generate unique slug
     let slug = slugify(name);
     const { data: slugExists } = await supabaseAdmin
-      .from('vendors').select('id').eq('slug', slug).single();
+      .from('vendors')
+      .select('id')
+      .eq('slug', slug)
+      .single();
     if (slugExists) slug = `${slug}-${Date.now().toString(36)}`;
 
     const { data: vendor, error } = await supabaseAdmin
@@ -31,14 +66,14 @@ export async function POST(request: NextRequest) {
       .insert({
         name: name.trim(),
         slug,
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
         description: description?.trim() ?? null,
         address: address?.trim() ?? null,
         eircode: eircode?.trim()?.toUpperCase() ?? null,
         delivery_radius_km: deliveryRadiusKm ?? 0,
         min_order_value: minOrderValue ?? 0,
         click_and_collect: clickAndCollect ?? false,
-        categories: categories ?? [],
+        categories: normalizedCategories,
         status: 'pending',
       })
       .select()
@@ -49,33 +84,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
     }
 
-    // Send welcome + magic link
+    // The browser never receives the credential. Access is established only
+    // after the vendor proves control of the claimed email by opening this link.
     const token = signVendorToken({ vendorId: vendor.id, email: vendor.email, name: vendor.name });
     const dashboardLink = `${process.env.NEXT_PUBLIC_SITE_URL}/vendor/dashboard?token=${token}`;
+    const safeName = escapeHtml(vendor.name);
+    const safeEmail = escapeHtml(vendor.email);
+    const safeEircode = escapeHtml(vendor.eircode ?? 'not provided');
+    const safeCategories = normalizedCategories.map(escapeHtml).join(', ') || 'none selected';
 
     await resend.emails.send({
       from: 'supermarket.ie <hello@supermarket.ie>',
       to: vendor.email,
-      subject: 'Welcome to supermarket.ie — your vendor account is being reviewed',
+      subject: 'Confirm your supermarket.ie vendor account',
       html: `
         <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
-          <h1 style="font-size:24px;font-weight:800;color:#1D2324;margin-bottom:8px">Welcome, ${vendor.name}! 🎉</h1>
-          <p style="color:#636E72;margin-bottom:16px">Your vendor account has been created and is now under review. We typically approve new vendors within 1 business day.</p>
-          <p style="color:#636E72;margin-bottom:32px">In the meantime, you can set up your product catalogue so you're ready to go live immediately after approval.</p>
-          <a href="${dashboardLink}" style="display:inline-block;background:#E17055;color:white;padding:14px 28px;border-radius:12px;font-weight:700;text-decoration:none;font-size:16px">Set up my catalogue →</a>
-          <p style="color:#B2BEC3;font-size:13px;margin-top:24px">Questions? Reply to this email and we'll get back to you.</p>
+          <h1 style="font-size:24px;font-weight:800;color:#1D2324;margin-bottom:8px">Confirm your email</h1>
+          <p style="color:#636E72;margin-bottom:16px">Hi ${safeName}, your vendor application has been created and is now under review.</p>
+          <p style="color:#636E72;margin-bottom:32px">Confirm this email address to access your dashboard and set up your catalogue.</p>
+          <a href="${dashboardLink}" style="display:inline-block;background:#E17055;color:white;padding:14px 28px;border-radius:12px;font-weight:700;text-decoration:none;font-size:16px">Confirm email &amp; open dashboard →</a>
+          <p style="color:#B2BEC3;font-size:13px;margin-top:24px">This link expires in 7 days. If you did not create this application, ignore this email.</p>
         </div>`,
     });
 
-    // Notify team
+    // Notify the team without exposing the vendor's login credential.
     await resend.emails.send({
       from: 'supermarket.ie <hello@supermarket.ie>',
       to: 'team@supermarket.ie',
       subject: `New vendor signup: ${vendor.name}`,
-      html: `<p><strong>${vendor.name}</strong> (${vendor.email}) just signed up as a vendor.</p><p>Eircode: ${vendor.eircode ?? 'not provided'}<br>Categories: ${(categories ?? []).join(', ') || 'none selected'}</p><p><a href="${process.env.NEXT_PUBLIC_SITE_URL}/vendor/dashboard?token=${token}">View their dashboard</a></p>`,
+      html: `<p><strong>${safeName}</strong> (${safeEmail}) just signed up as a vendor.</p><p>Eircode: ${safeEircode}<br>Categories: ${safeCategories}</p><p>Vendor ID: ${escapeHtml(vendor.id)}</p>`,
     });
 
-    return NextResponse.json({ success: true, vendorId: vendor.id, token });
+    return NextResponse.json({
+      success: true,
+      emailVerificationRequired: true,
+    });
   } catch (err) {
     console.error('Vendor signup error:', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
