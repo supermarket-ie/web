@@ -29,19 +29,23 @@ export async function GET() {
     const finalUrl = stdout.match(/__FINAL__:(.+)/)?.[1]?.trim() ?? null;
     const body = stdout.split('\n__STATUS__:')[0] ?? '';
 
-    return Response.json({
+    const result = {
       sandbox_region: sandbox.region,
       exit_code: command.exitCode,
       http_status: status,
       final_url: finalUrl,
       bytes: body.length,
       category_contains_target: /Irish Double Cream/i.test(body),
+      access_denied: /Access Denied|don't have permission/i.test(body),
       euro_prices: Array.from(body.matchAll(/€\s*(\d+(?:\.\d{1,2})?)/g))
         .map((match) => Number(match[1]))
         .filter((value, index, values) => value > 0 && value < 1000 && values.indexOf(value) === index)
         .slice(0, 10),
       body_preview: body.slice(0, 160),
-    });
+    };
+
+    console.log(`[aldi-sandbox-canary] ${JSON.stringify(result)}`);
+    return Response.json(result);
   } finally {
     await sandbox.stop();
   }
