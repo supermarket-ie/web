@@ -20,7 +20,7 @@ function classify(html: string) {
 }
 
 export async function GET(): Promise<Response> {
-  // Diagnostic endpoint only. Never expose it on the production deployment.
+  // Preview-only diagnostic endpoint. It never writes data or invokes ScrapingBee.
   if (process.env.VERCEL_ENV !== 'preview') {
     return Response.json({ error: 'Not available' }, { status: 404 });
   }
