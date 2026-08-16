@@ -47,6 +47,10 @@ function decodeHtml(value: string) {
     .replace(/&gt;/g, '>');
 }
 
+function stripTags(value: string) {
+  return decodeHtml(value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
 function normaliseName(value: string) {
   return decodeHtml(value)
     .normalize('NFD')
@@ -90,9 +94,9 @@ function isSizeCompatible(canonical: string, candidate: string) {
   return Math.max(a.qty, b.qty) / Math.min(a.qty, b.qty) <= 1.1;
 }
 
-function isNameCompatible(canonical: string, candidate: string) {
-  if (!isSizeCompatible(canonical, candidate)) return false;
-  const cn = normaliseName(canonical);
+function isNameCompatible(expected: string, candidate: string) {
+  if (!isSizeCompatible(expected, candidate)) return false;
+  const cn = normaliseName(expected);
   const ca = normaliseName(candidate);
   if (cn === ca) return true;
 
@@ -100,10 +104,19 @@ function isNameCompatible(canonical: string, candidate: string) {
   const a = cn.replace(sizeRe, '').replace(/\s+/g, ' ').trim();
   const b = ca.replace(sizeRe, '').replace(/\s+/g, ' ').trim();
   const aWords = a.split(/\s+/).filter((word) => word.length > 2);
-  const bWords = b.split(/\s+/).filter((word) => word.length > 2);
+  const bWords = b.split(/\s+/).filter((word) => word.length > 2 && word !== 'storefront');
   const aCoverage = aWords.length ? aWords.filter((word) => b.includes(word)).length / aWords.length : 0;
   const bCoverage = bWords.length ? bWords.filter((word) => a.includes(word)).length / bWords.length : 0;
   return aCoverage >= 0.65 && bCoverage >= 0.5;
+}
+
+function isDirectMappingCompatible(product: SupervaluQueueProduct, candidate: Candidate) {
+  if (!isSizeCompatible(product.canonicalName, candidate.name)) return false;
+  // Existing resolved product URLs should primarily agree with the retailer name.
+  // Canonical names can intentionally be generic (e.g. "White Pan Bread Standard")
+  // while retailer titles include a brand and merchandising wording.
+  return isNameCompatible(product.storeProductName, candidate.name)
+    || isNameCompatible(product.canonicalName, candidate.name);
 }
 
 function findProductJsonLd(value: unknown): Record<string, unknown> | null {
@@ -127,7 +140,15 @@ function numericPrice(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 && parsed < 1000 ? parsed : null;
 }
 
-function parseProductPage(html: string): Candidate | null {
+function firstPositiveEuroPrice(html: string): number | null {
+  for (const match of html.matchAll(/€\s*(\d+(?:\.\d{1,2})?)/g)) {
+    const price = numericPrice(match[1]);
+    if (price) return price;
+  }
+  return null;
+}
+
+export function parseSupervaluProductPage(html: string): Candidate | null {
   const scriptRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let scriptMatch: RegExpExecArray | null;
   while ((scriptMatch = scriptRegex.exec(html)) !== null) {
@@ -142,22 +163,24 @@ function parseProductPage(html: string): Candidate | null {
       const price = numericPrice(offer?.price ?? offer?.lowPrice);
       if (name && price) return { name, price, wasPrice: null, onPromotion: false };
     } catch {
-      // Continue to other JSON-LD blocks and HTML fallbacks.
+      // Continue to the retailer HTML fallbacks.
     }
   }
 
-  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
-    ?.replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const priceMatch = html.match(/(?:itemprop=["']price["'][^>]*(?:content|value)=["']|"price"\s*:\s*["']?)(\d+(?:\.\d{1,2})?)/i)
-    ?? html.match(/€\s*(\d+\.\d{2})/);
-  const price = numericPrice(priceMatch?.[1]);
-  if (!h1 || !price) return null;
-  return { name: decodeHtml(h1), price, wasPrice: null, onPromotion: false };
+  const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1]
+    ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)?.[1];
+  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
+  const documentTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+  const name = ogTitle ? stripTags(ogTitle) : h1 ? stripTags(h1) : documentTitle ? stripTags(documentTitle) : '';
+
+  const metaPrice = html.match(/<meta[^>]+(?:property|itemprop)=["'](?:product:price:amount|price)["'][^>]+content=["'](\d+(?:\.\d{1,2})?)["']/i)?.[1]
+    ?? html.match(/<meta[^>]+content=["'](\d+(?:\.\d{1,2})?)["'][^>]+(?:property|itemprop)=["'](?:product:price:amount|price)["']/i)?.[1];
+  const price = numericPrice(metaPrice) ?? firstPositiveEuroPrice(html);
+  if (!name || !price) return null;
+  return { name, price, wasPrice: null, onPromotion: false };
 }
 
-async function fetchProduct(product: SupervaluQueueProduct): Promise<Candidate | null> {
+export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Promise<Candidate | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -175,7 +198,7 @@ async function fetchProduct(product: SupervaluQueueProduct): Promise<Candidate |
       throw new TransientSupervaluError(`SuperValu returned HTTP ${response.status}`, product, `http_${response.status}`);
     }
     if (!response.ok) return null;
-    return parseProductPage(await response.text());
+    return parseSupervaluProductPage(await response.text());
   } catch (error) {
     if (error instanceof TransientSupervaluError) throw error;
     const message = error instanceof Error ? error.message : String(error);
@@ -311,7 +334,7 @@ export async function processSupervaluProduct(message: SupervaluBatchMessage, pr
     return;
   }
 
-  const candidate = await fetchProduct(product);
+  const candidate = await fetchSupervaluProduct(product);
   if (!candidate) {
     await finalize(message, product, {
       success: false,
@@ -322,7 +345,7 @@ export async function processSupervaluProduct(message: SupervaluBatchMessage, pr
     });
     return;
   }
-  if (!isNameCompatible(product.canonicalName, candidate.name)) {
+  if (!isDirectMappingCompatible(product, candidate)) {
     await finalize(message, product, {
       success: false,
       candidate,
@@ -330,7 +353,7 @@ export async function processSupervaluProduct(message: SupervaluBatchMessage, pr
       extracted: 1,
       failureStage: 'matching',
       failureReason: 'direct_name_mismatch',
-      rawError: `canonical=${product.canonicalName}; fetched=${candidate.name}`,
+      rawError: `canonical=${product.canonicalName}; stored=${product.storeProductName}; fetched=${candidate.name}`,
     });
     return;
   }
