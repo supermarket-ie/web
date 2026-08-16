@@ -30,6 +30,35 @@ function extractText(parts: UIMessage['parts']): string {
     .join('');
 }
 
+function normalizePlannerProfile(profile: PlannerProfile | undefined): PlannerProfile | undefined {
+  if (!profile) return undefined;
+
+  const meals = profile.meals ?? {
+    breakfast: true,
+    lunch: true,
+    dinner: true,
+    snacks: false,
+  };
+
+  return {
+    ...profile,
+    adults: Number.isFinite(profile.adults) ? Math.max(1, Math.floor(profile.adults)) : 1,
+    children: Number.isFinite(profile.children) ? Math.max(0, Math.floor(profile.children)) : 0,
+    childAges: Array.isArray(profile.childAges) ? profile.childAges : [],
+    preferredStores: Array.isArray(profile.preferredStores) && profile.preferredStores.length > 0
+      ? profile.preferredStores
+      : ['all'],
+    dietary: Array.isArray(profile.dietary) ? profile.dietary : [],
+    meals: {
+      breakfast: meals.breakfast ?? true,
+      lunch: meals.lunch ?? true,
+      dinner: meals.dinner ?? true,
+      snacks: meals.snacks ?? false,
+    },
+    batchCooking: profile.batchCooking ?? false,
+  };
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
 
@@ -39,7 +68,7 @@ export async function POST(req: Request) {
 
   // ── Extract request data ──
   const conversationId = body.conversationId as string | undefined;
-  let profile = body.profile as PlannerProfile | undefined;
+  let profile = normalizePlannerProfile(body.profile as PlannerProfile | undefined);
   const incomingMessages = (body.messages ?? []) as UIMessage[];
   const intakeMode = body.intakeMode as boolean | undefined;
   const returningUser = body.returningUser as boolean | undefined;
@@ -62,7 +91,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const convoProfile = convo.profile as PlannerProfile | null;
+    const convoProfile = normalizePlannerProfile(convo.profile as PlannerProfile | undefined);
     if (convoProfile) profile = convoProfile;
 
     // Convert stored messages to UIMessage format and prepend
@@ -145,7 +174,7 @@ export async function POST(req: Request) {
       .eq('subscriber_id', subscriberId)
       .single();
     if (hh) {
-      profile = {
+      profile = normalizePlannerProfile({
         adults: hh.adults,
         children: hh.children,
         childAges: hh.child_ages ?? [],
@@ -157,7 +186,7 @@ export async function POST(req: Request) {
         batchCooking: hh.batch_cooking ?? false,
         skipDays: hh.skip_days ?? undefined,
         extraContext: hh.extra_context ?? undefined,
-      };
+      });
     }
   }
 
