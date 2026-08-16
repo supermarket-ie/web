@@ -193,7 +193,9 @@ async function directFetch(url: string): Promise<DirectFetchResult> {
         return { ok: true, html };
       }
       if (looksBlocked(html)) {
-        if (attempt < DEFAULT_FETCH_RETRIES) { await sleep(2_000); continue; }
+        // A confirmed Akamai/security challenge is an egress-level signal.
+        // Stop immediately: retrying or falling through to search only hammers
+        // an identity that now needs a 24-48 hour cooldown.
         return { ok: false, reason: 'blocked_challenge', error: 'Tesco challenge page returned to direct Vercel request' };
       }
       if (response.status === 429) {
@@ -303,6 +305,10 @@ export async function processTescoProductDirect(message: TescoBatchMessage, prod
       }
       console.warn(`[tesco-direct] direct_name_mismatch ${product.storeProductId}; using guarded search fallback`);
     }
+  } else if (isTransient(productResult.reason)) {
+    // Transport failures belong to the egress/runtime layer. Do not issue a
+    // second Tesco request (search fallback) from the same failing identity.
+    throw new TransientTescoError(productResult.error, product, productResult.reason, 0, 0);
   }
 
   const searchUrl = `${BASE_URL}/groceries/en-IE/search?query=${encodeURIComponent(product.canonicalName)}`;
