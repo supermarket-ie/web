@@ -31,97 +31,46 @@ let _priceCacheAt = 0;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
- * Fetch all latest prices across all stores.
+ * Fetch the validated current-price set across active stores.
  *
- * Fast path: uses the `latest_prices` DB view (single query, no pagination).
- * The view is:
- *   CREATE OR REPLACE VIEW latest_prices AS
- *   SELECT DISTINCT ON (po.store_product_id)
- *     po.store_product_id, po.price, po.was_price, po.on_promotion,
- *     sp.store, sp.store_product_name,
- *     p.canonical_name, p.category
- *   FROM price_observations po
- *   JOIN store_products sp ON sp.id = po.store_product_id AND sp.url_status = 'resolved'
- *   JOIN products p ON p.id = sp.product_id
- *   ORDER BY po.store_product_id, po.observed_at DESC;
+ * `latest_prices` is the production boundary for price quality. Its database
+ * definition is responsible for selecting the latest observation and excluding
+ * mappings/stores that are not safe to present as live.
  *
- * Slow path (fallback): paginated price_observations scan — used if view not yet created.
+ * IMPORTANT: fail closed if the view is unavailable. Falling back to raw
+ * `price_observations` would bypass mapping/freshness guards and can publish
+ * known-contaminated data. supermarket.ie deliberately prefers a missing price
+ * to a false price.
  */
 export async function getAllLatestPrices(): Promise<ProductPrice[]> {
-  // Return cached data if fresh
   if (_priceCache && Date.now() - _priceCacheAt < CACHE_TTL_MS) {
     return _priceCache;
   }
 
-  // Fast path — try the view first (single DB round-trip, ~200ms)
   const { data: viewRows, error: viewError } = await supabaseAdmin
     .from('latest_prices')
     .select('canonical_name, category, store, price, was_price, on_promotion, store_product_name');
 
-  if (!viewError && viewRows && viewRows.length > 0) {
-    // Dedup by canonical_name + store
-    const seen = new Set<string>();
-    const results: ProductPrice[] = [];
-    for (const r of viewRows as unknown as ProductPrice[]) {
-      const key = `${r.canonical_name}::${r.store}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      results.push(r);
-    }
-    _priceCache = results;
-    _priceCacheAt = Date.now();
-    return results;
+  if (viewError) {
+    console.error('[price-data] latest_prices unavailable; refusing raw-price fallback:', viewError.message);
+    return [];
   }
 
-  // Slow path fallback — paginated scan (used before view is created)
-  const { data: spRows } = await supabaseAdmin
-    .from('store_products')
-    .select('id, store, store_product_name, products(canonical_name, category)')
-    .eq('url_status', 'resolved');
-
-  if (!spRows) return [];
-
-  let priceRows: { store_product_id: string; price: number; on_promotion: boolean; was_price: number | null }[] = [];
-  let offset = 0;
-  const PAGE = 1000;
-  while (true) {
-    const { data } = await supabaseAdmin
-      .from('price_observations')
-      .select('store_product_id, price, on_promotion, was_price')
-      .order('observed_at', { ascending: false })
-      .range(offset, offset + PAGE - 1);
-    if (!data || data.length === 0) break;
-    priceRows = priceRows.concat(data);
-    if (data.length < PAGE) break;
-    offset += PAGE;
+  if (!viewRows || viewRows.length === 0) {
+    console.warn('[price-data] latest_prices returned no rows');
+    return [];
   }
 
-  const latestBySpId = new Map<string, { price: number; on_promotion: boolean; was_price: number | null }>();
-  for (const row of priceRows) {
-    if (!latestBySpId.has(row.store_product_id)) {
-      latestBySpId.set(row.store_product_id, { price: row.price, on_promotion: row.on_promotion ?? false, was_price: row.was_price });
-    }
-  }
-
+  // Deduplicate by canonical_name + store. The validated view may contain more
+  // than one store_product mapping for a canonical product, but consumers need
+  // at most one current store price for that canonical item.
   const seen = new Set<string>();
   const results: ProductPrice[] = [];
-  for (const sp of spRows) {
-    const p = sp.products as unknown as { canonical_name: string; category: string } | null;
-    if (!p) continue;
-    const obs = latestBySpId.get(sp.id);
-    if (!obs) continue;
-    const key = `${p.canonical_name}::${sp.store}`;
+  for (const r of viewRows as unknown as ProductPrice[]) {
+    const key = `${r.canonical_name}::${r.store}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    results.push({
-      canonical_name: p.canonical_name,
-      category: p.category,
-      store: sp.store,
-      price: obs.price,
-      was_price: obs.was_price,
-      on_promotion: obs.on_promotion,
-      store_product_name: sp.store_product_name,
-    });
+    results.push(r);
   }
 
   _priceCache = results;
