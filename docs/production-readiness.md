@@ -20,7 +20,7 @@ Do not perform the following without explicit approval:
 | Area | Current state | Target |
 |---|---|---|
 | Application | Vercel project `web` | Vercel |
-| Database | Supabase `ytyzwiqnobxehdqrnzhx` | Supabase |
+| Database | Supabase `ytyzwiqnobxehdqrnzhx` (`eu-west-1`) | Supabase |
 | Source / CI | GitHub `supermarket-ie/web` | GitHub Actions + protected `main` |
 | Scheduled supermarket scrape | EC2 systemd, Mon/Thu 05:00 UTC | Proven replacement before retirement |
 | Tesco Vercel worker | Preview-only / fail-closed | Vercel queue + proven egress |
@@ -31,10 +31,25 @@ Do not perform the following without explicit approval:
 - Working branch: `scrape-observability`
 - Production branch: `main`
 - No merge to main has been performed by this readiness pass.
+- Current audited branch head before this document update: `5158c4bbf27652fdc762bd09e0279e408907b3da`.
 - GitHub Actions runs `npm ci`, lint, tests, and production build.
-- CI passed for the security hardening migration and legacy planner-profile normalization commits.
-- Repository visibility was reported as **public** during audit. Change to private before production-readiness sign-off.
-- Working branch is currently unprotected. Protect `main` at minimum with required CI, no force pushes, no deletion, and PR review before merge.
+- CI is aligned to Node 24, matching the Vercel project runtime. The Node-24 validation run passed.
+- The corresponding Vercel Preview deployment reached `READY`.
+- `package-lock.json` is the active lockfile; no current `pnpm-lock.yaml` is present on the branch.
+- Repository visibility is **public**. Change to private before production-readiness sign-off.
+- GitHub secret-scanning alerts could not be read through the connected API; a full repository-history secret review therefore remains open.
+- All inspected branches are unprotected. Protect `main` at minimum with required `validate` CI, no force pushes, no deletion, and PR review before merge.
+- `staging`, `feat/retention-loop`, `feat/ai-driven-planner`, and `upgrade/plan-tool-use` are stale and strictly behind `main`; `master` is unrelated legacy history with no common ancestor.
+- Local `.claude/settings.local.json` was removed from source control and is now ignored.
+- The repository previously ignored the entire `scripts/` directory; that ignore rule was removed so scraper/ops changes cannot silently remain untracked.
+
+## Vercel
+
+- Project runtime: Node 24.x.
+- Current observed Function region: `iad1`.
+- Supabase is in `eu-west-1`; this region mismatch should be corrected independently of Tesco transport work.
+- Static IP support exists on eligible Vercel plans. Secure Compute dedicated egress requires Enterprise. No networking change has been made.
+- Preview and Production remain distinct; no Tesco production schedule has been enabled.
 
 ## Database security
 
@@ -58,6 +73,23 @@ Do not apply this migration to production until application access paths and Pre
 
 Scrape observability tables and `tesco_egress_pool` already use RLS with service-role-only access.
 
+### Migration alignment
+
+Production `supabase_migrations.schema_migrations` currently records only the recent scrape migrations, while the repository contains older application migrations as well. The recent migration timestamps also do not exactly match the repository filenames. Migration history must be reconciled before Stage A is complete; do not rewrite migration history blindly.
+
+### Lidl freshness
+
+Lidl is not part of the current scheduled refresh pipeline. Production audit found only two Lidl mappings with observations and the newest Lidl observation was from 2026-05-11. Public claims that all five stores were live have been removed on the branch.
+
+A branch-only migration restricts `latest_prices` to the four actively refreshed stores:
+
+- Tesco
+- Dunnes
+- SuperValu
+- Aldi
+
+Do not present Lidl as live again until it has a proven refresh pipeline and freshness monitoring.
+
 ## Production jobs
 
 ### EC2 supermarket scrape
@@ -67,8 +99,10 @@ Scrape observability tables and `tesco_egress_pool` already use RLS with service
 - Frequency: Monday + Thursday, 05:00 UTC
 - Service: `supermarket-scrape.service`
 - Command: `scripts/scrape_all.sh`
+- Stores: Tesco, SuperValu, Dunnes, Aldi
 - Status: production source of truth for scheduled refreshes until replacement is proven
 - Action: do not modify/disable without explicit approval
+- OpenClaw dependency: scraper execution itself does not require OpenClaw. `scripts/scrape_all.sh` uses `openclaw system event` only for Telegram failure notification. This alert path must be replaced before OpenClaw is retired.
 
 ### Vercel weekly digest
 
@@ -85,8 +119,8 @@ Scrape observability tables and `tesco_egress_pool` already use RLS with service
 - Schedule: daily 07:30 UTC
 - Auth: `CRON_SECRET` bearer token
 - Dependencies: Supabase, Resend
-- Current production data: zero `price_alerts` rows during 2026-08-16 audit
-- Known issue: current query derives the minimum from historical observations rather than strictly the latest/current price. Fix before activating price alerts as a user-facing feature.
+- Production currently has zero `price_alerts` rows.
+- Known correctness issue: the current alert query can use the historical minimum price rather than strictly the latest/current price. Fix before launching alerts to users.
 
 ### Vercel price watchdog
 
@@ -111,6 +145,29 @@ Scrape observability tables and `tesco_egress_pool` already use RLS with service
 - Transport gap: consumer still calls direct Vercel transport. It does not yet claim/use/quarantine entries from `tesco_egress_pool`.
 - Rule: no broad Tesco run until a one-product canary succeeds from an accepted egress identity.
 
+## Scrape observability
+
+Available foundation:
+
+- `scrape_runs`
+- `scrape_failures`
+- `scrape_product_receipts`
+- `scrape_fetch_attempts`
+- Tesco egress health/cooldown state
+- secured `/api/admin/scrape-health`
+
+Current production `scrape_runs` evidence contains only recent manual Tesco runs. SuperValu, Dunnes and Aldi scheduled EC2 runs are not yet proven to write to the new observability tables. This is a Stage-B parity gap.
+
+Ops view should expose at minimum:
+
+- latest successful run per store
+- coverage/failure rate
+- stale-price counts
+- transport block classifications
+- queue backlog / delivery state where available
+- cron health
+- recent runtime errors
+
 ## Scraper safety / Tesco
 
 Keep these protections:
@@ -125,6 +182,8 @@ Keep these protections:
 - idempotent finalisation
 - prefer missing price over false match
 
+The Vercel direct worker validates the title returned from the known product URL before accepting a price. If the title does not confidently match, it does not publish that direct-page price and instead uses guarded search fallback.
+
 Known blocked transports from the current test window:
 
 - Vercel direct HTTP
@@ -132,6 +191,32 @@ Known blocked transports from the current test window:
 - fresh GitHub/Azure-hosted Chromium
 
 Treat a confirmed Akamai block as a 24-48 hour cooldown. Do not hammer blocked identities or add stealth/fingerprint bypasses.
+
+### Historical Tesco mapping contamination
+
+The production Tesco mapping problem is significantly broader than the three known butter examples.
+
+Read-only audit on 2026-08-16 found:
+
+- 324 duplicate Tesco URLs
+- 740 resolved mappings attached to those duplicate URLs
+- up to 6 canonical mappings sharing one Tesco URL
+- 175 duplicate URLs had August activity
+- 392 mappings sit on those August-active duplicate URLs
+- 257 of those mappings were refreshed in August
+- 192 were refreshed since 2026-08-10
+
+Sample inspection confirms a mixture of legitimate near-variants and obvious false mappings. Examples of clear contamination include unrelated foods sharing a cornflakes URL, wrong milk sizes sharing one product URL, and loose vegetables mapped to loose-leaf tea.
+
+Known butter contamination remains `resolved` and received observations through 2026-08-15:
+
+- Butter Salted 250g -> Biona Organic Crunchy Peanut Butter 250G
+- Butter Salted 500g -> Tesco Butter Me Up Lighter Spread 500G
+- Butter Unsalted 250g -> Biona Organic Smooth Peanut Butter 250G
+
+Do **not** delete observations or rewrite mappings yet. The new runtime/matcher must first be proven. Cleanup must distinguish legitimate shared-product variants from false mappings and then be explicitly approved.
+
+A SELECT-only repeatable audit is stored at `scripts/audit_tesco_mapping_integrity.sql`.
 
 ## Application issues
 
@@ -144,7 +229,12 @@ Verified production runtime issues over the audited period included:
 - legacy profile crash when `meals` was missing
 - 60-second runtime timeouts
 
-The legacy-profile crash has a branch fix that normalizes old/incomplete profiles before building the planner prompt.
+Branch fixes now:
+
+- normalize old/incomplete profiles before prompt generation
+- terminate AI-SDK work at 55 seconds, before Vercel's 60-second function limit
+
+Both changes passed CI and reached Vercel Preview.
 
 Anthropic availability still requires a production resilience decision: restore provider billing and/or provide a tested fallback. Do not silently switch providers without verifying configuration, cost and output behaviour.
 
@@ -152,58 +242,68 @@ Anthropic availability still requires a production resilience decision: restore 
 
 Two `family_size` NOT NULL errors were found in production logs. Both were generated by a smoke-test address, not normal user traffic. The schema should stay strict; malformed requests should return a 400 instead of reaching the database as NULL.
 
+### Vendor authentication
+
+A critical branch issue was fixed: public vendor signup previously returned the seven-day vendor JWT directly to the browser, so an arbitrary claimed email could obtain dashboard access without proving email ownership.
+
+Branch fixes:
+
+- signup no longer returns the JWT
+- login credential is sent only to the claimed email
+- signup UI stops at a check-email state
+- team notification does not contain a login token
+- user-controlled HTML in the email is escaped
+- vendor sign-in returns generic success to reduce account enumeration
+
+The signup/auth fix passed CI and reached Preview.
+
+Residual hardening: vendor and normal-user magic links still use JWTs in page URLs and client session flows. The longer-term design should consume the emailed magic link and establish an HttpOnly, Secure, SameSite cookie rather than carrying the session credential in URLs.
+
+### Public API abuse surfaces
+
+The following public endpoints should receive platform-level rate limiting / WAF protection before high-volume launch:
+
+- analytics/event ingestion
+- contact email
+- vendor signup/sign-in email issuance
+- magic-link issuance
+
+Do not use an in-memory serverless rate limiter as the sole control.
+
 ### Browse / trust
 
-- `/browse/null` appeared in production traffic and should be monitored/traced. Current BrowseClient derives product slugs from `canonical_name`, so the source may be stale links/bots or another code path.
-- Browse page currently contains an unsupported marketing claim of `2,400+ families signed up`, while the audited `subscribers` table contained 59 rows. Remove or replace only with a verified metric.
-- Sitemap `DATA_FRESHNESS` is hard-coded and should ultimately reflect actual verified data freshness rather than a stale static date.
-
-## Scrape observability
-
-Available foundation:
-
-- `scrape_runs`
-- `scrape_failures`
-- `scrape_product_receipts`
-- `scrape_fetch_attempts`
-- Tesco egress health/cooldown state
-- secured `/api/admin/scrape-health`
-
-Ops view should expose at minimum:
-
-- latest successful run per store
-- coverage/failure rate
-- stale-price counts
-- transport block classifications
-- queue backlog / delivery state where available
-- cron health
-- recent runtime errors
+- `/browse/null` appeared in production traffic and should continue to be traced.
+- Unsupported claims `2,400+ families signed up` and `Save €20+ a week` were removed on the branch.
+- Stale Lidl five-store claims were removed on the branch.
+- Sitemap `DATA_FRESHNESS` is hard-coded and should ultimately reflect verified data freshness rather than a static date.
 
 ## Launch-blocker classification
 
 ### Blockers before production-readiness sign-off
 
-1. Make repository private / complete secret-history review.
-2. Resolve unsafe Supabase public-table access and verify the RLS migration in Preview before production application.
+1. Make repository private and complete secret-history review.
+2. Resolve unsafe Supabase public-table access and verify the RLS migration before production application.
 3. Resolve planner provider availability or implement a tested graceful fallback.
-4. Complete Preview application smoke testing.
+4. Complete application smoke testing against the current Preview.
 5. Reconcile production migration history with repository migrations.
-6. Remove unsupported public trust/traction claims.
+6. Confirm historical Tesco contamination cannot enter live comparisons after the new pipeline/view changes.
+7. Add platform-level controls for public email/event abuse surfaces.
 
 ### Blockers before replacing EC2 scraping
 
 1. Prove SuperValu, Dunnes and Aldi replacement runs with parity/observability.
 2. Prove one Tesco canary from an accepted egress architecture.
 3. Wire Tesco egress claiming + block quarantine into the queue consumer.
-4. Observe at least one full scheduled cycle alongside EC2 and compare results.
-5. Obtain explicit approval before disabling EC2.
+4. Establish a reviewed cleanup/quarantine plan for contaminated Tesco mappings; do not delete historical data prematurely.
+5. Observe at least one full scheduled cycle alongside EC2 and compare results.
+6. Obtain explicit approval before disabling EC2.
 
 ## Staged deployment path
 
 ### Stage A
 
 - clean working branch
-- CI green
+- CI green on the same Node runtime as Vercel
 - Preview green
 - migrations reconciled
 - application smoke test
@@ -215,6 +315,7 @@ Ops view should expose at minimum:
 - one-product Tesco canary succeeds
 - other scraper jobs verified
 - ops visibility verified
+- contaminated Tesco mappings cannot leak into current recommendations
 
 ### Stage C
 
