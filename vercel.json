@@ -1,6 +1,9 @@
 {
   "regions": ["dub1"],
   "functions": {
+    "src/app/api/workers/aldi-london-canary/route.ts": {
+      "regions": ["lhr1"]
+    },
     "src/app/api/queues/tesco-scrape-batch/route.ts": {
       "maxDuration": 300,
       "experimentalTriggers": [
