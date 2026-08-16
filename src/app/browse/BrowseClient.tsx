@@ -115,7 +115,7 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
             <span className="text-xl flex-shrink-0">🔒</span>
             <div className="flex-1 min-w-0">
               <span className="text-sm font-semibold text-[#2F2F2E]">Prices hidden · </span>
-              <span className="text-sm text-[#5c5b5b]">Sign in free to see live prices from all 5 stores</span>
+              <span className="text-sm text-[#5c5b5b]">Sign in free to see live prices from Tesco, Dunnes, SuperValu and Aldi</span>
             </div>
             <Link href="/list/request" className="flex-shrink-0 text-sm font-semibold text-[#006A35] hover:underline whitespace-nowrap">
               Unlock →
@@ -190,7 +190,7 @@ export function BrowseClient({ products, categoryConfig }: { products: BrowsePro
           <div className="max-w-md mx-auto text-center">
             <div className="text-3xl mb-3">🔓</div>
             <h2 className="text-xl font-bold text-[#2F2F2E] mb-2">Unlock live prices</h2>
-            <p className="text-[#5c5b5b] text-sm mb-5">Free to sign up — see prices from Tesco, Dunnes, SuperValu, Lidl and Aldi and compare your basket.</p>
+            <p className="text-[#5c5b5b] text-sm mb-5">Free to sign up — see prices from Tesco, Dunnes, SuperValu and Aldi and compare your basket.</p>
             <Link href="/list/request"
               className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-semibold transition-all text-[#004a23]"
               style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
