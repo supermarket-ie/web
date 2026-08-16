@@ -1,0 +1,51 @@
+name: Store transport matrix
+
+on:
+  push:
+    branches: [scrape-observability]
+    paths:
+      - '.github/workflows/store-transport-matrix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: ${{ matrix.store }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [dunnes, supervalu, aldi]
+    steps:
+      - name: Wait for Preview and probe retailer
+        shell: bash
+        env:
+          STORE: ${{ matrix.store }}
+        run: |
+          set -euo pipefail
+          base='https://web-git-scrape-observability-supermarket-ie.vercel.app'
+          body=''
+          status='000'
+          for attempt in $(seq 1 30); do
+            status=$(curl -sS -o /tmp/probe.json -w '%{http_code}' "$base/api/workers/store-direct-canary?store=$STORE" || true)
+            if [ "$status" = '200' ]; then
+              break
+            fi
+            echo "Preview not ready for $STORE (HTTP $status), attempt $attempt/30"
+            sleep 10
+          done
+          test "$status" = '200'
+          body=$(cat /tmp/probe.json)
+          retailer_status=$(echo "$body" | jq -r '.http_status // 0')
+          test "$retailer_status" = '200'
+          if [ "$STORE" = 'dunnes' ]; then
+            test "$(echo "$body" | jq '.candidates | length')" -ge 1
+          elif [ "$STORE" = 'supervalu' ]; then
+            test -n "$(echo "$body" | jq -r '.title // empty')"
+            test "$(echo "$body" | jq -r '.price // 0')" != '0'
+          else
+            test "$(echo "$body" | jq -r '.category_contains_target // false')" = 'true'
+          fi
