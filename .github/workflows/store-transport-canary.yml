@@ -5,6 +5,7 @@ on:
     branches: [scrape-observability]
     paths:
       - '.github/workflows/store-transport-canary.yml'
+      - 'src/app/api/workers/store-direct-canary/route.ts'
   workflow_dispatch:
 
 permissions:
@@ -57,8 +58,8 @@ jobs:
             else
               title=$(echo "$body" | jq -r '.title // empty')
               price=$(echo "$body" | jq -r '.price // empty')
-              if [ -z "$title" ] || [ -z "$price" ]; then
-                echo "$store page did not yield both title and price"
+              if [ -z "$title" ] || [ -z "$price" ] || [ "$price" = "0" ]; then
+                echo "$store page did not yield both title and positive price"
                 failed=1
               fi
             fi
