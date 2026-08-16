@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 
 const ALLOWED = new Set(['dunnes', 'supervalu', 'aldi']);
+const ALDI_DAIRY_CATEGORY = 'https://www.aldi.ie/products/chilled-food/dairy/k/1588161416978076002';
 
 function text(value: string) {
   return value.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
@@ -43,6 +44,20 @@ function parseHtml(html: string) {
       json_ld_blocks: Array.from(html.matchAll(/<script[^>]*type=["']application\/ld\+json["']/gi)).length,
     },
   };
+}
+
+async function fetchHtml(url: string) {
+  const response = await fetch(url, {
+    cache: 'no-store',
+    redirect: 'follow',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-IE,en;q=0.9',
+    },
+  });
+  const html = await response.text();
+  return { response, html };
 }
 
 async function probeDunnes(queryName: string) {
@@ -107,17 +122,28 @@ export async function GET(request: Request) {
     return Response.json({ ...common, ...(await probeDunnes(data.store_product_name || product.canonical_name)) });
   }
 
+  if (store === 'aldi') {
+    const productProbe = data.store_url ? await fetchHtml(data.store_url) : null;
+    const categoryProbe = await fetchHtml(ALDI_DAIRY_CATEGORY);
+    const categoryContainsTarget = /CLONBAWN[\s\S]{0,200}Irish Double Cream/i.test(categoryProbe.html)
+      || /Irish Double Cream/i.test(categoryProbe.html);
+    return Response.json({
+      ...common,
+      http_status: categoryProbe.response.status,
+      final_url: categoryProbe.response.url,
+      bytes: categoryProbe.html.length,
+      title: parseHtml(categoryProbe.html).title,
+      price: parseHtml(categoryProbe.html).price,
+      category_contains_target: categoryContainsTarget,
+      category_euro_prices: parseHtml(categoryProbe.html).diagnostics.euro_prices,
+      product_page_status: productProbe?.response.status ?? null,
+      product_page_title: productProbe ? parseHtml(productProbe.html).title : null,
+      body_preview: categoryProbe.html.slice(0, 160),
+    });
+  }
+
   if (!data.store_url) return Response.json({ ...common, error: 'Missing product URL' }, { status: 422 });
-  const response = await fetch(data.store_url, {
-    cache: 'no-store',
-    redirect: 'follow',
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-IE,en;q=0.9',
-    },
-  });
-  const html = await response.text();
+  const { response, html } = await fetchHtml(data.store_url);
   return Response.json({
     ...common,
     http_status: response.status,
