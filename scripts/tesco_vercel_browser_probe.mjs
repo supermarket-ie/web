@@ -1,4 +1,5 @@
-import { chromium } from 'playwright';
+import { chromium as playwrightChromium } from 'playwright-core';
+import serverlessChromium from '@sparticuz/chromium';
 
 if (process.env.VERCEL_ENV !== 'preview') {
   console.log('[tesco-browser-probe] skipped: not preview');
@@ -9,9 +10,11 @@ const target = 'https://www.tesco.ie/groceries/en-IE/search?query=Butter%20Unsal
 let browser;
 
 try {
-  browser = await chromium.launch({
+  serverlessChromium.setGraphicsMode = false;
+  browser = await playwrightChromium.launch({
+    args: serverlessChromium.args,
+    executablePath: await serverlessChromium.executablePath(),
     headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
 
   const context = await browser.newContext({
