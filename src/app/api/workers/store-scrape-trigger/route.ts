@@ -1,7 +1,8 @@
 import { send } from '@vercel/queue';
-import { createDunnesScrapeRun, selectDunnesProducts, type DunnesBatchMessage } from '@/lib/dunnes-queue-worker';
-import { createSupervaluScrapeRun, selectSupervaluProducts, type SupervaluBatchMessage } from '@/lib/supervalu-direct-worker';
-import { createAldiScrapeRun, selectAldiProducts, type AldiBatchMessage } from '@/lib/aldi-direct-worker';
+import { createDunnesScrapeRun, type DunnesBatchMessage, type DunnesQueueProduct } from '@/lib/dunnes-queue-worker';
+import { createSupervaluScrapeRun, type SupervaluBatchMessage, type SupervaluQueueProduct } from '@/lib/supervalu-direct-worker';
+import { createAldiScrapeRun, type AldiBatchMessage, type AldiQueueProduct } from '@/lib/aldi-direct-worker';
+import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import { supabaseAdmin } from '@/lib/supabase';
 
 const SUPPORTED = ['dunnes', 'supervalu', 'aldi'] as const;
@@ -28,7 +29,7 @@ function parseStores(raw: string | null): Store[] {
 function parseLimit(raw: string | null) {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return 25;
-  return Math.min(Math.floor(parsed), 1000);
+  return Math.min(Math.floor(parsed), 2500);
 }
 
 async function markPublishFailure(runUuid: string, store: Store, queued: number, target: number, error: unknown) {
@@ -41,16 +42,25 @@ async function markPublishFailure(runUuid: string, store: Store, queued: number,
 }
 
 async function queueDunnes(limit: number) {
-  const products = await selectDunnesProducts(limit);
+  const rows = await selectStoreProductsForRefresh('dunnes', limit);
+  const products: DunnesQueueProduct[] = rows.map((row) => ({
+    storeProductId: row.store_product_id,
+    canonicalName: row.canonical_name,
+    storeProductName: row.store_product_name,
+    storeUrl: row.store_url,
+    storeSku: row.store_sku,
+    previousPrice: row.previous_price,
+  }));
   if (!products.length) return { store: 'dunnes' as const, status: 'no_products', queued: 0 };
   const runId = `vercel_dunnes_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
   const runUuid = await createDunnesScrapeRun(runId, products.length);
   const batchSize = 5;
+  const totalBatches = Math.ceil(products.length / batchSize);
   let queued = 0;
   try {
-    for (let index = 0; index < Math.ceil(products.length / batchSize); index += 1) {
+    for (let index = 0; index < totalBatches; index += 1) {
       const message: DunnesBatchMessage = {
-        runUuid, runId, batchIndex: index, totalBatches: Math.ceil(products.length / batchSize),
+        runUuid, runId, batchIndex: index, totalBatches,
         products: products.slice(index * batchSize, (index + 1) * batchSize),
       };
       await send('dunnes-scrape-batches', message, {
@@ -66,16 +76,27 @@ async function queueDunnes(limit: number) {
 }
 
 async function queueSupervalu(limit: number) {
-  const products = await selectSupervaluProducts(limit);
+  const rows = await selectStoreProductsForRefresh('supervalu', limit, { productUrlOnly: true });
+  const products: SupervaluQueueProduct[] = rows
+    .filter((row) => Boolean(row.store_url))
+    .map((row) => ({
+      storeProductId: row.store_product_id,
+      canonicalName: row.canonical_name,
+      storeProductName: row.store_product_name,
+      storeUrl: row.store_url as string,
+      storeSku: row.store_sku,
+      previousPrice: row.previous_price,
+    }));
   if (!products.length) return { store: 'supervalu' as const, status: 'no_products', queued: 0 };
   const runId = `vercel_supervalu_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
   const runUuid = await createSupervaluScrapeRun(runId, products.length);
   const batchSize = 3;
+  const totalBatches = Math.ceil(products.length / batchSize);
   let queued = 0;
   try {
-    for (let index = 0; index < Math.ceil(products.length / batchSize); index += 1) {
+    for (let index = 0; index < totalBatches; index += 1) {
       const message: SupervaluBatchMessage = {
-        runUuid, runId, batchIndex: index, totalBatches: Math.ceil(products.length / batchSize),
+        runUuid, runId, batchIndex: index, totalBatches,
         products: products.slice(index * batchSize, (index + 1) * batchSize),
       };
       await send('supervalu-scrape-batches', message, {
@@ -91,16 +112,27 @@ async function queueSupervalu(limit: number) {
 }
 
 async function queueAldi(limit: number) {
-  const products = await selectAldiProducts(limit);
+  const rows = await selectStoreProductsForRefresh('aldi', limit, { productUrlOnly: true });
+  const products: AldiQueueProduct[] = rows
+    .filter((row) => Boolean(row.store_url))
+    .map((row) => ({
+      storeProductId: row.store_product_id,
+      canonicalName: row.canonical_name,
+      storeProductName: row.store_product_name,
+      storeUrl: row.store_url as string,
+      storeSku: row.store_sku,
+      previousPrice: row.previous_price,
+    }));
   if (!products.length) return { store: 'aldi' as const, status: 'no_products', queued: 0 };
   const runId = `vercel_aldi_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
   const runUuid = await createAldiScrapeRun(runId, products.length);
   const batchSize = 3;
+  const totalBatches = Math.ceil(products.length / batchSize);
   let queued = 0;
   try {
-    for (let index = 0; index < Math.ceil(products.length / batchSize); index += 1) {
+    for (let index = 0; index < totalBatches; index += 1) {
       const message: AldiBatchMessage = {
-        runUuid, runId, batchIndex: index, totalBatches: Math.ceil(products.length / batchSize),
+        runUuid, runId, batchIndex: index, totalBatches,
         products: products.slice(index * batchSize, (index + 1) * batchSize),
       };
       await send('aldi-scrape-batches', message, {
