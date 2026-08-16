@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/tesco_vercel_browser_probe.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
