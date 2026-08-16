@@ -1,4 +1,5 @@
 {
+  "regions": ["dub1"],
   "functions": {
     "src/app/api/queues/tesco-scrape-batch/route.ts": {
       "maxDuration": 300,
