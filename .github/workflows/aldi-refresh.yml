@@ -1,0 +1,51 @@
+name: Aldi refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      category:
+        description: Optional canonical category filter (for example Dairy)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aldi-production-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: production
+    env:
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SCRAPE_RUN_ID: gha_aldi_${{ github.run_id }}_${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate required secret
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo 'SUPABASE_SERVICE_ROLE_KEY is not configured for the production GitHub environment.'
+            exit 1
+          fi
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Refresh Aldi prices
+        shell: bash
+        env:
+          CATEGORY: ${{ inputs.category }}
+        run: |
+          if [ -n "${CATEGORY:-}" ]; then
+            node scripts/aldi_scraper.js --refresh --category "$CATEGORY"
+          else
+            node scripts/aldi_scraper.js --refresh
+          fi
