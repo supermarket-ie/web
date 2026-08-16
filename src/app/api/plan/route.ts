@@ -5,6 +5,8 @@ import { getSubscriberId } from '@/lib/auth';
 
 export const maxDuration = 60;
 
+const PLANNER_TIMEOUT_MS = 55_000;
+
 // A list was generated when the agent successfully called save_list or
 // update_list — detected from the tool parts of the response, not by
 // matching markdown phrasing. Returns the saved list_id, or null.
@@ -117,6 +119,7 @@ export async function POST(req: Request) {
     return createAgentUIStreamResponse({
       agent,
       uiMessages: allMessages,
+      timeout: { totalMs: PLANNER_TIMEOUT_MS },
       onFinish: async ({ responseMessage }) => {
         try {
           const assistantText = extractText(responseMessage.parts);
@@ -252,6 +255,7 @@ export async function POST(req: Request) {
   return createAgentUIStreamResponse({
     agent,
     uiMessages,
+    timeout: { totalMs: PLANNER_TIMEOUT_MS },
     onFinish: async ({ responseMessage }) => {
       // Update household memory when a grocery list is generated
       if (subscriberId && intakeMode) {
