@@ -1,9 +1,6 @@
 {
   "regions": ["dub1"],
   "functions": {
-    "src/app/api/workers/aldi-london-canary/route.ts": {
-      "regions": ["lhr1"]
-    },
     "src/app/api/queues/tesco-scrape-batch/route.ts": {
       "maxDuration": 300,
       "experimentalTriggers": [
@@ -32,17 +29,6 @@
         {
           "type": "queue/v2beta",
           "topic": "supervalu-scrape-batches",
-          "retryAfterSeconds": 15,
-          "initialDelaySeconds": 0
-        }
-      ]
-    },
-    "src/app/api/queues/aldi-scrape-batch/route.ts": {
-      "maxDuration": 300,
-      "experimentalTriggers": [
-        {
-          "type": "queue/v2beta",
-          "topic": "aldi-scrape-batches",
           "retryAfterSeconds": 15,
           "initialDelaySeconds": 0
         }
