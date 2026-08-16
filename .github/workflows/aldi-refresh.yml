@@ -3,8 +3,14 @@ name: Aldi refresh
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Smoke runs 10 exact-name products; full runs the existing catalogue refresh
+        required: true
+        default: smoke
+        type: choice
+        options: [smoke, full]
       category:
-        description: Optional canonical category filter (for example Dairy)
+        description: Optional canonical category filter for full mode (for example Dairy)
         required: false
         type: string
 
@@ -22,7 +28,7 @@ jobs:
     environment: production
     env:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      SCRAPE_RUN_ID: gha_aldi_${{ github.run_id }}_${{ github.run_attempt }}
+      SCRAPE_RUN_ID: gha_aldi_${{ inputs.mode }}_${{ github.run_id }}_${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -39,7 +45,13 @@ jobs:
       - run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Refresh Aldi prices
+      - name: Smoke test 10 exact-name Aldi products
+        if: inputs.mode == 'smoke'
+        env:
+          ALDI_SMOKE_LIMIT: '10'
+        run: node scripts/aldi_smoke_refresh.js
+      - name: Full Aldi refresh
+        if: inputs.mode == 'full'
         shell: bash
         env:
           CATEGORY: ${{ inputs.category }}
