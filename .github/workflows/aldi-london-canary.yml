@@ -1,0 +1,36 @@
+name: Aldi London canary
+
+on:
+  push:
+    branches: [scrape-observability]
+    paths:
+      - '.github/workflows/aldi-london-canary.yml'
+      - 'src/app/api/workers/aldi-london-canary/route.ts'
+      - 'vercel.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for Preview and probe London Aldi route
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://web-git-scrape-observability-supermarket-ie.vercel.app/api/workers/aldi-london-canary'
+          for attempt in $(seq 1 30); do
+            status=$(curl -sS -o /tmp/aldi.json -w '%{http_code}' "$url" || true)
+            if [ "$status" = "200" ] && [ "$(jq -r '.region // empty' /tmp/aldi.json 2>/dev/null)" = "lhr1" ]; then
+              break
+            fi
+            echo "London canary not ready (HTTP $status), attempt $attempt/30"
+            sleep 10
+          done
+          cat /tmp/aldi.json | jq .
+          test "$(jq -r '.region' /tmp/aldi.json)" = 'lhr1'
+          test "$(jq -r '.http_status' /tmp/aldi.json)" = '200'
+          test "$(jq -r '.category_contains_target' /tmp/aldi.json)" = 'true'
