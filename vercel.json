@@ -10,6 +10,17 @@
           "initialDelaySeconds": 0
         }
       ]
+    },
+    "src/app/api/queues/dunnes-scrape-batch/route.ts": {
+      "maxDuration": 300,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "dunnes-scrape-batches",
+          "retryAfterSeconds": 15,
+          "initialDelaySeconds": 0
+        }
+      ]
     }
   },
   "crons": [
