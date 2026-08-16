@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "if [ \"$VERCEL_ENV\" = \"preview\" ]; then npm install --no-save --no-package-lock @sparticuz/chromium playwright-core@1.58.2 && node scripts/tesco_vercel_browser_probe.mjs; else echo '[tesco-browser-probe] skipped: not preview'; fi",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
