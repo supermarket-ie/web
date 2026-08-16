@@ -1,0 +1,34 @@
+name: Aldi Sandbox canary
+
+on:
+  push:
+    branches: [scrape-observability]
+    paths:
+      - '.github/workflows/aldi-sandbox-canary.yml'
+      - 'src/app/api/workers/aldi-sandbox-canary/route.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for Preview and invoke Sandbox canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://web-git-scrape-observability-supermarket-ie.vercel.app/api/workers/aldi-sandbox-canary'
+          for attempt in $(seq 1 40); do
+            status=$(curl -sS -o /tmp/aldi-sandbox.json -w '%{http_code}' "$url" || true)
+            if [ "$status" = "200" ] && jq -e '.sandbox_region != null' /tmp/aldi-sandbox.json >/dev/null 2>&1; then
+              break
+            fi
+            echo "Sandbox canary not ready (HTTP $status), attempt $attempt/40"
+            sleep 10
+          done
+          cat /tmp/aldi-sandbox.json | jq .
+          test "$(jq -r '.http_status // 0' /tmp/aldi-sandbox.json)" = '200'
+          test "$(jq -r '.category_contains_target // false' /tmp/aldi-sandbox.json)" = 'true'
