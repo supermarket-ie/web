@@ -7,51 +7,48 @@ import {
 
 export const faqs = [
   {
-    question: 'What exactly is a "grocery agent"?',
+    question: 'What exactly is a supermarket agent?',
     answer:
-      "It's an AI that works specifically for your household. Unlike a price comparison website where you search for individual products, your agent knows what you buy, remembers your preferences, and proactively builds your weekly shop. Think of it like a personal shopper who has memorised your entire household's needs.",
+      "It's an AI that works specifically for your household. It learns what you eat, use and regularly need, then helps plan and build your complete supermarket shop. Think of it as a personal shopper that remembers your household.",
+  },
+  {
+    question: 'Does it cover household items as well as food?',
+    answer:
+      'Yes. The aim is to handle the full supermarket shop: food and drink, cleaning and laundry, toiletries, baby products, pet supplies and other everyday household essentials.',
   },
   {
     question: 'Is it really free?',
     answer:
-      "Yes, completely free. Your agent has full access to pricing across Tesco, Dunnes, SuperValu, and Aldi. We're building the future of grocery shopping in Ireland and want as many households as possible using it.",
-  },
-  {
-    question: 'How much can my agent actually save me?',
-    answer:
-      "Most households save €80–100 per month. Your agent doesn't just find the cheapest item — it optimises your entire basket, splitting across stores when it makes sense and factoring in this week's deals on things you actually buy.",
+      "Yes, completely free. We're building Ireland's definitive supermarket agent and want as many households as possible to help shape it.",
   },
   {
     question: 'How does it learn about my household?',
     answer:
-      "Just chat with it. Tell it about your family, what you like to eat, your budget, any dietary needs. It remembers everything. The more you use it, the less you need to explain — it starts anticipating what you need.",
+      "Just chat with it. Tell it about your family, favourite meals, budget, dietary needs and the products you regularly use. The more you use it, the less you need to explain.",
   },
   {
-    question: 'Which supermarkets does it cover?',
+    question: 'Which supermarkets does it understand?',
     answer:
-      "Your agent tracks real-time prices from Tesco Ireland, Dunnes Stores, SuperValu, and Aldi — covering over 1,700 products. It knows what's on promotion, what's gone up, and what's cheapest where.",
+      'Your agent currently works with product and pricing information from Tesco Ireland, Dunnes Stores, SuperValu and Aldi. That coverage helps it make better choices while assembling your shop.',
   },
   {
-    question: 'How fresh are the prices?',
+    question: 'How fresh is the product information?',
     answer:
-      "Prices are updated multiple times per week. Your agent always works with current shelf prices and live promotions — not stale data from last month.",
+      'Product and price information is refreshed multiple times per week, so the agent can work from current availability and promotions rather than a static catalogue.',
   },
   {
-    question: 'Can I just ask it random questions about prices?',
+    question: 'Can I ask it individual product questions?',
     answer:
-      'Absolutely. "What\'s the cheapest butter right now?" "Is Tesco or Dunnes better for dairy?" "What\'s on offer this week?" Your agent can answer anything about Irish grocery prices instantly.',
+      'Absolutely. You can ask about anything from dinner ingredients to detergent, toiletries or pet food. Product and price questions are capabilities of the agent—not the limit of what it does.',
   },
 ];
 
 export function FAQSection() {
   return (
-    <section className="py-20 px-6" style={{ background: 'var(--surface)' }}>
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-12">
-          <span
-            className="type-label inline-flex items-center px-3 py-1.5 rounded-full mb-4"
-            style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
-          >
+    <section className="px-6 py-20" style={{ background: 'var(--surface)' }}>
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-12 text-center">
+          <span className="type-label mb-4 inline-flex rounded-full bg-surface-container px-3 py-1.5 text-on-surface">
             FAQ
           </span>
           <h2 className="type-headline text-on-background">Questions about your agent</h2>
@@ -60,12 +57,12 @@ export function FAQSection() {
         <Accordion className="w-full">
           {faqs.map((faq, index) => (
             <AccordionItem
-              key={index}
+              key={faq.question}
               value={`item-${index}`}
               className="border-b"
               style={{ borderColor: 'var(--outline-variant)' }}
             >
-              <AccordionTrigger className="text-left font-semibold text-on-background hover:no-underline py-4">
+              <AccordionTrigger className="py-4 text-left font-semibold text-on-background hover:no-underline">
                 {faq.question}
               </AccordionTrigger>
               <AccordionContent className="text-on-surface">

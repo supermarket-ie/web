@@ -3,7 +3,7 @@ type AgentMarkProps = {
   label?: string;
 };
 
-export function AgentMark({ className = 'size-10', label = 'supermarket.ie grocery agent' }: AgentMarkProps) {
+export function AgentMark({ className = 'size-10', label = 'supermarket.ie supermarket agent' }: AgentMarkProps) {
   return (
     <span className={`inline-flex shrink-0 items-center justify-center ${className}`}>
       <svg
