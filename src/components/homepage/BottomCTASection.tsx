@@ -12,9 +12,9 @@ export function BottomCTASection() {
           }}
         >
           <div className="mb-6">
-            <h2 className="type-headline text-on-background mb-2">Meet your grocery agent</h2>
+            <h2 className="type-headline text-on-background mb-2">Meet your supermarket agent</h2>
             <p className="text-on-surface">
-              Tell it about your household. It&apos;ll handle the rest — this week and every week after.
+              Tell it what your household eats, uses and regularly needs. It&apos;ll handle the complete shop—this week and every week after.
             </p>
           </div>
           <ScrollToTopButton />

@@ -35,7 +35,7 @@ export function HowItWorksSection() {
               Learns your household
             </h3>
             <p className="text-on-surface">
-              Family size, dietary needs, budget, favourite meals, stores you prefer — your agent remembers it all and gets better every week.
+              Family size, dietary needs, favourite meals, cleaning products, toiletries, budget and recurring essentials — your agent remembers it all and gets better every week.
             </p>
           </div>
 
@@ -65,7 +65,7 @@ export function HowItWorksSection() {
                 Works for you 24/7
               </h3>
               <p className="mb-8" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                Your agent isn&apos;t a search engine. It actively monitors prices, spots opportunities, and thinks about your grocery week so you don&apos;t have to.
+                Your agent isn&apos;t a search engine. It actively monitors prices, spots opportunities, and keeps track of your complete supermarket shop so you don&apos;t have to.
               </p>
 
               {/* Agent capabilities */}
@@ -77,10 +77,10 @@ export function HowItWorksSection() {
                   Your agent can
                 </div>
                 {[
-                  { icon: ShoppingCart, text: 'Build your weekly shop from scratch based on meals you want' },
-                  { icon: TrendingDown, text: 'Find the cheapest store split for your exact basket' },
-                  { icon: Bell, text: 'Alert you when items you buy regularly drop in price' },
-                  { icon: MessageSquare, text: 'Answer any question about Irish grocery prices instantly' },
+                  { icon: ShoppingCart, text: 'Plan meals and build your complete weekly shop' },
+                  { icon: TrendingDown, text: 'Remember cleaning, toiletries and recurring essentials' },
+                  { icon: Bell, text: 'Keep the whole shop within your household budget' },
+                  { icon: MessageSquare, text: 'Answer questions about products across Irish supermarkets' },
                 ].map((item) => (
                   <div key={item.text} className="flex items-start gap-3">
                     <div className="size-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }}>
@@ -108,7 +108,7 @@ export function HowItWorksSection() {
               Just talk to it
             </h3>
             <p className="text-on-surface">
-              &ldquo;We&apos;re doing a roast on Sunday and need lunches for the kids.&rdquo; Your agent handles the rest — no forms, no clicking through categories.
+              &ldquo;We need five dinners, school lunches, detergent and toilet roll.&rdquo; Your agent handles the rest — no forms, no clicking through categories.
             </p>
           </div>
         </div>

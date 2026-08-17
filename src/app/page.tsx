@@ -4,6 +4,7 @@ import { PlanPage } from '@/components/PlanPage';
 import {
   HeroSection,
   StoreLogosBar,
+  ProductProofSection,
   HowItWorksSection,
   BenefitsSection,
   TestimonialsSection,
@@ -35,20 +36,17 @@ export const metadata = {
 export default function Home() {
   return (
     <div className="min-h-screen bg-surface noise-bg">
-      {/* Hide marketing instantly (before paint) if session token present — prevents flash */}
       <script dangerouslySetInnerHTML={{ __html: `
         (function(){try{var s=localStorage.getItem('sm_session');if(s&&JSON.parse(s).token){document.documentElement.style.setProperty('--hide-marketing','none');}}catch(e){}})();
       `.trim() }} />
       <CookieBanner />
       <SiteHeader />
-
-      {/* Signed-in: just the planner, no marketing content */}
       <PlanPage />
 
-      {/* Signed-out: full marketing homepage (PlanPage renders null when signed in) */}
       <div id="homepage-marketing" style={{ display: 'var(--hide-marketing, block)' }}>
         <HeroSection />
         <StoreLogosBar />
+        <ProductProofSection />
         <HowItWorksSection />
         <BenefitsSection />
         <TestimonialsSection />

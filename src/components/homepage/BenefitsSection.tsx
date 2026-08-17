@@ -1,112 +1,92 @@
-import { RefreshCw, Euro, Brain, ArrowRight } from 'lucide-react';
+import { ArrowRight, Brain, Check, RefreshCw, ShoppingBasket } from 'lucide-react';
 
 const benefits = [
   {
     icon: Brain,
-    title: 'Remembers everything',
-    desc: "Your preferences, your usual items, your budget — it never forgets and never needs reminding",
+    title: 'Understands your household',
+    desc: 'Food preferences, regular products, budgets and everyday essentials all live in one place.',
   },
   {
     icon: RefreshCw,
-    title: 'Improves every week',
-    desc: "The more you use it, the better it knows what you need. Like a personal shopper who's been with you for years",
+    title: 'Remembers what comes around',
+    desc: 'Milk, lunches, detergent, toothpaste, pet food—your agent learns the rhythm of your home.',
   },
   {
-    icon: Euro,
-    title: '€80–100 saved monthly',
-    desc: "Not from coupons or gimmicks — from genuinely knowing which store has the best price on the things you actually buy",
+    icon: ShoppingBasket,
+    title: 'Handles the whole shop',
+    desc: 'Meals are one part of it. Your complete supermarket shop is assembled and ready to use.',
   },
+];
+
+const categories = [
+  'Food & drink',
+  'Cleaning & laundry',
+  'Toiletries & personal care',
+  'Baby & family',
+  'Pet supplies',
+  'Household essentials',
 ];
 
 export function BenefitsSection() {
   return (
-    <section className="py-20 px-6 noise-bg relative" style={{ background: 'var(--surface-container-low)' }}>
-      <div className="max-w-6xl mx-auto relative z-10">
-        <div className="grid md:grid-cols-2 gap-16 items-center">
-          <div>
-            <span
-              className="type-label inline-flex items-center px-3 py-1.5 rounded-full mb-4"
-              style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
-            >
-              Why an agent, not a website
-            </span>
-            <h2 className="type-headline text-on-background mb-6 text-balance">
-              Websites show you data.
-              <br />
-              Your agent does the work.
-            </h2>
-            <p className="type-body-lg mb-10 text-on-surface">
-              Price comparison sites give you tables. Your grocery agent gives you a ready-to-go
-              weekly shop, built around your family, your meals, and today&apos;s actual prices.
-            </p>
+    <section className="relative bg-surface-low px-6 py-20 noise-bg">
+      <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-16 md:grid-cols-2">
+        <div>
+          <span className="type-label mb-4 inline-flex rounded-full bg-surface-container px-3 py-1.5 text-on-surface">
+            The complete household shop
+          </span>
+          <h2 className="type-headline mb-6 text-balance text-on-background">
+            More than meal planning.
+            <br />
+            More than a shopping list.
+          </h2>
+          <p className="type-body-lg mb-10 text-on-surface">
+            Supermarket.ie is the agent for everything your household gets from the supermarket.
+            Tell it what matters once, then let it handle the recurring work.
+          </p>
 
-            <div className="flex flex-col gap-6">
-              {benefits.map((b) => (
-                <div key={b.title} className="flex gap-4">
-                  <div
-                    className="size-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'var(--surface-container)' }}
-                  >
-                    <b.icon className="size-6" style={{ color: 'var(--primary)' }} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold mb-1 text-on-background">{b.title}</h3>
-                    <p className="text-sm text-on-surface">{b.desc}</p>
-                  </div>
+          <div className="flex flex-col gap-6">
+            {benefits.map((benefit) => (
+              <div key={benefit.title} className="flex gap-4">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-surface-container">
+                  <benefit.icon className="size-6 text-primary" />
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Stats card */}
-          <div
-            className="rounded-2xl p-8 relative overflow-hidden"
-            style={{
-              background: 'linear-gradient(135deg, rgba(14,14,14,0.95), rgba(14,14,14,0.9))',
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-            }}
-          >
-            {/* Glassmorphism shine */}
-            <div
-              className="absolute inset-0 rounded-2xl opacity-20"
-              style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%)',
-              }}
-            />
-
-            <div className="relative z-10">
-              <h3 className="type-title-lg mb-8" style={{ color: 'var(--inverse-on-surface)' }}>
-                The average Irish family spends...
-              </h3>
-              <div className="flex flex-col gap-6">
                 <div>
-                  <div className="price" style={{ fontSize: 'clamp(3rem, 6vw, 4rem)' }}>
-                    €12,000
-                  </div>
-                  <div style={{ color: 'var(--primary-container)' }} className="font-medium mt-1">
-                    per year on groceries
-                  </div>
-                </div>
-                <div className="h-px" style={{ background: 'rgba(249,246,245,0.1)' }} />
-                <div>
-                  <div className="price" style={{ fontSize: 'clamp(3rem, 6vw, 4rem)' }}>
-                    €1,200+
-                  </div>
-                  <div style={{ color: 'var(--tertiary-container)' }} className="font-medium mt-1">
-                    your agent can save you per year
-                  </div>
+                  <h3 className="mb-1 font-bold text-on-background">{benefit.title}</h3>
+                  <p className="text-sm text-on-surface">{benefit.desc}</p>
                 </div>
               </div>
-              <a
-                href="#bottom-cta"
-                className="btn-primary mt-8 w-full px-6 py-4 text-base gap-2 hover:scale-[1.02] active:scale-[0.98] transition-transform"
-              >
-                Meet your agent
-                <ArrowRight className="size-5" />
-              </a>
-            </div>
+            ))}
           </div>
+        </div>
+
+        <div className="relative overflow-hidden rounded-[1.75rem] bg-inverse-surface p-8 text-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
+          <div className="absolute -right-14 -top-14 size-44 rounded-full bg-accent-butter/15 blur-2xl" />
+          <p className="type-label mb-3 text-primary-container">One definitive supermarket</p>
+          <h3 className="mb-7 text-3xl font-extrabold tracking-[-0.035em]">
+            Your whole household,
+            <span className="block text-primary-container">covered.</span>
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {categories.map((category, index) => (
+              <div
+                key={category}
+                className="flex items-center gap-2.5 rounded-xl bg-white/8 px-3 py-3 text-sm font-semibold"
+              >
+                <span
+                  className="flex size-6 shrink-0 items-center justify-center rounded-full text-[#26332a]"
+                  style={{ background: ['#6BFE9C', '#FFD84D', '#FF7A59', '#EADFF2', '#9D2F62', '#00DCFF'][index] }}
+                >
+                  <Check className="size-3.5" strokeWidth={3} />
+                </span>
+                {category}
+              </div>
+            ))}
+          </div>
+          <a href="#bottom-cta" className="btn-primary mt-8 w-full gap-2 px-6 py-4 text-base">
+            Meet your supermarket agent
+            <ArrowRight className="size-5" />
+          </a>
         </div>
       </div>
     </section>
