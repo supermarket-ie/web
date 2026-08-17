@@ -6,25 +6,51 @@ import jwt from 'jsonwebtoken';
 const SECRET = process.env.MAGIC_LINK_SECRET;
 if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
 
+const WINDOW_MS = 15 * 60 * 1000;
+const MAX_REQUESTS = 5;
+const buckets = new Map<string, { count: number; resetAt: number }>();
+
+function clientKey(request: NextRequest) {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? request.headers.get('x-real-ip')
+    ?? 'unknown';
+}
+
+function rateLimited(request: NextRequest) {
+  const now = Date.now();
+  const key = clientKey(request);
+  const bucket = buckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > MAX_REQUESTS;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json();
+    if (rateLimited(request)) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
 
-    if (!email) {
+    const { email } = await request.json();
+    if (typeof email !== 'string' || !email.trim()) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
     const { data: subscriber } = await supabaseAdmin
       .from('subscribers')
       .select('id, email, family_size')
-      .eq('email', email.toLowerCase().trim())
+      .eq('email', normalizedEmail)
       .eq('subscribed', true)
       .single();
 
+    // Deliberately use the same response whether the account exists or not.
+    // This prevents the sign-in endpoint being used to enumerate subscribers.
     if (!subscriber) {
-      // Return a distinct flag so the UI can nudge the user to sign up
-      // (not a full 404 to avoid leaking existence of emails to attackers — the UI handles it gracefully)
-      return NextResponse.json({ success: true, found: false });
+      return NextResponse.json({ success: true });
     }
 
     const token = jwt.sign(
@@ -37,38 +63,24 @@ export async function POST(request: NextRequest) {
       { expiresIn: '7d' }
     );
 
-    const magicLink = `${process.env.NEXT_PUBLIC_SITE_URL}/list?token=${token}`;
+    // The bearer token exists only on the one-time exchange URL. The exchange
+    // validates it, sets an HttpOnly cookie and redirects to a clean /list URL.
+    const magicLink = `${process.env.NEXT_PUBLIC_SITE_URL}/api/session?token=${encodeURIComponent(token)}`;
 
     await resend.emails.send({
       from: 'supermarket.ie <hello@mail.supermarket.ie>',
       to: subscriber.email,
       subject: 'Your shopping list link',
-      text: `Hi,
-
-Here's your link to your supermarket.ie shopping list:
-
-${magicLink}
-
-This link is valid for 7 days. If you didn't request this, you can ignore this email.
-
-— supermarket.ie
-Unsubscribe: ${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe`,
+      text: `Hi,\n\nHere's your link to your supermarket.ie shopping list:\n\n${magicLink}\n\nThis link is valid for 7 days. If you didn't request this, you can ignore this email.\n\n— supermarket.ie\nUnsubscribe: ${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe`,
       html: `
         <html>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.6; color: #1A1A1A; max-width: 520px; margin: 0 auto; padding: 32px 20px;">
           <p style="margin: 0 0 24px;"><strong>supermarket.ie</strong></p>
-
           <p style="margin: 0 0 16px;">Here&rsquo;s your link to your shopping list:</p>
-
-          <p style="margin: 0 0 24px;">
-            <a href="${magicLink}" style="color: #006A35; font-weight: 600;">${magicLink}</a>
-          </p>
-
+          <p style="margin: 0 0 24px;"><a href="${magicLink}" style="color: #006A35; font-weight: 600;">Open my shopping list &rarr;</a></p>
           <p style="margin: 0 0 32px; color: #555; font-size: 14px;">Valid for 7 days. If you didn&rsquo;t request this, you can ignore this email.</p>
-
           <p style="font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 16px; margin: 0;">
-            supermarket.ie &middot;
-            <a href="${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe" style="color: #999;">Unsubscribe</a>
+            supermarket.ie &middot; <a href="${process.env.NEXT_PUBLIC_SITE_URL}/unsubscribe" style="color: #999;">Unsubscribe</a>
           </p>
         </body>
         </html>
