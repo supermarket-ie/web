@@ -9,10 +9,10 @@ import {
 } from 'lucide-react';
 
 const products = [
-  { name: 'Chicken fillets', detail: 'Irish · 1kg', price: '€9.49', store: 'Dunnes', colour: '#7B0017', icon: '🍗' },
-  { name: 'Penne pasta', detail: '500g', price: '€0.99', store: 'Aldi', colour: '#00616A', icon: '🍝' },
-  { name: 'Irish milk', detail: '2 litre', price: '€2.35', store: 'Tesco', colour: '#003A8C', icon: '🥛' },
-  { name: 'Mixed peppers', detail: '3 pack', price: '€1.79', store: 'Aldi', colour: '#00616A', icon: '🫑' },
+  { name: 'Chicken fillets', detail: 'Irish · 1kg', price: '€9.49', store: 'Dunnes', colour: '#7B0017', position: '0% 0%', tone: '#f7dfdf' },
+  { name: 'Penne pasta', detail: '500g', price: '€0.99', store: 'Aldi', colour: '#00616A', position: '100% 0%', tone: '#fff0b8' },
+  { name: 'Irish milk', detail: '2 litre', price: '€2.35', store: 'Tesco', colour: '#003A8C', position: '0% 100%', tone: '#e8e3f2' },
+  { name: 'Mixed peppers', detail: '3 pack', price: '€1.79', store: 'Aldi', colour: '#00616A', position: '100% 100%', tone: '#fee0c8' },
 ];
 
 export function ProductProofSection() {
@@ -38,7 +38,13 @@ export function ProductProofSection() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="overflow-hidden rounded-[1.75rem] bg-[#f8f6f1] text-on-background shadow-2xl">
+          <div
+            className="receipt-card overflow-hidden rounded-[1.75rem] bg-[#fffaf0] text-on-background shadow-2xl"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(0deg, transparent 0, transparent 31px, rgba(70,60,45,0.025) 32px)',
+            }}
+          >
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/5 px-6 py-5 md:px-8">
               <div>
                 <div className="mb-1 flex items-center gap-2 text-sm font-bold">
@@ -47,7 +53,7 @@ export function ProductProofSection() {
                 </div>
                 <p className="text-xs text-on-surface">Family of 4 · 5 dinners · Lunches · €110 budget</p>
               </div>
-              <span className="rounded-full bg-primary-container px-3 py-1.5 text-xs font-extrabold text-on-primary-container">
+              <span className="savings-pop rounded-full bg-primary-container px-3 py-1.5 text-xs font-extrabold text-on-primary-container">
                 €12.34 saved
               </span>
             </div>
@@ -55,9 +61,16 @@ export function ProductProofSection() {
             <div className="grid gap-3 p-4 sm:grid-cols-2 md:p-6">
               {products.map((product) => (
                 <div key={product.name} className="flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-surface-low text-2xl" aria-hidden="true">
-                    {product.icon}
-                  </span>
+                  <span
+                    className="ingredient-sprite block h-10 w-[60px] shrink-0 rounded-xl"
+                    style={{
+                      backgroundColor: product.tone,
+                      backgroundImage: "url('/images/ingredients/weekly-shop-sprite.webp')",
+                      backgroundPosition: product.position,
+                    }}
+                    role="img"
+                    aria-label={product.name}
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold">{product.name}</p>
                     <p className="text-xs text-on-surface">{product.detail}</p>
@@ -72,7 +85,7 @@ export function ProductProofSection() {
               ))}
             </div>
 
-            <div className="grid border-t border-black/5 sm:grid-cols-3">
+            <div className="grid border-t border-dashed border-black/10 font-mono sm:grid-cols-3">
               {[
                 ['34', 'items'],
                 ['€106.42', 'recommended total'],
