@@ -62,7 +62,7 @@ export function ProductProofSection() {
               {products.map((product) => (
                 <div key={product.name} className="flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
                   <span
-                    className="ingredient-sprite block h-10 w-[60px] shrink-0 rounded-xl"
+                    className="ingredient-sprite block h-10 w-[60px] shrink-0 rounded-xl transition-transform duration-300 hover:scale-[1.03]"
                     style={{
                       backgroundColor: product.tone,
                       backgroundImage: "url('/images/ingredients/weekly-shop-sprite.webp')",
