@@ -1,5 +1,6 @@
 export { HeroSection } from './HeroSection';
 export { StoreLogosBar } from './StoreLogosBar';
+export { ProductProofSection } from './ProductProofSection';
 export { HowItWorksSection } from './HowItWorksSection';
 export { BenefitsSection } from './BenefitsSection';
 export { TestimonialsSection } from './TestimonialsSection';
