@@ -1,20 +1,12 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
 
-export async function POST(req: Request) {
-  try {
-    const { event, properties } = await req.json();
-    if (!event) return NextResponse.json({ ok: false }, { status: 400 });
-
-    await supabaseAdmin.from('events').insert({
-      event,
-      properties: properties ?? {},
-      created_at: new Date().toISOString(),
-    });
-
-    return NextResponse.json({ ok: true });
-  } catch {
-    // Never fail the caller — tracking is best-effort
-    return NextResponse.json({ ok: false });
-  }
+// Legacy tracking endpoint. Production traffic uses /api/events, which has an
+// explicit event allowlist, payload bounds and rate limiting. Keeping this
+// unrestricted service-role write path would create an unnecessary poisoning
+// surface, so fail closed rather than accepting arbitrary legacy events.
+export async function POST() {
+  return NextResponse.json(
+    { ok: false, error: 'Legacy tracking endpoint disabled' },
+    { status: 410 }
+  );
 }

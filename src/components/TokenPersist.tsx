@@ -3,19 +3,18 @@
 import { useEffect } from 'react';
 import { saveSession } from '@/lib/session';
 
-export function TokenPersist({ token, familySize, email }: { token: string; familySize: string; email: string }) {
+const CLIENT_SESSION_TOKEN = '__cookie__';
+
+export function TokenPersist({ token: _token, familySize, email }: { token: string; familySize: string; email: string }) {
   useEffect(() => {
-    // Persist the token to localStorage
     saveSession({
-      token,
+      token: CLIENT_SESSION_TOKEN,
       familySize,
       email,
       expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
     });
-    // Notify AppShell — it may have already mounted and read localStorage
-    // before this component wrote the token. The event lets it re-check.
-    window.dispatchEvent(new CustomEvent('sm:session-ready', { detail: { token } }));
-  }, [token, familySize, email]);
+    window.dispatchEvent(new CustomEvent('sm:session-ready', { detail: { token: CLIENT_SESSION_TOKEN } }));
+  }, [familySize, email]);
 
   return null;
 }

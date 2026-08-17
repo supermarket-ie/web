@@ -6,28 +6,20 @@ const VALID_FAMILY_SIZES = new Set(['1', '2', '3-4', '5+']);
 
 export async function POST(request: NextRequest) {
   try {
-    const { token, familySize, removedItems, addedItems, storeOverrides } = await request.json();
-
-    if (!token) {
-      return NextResponse.json({ error: 'Token required' }, { status: 400 });
-    }
+    const { token: explicitToken, familySize, removedItems, addedItems, storeOverrides } = await request.json();
+    const token = request.cookies.get('sm_session')?.value ??
+      (typeof explicitToken === 'string' && explicitToken !== '__cookie__' ? explicitToken : null);
 
     const payload: SessionPayload | null = verifySessionToken(token);
     if (!payload) {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
     }
 
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-    if (familySize && VALID_FAMILY_SIZES.has(familySize)) {
-      update.family_size = familySize;
-    }
-    if (Array.isArray(removedItems)) {
-      update.removed_items = removedItems;
-    }
-    if (Array.isArray(addedItems)) {
-      update.added_items = addedItems;
-    }
+    if (familySize && VALID_FAMILY_SIZES.has(familySize)) update.family_size = familySize;
+    if (Array.isArray(removedItems)) update.removed_items = removedItems;
+    if (Array.isArray(addedItems)) update.added_items = addedItems;
     if (storeOverrides && typeof storeOverrides === 'object' && !Array.isArray(storeOverrides)) {
       update.store_overrides = storeOverrides;
     }
@@ -39,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Preferences update error:', error.message);
-      return NextResponse.json({ success: true, warning: error.message });
+      return NextResponse.json({ error: 'Failed to update preferences' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });

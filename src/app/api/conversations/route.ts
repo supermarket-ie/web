@@ -1,15 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
 
-// GET /api/conversations?token=xxx — list conversations for subscriber
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+function sessionToken(req: NextRequest, explicit?: string | null) {
+  return req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
+}
 
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+export async function GET(req: NextRequest) {
+  const subscriberId = getSubscriberId(sessionToken(req, req.nextUrl.searchParams.get('token')));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const { data, error } = await supabaseAdmin
     .from('conversations')
@@ -20,7 +19,6 @@ export async function GET(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Return conversations with message_count instead of full messages
   const conversations = (data ?? []).map((c: { id: string; title: string | null; list_id: string | null; created_at: string; updated_at: string | null; messages: unknown }) => ({
     id: c.id,
     title: c.title,
@@ -33,16 +31,13 @@ export async function GET(req: Request) {
   return NextResponse.json({ conversations });
 }
 
-// POST /api/conversations — create a new conversation
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { token, title, profile, messages, list_id } = body;
+  const { token: explicitToken, title, profile, messages, list_id } = body;
 
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = getSubscriberId(sessionToken(req, explicitToken));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  // Cap at 20 conversations per subscriber — delete oldest if over limit
   const { data: existing } = await supabaseAdmin
     .from('conversations')
     .select('id, created_at')

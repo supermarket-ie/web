@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
 
-// GET /api/agents?token=xxx — fetch agent settings + last run info
+function sessionToken(req: NextRequest, explicit?: string | null) {
+  return req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
+}
+
 export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = getSubscriberId(sessionToken(req, req.nextUrl.searchParams.get('token')));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const { data: sub } = await supabaseAdmin
     .from('subscribers')
@@ -42,13 +43,11 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// PATCH /api/agents — update agent toggles
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { token, weeklyDigestEnabled, watchdogEnabled } = body;
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const { token: explicitToken, weeklyDigestEnabled, watchdogEnabled } = body;
+  const subscriberId = getSubscriberId(sessionToken(req, explicitToken));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const update: Record<string, boolean> = {};
   if (typeof weeklyDigestEnabled === 'boolean') update.weekly_digest_enabled = weeklyDigestEnabled;

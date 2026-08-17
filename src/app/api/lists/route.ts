@@ -1,17 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
 
-// GET /api/lists?token=xxx — fetch all saved lists for subscriber
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+function sessionToken(req: NextRequest, explicit?: string | null) {
+  return req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
+}
 
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+export async function GET(req: NextRequest) {
+  const subscriberId = getSubscriberId(sessionToken(req, req.nextUrl.searchParams.get('token')));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  // Deliberately exclude `items` (large JSONB) — dashboard only needs metadata
   const { data, error } = await supabaseAdmin
     .from('saved_lists')
     .select('id, name, meals_prompt, family_size, store_totals, is_default, created_at, generated_at, conversation_id')
@@ -23,24 +21,17 @@ export async function GET(req: Request) {
   return NextResponse.json({ lists: data ?? [] });
 }
 
-// POST /api/lists — save a new list
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { token, name, meals_prompt, family_size, items, store_totals, is_default } = body;
+  const { token: explicitToken, name, meals_prompt, family_size, items, store_totals, is_default } = body;
 
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = getSubscriberId(sessionToken(req, explicitToken));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  // If setting as default, clear existing defaults
   if (is_default) {
-    await supabaseAdmin
-      .from('saved_lists')
-      .update({ is_default: false })
-      .eq('subscriber_id', subscriberId);
+    await supabaseAdmin.from('saved_lists').update({ is_default: false }).eq('subscriber_id', subscriberId);
   }
 
-  // Cap at 10 lists per subscriber — delete oldest if over limit
   const { data: existing } = await supabaseAdmin
     .from('saved_lists')
     .select('id, created_at')
@@ -71,15 +62,12 @@ export async function POST(req: Request) {
   return NextResponse.json({ list: data });
 }
 
-// DELETE /api/lists?id=xxx&token=xxx
-export async function DELETE(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token');
-  const id = searchParams.get('id');
-  if (!token || !id) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
+export async function DELETE(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
 
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = getSubscriberId(sessionToken(req, req.nextUrl.searchParams.get('token')));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const { error } = await supabaseAdmin
     .from('saved_lists')

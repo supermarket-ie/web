@@ -1,22 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { queryPriceChanges, queryUserHistory } from '@/lib/planner-agent';
+import { queryPriceChanges } from '@/lib/planner-agent';
 import { getSubscriberId } from '@/lib/auth';
 
-// Cache TTL: 1 hour (prices update twice a week, no need to recompute per-visit)
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-
+export async function GET(req: NextRequest) {
+  const explicit = req.nextUrl.searchParams.get('token');
+  const token = req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
   const subscriberId = getSubscriberId(token);
-  if (!subscriberId) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-  }
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  // ── 1. Check cache first ─────────────────────────────────────────────────
   const { data: subscriber } = await supabaseAdmin
     .from('subscribers')
     .select('refresh_cache, refresh_cache_at')
@@ -25,15 +19,9 @@ export async function GET(req: Request) {
 
   if (subscriber?.refresh_cache && subscriber?.refresh_cache_at) {
     const age = Date.now() - new Date(subscriber.refresh_cache_at).getTime();
-    if (age < CACHE_TTL_MS) {
-      // Cache hit — return immediately
-      return NextResponse.json(subscriber.refresh_cache);
-    }
+    if (age < CACHE_TTL_MS) return NextResponse.json(subscriber.refresh_cache);
   }
 
-  // ── 2. Cache miss — compute fresh ────────────────────────────────────────
-
-  // Get last saved list
   const { data: lastList } = await supabaseAdmin
     .from('saved_lists')
     .select('id, name, created_at, store_totals')
@@ -43,7 +31,6 @@ export async function GET(req: Request) {
     .single();
 
   if (!lastList) {
-    // No lists yet — cache this too so we skip the query next time
     const empty = { hasRecentList: false };
     await supabaseAdmin
       .from('subscribers')
@@ -54,19 +41,13 @@ export async function GET(req: Request) {
 
   const listAge = Date.now() - new Date(lastList.created_at).getTime();
   const daysSince = Math.floor(listAge / (1000 * 60 * 60 * 24));
-
   const storeTotals = (lastList.store_totals ?? []) as Array<{ store: string; total: number }>;
   const lastTotal = storeTotals.reduce((sum, t) => sum + t.total, 0);
-
-  // Get price changes since last shop
   const priceChanges = await queryPriceChanges(subscriberId);
 
   const cheaper = priceChanges.filter(c => c.direction === 'cheaper');
   const dearer = priceChanges.filter(c => c.direction === 'dearer');
-  const promoSwaps = priceChanges.filter(
-    c => c.direction === 'cheaper' && c.best_store_now !== c.last_store,
-  );
-
+  const promoSwaps = priceChanges.filter(c => c.direction === 'cheaper' && c.best_store_now !== c.last_store);
   const cheaperAmount = cheaper.reduce((sum, c) => sum + Math.abs(c.change), 0);
   const dearerAmount = dearer.reduce((sum, c) => sum + c.change, 0);
   const netChange = cheaperAmount - dearerAmount;
@@ -92,8 +73,6 @@ export async function GET(req: Request) {
     thisWeekTotal: Math.round(thisWeekTotal * 100) / 100,
   };
 
-  // ── 3. Write cache ────────────────────────────────────────────────────────
-  // Fire-and-forget — don't block the response
   supabaseAdmin
     .from('subscribers')
     .update({ refresh_cache: result, refresh_cache_at: new Date().toISOString() })

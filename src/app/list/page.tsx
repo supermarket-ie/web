@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import jwt from 'jsonwebtoken';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
+import { verifySessionToken } from '@/lib/auth';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { TokenPersist } from '@/components/TokenPersist';
@@ -13,14 +15,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const SECRET = process.env.MAGIC_LINK_SECRET;
-if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
-
-interface MagicLinkPayload {
-  email: string;
-  subscriberId: string;
-  familySize: string;
-}
+const CLIENT_SESSION_TOKEN = '__cookie__';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,37 +25,27 @@ interface MagicLinkPayload {
  * Returns the last assistant message that looks like a real grocery list.
  */
 function extractListContent(messages: Array<{ role: string; content: string }>): string | null {
-  // Walk backward to find the last assistant message that contains a real list
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg.role !== 'assistant' || !msg.content || msg.content.length < 100) continue;
 
     const content = msg.content;
-
-    // Skip pure narration messages
     const narrationPatterns = [
       /^(Now let me|Perfect,? I have|Let me (get|check|look|find)|I('ll| will) now|Great,? (let|I)|OK,? (let|I)|Alright,? (let|I))/i,
       /^(I'm going to|I need to|First,? (let|I)|Here's what I'm)/i,
     ];
     const firstLine = content.split('\n')[0].trim();
     if (narrationPatterns.some(p => p.test(firstLine))) {
-      // But if it also has store totals or many list items, keep it
       const hasStoreSection = /🏪|store total/i.test(content);
       const listItemCount = (content.match(/^- /gm) || []).length;
       if (!hasStoreSection && listItemCount < 5) continue;
     }
 
-    // Check if this looks like a grocery list:
-    // Has store totals emoji/section, OR has at least 5 list items
     const hasStoreMarker = /🏪|Store total/i.test(content);
     const listItems = (content.match(/^- /gm) || []).length;
-
-    if (hasStoreMarker || listItems >= 5) {
-      return content;
-    }
+    if (hasStoreMarker || listItems >= 5) return content;
   }
 
-  // Fallback: return the last long assistant message
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'assistant' && messages[i].content?.length > 200) {
       return messages[i].content;
@@ -92,11 +77,11 @@ function ExpiredPage() {
   );
 }
 
-function EmptyListPage({ token }: { token: string }) {
+function EmptyListPage() {
   return (
     <>
       <SiteHeader />
-      <TokenPersist token={token} familySize="2" email="" />
+      <TokenPersist token={CLIENT_SESSION_TOKEN} familySize="2" email="" />
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16" style={{ background: 'var(--surface)' }}>
         <div className="rounded-2xl max-w-md w-full p-8 text-center" style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
           <div className="text-5xl mb-4">🛒</div>
@@ -125,20 +110,23 @@ export default async function ListPage({
 }: {
   searchParams: Promise<{ token?: string; list?: string; intent?: string }>;
 }) {
-  const { token, list: listId, intent } = await searchParams;
+  const { token: queryToken, list: listId, intent } = await searchParams;
 
-  // Auth
-  let payload: MagicLinkPayload | null = null;
-  if (token) {
-    try {
-      payload = jwt.verify(token, SECRET!) as MagicLinkPayload;
-    } catch {
-      // expired or invalid
-    }
+  // Backwards-compatible exchange for existing email/bookmark links. A real
+  // JWT is accepted only long enough to set the HttpOnly session cookie, then
+  // the browser is redirected to a credential-free URL.
+  if (queryToken && queryToken !== CLIENT_SESSION_TOKEN) {
+    const exchange = new URLSearchParams({ token: queryToken });
+    if (listId) exchange.set('list', listId);
+    if (intent) exchange.set('intent', intent);
+    redirect(`/api/session?${exchange.toString()}`);
   }
+
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get('sm_session')?.value ?? '';
+  const payload = verifySessionToken(sessionToken);
   if (!payload) return <ExpiredPage />;
 
-  // Fetch saved lists for this subscriber
   const { data: savedLists } = await supabaseAdmin
     .from('saved_lists')
     .select('id, name, meals_prompt, family_size, store_totals, is_default, created_at, generated_at, items')
@@ -146,17 +134,13 @@ export default async function ListPage({
     .order('created_at', { ascending: false })
     .limit(10);
 
-  // Pick which list to show (specific or most recent)
   const lists = savedLists ?? [];
   const activeList = listId
     ? lists.find(l => l.id === listId) ?? lists[0]
     : lists[0];
 
-  if (!activeList) {
-    return <EmptyListPage token={token!} />;
-  }
+  if (!activeList) return <EmptyListPage />;
 
-  // Get the conversation linked to this list (for fallback content)
   const { data: conversation } = await supabaseAdmin
     .from('conversations')
     .select('id, messages')
@@ -166,7 +150,6 @@ export default async function ListPage({
     .limit(1)
     .single();
 
-  // Extract list content using the narration-stripping helper
   let listContent: string | null = null;
   let conversationId: string | null = null;
 
@@ -176,7 +159,6 @@ export default async function ListPage({
     listContent = extractListContent(messages);
   }
 
-  // Structured items from saved_lists.items
   const structuredItems = (activeList.items && Array.isArray(activeList.items) && activeList.items.length > 0 &&
     typeof activeList.items[0] === 'object' && 'canonical_name' in activeList.items[0])
     ? activeList.items as Array<{ canonical_name: string; store: string; price: number; quantity?: number; category?: string; store_product_name?: string; on_promotion?: boolean }>
@@ -184,7 +166,6 @@ export default async function ListPage({
 
   const storeTotals = (activeList.store_totals ?? []) as Array<{ store: string; total: number; item_count?: number }>;
 
-  // Household memory for intelligence section
   const { data: householdData } = await supabaseAdmin
     .from('households')
     .select('memory')
@@ -195,7 +176,7 @@ export default async function ListPage({
   return (
     <>
       <SiteHeader />
-      <TokenPersist token={token!} familySize={activeList.family_size ?? '2'} email={payload.email} />
+      <TokenPersist token={CLIENT_SESSION_TOKEN} familySize={activeList.family_size ?? '2'} email={payload.email ?? ''} />
       <SavedListView
         listContent={listContent}
         structuredItems={structuredItems}
@@ -203,7 +184,7 @@ export default async function ListPage({
         listName={activeList.name}
         createdAt={activeList.created_at}
         conversationId={conversationId}
-        token={token!}
+        token={CLIENT_SESSION_TOKEN}
         allLists={lists.map(l => ({
           id: l.id,
           name: l.name,

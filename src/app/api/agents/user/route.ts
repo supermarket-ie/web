@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
 
-// GET /api/agents/user?token=xxx — list user's custom agents
 export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  const explicit = req.nextUrl.searchParams.get('token');
+  const token = req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
   const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const { data, error } = await supabaseAdmin
     .from('user_agents')
@@ -16,7 +15,6 @@ export async function GET(req: NextRequest) {
     .order('last_run', { ascending: false });
 
   if (error) {
-    // Table might not exist yet — return empty gracefully
     if (error.code === '42P01' || error.message?.includes('does not exist')) {
       return NextResponse.json({ agents: [] });
     }
