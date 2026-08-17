@@ -1,108 +1,86 @@
-import Link from 'next/link';
 import { HomePlanner } from '@/components/HomePlanner';
 import { PlannerSSRShell } from '@/components/PlannerSSRShell';
 import { HideAfterHydration } from '@/components/HideAfterHydration';
 import { LiveDealChip } from '@/components/LiveDealChip';
-import { Sparkles } from 'lucide-react';
+import { Check, Sparkles } from 'lucide-react';
 import { SessionLink } from './SessionLink';
 
 export function HeroSection() {
   return (
-    <section className="relative px-6 pt-10 pb-20 md:pt-14 md:pb-28 overflow-hidden noise-bg">
-      {/* Gradient mesh background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="gradient-blob"
-          style={{
-            width: '600px',
-            height: '600px',
-            background: 'linear-gradient(135deg, rgba(0,106,53,0.15), rgba(107,254,156,0.1))',
-            top: '-200px',
-            left: '-100px',
-          }}
-        />
-        <div
-          className="gradient-blob"
-          style={{
-            width: '500px',
-            height: '500px',
-            background: 'linear-gradient(135deg, rgba(0,220,255,0.08), rgba(107,254,156,0.05))',
-            top: '50%',
-            right: '-150px',
-          }}
-        />
-        <div className="absolute inset-0 dot-grid opacity-50" />
+    <section className="relative overflow-hidden px-6 pb-20 pt-8 noise-bg md:pb-28 md:pt-12">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="gradient-blob -left-40 -top-52 size-[620px] bg-[radial-gradient(circle,rgba(107,254,156,0.2),transparent_68%)]" />
+        <div className="gradient-blob -right-56 top-40 size-[560px] bg-[radial-gradient(circle,rgba(0,220,255,0.1),transparent_68%)]" />
+        <div className="absolute inset-0 dot-grid opacity-35" />
       </div>
 
-      <div className="max-w-7xl mx-auto relative z-10">
-        <div className="grid gap-12 items-start lg:grid-cols-[1fr_560px] md:grid-cols-1">
-          {/* Left: Copy & Trust Signals */}
-          <div className="lg:pr-8">
+      <div className="relative z-10 mx-auto max-w-7xl">
+        <div className="grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16">
+          <div className="max-w-xl">
             <div className="chip-tertiary mb-6 inline-flex items-center gap-2">
               <Sparkles className="size-3.5" />
-              Your personal AI grocery agent
+              Ireland&apos;s personal grocery agent
             </div>
 
-            <h1 className="type-display text-on-background mb-6 text-balance">
-              An AI agent that{' '}
-              <span
-                style={{
-                  background: 'linear-gradient(135deg, #006A35, #6BFE9C)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                handles your groceries
+            <h1 className="mb-6 text-balance text-[clamp(2.75rem,6vw,5.25rem)] font-extrabold leading-[0.98] tracking-[-0.055em] text-on-background">
+              Your weekly shop,
+              <span className="block bg-gradient-to-r from-[#006A35] to-[#12a85b] bg-clip-text text-transparent">
+                planned and price-checked.
               </span>
             </h1>
 
-            <div className="mb-6">
+            <p className="mb-7 max-w-lg text-lg leading-8 text-on-surface md:text-xl">
+              Tell us about your household. Your agent builds the list, compares Ireland&apos;s
+              major supermarkets and shows you where to save.
+            </p>
+
+            <div className="mb-7">
               <LiveDealChip />
             </div>
 
-            <p className="type-body-lg mb-8 max-w-lg text-on-surface">
-              Tell it about your household once. It learns what you buy, tracks prices across
-              Tesco, Dunnes, SuperValu &amp; Aldi, and builds your perfect weekly shop — every single week.
-            </p>
-
-            <div className="flex flex-col gap-3 mb-10">
+            <div className="mb-8 grid gap-3 sm:grid-cols-2">
               {[
-                'Knows your household, preferences & budget',
-                'Tracks prices across every major Irish supermarket',
-                'Gets smarter the more you use it',
+                'A ready-to-shop weekly list',
+                'Prices compared across 4 stores',
+                'Meals matched to your budget',
+                'Preferences remembered',
               ].map((item) => (
-                <div key={item} className="flex items-center gap-3">
-                  <div
-                    className="size-5 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'var(--primary-container)' }}
-                  >
-                    <Sparkles className="size-3 text-on-primary-container" strokeWidth={3} />
-                  </div>
-                  <span className="font-medium text-sm text-on-background">{item}</span>
+                <div key={item} className="flex items-center gap-2.5 text-sm font-semibold text-on-background">
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-container">
+                    <Check className="size-3 text-on-primary-container" strokeWidth={3} />
+                  </span>
+                  {item}
                 </div>
               ))}
             </div>
 
-            {/* Client island: shows "Open my agent" button only when logged in */}
-            <SessionLink />
+            <div className="flex flex-wrap items-center gap-4">
+              <a href="#grocery-agent" className="btn-primary px-6 py-3.5 text-sm">
+                Build my weekly shop
+              </a>
+              <SessionLink />
+            </div>
+            <p className="mt-4 text-xs font-medium text-on-surface-variant">
+              Free to use · No card needed · Start in 30 seconds
+            </p>
           </div>
 
-          {/* Right: Chat Interface */}
-          <div className="relative">
+          <div id="grocery-agent" className="relative scroll-mt-24">
+            <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-primary-container/25 to-tertiary-container/15 blur-2xl" />
+            <div className="mb-3 flex items-center justify-between px-2 text-xs font-semibold text-on-surface">
+              <span className="inline-flex items-center gap-2">
+                <span className="size-2 rounded-full bg-[#18a558] shadow-[0_0_0_4px_rgba(24,165,88,0.12)]" />
+                Your grocery agent is ready
+              </span>
+              <span>Live Irish prices</span>
+            </div>
             <div
-              className="rounded-2xl overflow-hidden p-4 sm:p-6"
-              style={{
-                background: 'var(--surface-container-lowest)',
-                boxShadow: '0 8px 40px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.03)',
-                minHeight: '500px',
-              }}
+              className="overflow-hidden rounded-[1.5rem] border border-black/[0.04] bg-surface-lowest p-4 shadow-[0_24px_80px_rgba(20,60,38,0.13)] sm:p-6"
+              style={{ minHeight: '500px' }}
             >
-              {/* SSR shell — in server HTML for crawlers, removed after hydration */}
               <HideAfterHydration>
                 <PlannerSSRShell />
               </HideAfterHydration>
-              {/* Client planner — renders its own UI after hydration */}
               <HomePlanner />
             </div>
           </div>
