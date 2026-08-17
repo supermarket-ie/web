@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { verifyVendorToken } from '@/lib/vendor-auth';
 
 function getToken(req: NextRequest) {
-  return req.headers.get('x-vendor-token') ?? new URL(req.url).searchParams.get('token') ?? '';
+  return req.cookies.get('vendor_session')?.value ?? req.headers.get('x-vendor-token') ?? '';
 }
 
 export async function GET(request: NextRequest) {
