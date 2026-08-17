@@ -1,4 +1,40 @@
 {
+  "regions": ["dub1"],
+  "functions": {
+    "src/app/api/queues/tesco-scrape-batch/route.ts": {
+      "maxDuration": 300,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "tesco-scrape-batches",
+          "retryAfterSeconds": 30,
+          "initialDelaySeconds": 0
+        }
+      ]
+    },
+    "src/app/api/queues/dunnes-scrape-batch/route.ts": {
+      "maxDuration": 300,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "dunnes-scrape-batches",
+          "retryAfterSeconds": 15,
+          "initialDelaySeconds": 0
+        }
+      ]
+    },
+    "src/app/api/queues/supervalu-scrape-batch/route.ts": {
+      "maxDuration": 300,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "supervalu-scrape-batches",
+          "retryAfterSeconds": 15,
+          "initialDelaySeconds": 0
+        }
+      ]
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/weekly-digest",
@@ -15,6 +51,14 @@
     {
       "path": "/api/cron/price-watchdog?nudge=thursday",
       "schedule": "0 9 * * 4"
+    },
+    {
+      "path": "/api/workers/dunnes-scrape-trigger?limit=1000",
+      "schedule": "10 5 * * 1,4"
+    },
+    {
+      "path": "/api/workers/supervalu-scrape-trigger?limit=1000",
+      "schedule": "20 5 * * 1,4"
     }
   ]
 }

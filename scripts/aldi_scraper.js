@@ -9,6 +9,7 @@
  */
 
 const { chromium } = require('playwright');
+const scrapeDb = require('./scrape-db');
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://ytyzwiqnobxehdqrnzhx.supabase.co';
@@ -475,7 +476,9 @@ async function resolveMode(categoryFilter) {
 async function refreshMode(categoryFilter) {
   console.log('=== ALDI REFRESH MODE ===');
   console.log('Updating prices for resolved products...\n');
-  
+
+  const RUN_ID = process.env.SCRAPE_RUN_ID || new Date().toISOString().replace(/[^0-9]/g, '').substring(0, 12);
+
   // Get resolved Aldi products (paginate)
   let storeProducts = [];
   let from = 0;
@@ -492,30 +495,34 @@ async function refreshMode(categoryFilter) {
     if (data.length < 1000) break;
     from += 1000;
   }
-  
+
   let filtered = storeProducts;
   if (categoryFilter) {
     filtered = storeProducts.filter(sp => sp.products?.category === categoryFilter);
   }
-  
-  console.log(`Resolved Aldi products to refresh: ${filtered.length}`);
-  if (filtered.length === 0) return;
-  
+
+  const targetCount = filtered.length;
+  console.log(`Resolved Aldi products to refresh: ${targetCount}`);
+  if (targetCount === 0) return;
+
+  const scrapeRunUuid = await scrapeDb.openRun('aldi', RUN_ID, targetCount, 'playwright');
+
   // Determine which categories we actually need to scrape
   const neededCats = new Set();
   for (const sp of filtered) {
     const cat = sp.products?.category;
     if (cat) neededCats.add(cat);
   }
-  
+
   const categoriesToScrape = ALDI_CATEGORIES.filter(c => neededCats.has(c.dbCat));
   console.log(`Categories needed: ${categoriesToScrape.length} (of ${ALDI_CATEGORIES.length} total)\n`);
-  
+
   // Scrape only needed categories (first 2 pages — covers ~60 items each, balances speed vs coverage)
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  
+
   let allAldiProducts = [];
+  const categoryErrors = [];
   for (const cat of categoriesToScrape) {
     try {
       const products = await scrapeAldiCategory(page, cat, { maxPages: 2 });
@@ -523,12 +530,13 @@ async function refreshMode(categoryFilter) {
       allAldiProducts = allAldiProducts.concat(products);
     } catch (e) {
       console.error(`  ${cat.name}: ERROR ${e.message}`);
+      categoryErrors.push(`${cat.name}: ${e.message}`);
     }
   }
   await browser.close();
-  
+
   console.log(`\nScraped ${allAldiProducts.length} products. Matching...\n`);
-  
+
   // Build lookup by exact name (primary) and stripped name (fallback)
   const byName = new Map();
   for (const ap of allAldiProducts) {
@@ -539,29 +547,37 @@ async function refreshMode(categoryFilter) {
     const s = stripBrand(ap.fullName).toLowerCase();
     if (!byStripped.has(s)) byStripped.set(s, ap);
   }
-  
-  let updated = 0;
-  let notFound = 0;
-  
+
+  // Latest-price cache for unchanged detection
+  const latestPriceMap = new Map();
+  const CHUNK = 200;
+  const ids = filtered.map(sp => sp.id);
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const { data: obs } = await supabase
+      .from('price_observations')
+      .select('store_product_id, price')
+      .in('store_product_id', chunk)
+      .order('observed_at', { ascending: false });
+    if (obs) {
+      for (const o of obs) {
+        if (!latestPriceMap.has(o.store_product_id)) latestPriceMap.set(o.store_product_id, o.price);
+      }
+    }
+  }
+
+  let inserted = 0, unchanged = 0, notFound = 0;
+
   for (const sp of filtered) {
     const spName = (sp.store_product_name || sp.store_sku || '');
-    
-    // Fast path: exact name match (should hit ~90%+ since we stored the Aldi name)
+    const canonName = sp.products?.canonical_name || spName;
+
     let match = byName.get(spName.toLowerCase());
-    
-    // Fallback: stripped canonical name
-    if (!match) {
-      const canonName = (sp.products?.canonical_name || '').toLowerCase();
-      match = byStripped.get(canonName);
-    }
-    
-    // Fallback: stripped store name
-    if (!match) {
-      match = byStripped.get(stripBrand(spName).toLowerCase());
-    }
-    
+    if (!match) match = byStripped.get(canonName.toLowerCase());
+    if (!match) match = byStripped.get(stripBrand(spName).toLowerCase());
+
     if (match) {
-      await supabase.from('price_observations').insert({
+      const { error: insertErr } = await supabase.from('price_observations').insert({
         store_product_id: sp.id,
         price: match.price,
         was_price: match.wasPrice,
@@ -570,17 +586,48 @@ async function refreshMode(categoryFilter) {
         unit_for_comparison: match.unitForComparison ? `per ${match.unitForComparison}` : null,
         observed_at: new Date().toISOString(),
       });
-      updated++;
+
+      if (insertErr) {
+        notFound++;
+        await scrapeDb.recordFailure({
+          scrapeRunUuid, store: 'aldi', canonicalName: canonName,
+          storeProductId: sp.id, failureStage: 'storing',
+          failureReason: 'db_error', rawError: insertErr.message,
+        });
+      } else {
+        const prevPrice = latestPriceMap.get(sp.id);
+        if (prevPrice != null && Math.abs(prevPrice - match.price) < 0.001) {
+          unchanged++;
+        } else {
+          inserted++;
+        }
+      }
     } else {
       notFound++;
+      await scrapeDb.recordFailure({
+        scrapeRunUuid, store: 'aldi', canonicalName: canonName,
+        storeProductId: sp.id, failureStage: 'parsing',
+        failureReason: 'no_search_results',
+      });
       if (notFound <= 5) {
-        console.log(`  ✗ ${sp.products?.canonical_name || spName}`);
+        console.log(`  ✗ ${canonName}`);
       }
     }
   }
-  
+
   if (notFound > 5) console.log(`  ... and ${notFound - 5} more not found`);
-  console.log(`\n=== Updated ${updated}/${filtered.length} prices, ${notFound} not found ===`);
+  console.log(`\n=== Updated ${inserted + unchanged}/${targetCount} prices (${unchanged} unchanged), ${notFound} not found ===`);
+
+  await scrapeDb.closeRun(RUN_ID, 'aldi', {
+    attempted: targetCount,  // Aldi match loop processes all selected
+    fetched: allAldiProducts.length,
+    extracted: inserted + unchanged,
+    inserted,
+    unchanged,
+    failed: notFound,
+    silently_skipped: 0,
+    error_summary: categoryErrors.length > 0 ? categoryErrors.join('; ') : null,
+  });
 }
 
 async function main() {

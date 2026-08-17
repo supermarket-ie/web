@@ -1,15 +1,14 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 const CATEGORIES = ['Groceries','Deli','Bakery','Butcher','Fishmonger','Pharmacy','Health & Beauty','Electronics','Restaurant','Convenience','Other'];
 const STEPS = ['Business info','Location & delivery','Go live'];
 
 export default function VendorSignupPage() {
-  const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
     name: '', email: '', description: '',
@@ -29,15 +28,37 @@ export default function VendorSignupPage() {
       const res = await fetch('/api/vendor/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Something went wrong');
-      router.push(`/vendor/dashboard?token=${data.token}`);
+      setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
       setSubmitting(false);
     }
   }
 
   const inputClass = "w-full px-4 py-3 rounded-xl border-2 border-[#E8E2DC] focus:border-[#5D9B8F] focus:outline-none text-sm text-[#1D2324] placeholder:text-[#B2BEC3] transition";
   const labelClass = "block text-sm font-semibold text-[#1D2324] mb-2";
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-[#FFFBF7] flex flex-col items-center justify-center px-6 py-12">
+        <Link href="/vendor" className="text-[18px] font-bold text-[#1D2324] mb-8">supermarket<span className="text-[#E17055]">.ie</span></Link>
+        <div className="bg-white rounded-2xl border border-[#E8E2DC] shadow-sm max-w-lg w-full p-8 text-center">
+          <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-[#E8F5EF] flex items-center justify-center text-2xl">✉️</div>
+          <h1 className="text-2xl font-bold text-[#1D2324] mb-3">Check your email</h1>
+          <p className="text-sm text-[#636E72] leading-6 mb-3">
+            We&apos;ve sent the confirmation link for your vendor application to <strong className="text-[#1D2324]">{form.email}</strong>.
+          </p>
+          <p className="text-sm text-[#636E72] leading-6 mb-7">
+            Open that link to confirm your email and access your dashboard. The link expires after 7 days.
+          </p>
+          <Link href="/vendor/signin" className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-[#E17055] text-white font-semibold hover:bg-[#D4604A] transition">
+            Go to vendor sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FFFBF7] flex flex-col items-center justify-center px-6 py-12">
