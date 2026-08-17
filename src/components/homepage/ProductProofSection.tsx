@@ -5,15 +5,16 @@ import {
   Euro,
   ShoppingBasket,
   Sparkles,
-  TrendingDown,
 } from 'lucide-react';
 import { AgentMark } from './AgentMark';
 
 const products = [
-  { name: 'Chicken fillets', detail: 'Irish · 1kg', price: '€9.49', store: 'Dunnes', colour: '#7B0017', position: '0% 0%', tone: '#f7dfdf' },
-  { name: 'Penne pasta', detail: '500g', price: '€0.99', store: 'Aldi', colour: '#00616A', position: '100% 0%', tone: '#fff0b8' },
-  { name: 'Irish milk', detail: '2 litre', price: '€2.35', store: 'Tesco', colour: '#003A8C', position: '0% 100%', tone: '#e8e3f2' },
-  { name: 'Mixed peppers', detail: '3 pack', price: '€1.79', store: 'Aldi', colour: '#00616A', position: '100% 100%', tone: '#fee0c8' },
+  { name: 'Chicken fillets', detail: 'Irish · 1kg', price: '€9.49', store: 'Dunnes', colour: '#7B0017', position: '0% 0%', tone: '#f7dfdf', sprite: '/images/ingredients/weekly-shop-sprite.webp' },
+  { name: 'Penne pasta', detail: '500g', price: '€0.99', store: 'Aldi', colour: '#00616A', position: '100% 0%', tone: '#fff0b8', sprite: '/images/ingredients/weekly-shop-sprite.webp' },
+  { name: 'Mixed peppers', detail: '3 pack', price: '€1.79', store: 'Aldi', colour: '#00616A', position: '100% 100%', tone: '#fee0c8', sprite: '/images/ingredients/weekly-shop-sprite.webp' },
+  { name: 'Laundry detergent', detail: '1.5 litre', price: '€4.49', store: 'Tesco', colour: '#003A8C', position: '0% 0%', tone: '#e1f1df', sprite: '/images/ingredients/household-essentials-sprite.webp' },
+  { name: 'Toilet tissue', detail: '9 roll', price: '€5.25', store: 'Dunnes', colour: '#7B0017', position: '100% 0%', tone: '#f5ead9', sprite: '/images/ingredients/household-essentials-sprite.webp' },
+  { name: 'Toothpaste', detail: '100ml', price: '€1.49', store: 'Aldi', colour: '#00616A', position: '0% 100%', tone: '#e5f2e5', sprite: '/images/ingredients/household-essentials-sprite.webp' },
 ];
 
 export function ProductProofSection() {
@@ -28,12 +29,12 @@ export function ProductProofSection() {
               See the result
             </span>
             <h2 className="text-balance text-[clamp(2.25rem,5vw,4rem)] font-extrabold leading-[1.02] tracking-[-0.045em]">
-              From “what are we eating?”
+              From “what do we need?”
               <span className="block text-primary-container">to a week that&apos;s handled.</span>
             </h2>
           </div>
           <p className="max-w-md text-base leading-7 text-white/65">
-            Your agent brings meals, household preferences, budget and live availability together into one clear plan—ready when you are.
+            Your agent brings food, household essentials, preferences, budget and live availability together into one complete supermarket shop.
           </p>
         </div>
 
@@ -51,7 +52,7 @@ export function ProductProofSection() {
                   <ShoppingBasket className="size-4 text-primary" />
                   Your agent&apos;s weekly shop
                 </div>
-                <p className="text-xs text-on-surface">Family of 4 · 5 dinners · Lunches · €110 budget</p>
+                <p className="text-xs text-on-surface">Family of 4 · Food · Cleaning · Toiletries · €110 budget</p>
               </div>
               <span className="savings-pop rounded-full bg-primary-container px-3 py-1.5 text-xs font-extrabold text-on-primary-container">
                 Ready to shop
@@ -65,7 +66,7 @@ export function ProductProofSection() {
                     className="ingredient-sprite block h-10 w-[60px] shrink-0 rounded-xl transition-transform duration-300 hover:scale-[1.03]"
                     style={{
                       backgroundColor: product.tone,
-                      backgroundImage: "url('/images/ingredients/weekly-shop-sprite.webp')",
+                      backgroundImage: `url('${product.sprite}')`,
                       backgroundPosition: product.position,
                     }}
                     role="img"
@@ -89,7 +90,7 @@ export function ProductProofSection() {
               {[
                 ['34', 'items handled'],
                 ['€106.42', 'within your budget'],
-                ['5 dinners', 'planned for the week'],
+                ['6 categories', 'one complete shop'],
               ].map(([value, label]) => (
                 <div key={label} className="border-b border-black/5 px-6 py-5 last:border-0 sm:border-b-0 sm:border-r">
                   <p className="text-xl font-extrabold tracking-tight">{value}</p>
@@ -114,8 +115,8 @@ export function ProductProofSection() {
               <div className="space-y-3">
                 {[
                   { label: 'Household understood', detail: '4 people · family favourites', colour: '#EADFF2' },
-                  { label: 'Meals planned', detail: '5 dinners · lunches included', colour: '#FFD84D' },
-                  { label: 'Shop assembled', detail: '34 matched grocery items', colour: '#FF7A59' },
+                  { label: 'Meals planned', detail: 'food and household needs included', colour: '#FFD84D' },
+                  { label: 'Shop assembled', detail: '34 supermarket items handled', colour: '#FF7A59' },
                   { label: 'Budget checked', detail: '€106.42 of €110', colour: '#6BFE9C' },
                 ].map((step, index) => (
                   <div
@@ -146,13 +147,13 @@ export function ProductProofSection() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-3xl bg-[#FFD84D] p-5 text-[#3d3412]">
                 <ChefHat className="mb-4 size-5" />
-                <p className="font-bold">Meals that fit</p>
-                <p className="mt-1 text-xs leading-5 opacity-70">Ingredients reused intelligently across your week.</p>
+                <p className="font-bold">Food and meals</p>
+                <p className="mt-1 text-xs leading-5 opacity-70">Meals and everyday food organised around your household.</p>
               </div>
               <div className="rounded-3xl bg-[#9D2F62] p-5 text-white">
                 <Euro className="mb-4 size-5 text-[#FFDDEB]" />
-                <p className="font-bold">Budget remembered</p>
-                <p className="mt-1 text-xs leading-5 text-white/65">Your agent makes the choices without losing the plan.</p>
+                <p className="font-bold">Everything else</p>
+                <p className="mt-1 text-xs leading-5 text-white/65">Cleaning, toiletries and recurring essentials remembered too.</p>
               </div>
             </div>
           </div>
