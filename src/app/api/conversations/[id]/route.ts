@@ -1,19 +1,18 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
 
-// GET /api/conversations/[id]?token=xxx — get single conversation with messages
+function sessionToken(req: NextRequest, explicit?: string | null) {
+  return req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
+}
+
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = getSubscriberId(sessionToken(req, req.nextUrl.searchParams.get('token')));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const { data, error } = await supabaseAdmin
     .from('conversations')
@@ -26,20 +25,17 @@ export async function GET(
   return NextResponse.json({ conversation: data });
 }
 
-// PATCH /api/conversations/[id] — update conversation (messages, title)
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const body = await req.json();
-  const { token, messages, title, list_id } = body;
+  const { token: explicitToken, messages, title, list_id } = body;
 
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = getSubscriberId(sessionToken(req, explicitToken));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  // Verify ownership
   const { data: existing } = await supabaseAdmin
     .from('conversations')
     .select('id')
@@ -65,18 +61,13 @@ export async function PATCH(
   return NextResponse.json({ conversation: data });
 }
 
-// DELETE /api/conversations/[id]?token=xxx — delete conversation
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = getSubscriberId(sessionToken(req, req.nextUrl.searchParams.get('token')));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const { error } = await supabaseAdmin
     .from('conversations')
