@@ -20,19 +20,18 @@ export function HeroSection() {
           <div className="max-w-xl">
             <div className="chip-tertiary mb-6 inline-flex items-center gap-2">
               <Sparkles className="size-3.5" />
-              Ireland&apos;s personal grocery agent
+              Ireland&apos;s personal supermarket agent
             </div>
 
             <h1 className="mb-6 text-balance text-[clamp(2.75rem,6vw,5.25rem)] font-extrabold leading-[0.98] tracking-[-0.055em] text-on-background">
-              Your groceries,
+              Your supermarket shop,
               <span className="block bg-gradient-to-r from-[#006A35] to-[#12a85b] bg-clip-text text-transparent">
                 handled.
               </span>
             </h1>
 
             <p className="mb-7 max-w-lg text-lg leading-8 text-on-surface md:text-xl">
-              Tell us about your household once. Your agent learns how you eat, plans the week,
-              builds the shop and keeps everything on budget—week after week.
+              Tell us about your household once. Your agent learns what your household eats, uses and regularly needs—then plans and builds the complete shop, week after week.
             </p>
 
             <div className="mb-7">
@@ -41,10 +40,10 @@ export function HeroSection() {
 
             <div className="mb-8 grid gap-3 sm:grid-cols-2">
               {[
-                'Your whole week planned',
-                'A ready-to-shop grocery list',
-                'Meals matched to your budget',
-                'Your household remembered',
+                'Food and meals planned',
+                'Household essentials included',
+                'One complete shop on budget',
+                'Your regular items remembered',
               ].map((item) => (
                 <div key={item} className="flex items-center gap-2.5 text-sm font-semibold text-on-background">
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-container">
@@ -57,7 +56,7 @@ export function HeroSection() {
 
             <div className="flex flex-wrap items-center gap-4">
               <a href="#grocery-agent" className="btn-primary px-6 py-3.5 text-sm">
-                Meet my grocery agent
+                Meet my supermarket agent
               </a>
               <SessionLink />
             </div>
@@ -71,7 +70,7 @@ export function HeroSection() {
             <div className="mb-3 flex items-center justify-between px-2 text-xs font-semibold text-on-surface">
               <span className="inline-flex items-center gap-2">
                 <AgentMark className="size-7" />
-                Your grocery agent is ready
+                Your supermarket agent is ready
               </span>
               <span>Built for Irish households</span>
             </div>
