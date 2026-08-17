@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     if (!vendor) return NextResponse.json({ success: true });
 
     const token = signVendorToken({ vendorId: vendor.id, email: vendor.email, name: vendor.name });
-    const link = `${process.env.NEXT_PUBLIC_SITE_URL}/vendor/dashboard?token=${token}`;
+    const link = `${process.env.NEXT_PUBLIC_SITE_URL}/api/vendor/session?token=${encodeURIComponent(token)}`;
     const safeName = escapeHtml(vendor.name);
 
     await resend.emails.send({
