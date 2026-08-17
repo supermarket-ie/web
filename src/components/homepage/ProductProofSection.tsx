@@ -7,6 +7,7 @@ import {
   Sparkles,
   TrendingDown,
 } from 'lucide-react';
+import { AgentMark } from './AgentMark';
 
 const products = [
   { name: 'Chicken fillets', detail: 'Irish · 1kg', price: '€9.49', store: 'Dunnes', colour: '#7B0017', position: '0% 0%', tone: '#f7dfdf' },
@@ -27,13 +28,12 @@ export function ProductProofSection() {
               See the result
             </span>
             <h2 className="text-balance text-[clamp(2.25rem,5vw,4rem)] font-extrabold leading-[1.02] tracking-[-0.045em]">
-              Not another price table.
-              <span className="block text-primary-container">A shop that&apos;s ready to go.</span>
+              From “what are we eating?”
+              <span className="block text-primary-container">to a week that&apos;s handled.</span>
             </h2>
           </div>
           <p className="max-w-md text-base leading-7 text-white/65">
-            Your agent turns meals, household preferences and current prices into one clear
-            recommendation—then explains exactly where the saving comes from.
+            Your agent brings meals, household preferences, budget and live availability together into one clear plan—ready when you are.
           </p>
         </div>
 
@@ -49,12 +49,12 @@ export function ProductProofSection() {
               <div>
                 <div className="mb-1 flex items-center gap-2 text-sm font-bold">
                   <ShoppingBasket className="size-4 text-primary" />
-                  Your recommended weekly shop
+                  Your agent&apos;s weekly shop
                 </div>
                 <p className="text-xs text-on-surface">Family of 4 · 5 dinners · Lunches · €110 budget</p>
               </div>
               <span className="savings-pop rounded-full bg-primary-container px-3 py-1.5 text-xs font-extrabold text-on-primary-container">
-                €12.34 saved
+                Ready to shop
               </span>
             </div>
 
@@ -87,9 +87,9 @@ export function ProductProofSection() {
 
             <div className="grid border-t border-dashed border-black/10 font-mono sm:grid-cols-3">
               {[
-                ['34', 'items'],
-                ['€106.42', 'recommended total'],
-                ['2 stores', 'best-value split'],
+                ['34', 'items handled'],
+                ['€106.42', 'within your budget'],
+                ['5 dinners', 'planned for the week'],
               ].map(([value, label]) => (
                 <div key={label} className="border-b border-black/5 px-6 py-5 last:border-0 sm:border-b-0 sm:border-r">
                   <p className="text-xl font-extrabold tracking-tight">{value}</p>
@@ -101,39 +101,58 @@ export function ProductProofSection() {
 
           <div className="grid gap-4">
             <div className="rounded-[1.75rem] bg-primary p-6 md:p-8">
-              <div className="mb-6 flex size-12 items-center justify-center rounded-2xl bg-white/10">
-                <TrendingDown className="size-6 text-primary-container" />
-              </div>
-              <p className="mb-1 text-sm font-semibold text-white/60">Cheapest single store</p>
-              <div className="mb-5 flex items-end justify-between gap-4">
-                <p className="text-4xl font-extrabold tracking-tight">€118.76</p>
-                <ArrowRight className="mb-2 size-5 text-white/40" />
-              </div>
-              <div className="rounded-2xl bg-white/10 p-4">
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span>Recommended split</span>
-                  <span className="font-extrabold">€106.42</span>
+              <div className="mb-7 flex items-center gap-3">
+                <AgentMark className="size-12" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-primary-container">
+                    Your agent at work
+                  </p>
+                  <p className="font-bold">One request. The whole week handled.</p>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-black/20">
-                  <div className="h-full w-[79%] rounded-full bg-primary-container" />
-                </div>
-                <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-primary-container">
-                  <Check className="size-3.5" />
-                  €12.34 stays in your pocket
-                </p>
+              </div>
+
+              <div className="space-y-3">
+                {[
+                  { label: 'Household understood', detail: '4 people · family favourites', colour: '#EADFF2' },
+                  { label: 'Meals planned', detail: '5 dinners · lunches included', colour: '#FFD84D' },
+                  { label: 'Shop assembled', detail: '34 matched grocery items', colour: '#FF7A59' },
+                  { label: 'Budget checked', detail: '€106.42 of €110', colour: '#6BFE9C' },
+                ].map((step, index) => (
+                  <div
+                    key={step.label}
+                    className="agent-step flex items-center gap-3 rounded-2xl bg-white/10 p-3.5"
+                    style={{ animationDelay: `${220 + index * 150}ms` }}
+                  >
+                    <span
+                      className="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-[#243229]"
+                      style={{ background: step.colour }}
+                    >
+                      <Check className="size-4" strokeWidth={3} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold">{step.label}</span>
+                      <span className="block text-xs text-white/55">{step.detail}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 flex items-center justify-between rounded-2xl bg-primary-container px-4 py-3 text-on-primary-container">
+                <span className="text-sm font-extrabold">Your weekly shop is ready</span>
+                <ArrowRight className="size-5" />
               </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-3xl bg-white/10 p-5">
-                <ChefHat className="mb-4 size-5 text-primary-container" />
-                <p className="font-bold">5 dinners planned</p>
-                <p className="mt-1 text-xs leading-5 text-white/55">Ingredients reused intelligently across meals.</p>
+              <div className="rounded-3xl bg-[#FFD84D] p-5 text-[#3d3412]">
+                <ChefHat className="mb-4 size-5" />
+                <p className="font-bold">Meals that fit</p>
+                <p className="mt-1 text-xs leading-5 opacity-70">Ingredients reused intelligently across your week.</p>
               </div>
-              <div className="rounded-3xl bg-white/10 p-5">
-                <Euro className="mb-4 size-5 text-tertiary-container" />
-                <p className="font-bold">Budget protected</p>
-                <p className="mt-1 text-xs leading-5 text-white/55">Better-value swaps without changing the plan.</p>
+              <div className="rounded-3xl bg-[#9D2F62] p-5 text-white">
+                <Euro className="mb-4 size-5 text-[#FFDDEB]" />
+                <p className="font-bold">Budget remembered</p>
+                <p className="mt-1 text-xs leading-5 text-white/65">Your agent makes the choices without losing the plan.</p>
               </div>
             </div>
           </div>

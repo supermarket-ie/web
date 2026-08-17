@@ -4,6 +4,7 @@ import { HideAfterHydration } from '@/components/HideAfterHydration';
 import { LiveDealChip } from '@/components/LiveDealChip';
 import { Check, Sparkles } from 'lucide-react';
 import { SessionLink } from './SessionLink';
+import { AgentMark } from './AgentMark';
 
 export function HeroSection() {
   return (
@@ -23,15 +24,15 @@ export function HeroSection() {
             </div>
 
             <h1 className="mb-6 text-balance text-[clamp(2.75rem,6vw,5.25rem)] font-extrabold leading-[0.98] tracking-[-0.055em] text-on-background">
-              Your weekly shop,
+              Your groceries,
               <span className="block bg-gradient-to-r from-[#006A35] to-[#12a85b] bg-clip-text text-transparent">
-                planned and price-checked.
+                handled.
               </span>
             </h1>
 
             <p className="mb-7 max-w-lg text-lg leading-8 text-on-surface md:text-xl">
-              Tell us about your household. Your agent builds the list, compares Ireland&apos;s
-              major supermarkets and shows you where to save.
+              Tell us about your household once. Your agent learns how you eat, plans the week,
+              builds the shop and keeps everything on budget—week after week.
             </p>
 
             <div className="mb-7">
@@ -40,10 +41,10 @@ export function HeroSection() {
 
             <div className="mb-8 grid gap-3 sm:grid-cols-2">
               {[
-                'A ready-to-shop weekly list',
-                'Prices compared across 4 stores',
+                'Your whole week planned',
+                'A ready-to-shop grocery list',
                 'Meals matched to your budget',
-                'Preferences remembered',
+                'Your household remembered',
               ].map((item) => (
                 <div key={item} className="flex items-center gap-2.5 text-sm font-semibold text-on-background">
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-container">
@@ -56,7 +57,7 @@ export function HeroSection() {
 
             <div className="flex flex-wrap items-center gap-4">
               <a href="#grocery-agent" className="btn-primary px-6 py-3.5 text-sm">
-                Build my weekly shop
+                Meet my grocery agent
               </a>
               <SessionLink />
             </div>
@@ -69,10 +70,10 @@ export function HeroSection() {
             <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-primary-container/25 to-tertiary-container/15 blur-2xl" />
             <div className="mb-3 flex items-center justify-between px-2 text-xs font-semibold text-on-surface">
               <span className="inline-flex items-center gap-2">
-                <span className="size-2 rounded-full bg-[#18a558] shadow-[0_0_0_4px_rgba(24,165,88,0.12)]" />
+                <AgentMark className="size-7" />
                 Your grocery agent is ready
               </span>
-              <span>Live Irish prices</span>
+              <span>Built for Irish households</span>
             </div>
             <div
               className="overflow-hidden rounded-[1.5rem] border border-black/[0.04] bg-surface-lowest p-4 shadow-[0_24px_80px_rgba(20,60,38,0.13)] sm:p-6"

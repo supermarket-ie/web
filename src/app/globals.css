@@ -37,6 +37,9 @@
 
   /* Tertiary — vitality / freshness accent */
   --tertiary-container:    #00DCFF;
+  --accent-tomato:         #FF7A59;
+  --accent-butter:         #FFD84D;
+  --accent-berry:          #9D2F62;
   --on-tertiary-container: #004956;
 
   /* Store brand colours (immutable — these are external brand identities) */
@@ -111,6 +114,9 @@
 
   --color-tertiary-container:        var(--tertiary-container);
   --color-on-tertiary-container:     var(--on-tertiary-container);
+  --color-accent-tomato:             var(--accent-tomato);
+  --color-accent-butter:             var(--accent-butter);
+  --color-accent-berry:              var(--accent-berry);
 
   --color-store-tesco:               var(--store-tesco);
   --color-store-dunnes:              var(--store-dunnes);
@@ -383,4 +389,18 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .savings-pop { animation: none; }
+}
+
+
+@keyframes agent-step-arrive {
+  0% { opacity: 0; transform: translateX(10px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.agent-step {
+  animation: agent-step-arrive 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-step { animation: none; }
 }

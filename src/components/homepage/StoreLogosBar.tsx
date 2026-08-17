@@ -14,9 +14,9 @@ export function StoreLogosBar() {
       <div className="mx-auto grid max-w-7xl items-center gap-7 lg:grid-cols-[auto_1fr_auto]">
         <div>
           <p className="text-xs font-extrabold uppercase tracking-[0.09em] text-on-surface">
-            Irish prices, one place
+            One agent. Ireland&apos;s supermarkets.
           </p>
-          <p className="mt-1 text-xs text-on-surface-variant">Compare the stores you already shop</p>
+          <p className="mt-1 text-xs text-on-surface-variant">Your agent understands what&apos;s available across the stores you know</p>
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-7 md:gap-10">
@@ -35,7 +35,7 @@ export function StoreLogosBar() {
 
         <div className="flex items-center gap-2 rounded-full bg-surface-lowest px-3 py-2 text-xs font-bold text-primary shadow-sm">
           <Activity className="size-3.5" />
-          Price tracking active
+          Your agent is watching
         </div>
       </div>
     </section>
