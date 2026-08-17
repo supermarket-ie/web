@@ -41,8 +41,6 @@ export async function POST(request: NextRequest) {
       ? categories.filter((category): category is string => typeof category === 'string').slice(0, 20)
       : [];
 
-    // Check existing — return the same response to prevent email enumeration.
-    // Existing vendors can use the normal sign-in flow to request a fresh link.
     const { data: existing } = await supabaseAdmin
       .from('vendors')
       .select('id')
@@ -52,7 +50,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, emailVerificationRequired: true });
     }
 
-    // Generate unique slug
     let slug = slugify(name);
     const { data: slugExists } = await supabaseAdmin
       .from('vendors')
@@ -84,10 +81,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
     }
 
-    // The browser never receives the credential. Access is established only
-    // after the vendor proves control of the claimed email by opening this link.
+    // The browser never receives the credential. The email link exchanges the
+    // short-lived bearer credential for an HttpOnly session cookie before the
+    // vendor reaches the dashboard, so the dashboard URL itself stays clean.
     const token = signVendorToken({ vendorId: vendor.id, email: vendor.email, name: vendor.name });
-    const dashboardLink = `${process.env.NEXT_PUBLIC_SITE_URL}/vendor/dashboard?token=${token}`;
+    const dashboardLink = `${process.env.NEXT_PUBLIC_SITE_URL}/api/vendor/session?token=${encodeURIComponent(token)}`;
     const safeName = escapeHtml(vendor.name);
     const safeEmail = escapeHtml(vendor.email);
     const safeEircode = escapeHtml(vendor.eircode ?? 'not provided');
@@ -107,7 +105,6 @@ export async function POST(request: NextRequest) {
         </div>`,
     });
 
-    // Notify the team without exposing the vendor's login credential.
     await resend.emails.send({
       from: 'supermarket.ie <hello@supermarket.ie>',
       to: 'team@supermarket.ie',
