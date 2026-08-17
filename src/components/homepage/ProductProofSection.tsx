@@ -2,7 +2,7 @@ import {
   ArrowRight,
   Check,
   ChefHat,
-  CircleEuro,
+  Euro,
   ShoppingBasket,
   Sparkles,
   TrendingDown,
@@ -118,7 +118,7 @@ export function ProductProofSection() {
                 <p className="mt-1 text-xs leading-5 text-white/55">Ingredients reused intelligently across meals.</p>
               </div>
               <div className="rounded-3xl bg-white/10 p-5">
-                <CircleEuro className="mb-4 size-5 text-tertiary-container" />
+                <Euro className="mb-4 size-5 text-tertiary-container" />
                 <p className="font-bold">Budget protected</p>
                 <p className="mt-1 text-xs leading-5 text-white/55">Better-value swaps without changing the plan.</p>
               </div>
