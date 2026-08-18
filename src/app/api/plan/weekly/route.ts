@@ -5,8 +5,6 @@ import { getSubscriberId } from '@/lib/auth';
 
 export const maxDuration = 30;
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
 export interface MealSlot {
   day: string;
   name: string | null;
@@ -50,11 +48,9 @@ export interface WeeklyPlanState {
   status: 'empty' | 'partial' | 'complete';
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 function getCurrentWeekStart(): string {
   const now = new Date();
-  const day = now.getDay(); // 0=Sun, 1=Mon…
+  const day = now.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   const monday = new Date(now);
   monday.setDate(now.getDate() + diff);
@@ -70,19 +66,19 @@ function computeStatus(meals: { dinners: MealSlot[]; lunches: MealSlot[] }): 'em
   return dinnersFull && lunchesFull ? 'complete' : 'partial';
 }
 
-// ── GET /api/plan/weekly ─────────────────────────────────────────────────────
+function subscriberFromRequest(req: NextRequest): string | null {
+  const explicit = req.nextUrl.searchParams.get('token');
+  const token = req.cookies.get('sm_session')?.value ??
+    (explicit && explicit !== '__cookie__' ? explicit : null);
+  return getSubscriberId(token);
+}
 
 export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = subscriberFromRequest(req);
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const weekStart = getCurrentWeekStart();
 
-  // Find or create weekly plan
-  // eslint-disable-next-line prefer-const -- plan is reassigned below when a new plan is created; selectErr is not
   let { data: plan, error: selectErr } = await supabaseAdmin
     .from('weekly_plans')
     .select('*')
@@ -91,7 +87,6 @@ export async function GET(req: NextRequest) {
     .single();
 
   if (selectErr && (selectErr.code === '42P01' || selectErr.message?.includes('does not exist'))) {
-    // Table doesn't exist yet — return empty state
     return NextResponse.json({
       weekStart,
       meals: { dinners: [], lunches: [] },
@@ -100,7 +95,7 @@ export async function GET(req: NextRequest) {
       budget: { target: null, current: 0, onTrack: true },
       agentNotices: [{
         type: 'suggestion',
-        message: 'Tap "Plan dinners" to generate this week\'s meal ideas based on current deals',
+        message: 'Ask Eve to plan dinners for this week based on your household and current supermarket options',
         actionable: true,
         action: 'plan_dinners',
       }],
@@ -123,7 +118,6 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (insertErr) {
-      // Table may not exist yet — return an empty state without crashing
       return NextResponse.json({
         weekStart,
         meals: { dinners: [], lunches: [] },
@@ -132,7 +126,7 @@ export async function GET(req: NextRequest) {
         budget: { target: null, current: 0, onTrack: true },
         agentNotices: [{
           type: 'suggestion',
-          message: 'Tap "Plan dinners" to generate this week\'s meal ideas based on current deals',
+          message: 'Ask Eve to plan dinners for this week based on your household and current supermarket options',
           actionable: true,
           action: 'plan_dinners',
         }],
@@ -142,14 +136,12 @@ export async function GET(req: NextRequest) {
     plan = newPlan;
   }
 
-  // Load household budget
   const { data: household } = await supabaseAdmin
     .from('households')
     .select('weekly_budget')
     .eq('subscriber_id', subscriberId)
     .single();
 
-  // Build agent notices
   const agentNotices: AgentNotice[] = [];
 
   try {
@@ -164,7 +156,7 @@ export async function GET(req: NextRequest) {
       });
     }
   } catch {
-    // price changes not available
+    // Price-change intelligence is helpful but should never block the weekly view.
   }
 
   const meals = (plan?.meals ?? { dinners: [], lunches: [] }) as { dinners: MealSlot[]; lunches: MealSlot[] };
@@ -174,21 +166,21 @@ export async function GET(req: NextRequest) {
   if (plannedDinners === 0 && plannedLunches === 0) {
     agentNotices.push({
       type: 'suggestion',
-      message: "Start by planning your dinners for this week — tap \"Plan dinners\" to generate meal ideas based on this week's deals",
+      message: 'Ask Eve to plan the meals you need this week',
       actionable: true,
       action: 'plan_dinners',
     });
   } else if (plannedDinners > 0 && plannedLunches === 0) {
     agentNotices.push({
       type: 'suggestion',
-      message: 'Dinners planned! Add lunches to complete your weekly plan',
+      message: 'Dinners are planned. Eve can add lunches too if you need them.',
       actionable: true,
       action: 'plan_lunches',
     });
   }
 
   const shoppingList = (plan?.shopping_list ?? []) as ShoppingItem[];
-  const shoppingTotal = shoppingList.reduce((sum, i) => sum + (i.price * (i.quantity ?? 1)), 0);
+  const shoppingTotal = shoppingList.reduce((sum, item) => sum + (item.price * (item.quantity ?? 1)), 0);
   const weeklyBudget = household?.weekly_budget ?? null;
 
   const response: WeeklyPlanState = {
@@ -208,14 +200,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(response);
 }
 
-// ── PATCH /api/plan/weekly ───────────────────────────────────────────────────
-
 export async function PATCH(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get('token');
-  if (!token) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-
-  const subscriberId = getSubscriberId(token);
-  if (!subscriberId) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const subscriberId = subscriberFromRequest(req);
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const weekStart = getCurrentWeekStart();
   const body = await req.json();
