@@ -29,8 +29,10 @@ export interface AgentTask {
   condition: AgentTaskCondition;
   baseline: Record<string, unknown> | null;
   notification_channel: 'email' | 'in_app';
+  cooldown_minutes: number;
   last_evaluated_at: string | null;
   last_triggered_at: string | null;
+  trigger_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +46,7 @@ export async function createAgentTask(input: {
   productFamily?: string | null;
   baseline?: Record<string, unknown> | null;
   notificationChannel?: 'email' | 'in_app';
+  cooldownMinutes?: number;
 }) {
   const { data, error } = await supabaseAdmin
     .from('agent_tasks')
@@ -57,6 +60,7 @@ export async function createAgentTask(input: {
       condition: input.condition,
       baseline: input.baseline ?? null,
       notification_channel: input.notificationChannel ?? 'email',
+      cooldown_minutes: input.cooldownMinutes ?? 1440,
     })
     .select('*')
     .single();
@@ -77,6 +81,18 @@ export async function listActiveAgentTasks(subscriberId: string) {
   return (data ?? []) as AgentTask[];
 }
 
+export async function listActiveTasksForProduct(canonicalName: string) {
+  const { data, error } = await supabaseAdmin
+    .from('agent_tasks')
+    .select('*')
+    .eq('status', 'active')
+    .eq('canonical_name', canonicalName)
+    .in('type', ['price_watch', 'promotion_watch', 'availability_watch']);
+
+  if (error) throw new Error(`Failed to list product watches: ${error.message}`);
+  return (data ?? []) as AgentTask[];
+}
+
 export async function updateAgentTaskStatus(
   subscriberId: string,
   taskId: string,
@@ -94,10 +110,24 @@ export async function updateAgentTaskStatus(
   return data as AgentTask;
 }
 
+export function taskIsInCooldown(task: AgentTask, now = new Date()): boolean {
+  if (!task.last_triggered_at || task.cooldown_minutes <= 0) return false;
+  const last = new Date(task.last_triggered_at).getTime();
+  return now.getTime() - last < task.cooldown_minutes * 60_000;
+}
+
 export async function markAgentTaskEvaluated(taskId: string, triggered = false) {
   const now = new Date().toISOString();
-  const patch: Record<string, string> = { last_evaluated_at: now, updated_at: now };
-  if (triggered) patch.last_triggered_at = now;
+  const patch: Record<string, unknown> = { last_evaluated_at: now, updated_at: now };
+  if (triggered) {
+    patch.last_triggered_at = now;
+    const { data: current } = await supabaseAdmin
+      .from('agent_tasks')
+      .select('trigger_count')
+      .eq('id', taskId)
+      .single();
+    patch.trigger_count = Number(current?.trigger_count ?? 0) + 1;
+  }
 
   const { error } = await supabaseAdmin
     .from('agent_tasks')
