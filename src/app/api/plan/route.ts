@@ -7,6 +7,7 @@ import { getSubscriberId } from '@/lib/auth';
 export const maxDuration = 60;
 
 const PLANNER_TIMEOUT_MS = 55_000;
+type PlannerAgent = Awaited<ReturnType<typeof createPlannerAgent>>;
 
 // A list was generated when the agent successfully called save_list or
 // update_list — detected from the tool parts of the response, not by
@@ -132,7 +133,10 @@ export async function POST(req: Request) {
         });
 
     return createAgentUIStreamResponse({
-      agent,
+      // Both specialists implement the AI SDK Agent contract. AI SDK 7 keeps
+      // each concrete tool set in the generic type, so normalize only at this
+      // dispatch boundary while preserving strict typing inside each agent.
+      agent: agent as unknown as PlannerAgent,
       uiMessages: allMessages,
       timeout: { totalMs: PLANNER_TIMEOUT_MS },
       onFinish: async ({ responseMessage }) => {
@@ -271,7 +275,7 @@ export async function POST(req: Request) {
       });
 
   return createAgentUIStreamResponse({
-    agent,
+    agent: agent as unknown as PlannerAgent,
     uiMessages,
     timeout: { totalMs: PLANNER_TIMEOUT_MS },
     onFinish: async ({ responseMessage }) => {
