@@ -37,7 +37,6 @@ function PlanMarkdown({ text }: { text: string }) {
 
     if (!trimmed) { nodes.push(<div key={key++} className="h-2" />); continue; }
 
-    // ### Heading
     if (trimmed.startsWith('### ')) {
       nodes.push(
         <h3 key={key++} className="text-sm font-bold mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>
@@ -46,7 +45,6 @@ function PlanMarkdown({ text }: { text: string }) {
       );
       continue;
     }
-    // ## Heading
     if (trimmed.startsWith('## ')) {
       nodes.push(
         <h3 key={key++} className="text-sm font-bold mt-3 mb-1" style={{ color: 'var(--on-surface)' }}>
@@ -55,12 +53,10 @@ function PlanMarkdown({ text }: { text: string }) {
       );
       continue;
     }
-    // --- divider
     if (trimmed === '---') {
       nodes.push(<hr key={key++} className="my-3" style={{ borderColor: 'var(--surface-container)' }} />);
       continue;
     }
-    // - bullet list item
     if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
       nodes.push(
         <div key={key++} className="flex gap-2 text-xs leading-relaxed" style={{ color: 'var(--on-surface)' }}>
@@ -70,7 +66,6 @@ function PlanMarkdown({ text }: { text: string }) {
       );
       continue;
     }
-    // **Day:** Meal — treat as day header
     if (trimmed.match(/^\*\*\w+:\*\*/)) {
       nodes.push(
         <p key={key++} className="text-sm font-semibold mt-3 mb-0.5" style={{ color: 'var(--on-surface)' }}>
@@ -79,7 +74,6 @@ function PlanMarkdown({ text }: { text: string }) {
       );
       continue;
     }
-    // *italics / Est. cost lines*
     if (trimmed.startsWith('*') && trimmed.endsWith('*') && !trimmed.startsWith('**')) {
       nodes.push(
         <p key={key++} className="text-xs italic" style={{ color: '#00944A' }}>
@@ -88,7 +82,6 @@ function PlanMarkdown({ text }: { text: string }) {
       );
       continue;
     }
-    // Plain paragraph
     nodes.push(
       <p key={key++} className="text-xs leading-relaxed" style={{ color: 'var(--on-surface-variant)' }}>
         {renderInline(trimmed)}
@@ -235,10 +228,8 @@ export function WeeklyCommandCentre() {
   const [chatOpen, setChatOpen] = useState(false);
   const [showDinners, setShowDinners] = useState(false);
   const [showLunches, setShowLunches] = useState(false);
-  // Raw markdown fallback when weekly_plans table doesn't exist yet
   const [dinnerPlanText, setDinnerPlanText] = useState<string | null>(null);
   const [lunchPlanText, setLunchPlanText] = useState<string | null>(null);
-
   const [token, setToken] = useState<string | null>(null);
 
   const fetchPlan = useCallback(async (t: string) => {
@@ -262,6 +253,15 @@ export function WeeklyCommandCentre() {
     }
   }, [fetchPlan]);
 
+  useEffect(() => {
+    if (!token) return;
+    const refreshAfterEveTurn = () => {
+      fetchPlan(token).catch(() => {});
+    };
+    window.addEventListener('sm:eve-turn-finished', refreshAfterEveTurn);
+    return () => window.removeEventListener('sm:eve-turn-finished', refreshAfterEveTurn);
+  }, [token, fetchPlan]);
+
   async function handleQuickAction(type: 'dinners' | 'lunches') {
     if (!token) return;
     setActionLoading(type);
@@ -273,9 +273,7 @@ export function WeeklyCommandCentre() {
       });
       if (res.ok) {
         const data = await res.json();
-        // Use parsed meal slots if available, else store raw text for display
         if (data.meals && data.meals.length > 0) {
-          // Merge into plan state
           setPlan(prev => {
             const base = prev ?? {
               weekStart: new Date().toISOString().split('T')[0],
@@ -295,14 +293,12 @@ export function WeeklyCommandCentre() {
             };
           });
         }
-        // Always store raw text as fallback
         if (data.plan) {
           if (type === 'dinners') setDinnerPlanText(data.plan);
           else setLunchPlanText(data.plan);
         }
         if (type === 'dinners') setShowDinners(true);
         else setShowLunches(true);
-        // Also try refreshing from DB in background (works once migration is run)
         fetchPlan(token).catch(() => {});
       }
     } catch (e) {
@@ -334,8 +330,6 @@ export function WeeklyCommandCentre() {
     }
   }
 
-  // ── Derived values ──
-
   const dinners = plan?.meals.dinners ?? [];
   const lunches = plan?.meals.lunches ?? [];
   const plannedDinners = dinners.filter(d => d.status === 'planned');
@@ -365,7 +359,6 @@ export function WeeklyCommandCentre() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
       <div className="flex items-center justify-between pt-1">
         <div>
           <h2 className="text-base font-bold" style={{ color: '#00DCFF', textShadow: '0 0 10px rgba(0,220,255,0.3)' }}>This week</h2>
@@ -382,7 +375,6 @@ export function WeeklyCommandCentre() {
         </span>
       </div>
 
-      {/* Status cards */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <StatusCard
           label="Dinners"
@@ -411,7 +403,6 @@ export function WeeklyCommandCentre() {
         />
       </div>
 
-      {/* Agent notices */}
       {plan?.agentNotices && plan.agentNotices.length > 0 && (
         <div
           className="rounded-2xl px-4 py-3"
@@ -431,7 +422,6 @@ export function WeeklyCommandCentre() {
         </div>
       )}
 
-      {/* Quick actions */}
       <div className="flex gap-2">
         <ActionButton
           label="Plan dinners"
@@ -451,7 +441,6 @@ export function WeeklyCommandCentre() {
         />
       </div>
 
-      {/* Dinners preview */}
       {hasDinners && (
         <div
           className="rounded-2xl overflow-hidden"
@@ -480,7 +469,6 @@ export function WeeklyCommandCentre() {
         </div>
       )}
 
-      {/* Lunches preview */}
       {hasLunches && (
         <div
           className="rounded-2xl overflow-hidden"
@@ -509,7 +497,6 @@ export function WeeklyCommandCentre() {
         </div>
       )}
 
-      {/* Chat section */}
       {!chatOpen ? (
         <button
           onClick={() => setChatOpen(true)}
