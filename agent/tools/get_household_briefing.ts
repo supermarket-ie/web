@@ -1,7 +1,7 @@
 import { defineTool } from 'eve/tools';
 import { z } from 'zod';
 import { requireSubscriber } from '../lib/subscriber';
-import { supabase } from '../lib/supabase';
+import { agentSupabase } from '../lib/supabase';
 
 export default defineTool({
   description: 'Get the signed-in household’s most useful current shopping signals: meaningful price changes and promotions on products they actually buy. Use when the user asks what is worth knowing, what changed, or what they should buy this week.',
@@ -9,7 +9,7 @@ export default defineTool({
   async execute(_input, ctx) {
     const subscriberId = requireSubscriber(ctx);
 
-    const { data: history } = await supabase
+    const { data: history } = await agentSupabase
       .from('list_items')
       .select('canonical_name, store, price_paid, observed_at')
       .eq('subscriber_id', subscriberId)
@@ -28,7 +28,7 @@ export default defineTool({
     }
 
     const names = [...last.keys()].slice(0, 40);
-    const { data: prices } = await supabase
+    const { data: prices } = await agentSupabase
       .from('latest_prices')
       .select('canonical_name, store, price, was_price, on_promotion')
       .in('canonical_name', names);
