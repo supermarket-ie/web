@@ -31,8 +31,6 @@ function scopedEveChatKey(): string | null {
 
 function loadSavedEveChat(): LoadedEveChat {
   try {
-    // Remove the old unscoped cache so a shared browser can never surface one
-    // household's prior transcript to another signed-in household.
     localStorage.removeItem(LEGACY_EVE_CHAT_KEY);
     const storageKey = scopedEveChatKey();
     if (!storageKey) return { saved: {}, storageKey: null };
@@ -53,7 +51,7 @@ function messageText(message: { parts?: readonly { type: string; text?: string }
     .join('');
 }
 
-function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKey: string | null }) {
+function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storageKey: string | null }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -62,7 +60,7 @@ function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKe
     initialEvents: saved.events ?? [],
     initialSession: saved.session,
     onError(nextError) {
-      setError(nextError.message || 'Eve could not complete that request.');
+      setError(nextError.message || 'Supermarket.ie could not complete that request.');
     },
     onFinish(snapshot) {
       if (storageKey) {
@@ -104,13 +102,13 @@ function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKe
                 className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
                 style={{ background: '#00944A' }}
               >
-                E
+                S
               </div>
               <div
                 className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
                 style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
               >
-                I’m Eve. Tell me what you need for the household shop — I can remember preferences, prepare and edit your shop, watch products, and surface the changes that matter.
+                Tell us what you need for the household shop. Supermarket.ie can remember preferences, prepare and edit your shop, watch products, and surface the changes that matter.
               </div>
             </div>
 
@@ -145,7 +143,7 @@ function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKe
                   className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold mr-2 mt-1 flex-shrink-0"
                   style={{ background: '#00944A' }}
                 >
-                  E
+                  S
                 </div>
               )}
               <div
@@ -172,7 +170,7 @@ function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKe
                 />
               ))}
             </span>
-            Eve is working on that…
+            Working on that…
           </div>
         )}
 
@@ -202,7 +200,7 @@ function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKe
             }}
             rows={1}
             disabled={busy}
-            placeholder="Tell Eve what you need…"
+            placeholder="Tell Supermarket.ie what you need…"
             className="w-full px-4 py-3 pr-12 rounded-xl text-sm resize-none outline-none disabled:opacity-60"
             style={{
               background: 'var(--surface-container-low)',
@@ -213,7 +211,7 @@ function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKe
           <button
             type="submit"
             disabled={busy || !input.trim()}
-            aria-label="Send to Eve"
+            aria-label="Send to Supermarket.ie"
             className="absolute right-2.5 bottom-2.5 w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-40"
             style={{ background: '#00944A' }}
           >
@@ -223,7 +221,7 @@ function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKe
           </button>
         </form>
         <p className="text-[11px] mt-1.5 text-center" style={{ color: 'var(--on-surface-variant)' }}>
-          Eve can change your draft shop and household preferences. She cannot place an order or spend money without your approval.
+          Supermarket.ie can change your draft shop and household preferences. We won’t place an order or spend money without your approval.
         </p>
       </div>
     </div>
@@ -240,10 +238,10 @@ export function HomePlanner() {
   if (!loaded) {
     return (
       <div className="min-h-[420px] flex items-center justify-center text-sm" style={{ color: 'var(--on-surface-variant)' }}>
-        Loading Eve…
+        Loading your shopping agent…
       </div>
     );
   }
 
-  return <EvePlannerInner saved={loaded.saved} storageKey={loaded.storageKey} />;
+  return <ShoppingAgentInner saved={loaded.saved} storageKey={loaded.storageKey} />;
 }
