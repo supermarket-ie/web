@@ -52,6 +52,10 @@ function messageText(message: { parts?: readonly { type: string; text?: string }
     .join('');
 }
 
+function isPersistentGuestRequest(text: string): boolean {
+  return /\b(watch|monitor|remind|notify|alert|track|tell me when|let me know when)\b/i.test(text);
+}
+
 function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveChat; storageKey: string | null; isGuest: boolean }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
@@ -83,7 +87,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const messages = agent.data.messages;
   const guestTurns = messages.filter(message => message.role === 'user').length;
   const showGuestGate = isGuest && (guestTurns >= 2 || messages.some(message =>
-    message.role === 'assistant' && /sign[ -]?in|account is required/i.test(messageText(message))
+    message.role === 'user' && isPersistentGuestRequest(messageText(message))
   ));
 
   useEffect(() => {
