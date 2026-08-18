@@ -85,9 +85,9 @@ export function WeeklyCommandCentre() {
 
   useEffect(() => {
     if (!token) return;
-    const refreshAfterEveTurn = () => fetchPlan(token).catch(() => {});
-    window.addEventListener('sm:eve-turn-finished', refreshAfterEveTurn);
-    return () => window.removeEventListener('sm:eve-turn-finished', refreshAfterEveTurn);
+    const refreshAfterAgentTurn = () => fetchPlan(token).catch(() => {});
+    window.addEventListener('sm:eve-turn-finished', refreshAfterAgentTurn);
+    return () => window.removeEventListener('sm:eve-turn-finished', refreshAfterAgentTurn);
   }, [token, fetchPlan]);
 
   const dinners = plan?.meals.dinners ?? [];
@@ -129,15 +129,15 @@ export function WeeklyCommandCentre() {
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <StatusCard label="Dinners" value={`${plannedDinners.length}/7`} sub={plannedDinners.length ? `€${dinnersTotal.toFixed(2)} est.` : 'Ask Eve to plan'} dot={plannedDinners.length ? 'green' : 'none'} />
-        <StatusCard label="Lunches" value={`${plannedLunches.length}/5`} sub={plannedLunches.length ? `€${lunchesTotal.toFixed(2)} est.` : 'Ask Eve to plan'} dot={plannedLunches.length ? 'green' : 'none'} />
+        <StatusCard label="Dinners" value={`${plannedDinners.length}/7`} sub={plannedDinners.length ? `€${dinnersTotal.toFixed(2)} est.` : 'Ask us to plan'} dot={plannedDinners.length ? 'green' : 'none'} />
+        <StatusCard label="Lunches" value={`${plannedLunches.length}/5`} sub={plannedLunches.length ? `€${lunchesTotal.toFixed(2)} est.` : 'Ask us to plan'} dot={plannedLunches.length ? 'green' : 'none'} />
         <StatusCard label="Shopping" value={shoppingItems > 0 ? `${shoppingItems} items` : '—'} sub={shoppingTotal > 0 ? `€${shoppingTotal.toFixed(2)}` : 'No shop yet'} dot="none" />
         <StatusCard label="Budget" value={budget?.target ? `€${budget.current.toFixed(2)}` : '—'} sub={budget?.target ? `of €${budget.target} target` : 'No target set'} accent={!budget?.onTrack} dot={budget?.target ? (budget.onTrack ? 'green' : 'amber') : 'none'} />
       </div>
 
       {plan?.agentNotices && plan.agentNotices.length > 0 && (
         <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#00944A' }}>What Eve noticed</p>
+          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#00944A' }}>Worth knowing</p>
           <ul className="space-y-1.5">{plan.agentNotices.map((n, i) => <NoticeRow key={i} notice={n} />)}</ul>
         </div>
       )}
@@ -164,7 +164,7 @@ export function WeeklyCommandCentre() {
 
       <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
         <div className="px-4 py-2.5" style={{ background: 'var(--surface-container)' }}>
-          <span className="text-xs font-semibold" style={{ color: 'var(--on-surface)' }}>Ask Eve</span>
+          <span className="text-xs font-semibold" style={{ color: 'var(--on-surface)' }}>What do you need?</span>
         </div>
         <HomePlanner />
       </div>
