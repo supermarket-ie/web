@@ -104,7 +104,14 @@ export async function listActiveProductAgentTasks(limit = 500) {
     .limit(limit);
 
   if (error) throw new Error(`Failed to list active agent tasks: ${error.message}`);
-  return (data ?? []) as AgentTask[];
+
+  // price_below tasks currently bridge to the established price_alerts checker,
+  // which already sends Resend notifications. Do not evaluate those a second
+  // time here while the compatibility bridge is active.
+  return ((data ?? []) as AgentTask[]).filter(task => {
+    const legacyAlertId = task.baseline?.legacy_alert_id;
+    return !(task.condition.kind === 'price_below' && typeof legacyAlertId === 'string');
+  });
 }
 
 export async function updateAgentTaskStatus(
