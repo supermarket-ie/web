@@ -25,7 +25,6 @@ export function PlanPage() {
 
   return (
     <div className="min-h-screen relative overflow-hidden noise-bg" style={{ background: 'var(--surface)' }}>
-      {/* Background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="gradient-blob" style={{
           width: 500, height: 500,
@@ -41,7 +40,6 @@ export function PlanPage() {
       </div>
 
       <div className="relative z-10 max-w-2xl mx-auto px-4 pt-6 pb-24">
-        {/* Header card */}
         <div className="rounded-2xl overflow-hidden mb-6"
           style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
           <div className="px-5 py-4 relative overflow-hidden"
@@ -55,9 +53,9 @@ export function PlanPage() {
               <h1 className="font-bold text-xl leading-tight" style={{
                 background: 'linear-gradient(135deg, #ffffff, #6BFE9C)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-              }}>Planner</h1>
-              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                Plan your weekly shop — prices tracked across every major Irish supermarket.
+              }}>Eve</h1>
+              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.78)' }}>
+                Your household shopping agent — remembers, prepares, watches and acts with you.
               </p>
             </div>
           </div>
