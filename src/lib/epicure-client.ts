@@ -11,15 +11,28 @@
  */
 
 const MCP_URL = 'https://epicure-mcp.kaikaku.ai/mcp';
+const EPICURE_TIMEOUT_MS = 3500;
 const HEADERS = {
   'Content-Type': 'application/json',
   'Accept': 'application/json, text/event-stream',
 };
 
+async function epicureFetch(init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), EPICURE_TIMEOUT_MS);
+  try {
+    const res = await fetch(MCP_URL, { ...init, signal: controller.signal });
+    if (!res.ok) throw new Error(`Epicure HTTP ${res.status}`);
+    return res;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ── MCP session helpers ───────────────────────────────────────────────────────
 
 async function initSession(): Promise<string> {
-  const res = await fetch(MCP_URL, {
+  const res = await epicureFetch({
     method: 'POST',
     headers: HEADERS,
     body: JSON.stringify({
@@ -38,7 +51,7 @@ async function initSession(): Promise<string> {
 }
 
 async function callTool(sessionId: string, name: string, args: Record<string, unknown>): Promise<string> {
-  const res = await fetch(MCP_URL, {
+  const res = await epicureFetch({
     method: 'POST',
     headers: { ...HEADERS, 'mcp-session-id': sessionId },
     body: JSON.stringify({
