@@ -7,6 +7,7 @@ import { WeeklyCommandCentre } from '@/components/WeeklyCommandCentre';
 export function PlanPage() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [ready, setReady] = useState(false);
+  const [eveRevision, setEveRevision] = useState(0);
 
   useEffect(() => {
     const session = loadSession();
@@ -19,6 +20,12 @@ export function PlanPage() {
       const el = document.getElementById('homepage-marketing');
       if (el) el.style.display = 'none';
     }
+  }, []);
+
+  useEffect(() => {
+    const handleEveTurnFinished = () => setEveRevision(revision => revision + 1);
+    window.addEventListener('sm:eve-turn-finished', handleEveTurnFinished);
+    return () => window.removeEventListener('sm:eve-turn-finished', handleEveTurnFinished);
   }, []);
 
   if (!ready || !isSignedIn) return null;
@@ -63,7 +70,7 @@ export function PlanPage() {
           </div>
         </div>
 
-        <WeeklyCommandCentre />
+        <WeeklyCommandCentre key={eveRevision} />
       </div>
     </div>
   );
