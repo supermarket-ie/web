@@ -2,13 +2,19 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useEveAgent } from 'eve/react';
+import { loadSession } from '@/lib/session';
 
-const EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
+const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 
 type EveAgentOptions = NonNullable<Parameters<typeof useEveAgent>[0]>;
 type SavedEveChat = {
   events?: EveAgentOptions['initialEvents'];
   session?: EveAgentOptions['initialSession'];
+};
+
+type LoadedEveChat = {
+  saved: SavedEveChat;
+  storageKey: string | null;
 };
 
 const STARTERS = [
@@ -18,12 +24,25 @@ const STARTERS = [
   'Show me what you are watching',
 ];
 
-function loadSavedEveChat(): SavedEveChat {
+function scopedEveChatKey(): string | null {
+  const email = loadSession()?.email?.trim().toLowerCase();
+  return email ? `${LEGACY_EVE_CHAT_KEY}:${encodeURIComponent(email)}` : null;
+}
+
+function loadSavedEveChat(): LoadedEveChat {
   try {
-    const raw = localStorage.getItem(EVE_CHAT_KEY);
-    return raw ? JSON.parse(raw) as SavedEveChat : {};
+    // Remove the old unscoped cache so a shared browser can never surface one
+    // household's prior transcript to another signed-in household.
+    localStorage.removeItem(LEGACY_EVE_CHAT_KEY);
+    const storageKey = scopedEveChatKey();
+    if (!storageKey) return { saved: {}, storageKey: null };
+    const raw = localStorage.getItem(storageKey);
+    return {
+      saved: raw ? JSON.parse(raw) as SavedEveChat : {},
+      storageKey,
+    };
   } catch {
-    return {};
+    return { saved: {}, storageKey: null };
   }
 }
 
@@ -34,7 +53,7 @@ function messageText(message: { parts?: readonly { type: string; text?: string }
     .join('');
 }
 
-function EvePlannerInner({ saved }: { saved: SavedEveChat }) {
+function EvePlannerInner({ saved, storageKey }: { saved: SavedEveChat; storageKey: string | null }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,12 +65,14 @@ function EvePlannerInner({ saved }: { saved: SavedEveChat }) {
       setError(nextError.message || 'Eve could not complete that request.');
     },
     onFinish(snapshot) {
-      try {
-        localStorage.setItem(EVE_CHAT_KEY, JSON.stringify({
-          events: snapshot.events,
-          session: snapshot.session,
-        }));
-      } catch {}
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify({
+            events: snapshot.events,
+            session: snapshot.session,
+          }));
+        } catch {}
+      }
       window.dispatchEvent(new CustomEvent('sm:eve-turn-finished'));
     },
   });
@@ -197,7 +218,7 @@ function EvePlannerInner({ saved }: { saved: SavedEveChat }) {
             style={{ background: '#00944A' }}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
             </svg>
           </button>
         </form>
@@ -210,13 +231,13 @@ function EvePlannerInner({ saved }: { saved: SavedEveChat }) {
 }
 
 export function HomePlanner() {
-  const [saved, setSaved] = useState<SavedEveChat | null>(null);
+  const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
 
   useEffect(() => {
-    setSaved(loadSavedEveChat());
+    setLoaded(loadSavedEveChat());
   }, []);
 
-  if (!saved) {
+  if (!loaded) {
     return (
       <div className="min-h-[420px] flex items-center justify-center text-sm" style={{ color: 'var(--on-surface-variant)' }}>
         Loading Eve…
@@ -224,5 +245,5 @@ export function HomePlanner() {
     );
   }
 
-  return <EvePlannerInner saved={saved} />;
+  return <EvePlannerInner saved={loaded.saved} storageKey={loaded.storageKey} />;
 }
