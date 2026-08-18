@@ -98,33 +98,15 @@ function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storag
         {messages.length === 0 && (
           <div className="space-y-4">
             <div className="flex items-start gap-2">
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
-                style={{ background: '#00944A' }}
-              >
-                S
-              </div>
-              <div
-                className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
-                style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}
-              >
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ background: '#00944A' }}>S</div>
+              <div className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed" style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}>
                 Tell us what you need for the household shop. Supermarket.ie can remember preferences, prepare and edit your shop, watch products, and surface the changes that matter.
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2 pl-9">
               {STARTERS.map(starter => (
-                <button
-                  key={starter}
-                  type="button"
-                  onClick={() => void send(starter)}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold transition-opacity hover:opacity-80"
-                  style={{
-                    background: 'var(--surface-container-lowest)',
-                    color: 'var(--on-surface)',
-                    border: '1px solid var(--surface-container)',
-                  }}
-                >
+                <button key={starter} type="button" onClick={() => void send(starter)} className="px-3 py-2 rounded-xl text-xs font-semibold transition-opacity hover:opacity-80" style={{ background: 'var(--surface-container-lowest)', color: 'var(--on-surface)', border: '1px solid var(--surface-container)' }}>
                   {starter}
                 </button>
               ))}
@@ -138,21 +120,8 @@ function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storag
           const isUser = message.role === 'user';
           return (
             <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-              {!isUser && (
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold mr-2 mt-1 flex-shrink-0"
-                  style={{ background: '#00944A' }}
-                >
-                  S
-                </div>
-              )}
-              <div
-                className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
-                style={isUser
-                  ? { background: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' }
-                  : { background: 'var(--surface-container)', color: 'var(--on-surface)' }
-                }
-              >
+              {!isUser && <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold mr-2 mt-1 flex-shrink-0" style={{ background: '#00944A' }}>S</div>}
+              <div className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`} style={isUser ? { background: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' } : { background: 'var(--surface-container)', color: 'var(--on-surface)' }}>
                 <p style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
               </div>
             </div>
@@ -162,62 +131,20 @@ function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storag
         {busy && (
           <div className="flex items-center gap-2 pl-9 text-xs" style={{ color: 'var(--on-surface-variant)' }}>
             <span className="flex gap-1">
-              {[0, 1, 2].map(i => (
-                <span
-                  key={i}
-                  className="w-1.5 h-1.5 rounded-full animate-bounce"
-                  style={{ background: '#00944A', animationDelay: `${i * 140}ms` }}
-                />
-              ))}
+              {[0, 1, 2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#00944A', animationDelay: `${i * 140}ms` }} />)}
             </span>
             Working on that…
           </div>
         )}
 
-        {error && (
-          <div className="ml-9 rounded-xl px-3 py-2 text-xs" style={{ background: '#FEF2F2', color: '#991B1B' }}>
-            {error}
-          </div>
-        )}
+        {error && <div className="ml-9 rounded-xl px-3 py-2 text-xs" style={{ background: '#FEF2F2', color: '#991B1B' }}>{error}</div>}
       </div>
 
       <div className="border-t p-3" style={{ borderColor: 'var(--surface-container)', background: 'var(--surface-container-lowest)' }}>
-        <form
-          onSubmit={event => {
-            event.preventDefault();
-            void send(input);
-          }}
-          className="relative"
-        >
-          <textarea
-            value={input}
-            onChange={event => setInput(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                void send(input);
-              }
-            }}
-            rows={1}
-            disabled={busy}
-            placeholder="Tell Supermarket.ie what you need…"
-            className="w-full px-4 py-3 pr-12 rounded-xl text-sm resize-none outline-none disabled:opacity-60"
-            style={{
-              background: 'var(--surface-container-low)',
-              color: 'var(--on-background)',
-              border: '1.5px solid var(--surface-container)',
-            }}
-          />
-          <button
-            type="submit"
-            disabled={busy || !input.trim()}
-            aria-label="Send to Supermarket.ie"
-            className="absolute right-2.5 bottom-2.5 w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-40"
-            style={{ background: '#00944A' }}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-            </svg>
+        <form onSubmit={event => { event.preventDefault(); void send(input); }} className="relative">
+          <textarea value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} disabled={busy} placeholder="Tell Supermarket.ie what you need…" className="w-full px-4 py-3 pr-12 rounded-xl text-sm resize-none outline-none disabled:opacity-60" style={{ background: 'var(--surface-container-low)', color: 'var(--on-background)', border: '1.5px solid var(--surface-container)' }} />
+          <button type="submit" disabled={busy || !input.trim()} aria-label="Send to Supermarket.ie" className="absolute right-2.5 bottom-2.5 w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-40" style={{ background: '#00944A' }}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>
           </button>
         </form>
         <p className="text-[11px] mt-1.5 text-center" style={{ color: 'var(--on-surface-variant)' }}>
@@ -232,7 +159,8 @@ export function HomePlanner() {
   const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
 
   useEffect(() => {
-    setLoaded(loadSavedEveChat());
+    const frame = requestAnimationFrame(() => setLoaded(loadSavedEveChat()));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   if (!loaded) {
