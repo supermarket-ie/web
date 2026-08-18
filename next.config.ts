@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withEve } from "eve/next";
 
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
@@ -31,4 +32,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Eve mounts the durable shopping agent at /eve/v1/* while preserving the
+// existing Next.js application and Vercel project as a single deployment.
+export default withEve(nextConfig);
