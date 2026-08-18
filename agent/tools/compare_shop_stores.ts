@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireSubscriber } from '../lib/subscriber';
 import { agentSupabase } from '../lib/supabase';
 import { loadCurrentShop } from '../lib/shop';
+import { compareBasketStores } from '../../src/lib/shopping/compare';
 
 type PriceRow = {
   canonical_name: string;
@@ -29,59 +30,25 @@ export default defineTool({
 
     if (error) throw new Error(`Unable to compare current supermarket prices: ${error.message}`);
 
-    const quantities = new Map(shop.items.map(item => [item.canonical_name, item.quantity ?? 1]));
-    const byStore = new Map<string, Map<string, PriceRow>>();
-
-    for (const row of (data ?? []) as PriceRow[]) {
-      const store = row.store;
-      const storeRows = byStore.get(store) ?? new Map<string, PriceRow>();
-      const existing = storeRows.get(row.canonical_name);
-      if (!existing || Number(row.price) < Number(existing.price)) storeRows.set(row.canonical_name, row);
-      byStore.set(store, storeRows);
-    }
-
-    const currentTotal = shop.items.reduce((sum, item) => sum + (Number(item.price) || 0) * (item.quantity ?? 1), 0);
-    const itemCount = shop.items.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
-
-    const comparisons = [...byStore.entries()].map(([store, rows]) => {
-      let total = 0;
-      let coveredUnits = 0;
-      const missing: string[] = [];
-      for (const name of names) {
-        const quantity = quantities.get(name) ?? 1;
-        const price = rows.get(name);
-        if (!price) {
-          missing.push(name);
-          continue;
-        }
-        total += Number(price.price) * quantity;
-        coveredUnits += quantity;
-      }
-      const complete = missing.length === 0;
-      return {
-        store,
-        total: Number(total.toFixed(2)),
-        complete,
-        covered_products: names.length - missing.length,
-        total_products: names.length,
-        covered_units: coveredUnits,
-        total_units: itemCount,
-        missing_products: missing.slice(0, 12),
-        difference_vs_current: complete ? Number((total - currentTotal).toFixed(2)) : null,
-      };
-    })
-      .filter(row => !input.store || row.store.toLowerCase() === input.store.toLowerCase())
-      .sort((a, b) => {
-        if (a.complete !== b.complete) return a.complete ? -1 : 1;
-        if (a.complete && b.complete) return a.total - b.total;
-        return b.covered_products - a.covered_products || a.total - b.total;
-      });
+    const comparison = compareBasketStores(
+      shop.items.map(item => ({
+        canonical_name: item.canonical_name,
+        quantity: item.quantity ?? 1,
+        current_price: item.price ?? null,
+      })),
+      ((data ?? []) as PriceRow[]).map(row => ({
+        canonical_name: row.canonical_name,
+        store: row.store,
+        price: Number(row.price),
+      })),
+      input.store,
+    );
 
     return {
       ok: true,
       list_id: shop.id,
-      current_mixed_total: Number(currentTotal.toFixed(2)),
-      comparisons,
+      current_mixed_total: comparison.current_total,
+      comparisons: comparison.comparisons,
       note: 'Only exact catalogue products are compared. A store with missing products is not presented as a complete basket total.',
     };
   },
