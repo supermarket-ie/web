@@ -1,6 +1,6 @@
 import { defineTool } from 'eve/tools';
 import { z } from 'zod';
-import { listActiveAgentTasks } from '../../src/lib/agent-tasks';
+import { listActiveAgentTasks } from '../lib/tasks';
 import { requireSubscriber } from '../lib/subscriber';
 
 export default defineTool({
