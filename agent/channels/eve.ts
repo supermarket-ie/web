@@ -34,9 +34,24 @@ function supermarketSessionAuth(): AuthFn<Request> {
   };
 }
 
+function supermarketGuestAuth(): AuthFn<Request> {
+  return async () => ({
+    authenticator: 'supermarket-guest',
+    issuer: 'https://supermarket.ie',
+    principalId: 'homepage-guest',
+    principalType: 'unknown',
+    subject: 'homepage-guest',
+    attributes: { access: 'preview' },
+  });
+}
+
 // Production is fail-closed: normal signed-in browser requests authenticate
 // through the existing HttpOnly sm_session cookie. Bearer auth remains available
 // for trusted non-browser clients. localDev keeps Eve's developer REPL usable.
 export default eveChannel({
-  auth: [supermarketSessionAuth(), localDev()],
+  // Guests may try the public shopping agent, but subscriber tools remain
+  // protected because they require a principalType of `user`. Keeping the
+  // preview inside Eve lets the agent explain why sign-in is useful instead
+  // of leaking the channel's raw 401 response into the homepage.
+  auth: [supermarketSessionAuth(), localDev(), supermarketGuestAuth()],
 });
