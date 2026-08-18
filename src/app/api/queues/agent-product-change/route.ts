@@ -1,6 +1,7 @@
 import { handleCallback } from '@vercel/queue';
 import { evaluateAgentTask } from '@/lib/agent-task-evaluator';
 import { listActiveTasksForProduct } from '@/lib/agent-tasks';
+import { evaluateHouseholdRelevanceForProduct } from '@/lib/household-relevance';
 import type { AgentProductChangeEvent } from '@/lib/agent-events';
 
 const MAX_DELIVERIES = 5;
@@ -9,27 +10,30 @@ export const POST = handleCallback<AgentProductChangeEvent>(
   async (message, metadata) => {
     if (!message?.canonicalName) throw new Error('Invalid agent product-change event');
 
+    // Explicit user instructions are always evaluated first and keep their
+    // existing notification semantics/cooldowns.
     const tasks = await listActiveTasksForProduct(message.canonicalName);
-    if (tasks.length === 0) {
-      console.log('[agent-events] no active watches for product', {
-        canonicalName: message.canonicalName,
-        store: message.store,
-        messageId: metadata.messageId,
-      });
-      return;
-    }
-
-    let triggered = 0;
+    let explicitTriggered = 0;
     for (const task of tasks) {
       const result = await evaluateAgentTask(task);
-      if (result.triggered) triggered += 1;
+      if (result.triggered) explicitTriggered += 1;
     }
 
-    console.log('[agent-events] product change evaluated', {
+    // Separately score households that repeatedly buy the exact canonical item.
+    // This can create an in-app insight at a lower threshold, while email uses
+    // a higher household preference-aware threshold.
+    const relevance = await evaluateHouseholdRelevanceForProduct(message.canonicalName);
+    const insightsStored = relevance.filter(result => result.persisted).length;
+    const proactiveEmails = relevance.filter(result => result.emailed).length;
+
+    console.log('[agent-events] product refresh evaluated', {
       canonicalName: message.canonicalName,
       store: message.store,
-      tasks: tasks.length,
-      triggered,
+      explicitTasks: tasks.length,
+      explicitTriggered,
+      householdsConsidered: relevance.length,
+      insightsStored,
+      proactiveEmails,
       deliveryCount: metadata.deliveryCount,
       messageId: metadata.messageId,
     });
