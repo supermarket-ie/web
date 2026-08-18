@@ -122,12 +122,18 @@ export default defineTool({
     }>();
 
     // Analyse meal-by-meal so a component repeatedly useful across different meals
-    // gains confidence. Keep calls bounded to the first 6 planned meals.
+    // gains confidence. Shop-wide analysis deliberately avoids live Epicure calls:
+    // the precomputed pairing table keeps this multi-meal check fast and resilient.
     for (const meal of selectedMeals.slice(0, 6)) {
       const heroIngredients = compactIngredients(meal);
       if (heroIngredients.length < 1) continue;
 
-      const intelligence = await getIngredientIntelligence(heroIngredients, context, 4);
+      const intelligence = await getIngredientIntelligence(
+        heroIngredients,
+        context,
+        4,
+        { allow_live_epicure: false },
+      );
       for (const suggestion of intelligence.suggestions) {
         const product = suggestion.products[0];
         if (!product) continue;
