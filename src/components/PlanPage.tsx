@@ -10,14 +10,17 @@ export function PlanPage() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const session = loadSession();
-    const signedIn = !!session?.token;
-    setIsSignedIn(signedIn);
-    setReady(true);
-    if (signedIn) {
-      const el = document.getElementById('homepage-marketing');
-      if (el) el.style.display = 'none';
-    }
+    const frame = requestAnimationFrame(() => {
+      const session = loadSession();
+      const signedIn = !!session?.token;
+      setIsSignedIn(signedIn);
+      setReady(true);
+      if (signedIn) {
+        const el = document.getElementById('homepage-marketing');
+        if (el) el.style.display = 'none';
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   if (!ready || !isSignedIn) return null;

@@ -79,12 +79,13 @@ export async function GET(req: NextRequest) {
 
   const weekStart = getCurrentWeekStart();
 
-  let { data: plan, error: selectErr } = await supabaseAdmin
+  const { data: selectedPlan, error: selectErr } = await supabaseAdmin
     .from('weekly_plans')
     .select('*')
     .eq('subscriber_id', subscriberId)
     .eq('week_start', weekStart)
     .single();
+  let plan = selectedPlan;
 
   if (selectErr && (selectErr.code === '42P01' || selectErr.message?.includes('does not exist'))) {
     return NextResponse.json({
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
       budget: { target: null, current: 0, onTrack: true },
       agentNotices: [{
         type: 'suggestion',
-        message: 'Ask Eve to plan dinners for this week based on your household and current supermarket options',
+        message: 'Ask Supermarket.ie to plan dinners for this week based on your household and current supermarket options',
         actionable: true,
         action: 'plan_dinners',
       }],
@@ -126,7 +127,7 @@ export async function GET(req: NextRequest) {
         budget: { target: null, current: 0, onTrack: true },
         agentNotices: [{
           type: 'suggestion',
-          message: 'Ask Eve to plan dinners for this week based on your household and current supermarket options',
+          message: 'Ask Supermarket.ie to plan dinners for this week based on your household and current supermarket options',
           actionable: true,
           action: 'plan_dinners',
         }],
@@ -166,14 +167,14 @@ export async function GET(req: NextRequest) {
   if (plannedDinners === 0 && plannedLunches === 0) {
     agentNotices.push({
       type: 'suggestion',
-      message: 'Ask Eve to plan the meals you need this week',
+      message: 'Ask Supermarket.ie to plan the meals you need this week',
       actionable: true,
       action: 'plan_dinners',
     });
   } else if (plannedDinners > 0 && plannedLunches === 0) {
     agentNotices.push({
       type: 'suggestion',
-      message: 'Dinners are planned. Eve can add lunches too if you need them.',
+      message: 'Dinners are planned. Supermarket.ie can add lunches too if you need them.',
       actionable: true,
       action: 'plan_lunches',
     });

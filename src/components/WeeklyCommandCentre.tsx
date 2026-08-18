@@ -21,12 +21,9 @@ function StatusCard({ label, value, sub, accent, dot }: {
   dot?: 'green' | 'amber' | 'none';
 }) {
   return (
-    <div className="rounded-2xl px-3 py-3 flex flex-col gap-0.5"
-      style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+    <div className="rounded-2xl px-3 py-3 flex flex-col gap-0.5" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
       <div className="flex items-center gap-1.5">
-        {dot && dot !== 'none' && (
-          <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: dot === 'green' ? '#00944A' : '#F59E0B' }} />
-        )}
+        {dot && dot !== 'none' && <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: dot === 'green' ? '#00944A' : '#F59E0B' }} />}
         <span className="text-xs font-medium" style={{ color: 'var(--on-surface-variant)' }}>{label}</span>
       </div>
       <span className="text-base font-bold leading-tight" style={{ color: accent ? '#F59E0B' : 'var(--on-surface)' }}>{value}</span>
@@ -76,11 +73,14 @@ export function WeeklyCommandCentre() {
   }, []);
 
   useEffect(() => {
-    const session = loadSession();
-    const t = session?.token ?? null;
-    setToken(t);
-    if (t) fetchPlan(t).finally(() => setLoading(false));
-    else setLoading(false);
+    const frame = requestAnimationFrame(() => {
+      const session = loadSession();
+      const t = session?.token ?? null;
+      setToken(t);
+      if (t) void fetchPlan(t).finally(() => setLoading(false));
+      else setLoading(false);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [fetchPlan]);
 
   useEffect(() => {
@@ -119,11 +119,7 @@ export function WeeklyCommandCentre() {
           <h2 className="text-base font-bold" style={{ color: 'var(--on-surface)' }}>This week</h2>
           <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{weekLabel}</p>
         </div>
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-          style={{
-            background: plan?.status === 'complete' ? '#00944A' : plan?.status === 'partial' ? 'var(--primary-container)' : 'var(--surface-container)',
-            color: plan?.status === 'complete' ? '#fff' : plan?.status === 'partial' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
-          }}>
+        <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: plan?.status === 'complete' ? '#00944A' : plan?.status === 'partial' ? 'var(--primary-container)' : 'var(--surface-container)', color: plan?.status === 'complete' ? '#fff' : plan?.status === 'partial' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)' }}>
           {plan?.status === 'complete' ? 'Ready' : plan?.status === 'partial' ? 'In progress' : 'Not started'}
         </span>
       </div>
