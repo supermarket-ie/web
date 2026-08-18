@@ -1,4 +1,5 @@
 import { agentSupabase } from './supabase';
+import { computeBasketStoreTotals } from '../../src/lib/shopping/basket';
 
 export type AgentListItem = {
   canonical_name: string;
@@ -20,19 +21,21 @@ export type CurrentPrice = {
 };
 
 export function computeStoreTotals(items: AgentListItem[]) {
-  const grouped = new Map<string, { store: string; total: number; item_count: number }>();
-  for (const item of items) {
-    if (!item.store || typeof item.price !== 'number') continue;
-    const quantity = item.quantity ?? 1;
-    const row = grouped.get(item.store) ?? { store: item.store, total: 0, item_count: 0 };
-    row.total += item.price * quantity;
-    row.item_count += quantity;
-    grouped.set(item.store, row);
-  }
-  return [...grouped.values()].map(row => ({
-    ...row,
-    total: Number(row.total.toFixed(2)),
-  }));
+  return computeBasketStoreTotals(
+    items
+      .filter(item => item.store && typeof item.price === 'number')
+      .map(item => ({
+        canonical_name: item.canonical_name,
+        category: item.category ?? null,
+        quantity: item.quantity ?? 1,
+        selected_offer: {
+          retailer: item.store!,
+          retailer_product_name: item.store_product_name ?? item.canonical_name,
+          price: item.price!,
+          on_promotion: Boolean(item.on_promotion),
+        },
+      })),
+  );
 }
 
 export async function loadCurrentShop(subscriberId: string) {
