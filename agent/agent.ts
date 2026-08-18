@@ -1,9 +1,11 @@
 import { defineAgent } from 'eve';
+import { anthropic } from '@ai-sdk/anthropic';
 
 export default defineAgent({
-  // Route through Vercel AI Gateway so the agent can use Vercel-native model
-  // observability/routing while keeping the model choice easy to change later.
-  model: 'anthropic/claude-haiku-4.5',
+  // Use the project's configured Anthropic account directly. The Vercel AI
+  // Gateway model is restricted without paid Gateway credits, while this
+  // project already has ANTHROPIC_API_KEY configured in production.
+  model: anthropic('claude-haiku-4-5-20251001'),
   limits: {
     maxInputTokensPerSession: 250_000,
     maxOutputTokensPerSession: 40_000,
