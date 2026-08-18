@@ -28,9 +28,9 @@ export function ProductProofSection() {
               <Sparkles className="size-3.5" />
               See the result
             </span>
-            <h2 className="text-balance text-[clamp(2.25rem,5vw,4rem)] font-extrabold leading-[1.02] tracking-[-0.045em]">
+            <h2 className="text-balance text-[clamp(2.25rem,4.5vw,3.5rem)] font-extrabold leading-[1.02] tracking-[-0.045em]">
               From “what do we need?”
-              <span className="block text-primary-container">to a week that&apos;s handled.</span>
+              <span className="block text-primary-container">to a shop planned around you.</span>
             </h2>
           </div>
           <p className="max-w-md text-base leading-7 text-white/65">
@@ -88,7 +88,7 @@ export function ProductProofSection() {
 
             <div className="grid border-t border-dashed border-black/10 font-mono sm:grid-cols-3">
               {[
-                ['34', 'items handled'],
+                ['34', 'items included'],
                 ['€106.42', 'within your budget'],
                 ['6 categories', 'one complete shop'],
               ].map(([value, label]) => (
@@ -108,7 +108,7 @@ export function ProductProofSection() {
                   <p className="text-xs font-bold uppercase tracking-[0.08em] text-primary-container">
                     Your agent at work
                   </p>
-                  <p className="font-bold">One request. The whole week handled.</p>
+                  <p className="font-bold">One request. Your whole week planned.</p>
                 </div>
               </div>
 
@@ -116,7 +116,7 @@ export function ProductProofSection() {
                 {[
                   { label: 'Household understood', detail: '4 people · family favourites', colour: '#EADFF2' },
                   { label: 'Meals planned', detail: 'food and household needs included', colour: '#FFD84D' },
-                  { label: 'Shop assembled', detail: '34 supermarket items handled', colour: '#FF7A59' },
+                  { label: 'Shop assembled', detail: '34 supermarket items included', colour: '#FF7A59' },
                   { label: 'Budget checked', detail: '€106.42 of €110', colour: '#6BFE9C' },
                 ].map((step, index) => (
                   <div
