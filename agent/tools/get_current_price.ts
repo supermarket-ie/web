@@ -1,6 +1,6 @@
 import { defineTool } from 'eve/tools';
 import { z } from 'zod';
-import { getCurrentProductSnapshot, resolveCatalogueProduct } from '../../src/lib/catalogue-resolution';
+import { getCurrentProductSnapshot, resolveCatalogueProduct } from '../lib/catalogue';
 
 export default defineTool({
   description: 'Get the current Supermarket.ie price snapshot for a product, including the best store and promotion state. Accepts natural product wording.',
