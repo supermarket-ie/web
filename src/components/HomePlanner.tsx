@@ -70,7 +70,7 @@ function EvePlannerInner({ saved }: { saved: SavedEveChat }) {
     if (!message || busy) return;
     setInput('');
     setError('');
-    await agent.send({ message });
+    await agent.send([{ type: 'text', text: message }]);
   }
 
   return (
