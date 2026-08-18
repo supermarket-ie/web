@@ -93,6 +93,20 @@ export async function listActiveTasksForProduct(canonicalName: string) {
   return (data ?? []) as AgentTask[];
 }
 
+export async function listActiveProductAgentTasks(limit = 500) {
+  const { data, error } = await supabaseAdmin
+    .from('agent_tasks')
+    .select('*')
+    .eq('status', 'active')
+    .not('canonical_name', 'is', null)
+    .in('type', ['price_watch', 'promotion_watch', 'availability_watch'])
+    .order('last_evaluated_at', { ascending: true, nullsFirst: true })
+    .limit(limit);
+
+  if (error) throw new Error(`Failed to list active agent tasks: ${error.message}`);
+  return (data ?? []) as AgentTask[];
+}
+
 export async function updateAgentTaskStatus(
   subscriberId: string,
   taskId: string,
@@ -108,6 +122,18 @@ export async function updateAgentTaskStatus(
 
   if (error) throw new Error(`Failed to update agent task: ${error.message}`);
   return data as AgentTask;
+}
+
+export async function updateAgentTaskBaseline(
+  taskId: string,
+  baseline: Record<string, unknown> | null,
+) {
+  const { error } = await supabaseAdmin
+    .from('agent_tasks')
+    .update({ baseline, updated_at: new Date().toISOString() })
+    .eq('id', taskId);
+
+  if (error) throw new Error(`Failed to update agent task baseline: ${error.message}`);
 }
 
 export function taskIsInCooldown(task: AgentTask, now = new Date()): boolean {
