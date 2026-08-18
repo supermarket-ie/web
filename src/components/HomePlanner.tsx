@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useEveAgent } from 'eve/react';
-import type { HandleMessageStreamEvent, SessionState } from 'eve/client';
 
 const EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 
+type EveAgentOptions = NonNullable<Parameters<typeof useEveAgent>[0]>;
 type SavedEveChat = {
-  events?: readonly HandleMessageStreamEvent[];
-  session?: SessionState;
+  events?: EveAgentOptions['initialEvents'];
+  session?: EveAgentOptions['initialSession'];
 };
 
 const STARTERS = [
