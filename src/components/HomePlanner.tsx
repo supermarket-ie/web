@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useEveAgent } from 'eve/react';
+import Link from 'next/link';
 import { loadSession } from '@/lib/session';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
@@ -51,7 +52,7 @@ function messageText(message: { parts?: readonly { type: string; text?: string }
     .join('');
 }
 
-function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storageKey: string | null }) {
+function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveChat; storageKey: string | null; isGuest: boolean }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -60,7 +61,10 @@ function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storag
     initialEvents: saved.events ?? [],
     initialSession: saved.session,
     onError(nextError) {
-      setError(nextError.message || 'Supermarket.ie could not complete that request.');
+      const message = nextError.message || '';
+      setError(/authori[sz]ation|required.*route|unauthori[sz]ed/i.test(message)
+        ? 'Sign in to let your agent remember this and keep working for you.'
+        : 'Supermarket.ie could not complete that request. Please try again.');
     },
     onFinish(snapshot) {
       if (storageKey) {
@@ -77,6 +81,10 @@ function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storag
 
   const busy = agent.status === 'submitted' || agent.status === 'streaming';
   const messages = agent.data.messages;
+  const guestTurns = messages.filter(message => message.role === 'user').length;
+  const showGuestGate = isGuest && (guestTurns >= 2 || messages.some(message =>
+    message.role === 'assistant' && /sign[ -]?in|account is required/i.test(messageText(message))
+  ));
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -138,12 +146,26 @@ function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storag
         )}
 
         {error && <div className="ml-9 rounded-xl px-3 py-2 text-xs" style={{ background: '#FEF2F2', color: '#991B1B' }}>{error}</div>}
+
+        {showGuestGate && (
+          <div className="ml-9 rounded-2xl px-4 py-4" style={{ background: 'var(--primary-container)', border: '1px solid rgba(0,106,53,0.25)' }}>
+            <p className="text-sm font-bold" style={{ color: 'var(--on-primary-container)' }}>
+              Make this your household agent
+            </p>
+            <p className="mt-1 text-xs leading-5" style={{ color: 'var(--on-primary-container)', opacity: 0.82 }}>
+              Sign in so it can remember your preferences, prepare your shop and notify you when something you buy changes.
+            </p>
+            <Link href="/list/request" className="mt-3 inline-flex rounded-xl px-4 py-2 text-xs font-bold text-white" style={{ background: '#006A35' }}>
+              Sign in free →
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="border-t p-3" style={{ borderColor: 'var(--surface-container)', background: 'var(--surface-container-lowest)' }}>
         <form onSubmit={event => { event.preventDefault(); void send(input); }} className="relative">
-          <textarea value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} disabled={busy} placeholder="Tell Supermarket.ie what you need…" className="w-full px-4 py-3 pr-12 rounded-xl text-sm resize-none outline-none disabled:opacity-60" style={{ background: 'var(--surface-container-low)', color: 'var(--on-background)', border: '1.5px solid var(--surface-container)' }} />
-          <button type="submit" disabled={busy || !input.trim()} aria-label="Send to Supermarket.ie" className="absolute right-2.5 bottom-2.5 w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-40" style={{ background: '#00944A' }}>
+          <textarea value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} disabled={busy || showGuestGate} placeholder={showGuestGate ? 'Sign in to keep chatting…' : 'Tell Supermarket.ie what you need…'} className="w-full px-4 py-3 pr-12 rounded-xl text-sm resize-none outline-none disabled:opacity-60" style={{ background: 'var(--surface-container-low)', color: 'var(--on-background)', border: '1.5px solid var(--surface-container)' }} />
+          <button type="submit" disabled={busy || showGuestGate || !input.trim()} aria-label="Send to Supermarket.ie" className="absolute right-2.5 bottom-2.5 w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-40" style={{ background: '#00944A' }}>
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>
           </button>
         </form>
@@ -157,9 +179,13 @@ function ShoppingAgentInner({ saved, storageKey }: { saved: SavedEveChat; storag
 
 export function HomePlanner() {
   const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
+  const [isGuest, setIsGuest] = useState(true);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setLoaded(loadSavedEveChat()));
+    const frame = requestAnimationFrame(() => {
+      setIsGuest(!loadSession()?.token);
+      setLoaded(loadSavedEveChat());
+    });
     return () => cancelAnimationFrame(frame);
   }, []);
 
@@ -171,5 +197,5 @@ export function HomePlanner() {
     );
   }
 
-  return <ShoppingAgentInner saved={loaded.saved} storageKey={loaded.storageKey} />;
+  return <ShoppingAgentInner saved={loaded.saved} storageKey={loaded.storageKey} isGuest={isGuest} />;
 }
