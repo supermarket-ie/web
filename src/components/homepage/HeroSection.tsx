@@ -16,8 +16,8 @@ export function HeroSection() {
       </div>
 
       <div className="relative z-10 mx-auto max-w-7xl">
-        <div className="grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16">
-          <div className="max-w-xl">
+        <div className="grid items-start gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16">
+          <div className="min-w-0 max-w-xl">
             <div className="chip-tertiary mb-6 inline-flex items-center gap-2">
               <Sparkles className="size-3.5" />
               Ireland&apos;s personal supermarket agent
@@ -34,7 +34,7 @@ export function HeroSection() {
               Tell your agent what your household needs—from food and meals to cleaning, toiletries and pet care. It remembers your preferences and helps you build the right shop each week.
             </p>
 
-            <div className="mb-7 h-10">
+            <div className="relative mb-7 h-10 max-w-lg overflow-hidden">
               <LiveDealChip />
             </div>
 
@@ -65,7 +65,7 @@ export function HeroSection() {
             </p>
           </div>
 
-          <div id="grocery-agent" className="relative scroll-mt-24">
+          <div id="grocery-agent" className="relative min-w-0 self-start scroll-mt-24">
             <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-primary-container/25 to-tertiary-container/15 blur-2xl" />
             <div className="mb-3 flex items-center justify-between px-2 text-xs font-semibold text-on-surface">
               <span className="inline-flex items-center gap-2">
