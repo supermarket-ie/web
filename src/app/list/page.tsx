@@ -8,22 +8,16 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { TokenPersist } from '@/components/TokenPersist';
 import { SavedListView } from '@/components/SavedListView';
+import { ShopDecisionTrace } from '@/components/ShopDecisionTrace';
 
 export const metadata: Metadata = {
   title: 'Your grocery list — supermarket.ie',
-  description: 'Your personalised AI grocery list with the best prices across Irish supermarkets.',
+  description: 'Your household shop, prepared and managed with Supermarket.ie.',
   robots: { index: false, follow: false },
 };
 
 const CLIENT_SESSION_TOKEN = '__cookie__';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Extracts the actual grocery list content from conversation messages.
- * Filters out AI narration / planning commentary.
- * Returns the last assistant message that looks like a real grocery list.
- */
 function extractListContent(messages: Array<{ role: string; content: string }>): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
@@ -55,8 +49,6 @@ function extractListContent(messages: Array<{ role: string; content: string }>):
   return null;
 }
 
-// ── Error pages ───────────────────────────────────────────────────────────────
-
 function ExpiredPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16" style={{ background: 'var(--surface)' }}>
@@ -85,16 +77,16 @@ function EmptyListPage() {
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16" style={{ background: 'var(--surface)' }}>
         <div className="rounded-2xl max-w-md w-full p-8 text-center" style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
           <div className="text-5xl mb-4">🛒</div>
-          <h1 className="text-2xl font-bold mb-3" style={{ color: 'var(--on-background)' }}>No list yet</h1>
+          <h1 className="text-2xl font-bold mb-3" style={{ color: 'var(--on-background)' }}>No shop yet</h1>
           <p className="mb-6" style={{ color: 'var(--on-surface)' }}>
-            Chat with our AI planner to build your personalised grocery list with the best prices across stores.
+            Tell Supermarket.ie what your household needs and we&rsquo;ll prepare the shop with you.
           </p>
           <Link
             href="/"
             className="inline-flex items-center px-6 py-3 rounded-xl font-semibold text-white transition-opacity hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #006A35, #00944A)' }}
           >
-            Plan my groceries →
+            Prepare my shop →
           </Link>
         </div>
       </div>
@@ -103,7 +95,21 @@ function EmptyListPage() {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+type DecisionTrace = {
+  version?: number;
+  prepared_at?: string;
+  decisions?: Array<{
+    canonical_name: string;
+    action: 'included' | 'suggested' | 'not_added';
+    confidence: 'include' | 'suggest' | 'suppress';
+    reason: string;
+    signals?: string[];
+    sources?: string[];
+    price?: number | null;
+    store?: string | null;
+    on_promotion?: boolean;
+  }>;
+};
 
 export default async function ListPage({
   searchParams,
@@ -112,9 +118,6 @@ export default async function ListPage({
 }) {
   const { token: queryToken, list: listId, intent } = await searchParams;
 
-  // Backwards-compatible exchange for existing email/bookmark links. A real
-  // JWT is accepted only long enough to set the HttpOnly session cookie, then
-  // the browser is redirected to a credential-free URL.
   if (queryToken && queryToken !== CLIENT_SESSION_TOKEN) {
     const exchange = new URLSearchParams({ token: queryToken });
     if (listId) exchange.set('list', listId);
@@ -129,7 +132,7 @@ export default async function ListPage({
 
   const { data: savedLists } = await supabaseAdmin
     .from('saved_lists')
-    .select('id, name, meals_prompt, family_size, store_totals, is_default, created_at, generated_at, items')
+    .select('id, name, meals_prompt, family_size, store_totals, is_default, created_at, generated_at, items, agent_decision_trace')
     .eq('subscriber_id', payload.subscriberId)
     .order('created_at', { ascending: false })
     .limit(10);
@@ -165,6 +168,7 @@ export default async function ListPage({
     : null;
 
   const storeTotals = (activeList.store_totals ?? []) as Array<{ store: string; total: number; item_count?: number }>;
+  const decisionTrace = (activeList.agent_decision_trace ?? null) as DecisionTrace | null;
 
   const { data: householdData } = await supabaseAdmin
     .from('households')
@@ -177,6 +181,7 @@ export default async function ListPage({
     <>
       <SiteHeader />
       <TokenPersist token={CLIENT_SESSION_TOKEN} familySize={activeList.family_size ?? '2'} email={payload.email ?? ''} />
+      <ShopDecisionTrace trace={decisionTrace} conversationId={conversationId} />
       <SavedListView
         listContent={listContent}
         structuredItems={structuredItems}
