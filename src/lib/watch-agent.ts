@@ -10,7 +10,8 @@ export function isPersistentShoppingIntent(text: string): boolean {
   const normal = text.toLowerCase();
   return /\b(notify|notification|alert|watch|monitor|track|remind|tell me (?:if|when)|let me know (?:if|when)|keep an eye)\b/.test(normal)
     || /\b(stop|cancel|remove|delete)\b.*\b(watch|alert|notification|monitoring)\b/.test(normal)
-    || /\b(what|which|show|list)\b.*\b(watching|watches|alerts|monitoring|tracking)\b/.test(normal);
+    || /\b(what|which|show|list)\b.*\b(watching|watches|alerts|monitoring|tracking)\b/.test(normal)
+    || /\b(important only|only important|useful updates|keep me updated|be quiet|stop proactive|automatic updates|proactive (?:emails|messages|updates))\b/.test(normal);
 }
 
 async function createLegacyPriceAlert(
@@ -61,18 +62,28 @@ function watchTools(subscriberId: string | null) {
   return {
     resolve_product: tool({
       description: 'Resolve natural product wording to current Supermarket.ie catalogue products. Use before creating a product watch if the exact item is not already known.',
-      inputSchema: z.object({
-        query: z.string().min(2),
-      }),
+      inputSchema: z.object({ query: z.string().min(2) }),
       execute: async ({ query }) => resolveCatalogueProduct(query, 5),
     }),
 
     get_current_price: tool({
       description: 'Get the current price/promotion snapshot for a canonical Supermarket.ie product.',
-      inputSchema: z.object({
-        canonical_name: z.string().min(2),
-      }),
+      inputSchema: z.object({ canonical_name: z.string().min(2) }),
       execute: async ({ canonical_name }) => getCurrentProductSnapshot(canonical_name),
+    }),
+
+    set_proactivity: tool({
+      description: 'Set the household’s automatic proactive update level. Explicit product watches are not affected.',
+      inputSchema: z.object({ mode: z.enum(['important_only', 'useful_updates', 'quiet']) }),
+      execute: async ({ mode }) => {
+        if (!subscriberId) return { updated: false, reason: 'sign_in_required' };
+        const { error } = await supabaseAdmin
+          .from('subscribers')
+          .update({ agent_proactivity: mode, updated_at: new Date().toISOString() })
+          .eq('id', subscriberId);
+        if (error) throw new Error(`Could not update proactive preference: ${error.message}`);
+        return { updated: true, mode };
+      },
     }),
 
     create_watch: tool({
@@ -97,9 +108,7 @@ function watchTools(subscriberId: string | null) {
         }
 
         const candidates = await resolveCatalogueProduct(product_query, 5);
-        if (candidates.length === 0) {
-          return { created: false, reason: 'product_not_found', query: product_query };
-        }
+        if (candidates.length === 0) return { created: false, reason: 'product_not_found', query: product_query };
 
         const best = candidates[0];
         const second = candidates[1];
@@ -124,14 +133,8 @@ function watchTools(subscriberId: string | null) {
           ? { ...snapshot, available: true }
           : { available: false, captured_at: new Date().toISOString() };
 
-        // Keep using the proven existing price-alert mailer for threshold alerts
-        // until all notification types are consolidated into agent_notifications.
         if (condition.kind === 'price_below') {
-          const legacyAlertId = await createLegacyPriceAlert(
-            subscriberId,
-            best.canonical_name,
-            condition.amount,
-          );
+          const legacyAlertId = await createLegacyPriceAlert(subscriberId, best.canonical_name, condition.amount);
           if (legacyAlertId) baseline.legacy_alert_id = legacyAlertId;
         }
 
@@ -216,7 +219,7 @@ export function createWatchAgent(subscriberId: string | null) {
     model: anthropic('claude-haiku-4-5-20251001'),
     instructions: `You are the persistent household shopping agent for Supermarket.ie.
 
-This request is about an ongoing watch, notification, reminder or monitoring instruction — not meal planning.
+This request is about an ongoing watch, notification, monitoring instruction or proactive-agent preference — not meal planning.
 
 Rules:
 - If the user asks to watch/notify/monitor/track a supermarket product, use create_watch. Do not claim you cannot monitor things.
@@ -227,7 +230,10 @@ Rules:
 - "Tell me when it is back/in stock/available" means available.
 - If the user asks what is being watched, use list_watches.
 - If they ask to stop a watch, identify it from list_watches and use cancel_watch.
-- A persistent watch requires sign-in. If create_watch returns sign_in_required, explain that succinctly; never pretend the watch was created.
+- If the user says only tell me important things, use set_proactivity with important_only.
+- If they ask for useful automatic updates or to keep them updated, use useful_updates.
+- If they ask the automatic agent to be quiet or stop proactive emails, use quiet. Explain that explicit watches still work.
+- A persistent action requires sign-in. If a tool returns sign_in_required, explain that succinctly; never pretend it succeeded.
 - Never invent catalogue matches, prices, promotions or notification status.
 - After a successful tool call, confirm the action in one or two natural sentences. Do not mention internal tools or architecture.
 - Supermarket.ie covers groceries and normal household consumables, not just meal ingredients.`,
