@@ -95,15 +95,15 @@ export function LiveDealChip() {
 
   return (
     <div
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-opacity duration-300"
+      className="flex h-10 w-full max-w-full items-center gap-2 rounded-full px-4 text-sm font-semibold transition-opacity duration-300"
       style={{
         background: 'var(--primary-fixed)',
         color: 'var(--on-primary-container)',
         opacity: fading ? 0 : 1,
       }}
     >
-      <span className="animate-pulse">🔥</span>
-      <span>
+      <span className="shrink-0 animate-pulse">🔥</span>
+      <span className="min-w-0 truncate whitespace-nowrap">
         {name} down {pct}% at {store} this week
       </span>
     </div>

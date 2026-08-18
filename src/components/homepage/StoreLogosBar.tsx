@@ -1,5 +1,4 @@
 import Image from 'next/image';
-import { Activity } from 'lucide-react';
 
 const stores = [
   { name: 'Tesco', logo: '/images/stores/tesco-grey.png', width: 394, height: 113 },
@@ -10,32 +9,23 @@ const stores = [
 
 export function StoreLogosBar() {
   return (
-    <section className="border-y border-black/[0.04] bg-surface-low px-6 py-8">
-      <div className="mx-auto grid max-w-7xl items-center gap-7 lg:grid-cols-[auto_1fr_auto]">
-        <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.09em] text-on-surface">
-            One agent. Ireland&apos;s supermarkets.
-          </p>
-          <p className="mt-1 text-xs text-on-surface-variant">Your agent understands what&apos;s available across the stores you know</p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-7 md:gap-10">
+    <section className="bg-surface-low px-6 py-10">
+      <div className="mx-auto max-w-6xl">
+        <p className="mb-6 text-center text-xs font-extrabold uppercase tracking-[0.09em] text-on-surface-variant">
+          Your agent understands Ireland&apos;s supermarkets
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12">
           {stores.map((store) => (
-            <div key={store.name} className="opacity-55 grayscale transition-all duration-200 hover:opacity-90 hover:grayscale-0">
+            <div key={store.name} className="opacity-50 grayscale">
               <Image
                 src={store.logo}
                 alt={store.name}
                 width={store.width}
                 height={store.height}
-                className="h-6 w-auto md:h-7"
+                className="h-6 w-auto md:h-8"
               />
             </div>
           ))}
-        </div>
-
-        <div className="flex items-center gap-2 rounded-full bg-surface-lowest px-3 py-2 text-xs font-bold text-primary shadow-sm">
-          <Activity className="size-3.5" />
-          Your agent is watching
         </div>
       </div>
     </section>
