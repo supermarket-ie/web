@@ -9,13 +9,16 @@ function supermarketSessionAuth(): AuthFn<Request> {
     const payload = verifySessionToken(bearer);
     if (!payload) return null;
 
+    const attributes: Record<string, string | readonly string[]> = {};
+    if (payload.email) attributes.email = payload.email;
+
     return {
       authenticator: 'supermarket-session',
       issuer: 'https://supermarket.ie',
       principalId: payload.subscriberId,
       principalType: 'user',
       subject: payload.subscriberId,
-      attributes: payload.email ? { email: payload.email } : {},
+      attributes,
     };
   };
 }
