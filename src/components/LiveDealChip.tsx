@@ -95,7 +95,7 @@ export function LiveDealChip() {
 
   return (
     <div
-      className="flex h-10 w-full max-w-full items-center gap-2 rounded-full px-4 text-sm font-semibold transition-opacity duration-300"
+      className="absolute inset-0 flex h-10 w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-full px-4 text-sm font-semibold transition-opacity duration-300"
       style={{
         background: 'var(--primary-fixed)',
         color: 'var(--on-primary-container)',
