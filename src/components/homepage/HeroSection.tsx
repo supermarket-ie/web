@@ -34,7 +34,7 @@ export function HeroSection() {
               Tell us about your household once. Your agent learns what your household eats, uses and regularly needs—then plans and builds the complete shop, week after week.
             </p>
 
-            <div className="mb-7">
+            <div className="mb-7 h-10">
               <LiveDealChip />
             </div>
 
