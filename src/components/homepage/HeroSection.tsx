@@ -23,15 +23,15 @@ export function HeroSection() {
               Ireland&apos;s personal supermarket agent
             </div>
 
-            <h1 className="mb-6 text-balance text-[clamp(2.75rem,6vw,5.25rem)] font-extrabold leading-[0.98] tracking-[-0.055em] text-on-background">
-              Your supermarket shop,
+            <h1 className="mb-6 text-balance text-[clamp(2.5rem,4.5vw,4rem)] font-extrabold leading-[1.02] tracking-[-0.045em] text-on-background">
+              Your whole shop,
               <span className="block bg-gradient-to-r from-[#006A35] to-[#12a85b] bg-clip-text text-transparent">
-                handled.
+                planned around you.
               </span>
             </h1>
 
             <p className="mb-7 max-w-lg text-lg leading-8 text-on-surface md:text-xl">
-              Tell us about your household once. Your agent learns what your household eats, uses and regularly needs—then plans and builds the complete shop, week after week.
+              Tell your agent what your household needs—from food and meals to cleaning, toiletries and pet care. It remembers your preferences and helps you build the right shop each week.
             </p>
 
             <div className="mb-7 h-10">
