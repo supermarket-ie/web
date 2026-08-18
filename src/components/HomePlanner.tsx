@@ -56,6 +56,18 @@ function isPersistentGuestRequest(text: string): boolean {
   return /\b(watch|monitor|remind|notify|alert|track|tell me when|let me know when)\b/i.test(text);
 }
 
+function FormattedAgentText({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <p style={{ whiteSpace: 'pre-wrap' }}>
+      {parts.map((part, index) => part.startsWith('**') && part.endsWith('**')
+        ? <strong key={index}>{part.slice(2, -2)}</strong>
+        : <span key={index}>{part}</span>
+      )}
+    </p>
+  );
+}
+
 function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveChat; storageKey: string | null; isGuest: boolean }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
@@ -91,10 +103,11 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   ));
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, busy]);
+    const frame = requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, busy, showGuestGate]);
 
   async function send(text: string) {
     const message = text.trim();
@@ -134,7 +147,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
             <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
               {!isUser && <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold mr-2 mt-1 flex-shrink-0" style={{ background: '#00944A' }}>S</div>}
               <div className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`} style={isUser ? { background: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' } : { background: 'var(--surface-container)', color: 'var(--on-surface)' }}>
-                <p style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
+                {isUser ? <p style={{ whiteSpace: 'pre-wrap' }}>{text}</p> : <FormattedAgentText text={text} />}
               </div>
             </div>
           );
