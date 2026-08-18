@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from '@/lib/supabase';
 import { resend } from '@/lib/resend';
-import { queryPriceChanges, queryUserHistory } from '@/lib/planner-agent';
-import {
-  generateTier1Email,
-  generateTier2Email,
-  generateTier3Email,
-  type Deal,
-  type PriceChange,
-} from '@/lib/weekly-email-templates';
+import { buildHouseholdBriefing } from '@/lib/household-briefing';
+import { generateHouseholdBriefingEmail } from '@/lib/household-briefing-email';
+import { generateTier1Email, type Deal } from '@/lib/weekly-email-templates';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -21,18 +15,11 @@ const CRON_SECRET = process.env.CRON_SECRET;
 if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
 if (!CRON_SECRET) throw new Error('CRON_SECRET environment variable is required');
 
-const anthropic = new Anthropic(); // uses ANTHROPIC_API_KEY env
+const MIN_SAVING_PCT = 0.15;
+const MAX_RATIO = 1.9;
+const MAX_PER_STORE = 2;
+const MAX_PER_CATEGORY = 2;
 
-// ---------------------------------------------------------------------------
-// Top deals query (kept from original)
-// ---------------------------------------------------------------------------
-
-const MIN_SAVING_PCT = 0.15;       // must be at least 15% off
-const MAX_RATIO = 1.9;              // exclude likely-manufactured 2× "half price" promos
-const MAX_PER_STORE = 2;            // max deals from any single store
-const MAX_PER_CATEGORY = 2;         // max deals from any single category
-
-// Rough category inference from canonical product name (keeps us store-agnostic)
 function inferCategory(name: string): string {
   const n = name.toLowerCase();
   if (/toothpaste|toothbrush|mouthwash|floss|dental|oral.b|colgate/.test(n)) return 'oral-care';
@@ -59,10 +46,7 @@ async function getTopDeals(limit = 5): Promise<Deal[]> {
       store_products!inner(
         store,
         store_product_name,
-        products!inner(
-          canonical_name,
-          category
-        )
+        products!inner(canonical_name, category)
       )
     `)
     .eq('on_promotion', true)
@@ -71,65 +55,56 @@ async function getTopDeals(limit = 5): Promise<Deal[]> {
     .gte('observed_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
     .order('observed_at', { ascending: false });
 
-  if (error) {
-    console.error('[weekly-digest] Error fetching deals:', error);
+  if (error || !deals) {
+    if (error) console.error('[weekly-digest] Error fetching deals:', error);
     return [];
   }
 
-  if (!deals) return [];
-
-  // 1. Map to Deal objects, filtering out bad data and manufactured promos
   const candidates = deals
     .map(deal => {
-      const storeProduct = deal.store_products as unknown as { store: string; store_product_name: string; products: { canonical_name: string; category: string | null } | null } | null;
+      const storeProduct = deal.store_products as unknown as {
+        store: string;
+        store_product_name: string;
+        products: { canonical_name: string; category: string | null } | null;
+      } | null;
       const product = storeProduct?.products;
       if (!deal.price || !deal.was_price || !storeProduct || !product) return null;
-      const saving = deal.was_price - deal.price;
+
+      const saving = Number(deal.was_price) - Number(deal.price);
       if (saving <= 0) return null;
-
-      const savingPct = saving / deal.was_price;
-
-      // Filter: must be at least MIN_SAVING_PCT genuine discount
+      const savingPct = saving / Number(deal.was_price);
       if (savingPct < MIN_SAVING_PCT) return null;
-
-      // Filter: exclude likely-manufactured "half price" promos (was = exactly 2× current)
-      const ratio = deal.was_price / deal.price;
-      if (ratio >= MAX_RATIO) return null;
+      if (Number(deal.was_price) / Number(deal.price) >= MAX_RATIO) return null;
 
       return {
         product_name: product.canonical_name,
         store: storeProduct.store,
-        current_price: deal.price,
-        was_price: deal.was_price,
+        current_price: Number(deal.price),
+        was_price: Number(deal.was_price),
         saving,
-        _savingPct: savingPct,
         _category: product.category ?? inferCategory(product.canonical_name),
       };
     })
     .filter((d): d is NonNullable<typeof d> => d !== null)
     .sort((a, b) => b.saving - a.saving);
 
-  // 2. Deduplicate by canonical product name — keep highest saving per product
   const seenProducts = new Set<string>();
-  const deduped = candidates.filter(d => {
-    if (seenProducts.has(d.product_name)) return false;
-    seenProducts.add(d.product_name);
-    return true;
-  });
-
-  // 3. Apply store + category caps for diversity
   const storeCounts: Record<string, number> = {};
   const categoryCounts: Record<string, number> = {};
   const result: Deal[] = [];
 
-  for (const d of deduped) {
+  for (const d of candidates) {
     if (result.length >= limit) break;
+    if (seenProducts.has(d.product_name)) continue;
+
     const store = d.store.toLowerCase();
-    const cat = d._category;
+    const category = d._category;
     if ((storeCounts[store] ?? 0) >= MAX_PER_STORE) continue;
-    if ((categoryCounts[cat] ?? 0) >= MAX_PER_CATEGORY) continue;
+    if ((categoryCounts[category] ?? 0) >= MAX_PER_CATEGORY) continue;
+
+    seenProducts.add(d.product_name);
     storeCounts[store] = (storeCounts[store] ?? 0) + 1;
-    categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+    categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
     result.push({
       product_name: d.product_name,
       store: d.store,
@@ -142,120 +117,53 @@ async function getTopDeals(limit = 5): Promise<Deal[]> {
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Tier 3 AI content generation
-// ---------------------------------------------------------------------------
-
-async function generateAiContent(
-  household: Record<string, unknown>,
-  userHistory: unknown[],
-  priceChanges: unknown[],
-  topDeals: Deal[],
-): Promise<string> {
-  // Extract household details for better prompting
-  const preferredStores = (household.preferred_stores as string[])?.join(', ') || 'SuperValu, Tesco';
-  const dietary = (household.dietary as string[])?.join(', ') || 'none specified';
-  const weeklyBudget = household.weekly_budget ? `€${household.weekly_budget}` : 'not specified';
-  const meals = household.meals as Record<string, boolean> | undefined;
-  const mealPlanning = meals ? Object.entries(meals).filter(([_, included]) => included).map(([meal, _]) => meal).join(', ') : 'breakfast, lunch, dinner, snacks';
-  const batchCooking = household.batch_cooking ? 'They do batch cooking' : '';
-
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 800,
-    messages: [{
-      role: 'user',
-      content: `You are a personal grocery agent for a household in Ireland. Write a SHORT, friendly weekly email (3-4 paragraphs max) highlighting this week's relevant deals and savings for this household:
-
-Household details:
-- They usually shop at: ${preferredStores}
-- Dietary requirements: ${dietary}
-- Weekly budget: ${weeklyBudget}
-- They plan: ${mealPlanning}
-${batchCooking ? `- ${batchCooking}` : ''}
-
-Their usual items: ${JSON.stringify(userHistory.slice(0, 15))}
-Price changes on their items: ${JSON.stringify(priceChanges)}
-Top deals this week: ${JSON.stringify(topDeals)}
-
-Write conversationally as "your grocery agent". Mention specific items and savings. End with a prompt to build their list this week. Do NOT include subject lines or sign-offs.`,
-    }],
-  });
-
-  const textBlock = response.content.find(b => b.type === 'text');
-  return textBlock && textBlock.type === 'text' ? textBlock.text : '';
-}
-
-// ---------------------------------------------------------------------------
-// GET handler
-// ---------------------------------------------------------------------------
-
 export async function GET(request: NextRequest) {
   try {
-    // Auth check
     const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Missing authorization header' }, { status: 401 });
-    }
-    if (authHeader.substring(7) !== CRON_SECRET) {
-      return NextResponse.json({ error: 'Invalid authorization token' }, { status: 401 });
+    if (!authHeader?.startsWith('Bearer ') || authHeader.slice(7) !== CRON_SECRET) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
-
-    // Fetch all active subscribers
-    const { data: subscribers, error: subscribersError } = await supabaseAdmin
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://supermarket.ie';
+    const { data: subscribers, error } = await supabaseAdmin
       .from('subscribers')
       .select('id, email, family_size, unsubscribe_token, last_list_planned_at')
       .eq('subscribed', true)
-      .limit(50); // max 50 per batch
+      .limit(100);
 
-    if (subscribersError) {
-      console.error('[weekly-digest] Error fetching subscribers:', subscribersError);
+    if (error) {
+      console.error('[weekly-digest] Failed to fetch subscribers', error);
       return NextResponse.json({ error: 'Failed to fetch subscribers' }, { status: 500 });
     }
 
-    if (!subscribers || subscribers.length === 0) {
-      return NextResponse.json({ sent: 0, failed: 0, message: 'No subscribers found' });
+    if (!subscribers?.length) {
+      return NextResponse.json({ sent: 0, failed: 0, skippedAlreadyPlanned: 0 });
     }
 
-    // Fetch top deals once — reused for all tiers
     const topDeals = await getTopDeals(5);
-
     let sent = 0;
     let failed = 0;
     let skippedAlreadyPlanned = 0;
-    const tiers = { t1: 0, t2: 0, t3: 0 };
+    let householdBriefings = 0;
+    let quietBriefings = 0;
+    let newSubscriberDigests = 0;
 
     for (const subscriber of subscribers) {
       try {
-        // --- Skip if already planned this week ---
         if (subscriber.last_list_planned_at) {
           const lastPlanned = new Date(subscriber.last_list_planned_at);
           const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
           if (lastPlanned > sevenDaysAgo) {
             skippedAlreadyPlanned++;
-            console.log(`[weekly-digest] Skipped ${subscriber.email}: already planned within 7 days (${subscriber.last_list_planned_at})`);
             continue;
           }
         }
 
-        // --- Determine tier ---
-        const [{ data: household }, { count: itemCount }] = await Promise.all([
-          supabaseAdmin
-            .from('households')
-            .select('adults, children, dietary, weekly_budget, preferred_stores, extra_context')
-            .eq('subscriber_id', subscriber.id)
-            .single(),
-          supabaseAdmin
-            .from('list_items')
-            .select('*', { count: 'exact', head: true })
-            .eq('subscriber_id', subscriber.id),
-        ]);
+        const { count: itemCount } = await supabaseAdmin
+          .from('list_items')
+          .select('*', { count: 'exact', head: true })
+          .eq('subscriber_id', subscriber.id);
 
-        const tier = household ? 3 : (itemCount && itemCount > 0) ? 2 : 1;
-
-        // --- Generate magic link (7-day JWT) ---
         const jwtToken = jwt.sign(
           {
             email: subscriber.email,
@@ -266,61 +174,33 @@ export async function GET(request: NextRequest) {
           { expiresIn: '7d' },
         );
 
-        const magicLink = `${siteUrl}/list?token=${jwtToken}`;
-        const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${subscriber.unsubscribe_token}`;
+        const shopUrl = `${siteUrl}/list?token=${encodeURIComponent(jwtToken)}&source=household-briefing`;
+        const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${encodeURIComponent(subscriber.unsubscribe_token ?? '')}`;
 
-        // --- Same-again link (Tier 2+) ---
-        let sameAgainLink = `${siteUrl}/dashboard?source=weekly-email`;
-        if (tier >= 2) {
-          const { data: lastList } = await supabaseAdmin
-            .from('saved_lists')
-            .select('id')
-            .eq('subscriber_id', subscriber.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-          if (lastList) {
-            sameAgainLink = `${siteUrl}/list?token=${jwtToken}&intent=same-again&list_id=${lastList.id}&source=weekly-email`;
-          }
-        }
-
-        // --- Generate email per tier ---
         let subject: string;
         let html: string;
 
-        if (tier === 3) {
-          // Tier 3: AI-personalised
-          const [userHistory, priceChanges] = await Promise.all([
-            queryUserHistory(subscriber.id),
-            queryPriceChanges(subscriber.id) as Promise<PriceChange[]>,
-          ]);
-          const aiContent = await generateAiContent(
-            household as Record<string, unknown>,
-            userHistory,
-            priceChanges,
-            topDeals,
-          );
-          subject = 'Your weekly grocery update from your agent';
-          html = generateTier3Email(aiContent, magicLink, unsubscribeUrl);
-          tiers.t3++;
-
-        } else if (tier === 2) {
-          // Tier 2: price changes on their items + deals
-          const priceChanges = (await queryPriceChanges(subscriber.id)) as PriceChange[];
-          subject = 'Your agent found savings on your items';
-          html = generateTier2Email(priceChanges, topDeals, sameAgainLink, magicLink, unsubscribeUrl);
-          tiers.t2++;
-
+        if ((itemCount ?? 0) > 0) {
+          const briefing = await buildHouseholdBriefing(subscriber.id);
+          subject = briefing.quiet
+            ? 'Your shop is quiet this week'
+            : `${briefing.insights.length} things worth knowing about your shop`;
+          html = generateHouseholdBriefingEmail({
+            briefing,
+            shopUrl,
+            agentUrl: shopUrl,
+            unsubscribeUrl,
+          });
+          householdBriefings++;
+          if (briefing.quiet) quietBriefings++;
         } else {
-          // Tier 1: generic deals
-          subject = "This week's best grocery deals";
-          html = generateTier1Email(topDeals, magicLink, unsubscribeUrl);
-          tiers.t1++;
+          subject = "This week's supermarket picks";
+          html = generateTier1Email(topDeals, shopUrl, unsubscribeUrl);
+          newSubscriberDigests++;
         }
 
-        // --- Send ---
-        await resend.emails.send({
-          from: 'Your grocery agent <hello@mail.supermarket.ie>',
+        const { error: sendError } = await resend.emails.send({
+          from: 'supermarket.ie shopping agent <hello@mail.supermarket.ie>',
           to: subscriber.email,
           subject,
           html,
@@ -330,25 +210,33 @@ export async function GET(request: NextRequest) {
           },
         });
 
+        if (sendError) throw new Error(sendError.message);
         sent++;
-        console.log(`[weekly-digest] [tier${tier}] Sent to: ${subscriber.email}`);
-
-        // 200ms delay between sends
-        if (sent + failed < subscribers.length) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-
       } catch (emailError) {
-        console.error(`[weekly-digest] Failed for ${subscriber.email}:`, emailError);
         failed++;
+        console.error(`[weekly-digest] Failed for ${subscriber.email}`, emailError);
       }
     }
 
-    console.log(`[weekly-digest] Done: ${sent} sent, ${failed} failed, ${skippedAlreadyPlanned} skipped_already_planned | tiers: t1=${tiers.t1} t2=${tiers.t2} t3=${tiers.t3}`);
-    return NextResponse.json({ sent, failed, skippedAlreadyPlanned, tiers });
+    console.log('[weekly-digest] Complete', {
+      sent,
+      failed,
+      skippedAlreadyPlanned,
+      householdBriefings,
+      quietBriefings,
+      newSubscriberDigests,
+    });
 
+    return NextResponse.json({
+      sent,
+      failed,
+      skippedAlreadyPlanned,
+      householdBriefings,
+      quietBriefings,
+      newSubscriberDigests,
+    });
   } catch (error) {
-    console.error('[weekly-digest] Unexpected error:', error);
+    console.error('[weekly-digest] Unexpected error', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
