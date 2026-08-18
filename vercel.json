@@ -45,6 +45,10 @@
       "schedule": "30 7 * * *"
     },
     {
+      "path": "/api/cron/agent-tasks",
+      "schedule": "35 7 * * *"
+    },
+    {
       "path": "/api/cron/price-watchdog",
       "schedule": "30 7 * * *"
     },
