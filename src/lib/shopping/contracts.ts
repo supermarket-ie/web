@@ -64,6 +64,8 @@ export type StoreBasketComparison = {
   complete: boolean;
   covered_products: number;
   total_products: number;
+  covered_units?: number;
+  total_units?: number;
   missing_products: string[];
   substitutions?: Array<{
     requested: string;
