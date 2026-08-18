@@ -23,6 +23,7 @@ export function compareBasketStores(
     (sum, item) => sum + (Number(item.current_price) || 0) * (item.quantity ?? 1),
     0,
   );
+  const totalUnits = items.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
 
   const byStore = new Map<string, Map<string, ComparablePrice>>();
   for (const row of prices) {
@@ -37,14 +38,17 @@ export function compareBasketStores(
   ]
     .map(([store, rows]) => {
       let total = 0;
+      let coveredUnits = 0;
       const missing: string[] = [];
       for (const name of names) {
+        const quantity = quantities.get(name) ?? 1;
         const price = rows.get(name);
         if (!price) {
           missing.push(name);
           continue;
         }
-        total += price.price * (quantities.get(name) ?? 1);
+        total += price.price * quantity;
+        coveredUnits += quantity;
       }
 
       const complete = missing.length === 0;
@@ -54,6 +58,8 @@ export function compareBasketStores(
         complete,
         covered_products: names.length - missing.length,
         total_products: names.length,
+        covered_units: coveredUnits,
+        total_units: totalUnits,
         missing_products: missing.slice(0, 12),
         difference_vs_current: complete
           ? Number((total - currentTotal).toFixed(2))
