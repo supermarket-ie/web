@@ -33,6 +33,17 @@
           "initialDelaySeconds": 0
         }
       ]
+    },
+    "src/app/api/queues/agent-product-change/route.ts": {
+      "maxDuration": 120,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "agent-product-changes",
+          "retryAfterSeconds": 15,
+          "initialDelaySeconds": 0
+        }
+      ]
     }
   },
   "crons": [
