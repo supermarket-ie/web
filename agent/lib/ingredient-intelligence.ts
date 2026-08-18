@@ -153,10 +153,15 @@ export type IngredientIntelligenceResult = {
   unresolved: string[];
 };
 
+export type IngredientIntelligenceOptions = {
+  allow_live_epicure?: boolean;
+};
+
 export async function getIngredientIntelligence(
   ingredients: string[],
   context: HouseholdIngredientContext = {},
   limit = 8,
+  options: IngredientIntelligenceOptions = {},
 ): Promise<IngredientIntelligenceResult> {
   const cleanIngredients = [...new Set(ingredients.map(toEpicureName).filter(Boolean))].slice(0, 6);
   if (cleanIngredients.length === 0) {
@@ -183,7 +188,8 @@ export async function getIngredientIntelligence(
   }
 
   let source: IngredientIntelligenceResult['source'] = rows.length > 0 ? 'precomputed' : 'unavailable';
-  if (signalCounts.size === 0) {
+  const allowLiveEpicure = options.allow_live_epicure ?? true;
+  if (signalCounts.size === 0 && allowLiveEpicure) {
     const live = await getPairings(cleanIngredients);
     if (live?.bridges?.length) {
       source = 'live_epicure';
