@@ -11,7 +11,7 @@ import { SavedListView } from '@/components/SavedListView';
 import { ShopDecisionTrace } from '@/components/ShopDecisionTrace';
 
 export const metadata: Metadata = {
-  title: 'Your grocery list — supermarket.ie',
+  title: 'Your shop — supermarket.ie',
   description: 'Your household shop, prepared and managed with Supermarket.ie.',
   robots: { index: false, follow: false },
 };
@@ -170,13 +170,6 @@ export default async function ListPage({
   const storeTotals = (activeList.store_totals ?? []) as Array<{ store: string; total: number; item_count?: number }>;
   const decisionTrace = (activeList.agent_decision_trace ?? null) as DecisionTrace | null;
 
-  const { data: householdData } = await supabaseAdmin
-    .from('households')
-    .select('memory')
-    .eq('subscriber_id', payload.subscriberId)
-    .single();
-  const householdMemory = householdData?.memory ?? null;
-
   return (
     <>
       <SiteHeader />
@@ -197,7 +190,6 @@ export default async function ListPage({
           created_at: l.created_at,
         }))}
         activeListId={activeList.id}
-        householdMemory={householdMemory}
         intent={intent}
       />
       <SiteFooter />
