@@ -5,13 +5,20 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { loadSession, clearSession } from '@/lib/session';
 
-// ─── Nav items ────────────────────────────────────────────────────────────────
-// My Shop is the primary destination — always opens most recent list.
-// Planner, History (past shops), Household, Automations.
-
 const NAV_ITEMS = [
   {
-    href: '/list',   // resolved to /list?token=... at render time
+    href: '/',
+    label: 'Home',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 11l9-8 9 8" />
+        <path d="M5 10v10h14V10" />
+      </svg>
+    ),
+    match: (p: string) => p === '/',
+  },
+  {
+    href: '/list',
     label: 'My Shop',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -23,25 +30,15 @@ const NAV_ITEMS = [
     match: (p: string) => p.startsWith('/list') && !p.startsWith('/list/request') && !p.startsWith('/list/share'),
   },
   {
-    href: '/',
-    label: 'Planner',
+    href: '/shop',
+    label: 'Browse',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
       </svg>
     ),
-    match: (p: string) => p === '/',
-  },
-  {
-    href: '/dashboard',
-    label: 'History',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-    ),
-    match: (p: string) => p.startsWith('/dashboard') && !p.startsWith('/dashboard/profile') && !p.startsWith('/dashboard/agents') && !p.startsWith('/dashboard/automations'),
+    match: (p: string) => p.startsWith('/shop') || p.startsWith('/browse'),
   },
   {
     href: '/dashboard/profile',
@@ -53,17 +50,6 @@ const NAV_ITEMS = [
       </svg>
     ),
     match: (p: string) => p.startsWith('/dashboard/profile'),
-  },
-  {
-    href: '/dashboard/automations',
-    label: 'Automations',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
-      </svg>
-    ),
-    match: (p: string) => p.startsWith('/dashboard/agents') || p.startsWith('/dashboard/automations'),
   },
 ];
 
@@ -82,13 +68,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     setListToken(token);
     setReady(true);
 
-    // Post-login redirect: if user lands on /dashboard directly, send them to My Shop
+    // Old History route is no longer a primary destination. Direct visits remain
+    // supported, but the generic dashboard landing returns signed-in users Home.
     if (token && pathname === '/dashboard') {
-      router.replace(`/list?token=${encodeURIComponent(token)}`);
+      router.replace('/');
     }
 
-    // TokenPersist (on /list, /dashboard etc.) writes the token to localStorage
-    // and fires this event so we can show the nav without a full re-mount.
     function handleSessionReady(e: Event) {
       const newToken = (e as CustomEvent<{ token: string }>).detail?.token ?? null;
       if (newToken && newToken !== token) {
@@ -109,25 +94,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     window.location.href = '/';
   }
 
-  // Resolve nav href — /list always gets the token appended
   function resolveHref(href: string) {
     return href === '/list' ? `/list?token=${encodeURIComponent(listToken!)}` : href;
   }
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* ── Header ── */}
       <header className="sticky top-0 z-40 w-full px-6 py-3.5" style={{ background: '#00944A' }}>
         <div className="flex justify-between items-center">
-          <Link href={showNav ? `/list?token=${encodeURIComponent(listToken!)}` : '/'} className="flex-shrink-0" onClick={() => setMenuOpen(false)}>
+          <Link href="/" className="flex-shrink-0" onClick={() => setMenuOpen(false)}>
             <span className="text-[28px] font-extrabold tracking-tight" style={{ color: '#FFFFFF', letterSpacing: '-0.02em' }}>
               supermarket<span style={{ color: '#d4ffe5' }}>.ie</span>
             </span>
           </Link>
 
-          {/* Desktop right */}
           <div className="hidden sm:flex items-center gap-4">
-            {!hideNav && (
+            {!showNav && !hideNav && (
               <Link href="/shop" className="text-sm font-semibold hover:opacity-80 transition-opacity" style={{ color: 'rgba(255,255,255,0.9)' }}>
                 Browse
               </Link>
@@ -146,7 +128,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
 
-          {/* Mobile hamburger */}
           <button className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg transition-opacity hover:opacity-80"
             style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(o => !o)} aria-label="Menu">
             {menuOpen ? (
@@ -161,10 +142,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        {/* Mobile dropdown */}
         {menuOpen && (
           <div className="sm:hidden mt-3 pb-2 flex flex-col gap-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
-            {!hideNav && (
+            {!showNav && !hideNav && (
               <Link href="/shop" className="px-2 py-2.5 text-sm font-semibold rounded-lg hover:opacity-80"
                 style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>
                 Browse
@@ -188,9 +168,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       </header>
 
-      {/* ── Body ── */}
       <div className="flex flex-1">
-        {/* Desktop sidebar */}
         {showNav && (
           <aside className="hidden md:flex flex-col flex-shrink-0 sticky top-[57px] self-start h-[calc(100vh-57px)]"
             style={{ width: 220, background: '#fff', borderRight: '1px solid #eaeaea' }}>
@@ -228,7 +206,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      {/* ── Footer ── */}
       <footer className="py-12 px-6" style={{ background: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' }}>
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
@@ -243,12 +220,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             </nav>
           </div>
           <p className="text-center text-xs" style={{ color: 'rgba(249,246,245,0.35)' }}>
-            © {new Date().getFullYear()} supermarket.ie — AI grocery planning for Ireland
+            © {new Date().getFullYear()} supermarket.ie — your household shopping agent for Ireland
           </p>
         </div>
       </footer>
 
-      {/* ── Mobile bottom bar ── */}
       {showNav && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex"
           style={{ background: '#1C2B22', borderTop: '1px solid rgba(107,254,156,0.2)', height: 64, paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -258,7 +234,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link key={item.href} href={resolveHref(item.href)}
                 className="flex-1 flex flex-col items-center justify-center gap-1 relative"
                 style={{ textDecoration: 'none' }}>
-                {/* Active indicator pill */}
                 {active && (
                   <span className="absolute top-1.5 left-1/2 -translate-x-1/2 rounded-full"
                     style={{ width: 32, height: 3, background: '#6BFE9C' }} />
