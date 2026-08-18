@@ -1,8 +1,8 @@
 import { defineTool } from 'eve/tools';
 import { z } from 'zod';
-import { createAgentTask } from '../../src/lib/agent-tasks';
-import { getCurrentProductSnapshot, resolveCatalogueProduct } from '../../src/lib/catalogue-resolution';
-import { supabaseAdmin } from '../../src/lib/supabase';
+import { createAgentTask } from '../lib/tasks';
+import { getCurrentProductSnapshot, resolveCatalogueProduct } from '../lib/catalogue';
+import { agentSupabase } from '../lib/supabase';
 import { requireSubscriber } from '../lib/subscriber';
 
 const conditionSchema = z.discriminatedUnion('kind', [
@@ -64,14 +64,16 @@ export default defineTool({
     // becomes the general source of truth for all persistent intentions.
     let legacyAlertId: string | null = null;
     if (input.condition.kind === 'price_below') {
-      const { data: product } = await supabaseAdmin
+      const { data: product, error: productError } = await agentSupabase
         .from('products')
         .select('id')
         .eq('canonical_name', best.canonical_name)
         .single();
 
+      if (productError) throw new Error(`Could not resolve alert product: ${productError.message}`);
+
       if (product?.id) {
-        const { data: existing } = await supabaseAdmin
+        const { data: existing, error: existingError } = await agentSupabase
           .from('price_alerts')
           .select('id')
           .eq('subscriber_id', subscriberId)
@@ -79,15 +81,18 @@ export default defineTool({
           .eq('active', true)
           .maybeSingle();
 
+        if (existingError) throw new Error(`Could not inspect existing price alert: ${existingError.message}`);
+
         if (existing?.id) {
           legacyAlertId = existing.id;
-          await supabaseAdmin
+          const { error: updateError } = await agentSupabase
             .from('price_alerts')
             .update({ target_price: input.condition.amount })
             .eq('id', existing.id)
             .eq('subscriber_id', subscriberId);
+          if (updateError) throw new Error(`Could not update price alert: ${updateError.message}`);
         } else {
-          const { data: inserted } = await supabaseAdmin
+          const { data: inserted, error: insertError } = await agentSupabase
             .from('price_alerts')
             .insert({
               subscriber_id: subscriberId,
@@ -96,6 +101,7 @@ export default defineTool({
             })
             .select('id')
             .single();
+          if (insertError) throw new Error(`Could not create price alert: ${insertError.message}`);
           legacyAlertId = inserted?.id ?? null;
         }
       }
