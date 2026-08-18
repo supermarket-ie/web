@@ -1,11 +1,13 @@
 import { createAgentUIStreamResponse, UIMessage } from 'ai';
 import { createPlannerAgent, updateHouseholdMemory, type PlannerProfile } from '@/lib/planner-agent';
+import { createWatchAgent, isPersistentShoppingIntent } from '@/lib/watch-agent';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
 
 export const maxDuration = 60;
 
 const PLANNER_TIMEOUT_MS = 55_000;
+type PlannerAgent = Awaited<ReturnType<typeof createPlannerAgent>>;
 
 // A list was generated when the agent successfully called save_list or
 // update_list — detected from the tool parts of the response, not by
@@ -30,6 +32,14 @@ function extractText(parts: UIMessage['parts']): string {
     .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
     .map(p => p.text)
     .join('');
+}
+
+function latestUserText(messages: UIMessage[]): string {
+  const user = [...messages].reverse().find(message => message.role === 'user');
+  return user?.parts
+    ?.filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+    .map(part => part.text)
+    .join('') ?? '';
 }
 
 function normalizePlannerProfile(profile: PlannerProfile | undefined): PlannerProfile | undefined {
@@ -108,16 +118,25 @@ export async function POST(req: Request) {
 
     // Merge: stored messages first, then incoming (which has the new user message)
     const allMessages = [...storedUIMessages, ...incomingMessages];
+    const currentRequest = latestUserText(incomingMessages);
 
-    const agent = await createPlannerAgent({
-      subscriberId,
-      profile: profile ?? undefined,
-      householdSize: body.householdSize ?? 2,
-      isModification: true,
-    });
+    // Persistent watch/notification requests go to the specialist that can
+    // actually create durable tasks. Everything else keeps the established
+    // grocery-planning behavior unchanged.
+    const agent = isPersistentShoppingIntent(currentRequest)
+      ? createWatchAgent(subscriberId)
+      : await createPlannerAgent({
+          subscriberId,
+          profile: profile ?? undefined,
+          householdSize: body.householdSize ?? 2,
+          isModification: true,
+        });
 
     return createAgentUIStreamResponse({
-      agent,
+      // Both specialists implement the AI SDK Agent contract. AI SDK 7 keeps
+      // each concrete tool set in the generic type, so normalize only at this
+      // dispatch boundary while preserving strict typing inside each agent.
+      agent: agent as unknown as PlannerAgent,
       uiMessages: allMessages,
       timeout: { totalMs: PLANNER_TIMEOUT_MS },
       onFinish: async ({ responseMessage }) => {
@@ -241,19 +260,22 @@ export async function POST(req: Request) {
     parts: [{ type: 'text' as const, text: m.content }],
   }));
 
-  const agent = await createPlannerAgent({
-    subscriberId,
-    profile: intakeMode ? undefined : profile,
-    householdSize: body.householdSize ?? 2,
-    isModification,
-    intakeMode: intakeMode ?? false,
-    returningUser: returningUser ?? false,
-    profileSummary: profileSummary ?? undefined,
-    hasLastList: hasLastList ?? false,
-  });
+  const currentRequest = [...apiMessages].reverse().find(message => message.role === 'user')?.content ?? '';
+  const agent = isPersistentShoppingIntent(currentRequest)
+    ? createWatchAgent(subscriberId)
+    : await createPlannerAgent({
+        subscriberId,
+        profile: intakeMode ? undefined : profile,
+        householdSize: body.householdSize ?? 2,
+        isModification,
+        intakeMode: intakeMode ?? false,
+        returningUser: returningUser ?? false,
+        profileSummary: profileSummary ?? undefined,
+        hasLastList: hasLastList ?? false,
+      });
 
   return createAgentUIStreamResponse({
-    agent,
+    agent: agent as unknown as PlannerAgent,
     uiMessages,
     timeout: { totalMs: PLANNER_TIMEOUT_MS },
     onFinish: async ({ responseMessage }) => {
