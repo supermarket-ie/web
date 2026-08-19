@@ -10,7 +10,7 @@ export function PlannerSSRShell() {
             Ready when you are
           </div>
           <p className="text-balance text-2xl font-semibold tracking-[-0.035em] text-[#152219] sm:text-[2rem]">What do you need for the household?</p>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">Try Supermarket.ie with a current product question, a meal idea or a household budget.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">Thousands of tracked Irish supermarket prices and ingredient mappings.</p>
         </div>
 
         <div className="relative min-h-20 rounded-[1.35rem] border border-[#dfe5e0] bg-white px-5 py-5 text-[15px] text-[#8d948f] shadow-[0_14px_45px_rgba(26,54,39,0.08)]">
