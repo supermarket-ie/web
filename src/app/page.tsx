@@ -7,7 +7,6 @@ import {
   ProductProofSection,
   HowItWorksSection,
   BenefitsSection,
-  TestimonialsSection,
   FAQSection,
   BottomCTASection,
 } from '@/components/homepage';
@@ -49,7 +48,6 @@ export default function Home() {
         <ProductProofSection />
         <HowItWorksSection />
         <BenefitsSection />
-        <TestimonialsSection />
         <FAQSection />
         <BottomCTASection />
       </div>
