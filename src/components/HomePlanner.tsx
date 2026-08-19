@@ -239,7 +239,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   if (isEmpty) {
     return (
       <div className="flex min-h-[470px] flex-col bg-white px-5 py-6 sm:px-8 sm:py-8">
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center">
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
           <div className="mb-6">
             <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#397250]">
               <span className="flex size-6 items-center justify-center rounded-full bg-[#e5f7eb]"><Sparkles className="size-3.5" /></span>
