@@ -2,88 +2,52 @@ import { HomePlanner } from '@/components/HomePlanner';
 import { PlannerSSRShell } from '@/components/PlannerSSRShell';
 import { HideAfterHydration } from '@/components/HideAfterHydration';
 import { LiveDealChip } from '@/components/LiveDealChip';
-import { Check, Sparkles } from 'lucide-react';
-import { SessionLink } from './SessionLink';
 import { AgentMark } from './AgentMark';
 
 export function HeroSection() {
   return (
-    <section className="relative overflow-hidden px-6 pb-20 pt-8 noise-bg md:pb-28 md:pt-12">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="gradient-blob -left-40 -top-52 size-[620px] bg-[radial-gradient(circle,rgba(107,254,156,0.2),transparent_68%)]" />
-        <div className="gradient-blob -right-56 top-40 size-[560px] bg-[radial-gradient(circle,rgba(0,220,255,0.1),transparent_68%)]" />
-        <div className="absolute inset-0 dot-grid opacity-35" />
+    <section className="relative overflow-hidden bg-[#f8faf8] px-4 pb-20 pt-12 sm:px-6 sm:pt-16 md:pb-28">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/2 top-[-420px] size-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(169,236,191,0.28),rgba(248,250,248,0)_68%)]" />
+        <div className="absolute -right-48 top-44 size-[520px] rounded-full bg-[radial-gradient(circle,rgba(255,216,77,0.08),rgba(248,250,248,0)_70%)]" />
       </div>
 
-      <div className="relative z-10 mx-auto max-w-7xl">
-        <div className="grid items-start gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16">
-          <div className="min-w-0 max-w-xl">
-            <div className="chip-tertiary mb-6 inline-flex items-center gap-2">
-              <Sparkles className="size-3.5" />
-              Ireland&apos;s personal supermarket agent
-            </div>
-
-            <h1 className="mb-6 text-balance text-[clamp(2.5rem,4.5vw,4rem)] font-extrabold leading-[1.02] tracking-[-0.045em] text-on-background">
-              Your whole shop,
-              <span className="block bg-gradient-to-r from-[#006A35] to-[#12a85b] bg-clip-text text-transparent">
-                planned around you.
-              </span>
-            </h1>
-
-            <p className="mb-7 max-w-lg text-lg leading-8 text-on-surface md:text-xl">
-              Tell your agent what your household needs—from food and meals to cleaning, toiletries and pet care. It remembers your preferences and helps you build the right shop each week.
-            </p>
-
-            <div className="relative mb-7 h-10 max-w-lg overflow-hidden">
-              <LiveDealChip />
-            </div>
-
-            <div className="mb-8 grid gap-3 sm:grid-cols-2">
-              {[
-                'Food and meals planned',
-                'Household essentials included',
-                'One complete shop on budget',
-                'Your regular items remembered',
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-2.5 text-sm font-semibold text-on-background">
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-container">
-                    <Check className="size-3 text-on-primary-container" strokeWidth={3} />
-                  </span>
-                  {item}
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4">
-              <a href="#grocery-agent" className="btn-primary px-6 py-3.5 text-sm">
-                Meet my supermarket agent
-              </a>
-              <SessionLink />
-            </div>
-            <p className="mt-4 text-xs font-medium text-on-surface-variant">
-              Free to use · No card needed · Start in 30 seconds
-            </p>
+      <div className="relative z-10 mx-auto max-w-5xl">
+        <div className="mx-auto mb-9 max-w-3xl text-center">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#dfe9e2] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[#326246] shadow-sm backdrop-blur">
+            <AgentMark className="size-5" />
+            Ireland&apos;s household shopping agent
           </div>
 
-          <div id="grocery-agent" className="relative min-w-0 self-start scroll-mt-24">
-            <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-primary-container/25 to-tertiary-container/15 blur-2xl" />
-            <div className="mb-3 flex items-center justify-between px-2 text-xs font-semibold text-on-surface">
-              <span className="inline-flex items-center gap-2">
-                <AgentMark className="size-7" />
-                Your supermarket agent is ready
-              </span>
-              <span>Built for Irish households</span>
-            </div>
-            <div
-              className="overflow-hidden rounded-[1.5rem] border border-black/[0.04] bg-surface-lowest p-4 shadow-[0_24px_80px_rgba(20,60,38,0.13)] sm:p-6"
-              style={{ minHeight: '500px' }}
-            >
-              <HideAfterHydration>
-                <PlannerSSRShell />
-              </HideAfterHydration>
-              <HomePlanner />
-            </div>
+          <h1 className="text-balance text-[clamp(2.55rem,5.5vw,4.6rem)] font-semibold leading-[0.98] tracking-[-0.065em] text-[#132019]">
+            What does your household need?
+          </h1>
+
+          <p className="mx-auto mt-5 max-w-2xl text-balance text-base leading-7 text-[#637068] sm:text-lg">
+            Ask Supermarket.ie to find products, plan meals and household essentials, prepare your shop, or keep watch for the changes that matter.
+          </p>
+        </div>
+
+        <div id="grocery-agent" className="relative scroll-mt-20">
+          <div className="absolute -inset-8 -z-10 rounded-[3rem] bg-[radial-gradient(circle_at_top,rgba(118,224,153,0.2),transparent_66%)] blur-2xl" />
+          <div className="overflow-hidden rounded-[1.8rem] border border-[#dfe6e0] bg-white shadow-[0_28px_90px_rgba(25,57,38,0.12)]">
+            <HideAfterHydration>
+              <PlannerSSRShell />
+            </HideAfterHydration>
+            <HomePlanner />
           </div>
+        </div>
+
+        <div className="relative mx-auto mt-5 h-10 max-w-xl overflow-hidden opacity-90">
+          <LiveDealChip />
+        </div>
+
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-xs font-medium text-[#7c867f]">
+          <span>Current Irish supermarket data</span>
+          <span className="hidden size-1 rounded-full bg-[#b5bdb7] sm:block" />
+          <span>Groceries and household essentials</span>
+          <span className="hidden size-1 rounded-full bg-[#b5bdb7] sm:block" />
+          <span>Nothing ordered without approval</span>
         </div>
       </div>
     </section>
