@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { loadSession, clearSession } from '@/lib/session';
+import { AgentMark } from '@/components/homepage/AgentMark';
 
 const NAV_ITEMS = [
   {
@@ -100,36 +101,36 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-40 w-full px-6 py-3.5" style={{ background: '#00944A' }}>
-        <div className="flex justify-between items-center">
-          <Link href="/" className="flex-shrink-0" onClick={() => setMenuOpen(false)}>
-            <span className="text-[28px] font-extrabold tracking-tight" style={{ color: '#FFFFFF', letterSpacing: '-0.02em' }}>
-              supermarket<span style={{ color: '#d4ffe5' }}>.ie</span>
+      <header className="sticky top-0 z-40 w-full border-b border-black/[0.05] bg-white/90 px-6 py-3.5 backdrop-blur-xl">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex flex-shrink-0 items-center gap-2.5" onClick={() => setMenuOpen(false)}>
+            <AgentMark className="size-8" label="Supermarket.ie basket" />
+            <span className="text-[28px] font-extrabold tracking-tight" style={{ color: '#132019', letterSpacing: '-0.02em' }}>
+              supermarket<span style={{ color: '#168049' }}>.ie</span>
             </span>
           </Link>
 
           <div className="hidden sm:flex items-center gap-4">
             {!showNav && !hideNav && (
-              <Link href="/shop" className="text-sm font-semibold hover:opacity-80 transition-opacity" style={{ color: 'rgba(255,255,255,0.9)' }}>
+              <Link href="/shop" className="text-sm font-semibold text-[#536058] transition-colors hover:text-[#132019]">
                 Browse
               </Link>
             )}
             {ready && (
               showNav ? (
-                <button onClick={signOut} className="text-sm font-medium hover:opacity-80 transition-opacity" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                <button onClick={signOut} className="text-sm font-medium text-[#536058] transition-colors hover:text-[#132019]">
                   Sign out
                 </button>
               ) : (
-                <Link href="/list/request" className="inline-flex items-center px-5 py-2 text-sm font-semibold rounded-full hover:opacity-90 transition-opacity"
-                  style={{ border: '1.5px solid rgba(255,255,255,0.6)', color: '#FFFFFF' }}>
+                <Link href="/list/request" className="inline-flex items-center rounded-full bg-[#0b1710] px-5 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.02]">
                   Sign in
                 </Link>
               )
             )}
           </div>
 
-          <button className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg transition-opacity hover:opacity-80"
-            style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(o => !o)} aria-label="Menu">
+          <button className="flex size-9 items-center justify-center rounded-lg text-[#132019] transition-opacity hover:opacity-70 sm:hidden"
+            onClick={() => setMenuOpen(o => !o)} aria-label="Menu">
             {menuOpen ? (
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -143,23 +144,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         {menuOpen && (
-          <div className="sm:hidden mt-3 pb-2 flex flex-col gap-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
+          <div className="mt-3 flex flex-col gap-1 border-t border-black/[0.06] pb-2 sm:hidden">
             {!showNav && !hideNav && (
-              <Link href="/shop" className="px-2 py-2.5 text-sm font-semibold rounded-lg hover:opacity-80"
-                style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>
+              <Link href="/shop" className="rounded-lg px-2 py-2.5 text-sm font-semibold text-[#132019] hover:bg-[#f3f6f3]" onClick={() => setMenuOpen(false)}>
                 Browse
               </Link>
             )}
             {ready && (
               showNav ? (
                 <button onClick={() => { setMenuOpen(false); signOut(); }}
-                  className="text-left px-2 py-2.5 text-sm font-medium rounded-lg hover:opacity-80"
-                  style={{ color: 'rgba(255,255,255,0.85)' }}>
+                  className="rounded-lg px-2 py-2.5 text-left text-sm font-medium text-[#132019] hover:bg-[#f3f6f3]">
                   Sign out
                 </button>
               ) : (
-                <Link href="/list/request" className="px-2 py-2.5 text-sm font-semibold rounded-lg hover:opacity-80"
-                  style={{ color: '#FFFFFF' }} onClick={() => setMenuOpen(false)}>
+                <Link href="/list/request" className="rounded-lg px-2 py-2.5 text-sm font-semibold text-[#132019] hover:bg-[#f3f6f3]" onClick={() => setMenuOpen(false)}>
                   Sign in
                 </Link>
               )
