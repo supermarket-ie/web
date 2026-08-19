@@ -51,6 +51,60 @@ const HOUSEHOLD_STARTERS: Starter[] = [
   { label: 'Show what you are watching', detail: 'Review active product watches and reminders', prompt: 'Show me what you are watching', icon: Eye },
 ];
 
+const GUEST_TYPEAHEAD = [
+  "Where can I find Hellmann's mayonnaise?",
+  'Where can I find Glenisk natural yoghurt?',
+  'Where can I find Glenisk Greek-style yoghurt?',
+  'Find the current price of Glenisk yoghurt',
+  'Where can I find gluten-free bread?',
+  'Where can I find laundry detergent on offer?',
+  'Compare current prices for Irish butter',
+  'Compare current prices for whole milk',
+  'Compare current prices for dishwasher tablets',
+  'Help me plan four easy family dinners',
+  'Plan five vegetarian dinners for this week',
+  'What can I make with chicken and rice?',
+  'How can I keep a household shop under €120?',
+  'Suggest a practical shop for two adults',
+];
+
+const HOUSEHOLD_TYPEAHEAD = [
+  ...GUEST_TYPEAHEAD,
+  'Prepare my usual shop for this week',
+  'What have you noticed about my usual products?',
+  'Keep my current shop under €120',
+  'Show me what you are watching for me',
+  "Remind me when Hellmann's mayonnaise is on offer",
+];
+
+function normalisePrompt(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9€]+/g, ' ').trim();
+}
+
+function typeaheadSuggestions(input: string, isGuest: boolean): string[] {
+  const query = normalisePrompt(input);
+  if (query.length < 2) return [];
+  const queryWords = query.split(' ');
+  const lastWord = queryWords.at(-1) ?? query;
+  const candidates = isGuest ? GUEST_TYPEAHEAD : HOUSEHOLD_TYPEAHEAD;
+
+  return candidates
+    .map((prompt, index) => {
+      const normalised = normalisePrompt(prompt);
+      const words = normalised.split(' ');
+      const sharedWords = queryWords.filter(word => word.length > 1 && normalised.includes(word)).length;
+      let score = sharedWords * 12;
+      if (normalised.startsWith(query)) score += 100;
+      if (normalised.includes(query)) score += 65;
+      if (lastWord.length > 1 && words.some(word => word.startsWith(lastWord))) score += 45;
+      return { prompt, score, index };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 4)
+    .map(item => item.prompt);
+}
+
 function scopedEveChatKey(): string | null {
   const email = loadSession()?.email?.trim().toLowerCase();
   return email ? `${LEGACY_EVE_CHAT_KEY}:${encodeURIComponent(email)}` : null;
@@ -165,6 +219,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   ));
   const starters = isGuest ? GUEST_STARTERS : HOUSEHOLD_STARTERS;
   const isEmpty = messages.length === 0;
+  const liveSuggestions = typeaheadSuggestions(input, isGuest);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -200,20 +255,36 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
 
           <AgentComposer input={input} setInput={setInput} send={send} busy={busy} gated={showGuestGate} prominent />
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {starters.map(starter => {
-              const Icon = starter.icon;
-              return (
-                <button key={starter.prompt} type="button" onClick={() => void send(starter.prompt)} className="group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors hover:bg-[#f5f8f5]">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e5eae6] bg-white text-[#176b3a] shadow-sm"><Icon className="size-4" /></span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-[#26342b]">{starter.label}</span>
-                    <span className="mt-0.5 block truncate text-[11px] text-[#879089]">{starter.detail}</span>
-                  </span>
+          {liveSuggestions.length > 0 ? (
+            <div className="mt-2 overflow-hidden rounded-2xl border border-[#e3e8e4] bg-white py-1 shadow-[0_18px_45px_rgba(25,57,38,0.1)]">
+              {liveSuggestions.map(suggestion => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => void send(suggestion)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-[#435047] transition-colors hover:bg-[#f3f7f4] hover:text-[#142019]"
+                >
+                  <Search className="size-4 shrink-0 text-[#7c8980]" />
+                  <span>{suggestion}</span>
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {starters.map(starter => {
+                const Icon = starter.icon;
+                return (
+                  <button key={starter.prompt} type="button" onClick={() => void send(starter.prompt)} className="group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors hover:bg-[#f5f8f5]">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e5eae6] bg-white text-[#176b3a] shadow-sm"><Icon className="size-4" /></span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-[#26342b]">{starter.label}</span>
+                      <span className="mt-0.5 block truncate text-[11px] text-[#879089]">{starter.detail}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <p className="mt-5 text-center text-[10px] leading-4 text-[#9aa19c]">Your agent can prepare drafts and remember preferences after sign-in. It will never place an order or spend money without approval.</p>
