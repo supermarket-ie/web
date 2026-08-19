@@ -1,96 +1,41 @@
-// Server component — no 'use client' directive
-// Renders a static visual shell of the planner chat for SEO/crawlers.
-// The live HomePlanner hydrates on top of this via absolute positioning.
-
+// Server-rendered visual shell shown until the live agent hydrates.
 export function PlannerSSRShell() {
   return (
-    <div className="flex flex-col h-full max-w-2xl mx-auto overflow-hidden">
-      {/* SEO-only structured text — visible to crawlers, not intrusive visually */}
-      <h2 className="sr-only">
-        AI grocery planner for Ireland — compare prices across Tesco, Dunnes Stores, SuperValu, Aldi
-      </h2>
-
-      {/* Initial assistant message */}
-      <div className="flex-1 space-y-3 mb-4 overflow-hidden">
-        <div className="flex justify-start">
-          <div
-            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-1 flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}
-            aria-hidden="true"
-          >
-            S
+    <div className="flex min-h-[470px] flex-col bg-white px-5 py-6 sm:px-8 sm:py-8">
+      <h2 className="sr-only">Supermarket.ie household shopping agent for Ireland</h2>
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center">
+        <div className="mb-6">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#397250]">
+            <span className="flex size-6 items-center justify-center rounded-full bg-[#e5f7eb]">✦</span>
+            Ready when you are
           </div>
-          <div
-            className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-3 text-sm"
-            style={{
-              background: 'var(--surface-container-lowest)',
-              border: '1px solid var(--surface-container)',
-            }}
-          >
-            <p style={{ color: 'var(--on-surface)' }}>
-              👋 Hey! I&apos;m your grocery planning assistant. Tell me what you need — household
-              size, any dietary requirements, budget — and I&apos;ll build you a priced weekly list.
-            </p>
-            {/* Suggestion buttons — static, non-interactive */}
-            <div className="flex flex-wrap gap-1.5 mt-2" aria-hidden="true">
-              {[
-                '👨\u200d👩\u200d👧\u200d👦 Family of 4, full week',
-                '🧑 Just me, dinners only',
-                '🥗 2 adults, vegetarian, €100',
-              ].map((label) => (
-                <div
-                  key={label}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium"
-                  style={{
-                    background: 'var(--primary-container)',
-                    color: 'var(--on-primary-container)',
-                    border: '1px solid var(--primary)',
-                  }}
-                >
-                  {label}
-                </div>
-              ))}
+          <p className="text-balance text-2xl font-semibold tracking-[-0.035em] text-[#152219] sm:text-[2rem]">What do you need for the household?</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">Try Supermarket.ie with a current product question, a meal idea or a household budget.</p>
+        </div>
+
+        <div className="relative min-h-20 rounded-[1.35rem] border border-[#dfe5e0] bg-white px-5 py-5 text-[15px] text-[#8d948f] shadow-[0_14px_45px_rgba(26,54,39,0.08)]">
+          Ask Supermarket.ie what your household needs…
+          <span className="absolute bottom-3 right-3 flex size-10 items-center justify-center rounded-full bg-[#0b1710] text-lg text-white">↑</span>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-hidden="true">
+          {[
+            ["Find Hellmann's mayonnaise", 'Check current products, prices and stores'],
+            ['Compare Irish butter', 'See how a product compares across stores'],
+            ['Plan four easy dinners', 'Turn a simple idea into a practical week'],
+            ['Keep a shop under €120', 'Get a sensible household shopping strategy'],
+          ].map(([label, detail]) => (
+            <div key={label} className="flex items-center gap-3 rounded-2xl px-3.5 py-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e5eae6] bg-white text-[#176b3a] shadow-sm">↗</span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-[#26342b]">{label}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-[#879089]">{detail}</span>
+              </span>
             </div>
-          </div>
+          ))}
         </div>
       </div>
-
-      {/* Static input placeholder */}
-      <div
-        className="sticky bottom-0 z-10 pt-2 w-full"
-        style={{ background: 'var(--surface-container-lowest)' }}
-      >
-        <div className="relative w-full">
-          <div
-            className="w-full px-4 py-3 pr-12 rounded-xl text-sm"
-            style={{
-              background: 'var(--surface-container-low)',
-              border: '1.5px solid var(--surface-container)',
-              color: 'var(--on-surface-variant)',
-              minHeight: '46px',
-            }}
-            aria-hidden="true"
-          >
-            Tell me what you need...
-          </div>
-          <div
-            className="absolute right-3 bottom-3 w-8 h-8 rounded-lg flex items-center justify-center opacity-40"
-            style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-container))' }}
-            aria-hidden="true"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
-              />
-            </svg>
-          </div>
-        </div>
-        <p className="text-xs mt-1.5 text-center" style={{ color: 'var(--on-surface-variant)' }}>
-          Prices from Tesco, Dunnes, SuperValu &amp; Aldi · Free
-        </p>
-      </div>
+      <p className="mt-5 text-center text-[10px] leading-4 text-[#9aa19c]">Your agent can prepare drafts and remember preferences after sign-in. It will never place an order or spend money without approval.</p>
     </div>
   );
 }
