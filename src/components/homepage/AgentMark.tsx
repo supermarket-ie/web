@@ -13,15 +13,11 @@ export function AgentMark({ className = 'size-10', label = 'supermarket.ie super
         className="h-full w-full"
       >
         <rect width="64" height="64" rx="19" fill="#0B1710" />
-        <path
-          d="M45.5 19.5c-4.6-5.1-15.4-6-21.3-1.9-5.5 3.8-4.6 10.5 1.3 13.1 4.7 2 10.9 1.2 15.1 4.2 4.8 3.4 3.2 9.7-1.6 12.4-6 3.4-15.4 1.6-19.4-3.4"
-          fill="none"
-          stroke="#F4FBF6"
-          strokeWidth="6.5"
-          strokeLinecap="round"
-        />
-        <circle cx="46.5" cy="18" r="5" fill="#67EE98" />
-        <path d="M47 8.5c0-3.3 2.6-5.7 6.2-5.7-.7 3.5-2.8 5.6-6.2 5.7Z" fill="#C9FFD9" />
+        <path d="M23 25c0-6.6 4-11 9-11s9 4.4 9 11" fill="none" stroke="#F4FBF6" strokeWidth="5" strokeLinecap="round" />
+        <path d="M16 25h32l-4 25H20l-4-25Z" fill="#F4FBF6" stroke="#F4FBF6" strokeWidth="2" strokeLinejoin="round" />
+        <path d="M24 34h16" stroke="#0B1710" strokeWidth="4" strokeLinecap="round" />
+        <path d="M24 42h10" stroke="#67EE98" strokeWidth="4" strokeLinecap="round" />
+        <path d="m45 11 1.8 4.2L51 17l-4.2 1.8L45 23l-1.8-4.2L39 17l4.2-1.8L45 11Z" fill="#67EE98" />
       </svg>
     </span>
   );
