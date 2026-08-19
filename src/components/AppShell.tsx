@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { loadSession, clearSession } from '@/lib/session';
+import { AgentMark } from '@/components/homepage/AgentMark';
 
 const NAV_ITEMS = [
   {
@@ -102,7 +103,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-40 w-full px-6 py-3.5" style={{ background: '#00944A' }}>
         <div className="flex justify-between items-center">
-          <Link href="/" className="flex-shrink-0" onClick={() => setMenuOpen(false)}>
+          <Link href="/" className="flex flex-shrink-0 items-center gap-2.5" onClick={() => setMenuOpen(false)}>
+            <AgentMark className="size-8" label="Supermarket.ie basket" />
             <span className="text-[28px] font-extrabold tracking-tight" style={{ color: '#FFFFFF', letterSpacing: '-0.02em' }}>
               supermarket<span style={{ color: '#d4ffe5' }}>.ie</span>
             </span>
