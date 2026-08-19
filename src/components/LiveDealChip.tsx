@@ -95,10 +95,11 @@ export function LiveDealChip() {
 
   return (
     <div
-      className="absolute inset-0 flex h-10 w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-full px-4 text-sm font-semibold transition-opacity duration-300"
+      className="absolute inset-0 flex h-10 w-full min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden rounded-full border px-4 text-xs font-semibold shadow-sm transition-opacity duration-300 sm:text-sm"
       style={{
-        background: 'var(--primary-fixed)',
-        color: 'var(--on-primary-container)',
+        background: 'rgba(255,255,255,0.86)',
+        borderColor: 'rgba(20, 77, 44, 0.12)',
+        color: '#28613f',
         opacity: fading ? 0 : 1,
       }}
     >
