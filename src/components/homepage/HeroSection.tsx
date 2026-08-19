@@ -26,9 +26,6 @@ export function HeroSection() {
           <p className="mx-auto mt-5 max-w-2xl text-balance text-base leading-7 text-[#637068] sm:text-lg">
             Ask Supermarket.ie to find products, plan meals and household essentials, prepare your shop, or keep watch for the changes that matter.
           </p>
-          <p className="mx-auto mt-3 max-w-2xl text-balance text-sm leading-6 text-[#7b867f]">
-            Grounded in thousands of Irish supermarket prices and ingredient mappings, it understands products, meals and household needs with greater precision.
-          </p>
         </div>
 
         <div id="grocery-agent" className="relative scroll-mt-20">
