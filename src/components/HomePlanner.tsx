@@ -248,7 +248,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
             <h2 className="text-balance text-2xl font-semibold tracking-[-0.035em] text-[#152219] sm:text-[2rem]">What do you need for the household?</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">
               {isGuest
-                ? 'Try Supermarket.ie with a current product question, a meal idea or a household budget.'
+                ? 'Thousands of Irish supermarket prices and ingredient mappings.'
                 : 'Ask your agent to prepare, review or update the shop around your household.'}
             </p>
           </div>
