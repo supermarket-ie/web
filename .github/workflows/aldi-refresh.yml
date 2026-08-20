@@ -2,7 +2,8 @@ name: Aldi refresh
 
 on:
   schedule:
-    - cron: '0 6 20 8 *'
+    - cron: '30 5 * * 1,4'
+    - cron: '15 6 20 8 *'
   workflow_dispatch:
     inputs:
       mode:
