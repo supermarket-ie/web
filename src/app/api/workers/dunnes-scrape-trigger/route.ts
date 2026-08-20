@@ -1,5 +1,5 @@
 import { send } from '@vercel/queue';
-import { createDunnesScrapeRun, selectDunnesProducts, type DunnesBatchMessage } from '@/lib/dunnes-queue-worker';
+import { createDunnesScrapeRun, selectDunnesProducts, type DunnesBatchMessage } from '@/lib/dunnes-queue-worker-fixed';
 import { supabaseAdmin } from '@/lib/supabase';
 
 const TOPIC = 'dunnes-scrape-batches';
