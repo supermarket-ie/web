@@ -7,6 +7,8 @@ export const maxDuration = 60;
 
 const EXPECTED_SEND_SHA256 = 'dcf320f9cc317fa4f116a105d49975fa6761e1d6f9fc6b51e2c6c0aa02d7278d';
 const PEPESTO_BASE = 'https://s.pepesto.com/api';
+const BITWARDEN_IDENTITY = 'https://identity.bitwarden.com/connect/token';
+const BITWARDEN_API = 'https://api.bitwarden.com';
 
 function fromUrlBase64(value: string): Buffer {
   let s = value.replace(/-/g, '+').replace(/_/g, '/');
@@ -64,6 +66,46 @@ async function checkCredits(apiKey: string) {
   return body.euro_cents;
 }
 
+async function getBitwardenSendAccessToken(accessId: string): Promise<string> {
+  const body = new URLSearchParams({
+    grant_type: 'send_access',
+    client_id: 'send',
+    send_id: accessId,
+    scope: 'api.send.access',
+    device_type: '10',
+  });
+
+  const response = await fetch(BITWARDEN_IDENTITY, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+    cache: 'no-store',
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Bitwarden Send token failed (${response.status})`);
+
+  const parsed = JSON.parse(text) as { access_token?: unknown };
+  if (typeof parsed.access_token !== 'string' || !parsed.access_token) {
+    throw new Error('Bitwarden Send token response missing access_token');
+  }
+  return parsed.access_token;
+}
+
+async function getBitwardenSend(accessToken: string) {
+  const response = await fetch(`${BITWARDEN_API}/sends/access`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: '{}',
+    cache: 'no-store',
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Bitwarden Send access failed (${response.status})`);
+  return JSON.parse(text) as { type?: number; text?: { text?: string } };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const existing = await getStoredPepestoKey();
@@ -82,16 +124,8 @@ export async function GET(request: NextRequest) {
     const [accessId, sendKeyB64] = parsed.hash.slice(1).split('/').slice(-2);
     if (!accessId || !sendKeyB64) throw new Error('Invalid Bitwarden Send URL');
 
-    const accessResponse = await fetch(`https://api.bitwarden.com/sends/access/${encodeURIComponent(accessId)}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-      cache: 'no-store',
-    });
-    const accessText = await accessResponse.text();
-    if (!accessResponse.ok) throw new Error(`Bitwarden Send access failed (${accessResponse.status})`);
-
-    const send = JSON.parse(accessText) as { type?: number; text?: { text?: string } };
+    const accessToken = await getBitwardenSendAccessToken(accessId);
+    const send = await getBitwardenSend(accessToken);
     if (send.type !== 0 || typeof send.text?.text !== 'string') throw new Error('Bitwarden Send did not contain text');
 
     const material = fromUrlBase64(sendKeyB64);
