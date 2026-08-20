@@ -69,11 +69,11 @@
     },
     {
       "path": "/api/workers/dunnes-scrape-trigger?limit=1000",
-      "schedule": "55 5 20 8 *"
+      "schedule": "10 5 * * 1,4"
     },
     {
       "path": "/api/workers/supervalu-scrape-trigger?limit=1000",
-      "schedule": "57 5 20 8 *"
+      "schedule": "20 5 * * 1,4"
     }
   ]
 }
