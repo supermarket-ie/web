@@ -1,5 +1,5 @@
 import { send } from '@vercel/queue';
-import { createSupervaluScrapeRun, selectSupervaluProducts, type SupervaluBatchMessage } from '@/lib/supervalu-direct-worker';
+import { createSupervaluScrapeRun, selectSupervaluProducts, type SupervaluBatchMessage } from '@/lib/supervalu-direct-worker-fixed';
 import { supabaseAdmin } from '@/lib/supabase';
 
 const TOPIC = 'supervalu-scrape-batches';
