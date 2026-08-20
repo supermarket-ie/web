@@ -5,7 +5,7 @@ import { resend } from '@/lib/resend';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const STORES = ['tesco', 'supervalu', 'dunnes', 'aldi'] as const;
+const STORES = ['supervalu', 'dunnes', 'aldi'] as const;
 const STALE_HOURS = 120; // current Mon/Thu cadence can legitimately span four days
 const STUCK_HOURS = 3;
 
@@ -65,6 +65,10 @@ export async function GET(request: NextRequest) {
       issues.push(`${store}: run ${latest.run_id} has been running for ${latestAgeHours.toFixed(1)}h`);
     } else if (latest.status === 'failed') {
       issues.push(`${store}: latest run ${latest.run_id} failed${latest.error_summary ? ` — ${latest.error_summary}` : ''}`);
+    } else if (latest.status === 'degraded') {
+      const coverage = latest.coverage_pct == null ? 'unknown' : `${Number(latest.coverage_pct).toFixed(1)}%`;
+      const threshold = latest.threshold_pct == null ? 'configured threshold' : `${Number(latest.threshold_pct).toFixed(1)}% threshold`;
+      issues.push(`${store}: latest run ${latest.run_id} degraded — ${coverage} coverage vs ${threshold}`);
     }
 
     if (!lastHealthy) {
