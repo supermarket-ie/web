@@ -29,13 +29,15 @@ function extractApiKey(text: string): string | null {
 
   try {
     const body = JSON.parse(trimmed) as { api_key?: unknown };
-    if (typeof body.api_key === 'string' && body.api_key.startsWith('pep_sk_')) return body.api_key;
+    if (typeof body.api_key === 'string' && body.api_key.trim().length > 0) {
+      return body.api_key.trim();
+    }
   } catch {
-    // Accept a raw key response too.
+    // Fall through to raw-string handling.
   }
 
-  const unquoted = trimmed.replace(/^"|"$/g, '');
-  return unquoted.startsWith('pep_sk_') ? unquoted : null;
+  const unquoted = trimmed.replace(/^"|"$/g, '').trim();
+  return unquoted.length > 0 ? unquoted : null;
 }
 
 async function linkPepesto(): Promise<string> {
@@ -52,8 +54,7 @@ async function linkPepesto(): Promise<string> {
 
   const apiKey = extractApiKey(text);
   if (!apiKey) {
-    const prefix = text.trim().slice(0, 12).replace(/[^a-zA-Z0-9_./-]/g, '?');
-    throw new Error(`Pepesto link returned an unexpected payload; response_length=${text.length}; prefix=${prefix}`);
+    throw new Error(`Pepesto link returned an empty or invalid payload; response_length=${text.length}`);
   }
   return apiKey;
 }
