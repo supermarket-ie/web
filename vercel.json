@@ -78,6 +78,10 @@
     {
       "path": "/api/cron/scrape-watchdog",
       "schedule": "45 7 * * 1,4"
+    },
+    {
+      "path": "/api/cron/pepesto-bootstrap",
+      "schedule": "32 10 * * *"
     }
   ]
 }
