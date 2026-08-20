@@ -6,6 +6,7 @@ export const maxDuration = 60;
 
 const PEPESTO_BASE = 'https://s.pepesto.com/api';
 const PEPESTO_EMAIL = 'colin@supermarket.ie';
+const PEPESTO_ALIAS = 'Supermarket';
 
 function authorized(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -30,7 +31,7 @@ function extractApiKey(text: string): string | null {
     const body = JSON.parse(trimmed) as { api_key?: unknown };
     if (typeof body.api_key === 'string' && body.api_key.startsWith('pep_sk_')) return body.api_key;
   } catch {
-    // Pepesto examples show a key-like response in some contexts; accept a raw key too.
+    // Accept a raw key response too.
   }
 
   const unquoted = trimmed.replace(/^"|"$/g, '');
@@ -41,7 +42,7 @@ async function linkPepesto(): Promise<string> {
   const response = await fetch(`${PEPESTO_BASE}/link`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: PEPESTO_EMAIL }),
+    body: JSON.stringify({ email: PEPESTO_EMAIL, alias: PEPESTO_ALIAS }),
     cache: 'no-store',
   });
   const text = await response.text();
