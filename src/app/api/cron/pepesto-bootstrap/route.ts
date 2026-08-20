@@ -23,6 +23,20 @@ async function storeKey(apiKey: string) {
   if (error) throw new Error(`Failed storing Pepesto key in Vault: ${error.message}`);
 }
 
+function extractApiKey(text: string): string | null {
+  const trimmed = text.trim();
+
+  try {
+    const body = JSON.parse(trimmed) as { api_key?: unknown };
+    if (typeof body.api_key === 'string' && body.api_key.startsWith('pep_sk_')) return body.api_key;
+  } catch {
+    // Pepesto examples show a key-like response in some contexts; accept a raw key too.
+  }
+
+  const unquoted = trimmed.replace(/^"|"$/g, '');
+  return unquoted.startsWith('pep_sk_') ? unquoted : null;
+}
+
 async function linkPepesto(): Promise<string> {
   const response = await fetch(`${PEPESTO_BASE}/link`, {
     method: 'POST',
@@ -31,10 +45,16 @@ async function linkPepesto(): Promise<string> {
     cache: 'no-store',
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`Pepesto link failed (${response.status}): ${text.slice(0, 300)}`);
-  const body = JSON.parse(text) as { api_key?: string };
-  if (!body.api_key) throw new Error('Pepesto link response did not contain api_key');
-  return body.api_key;
+  if (!response.ok) {
+    throw new Error(`Pepesto link failed (${response.status}); response_length=${text.length}`);
+  }
+
+  const apiKey = extractApiKey(text);
+  if (!apiKey) {
+    const prefix = text.trim().slice(0, 12).replace(/[^a-zA-Z0-9_./-]/g, '?');
+    throw new Error(`Pepesto link returned an unexpected payload; response_length=${text.length}; prefix=${prefix}`);
+  }
+  return apiKey;
 }
 
 async function checkCredits(apiKey: string): Promise<number> {
@@ -48,7 +68,7 @@ async function checkCredits(apiKey: string): Promise<number> {
     cache: 'no-store',
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`Pepesto credits failed (${response.status}): ${text.slice(0, 300)}`);
+  if (!response.ok) throw new Error(`Pepesto credits failed (${response.status}); response_length=${text.length}`);
   const body = JSON.parse(text) as { euro_cents?: number };
   if (typeof body.euro_cents !== 'number') throw new Error('Pepesto credits response missing euro_cents');
   return body.euro_cents;
