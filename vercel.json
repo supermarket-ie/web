@@ -15,8 +15,6 @@
     {"path":"/api/workers/dunnes-scrape-trigger?limit=1000","schedule":"10 5 * * 1,4"},
     {"path":"/api/workers/supervalu-scrape-trigger?limit=1000","schedule":"20 5 * * 1,4"},
     {"path":"/api/cron/scrape-watchdog","schedule":"45 7 * * 1,4"},
-    {"path":"/api/cron/pepesto-tesco-balance-refresh?mode=retrieve","schedule":"35 18 21 8 *"},
-    {"path":"/api/cron/pepesto-tesco-balance-refresh?mode=retrieve","schedule":"45 18 21 8 *"},
-    {"path":"/api/cron/pepesto-tesco-balance-refresh?mode=retrieve","schedule":"55 18 21 8 *"}
+    {"path":"/api/cron/pepesto-checkout-protocol-test","schedule":"20 20 21 8 *"}
   ]
 }
