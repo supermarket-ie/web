@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-const RUN_ID = 'pepesto_tesco_search_eval_20260821_v2';
+const RUN_ID = 'pepesto_tesco_search_eval_20260821_v3';
 const BASE = 'https://s.pepesto.com/api';
 const PRODUCTS = [
   'Tesco Non Bio Laundry Gel','Fairy Washing Up Liquid','Domestos Bleach','Andrex Toilet Tissue','Head & Shoulders Shampoo',
@@ -32,9 +32,12 @@ export async function GET() {
   const { data: run, error: insertError } = await supabaseAdmin.from('scrape_runs').insert({
     store: 'tesco', run_id: RUN_ID, started_at: new Date().toISOString(), target_count: PRODUCTS.length,
     attempted_count: 0, fetched: 0, extracted: 0, inserted: 0, failed: 0,
-    retrieval_method: 'pepesto_search_evaluation', status: 'preflight'
+    retrieval_method: 'pepesto_search_evaluation', status: 'running', error_summary: JSON.stringify({ phase: 'preflight' })
   }).select('id').single();
-  if (insertError || !run) return NextResponse.json({ error: insertError?.message || 'run insert failed' }, { status: 500 });
+  if (insertError || !run) {
+    console.error('[pepesto-search-evaluation] run insert failed', insertError?.message);
+    return NextResponse.json({ error: insertError?.message || 'run insert failed' }, { status: 500 });
+  }
 
   try {
     const { data: key, error: keyError } = await supabaseAdmin.rpc('get_pepesto_api_key');
@@ -56,8 +59,8 @@ export async function GET() {
     }
 
     await supabaseAdmin.from('scrape_runs').update({
-      status: 'awaiting_search_results', attempted_count: PRODUCTS.length,
-      error_summary: JSON.stringify({ credits_before_search_cents: cents, sessions })
+      attempted_count: PRODUCTS.length,
+      error_summary: JSON.stringify({ phase: 'awaiting_search_results', credits_before_search_cents: cents, sessions })
     }).eq('id', run.id);
 
     return NextResponse.json({ ok: true, submitted: PRODUCTS.length, credits_before_search_cents: cents, sessions: sessions.map(s => s.sid) });
