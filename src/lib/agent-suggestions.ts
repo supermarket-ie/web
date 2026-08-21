@@ -1,4 +1,4 @@
-export type SuggestionIntent = 'find' | 'price' | 'offer' | 'compare' | 'meal' | 'budget' | 'general';
+export type SuggestionIntent = 'find' | 'price' | 'offer' | 'compare' | 'meal' | 'budget' | 'dietary' | 'general';
 
 export type CatalogueSuggestionProduct = {
   name: string;
@@ -28,7 +28,8 @@ export function normaliseSuggestionText(value: string): string {
 
 export function inferSuggestionIntent(input: string): SuggestionIntent {
   const query = normaliseSuggestionText(input);
-  if (/\b(dinners?|meals?|cook|make|recipes?|lunch(?:es)?|breakfasts?|ingredients?|vegetarian|vegan)\b/.test(query)) return 'meal';
+  if (/\b(gluten(?:\s+f(?:r(?:e(?:e)?)?)?)?|dairy(?:\s+f(?:r(?:e(?:e)?)?)?)?|lactose(?:\s+f(?:r(?:e(?:e)?)?)?)?|nut(?:\s+f(?:r(?:e(?:e)?)?)?)?|peanut(?:\s+f(?:r(?:e(?:e)?)?)?)?|egg(?:\s+f(?:r(?:e(?:e)?)?)?)?|soy(?:\s+f(?:r(?:e(?:e)?)?)?)?|sesame(?:\s+f(?:r(?:e(?:e)?)?)?)?|low\s+(?:prot(?:e(?:i(?:n)?)?)?|sod(?:i(?:u(?:m)?)?)?|salt|sugar|carb)|high\s+prot(?:e(?:i(?:n)?)?)?|no\s+added\s+sugar|without\s+(?:gluten|dairy|lactose|nuts?|peanuts?|eggs?|soy|sesame)|allerg(?:y|ies|en|ens)|vegetarian|vegan|halal|kosher|keto)\b/.test(query)) return 'dietary';
+  if (/\b(dinners?|meals?|cook|make|recipes?|lunch(?:es)?|breakfasts?|ingredients?)\b/.test(query)) return 'meal';
   if (/€|£|\b(budget|spend|under|less than|shop for|family of|adults?|people)\b/.test(query)) return 'budget';
   if (/\b(compare|versus|vs|difference|which store|cheapest)\b/.test(query)) return 'compare';
   if (/\b(offer|offers|promotion|promotions|sale|reduced|deal)\b/.test(query)) return 'offer';
@@ -59,6 +60,28 @@ function readableFragment(fragment: string): string {
     .join(' ');
 }
 
+function dietaryRequirement(input: string): string {
+  const query = normaliseSuggestionText(input);
+  const completions: Array<[RegExp, string]> = [
+    [/\bgluten\s+f(?:r(?:e(?:e)?)?)?\b/, 'gluten-free'],
+    [/\bdairy\s+f(?:r(?:e(?:e)?)?)?\b/, 'dairy-free'],
+    [/\blactose\s+f(?:r(?:e(?:e)?)?)?\b/, 'lactose-free'],
+    [/\bnut\s+f(?:r(?:e(?:e)?)?)?\b/, 'nut-free'],
+    [/\bpeanut\s+f(?:r(?:e(?:e)?)?)?\b/, 'peanut-free'],
+    [/\begg\s+f(?:r(?:e(?:e)?)?)?\b/, 'egg-free'],
+    [/\bsoy\s+f(?:r(?:e(?:e)?)?)?\b/, 'soy-free'],
+    [/\bsesame\s+f(?:r(?:e(?:e)?)?)?\b/, 'sesame-free'],
+    [/\blow\s+prot(?:e(?:i(?:n)?)?)?\b/, 'low protein'],
+    [/\blow\s+sod(?:i(?:u(?:m)?)?)?\b/, 'low sodium'],
+    [/\bhigh\s+prot(?:e(?:i(?:n)?)?)?\b/, 'high protein'],
+  ];
+  for (const [pattern, label] of completions) {
+    if (pattern.test(query)) return label;
+  }
+  return query.match(/\b(no added sugar|low (?:salt|sugar|carb)|without (?:gluten|dairy|lactose|nuts?|peanuts?|eggs?|soy|sesame)|vegetarian|vegan|halal|kosher|keto)\b/)?.[1]
+    ?? query;
+}
+
 function productSuggestions(product: CatalogueSuggestionProduct, intent: SuggestionIntent): PredictiveSuggestion[] {
   const price = euro(product.best_price);
   const priceDetail = price && product.best_store
@@ -68,7 +91,7 @@ function productSuggestions(product: CatalogueSuggestionProduct, intent: Suggest
     ? 'A current promotion is available'
     : 'Check current promotions across Irish supermarkets';
 
-  const primary: Record<Exclude<SuggestionIntent, 'meal' | 'budget' | 'general'>, PredictiveSuggestion> = {
+  const primary: Record<Exclude<SuggestionIntent, 'meal' | 'budget' | 'dietary' | 'general'>, PredictiveSuggestion> = {
     find: { label: `Where can I find ${product.name}?`, detail: priceDetail, prompt: `Where can I find ${product.name}?` },
     price: { label: `What is the current price of ${product.name}?`, detail: priceDetail, prompt: `Find the current price of ${product.name}` },
     offer: { label: `Is ${product.name} on offer?`, detail: offerDetail, prompt: `Where is ${product.name} currently on offer?` },
@@ -93,6 +116,25 @@ function contextualSuggestions(input: string, intent: SuggestionIntent): Predict
   const subject = readableFragment(fragment || input.trim());
   const amount = input.match(/[€£]?\s?(\d{2,3})\b/)?.[1];
   const people = query.match(/(?:family of|for|shop for)\s+(\d+)/)?.[1];
+
+  if (intent === 'dietary') {
+    const requirement = dietaryRequirement(input);
+    const namedProduct = normaliseSuggestionText(input)
+      .replace(/\b(?:gluten|dairy|lactose|nut|peanut|egg|soy|sesame)\s+f(?:r(?:e(?:e)?)?)?\b/g, ' ')
+      .replace(/\b(?:low\s+(?:prot(?:e(?:i(?:n)?)?)?|sod(?:i(?:u(?:m)?)?)?|salt|sugar|carb)|high\s+prot(?:e(?:i(?:n)?)?)?|no\s+added\s+sugar|without\s+(?:gluten|dairy|lactose|nuts?|peanuts?|eggs?|soy|sesame)|vegetarian|vegan|halal|kosher|keto)\b/g, ' ')
+      .replace(/\b(products?|food|foods|options?|meals?|dinners?|recipes?|find|show|me|for)\b/g, ' ')
+      .trim().replace(/\s+/g, ' ');
+    const product = namedProduct || null;
+    const target = product ? `${requirement} ${product}` : `${requirement} products`;
+    return [
+      { label: `Find ${target}`, detail: 'Search products and check available ingredient or nutrition information', prompt: `Find ${target} and check the available ingredient or nutrition information` },
+      product
+        ? { label: `Check ${product} for ${requirement}`, detail: 'Review available labels and ingredient information for this requirement', prompt: `Check ${product} options for ${requirement} using available label and ingredient information` }
+        : { label: `Compare ${requirement} options`, detail: 'Compare relevant products, prices and available label information', prompt: `Compare ${requirement} product options and their current prices` },
+      { label: `Plan meals around a ${requirement} requirement`, detail: 'Build practical meal ideas while keeping the stated requirement exact', prompt: `Help me plan meals around a ${requirement} requirement` },
+      { label: `Compare prices for ${target}`, detail: 'Compare matching options across Irish supermarkets', prompt: `Compare current Irish supermarket prices for ${target}` },
+    ];
+  }
 
   if (intent === 'meal') {
     const ingredient = query.match(/(?:with|using|use up)\s+(.+)$/)?.[1];
