@@ -1,1 +1,37 @@
-aW1wb3J0IHsgTmV4dFJlc3BvbnNlIH0gZnJvbSAnbmV4dC9zZXJ2ZXInOwppbXBvcnQgeyByZXNvbHZlQ2F0YWxvZ3VlUHJvZHVjdCB9IGZyb20gJ0AvbGliL2NhdGFsb2d1ZS1yZXNvbHV0aW9uJzsKaW1wb3J0IHsgZXh0cmFjdENhdGFsb2d1ZUZyYWdtZW50IH0gZnJvbSAnQC9saWIvYWdlbnQtc3VnZ2VzdGlvbnMnOwoKZXhwb3J0IGNvbnN0IGR5bmFtaWMgPSAnZm9yY2UtZHluYW1pYyc7CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gR0VUKHJlcXVlc3Q6IFJlcXVlc3QpIHsKICBjb25zdCBpbnB1dCA9IG5ldyBVUkwocmVxdWVzdC51cmwpLnNlYXJjaFBhcmFtcy5nZXQoJ3EnKT8udHJpbSgpID8/ICcnOwogIGlmIChpbnB1dC5sZW5ndGggPCAyKSByZXR1cm4gTmV4dFJlc3BvbnNlLmpzb24oeyBwcm9kdWN0czogW10gfSk7CgogIGNvbnN0IGZyYWdtZW50ID0gZXh0cmFjdENhdGFsb2d1ZUZyYWdtZW50KGlucHV0KTsKICBpZiAoZnJhZ21lbnQubGVuZ3RoIDwgMikgcmV0dXJuIE5leHRSZXNwb25zZS5qc29uKHsgcHJvZHVjdHM6IFtdIH0pOwoKICB0cnkgewogICAgbGV0IGNhbmRpZGF0ZXMgPSBhd2FpdCByZXNvbHZlQ2F0YWxvZ3VlUHJvZHVjdChmcmFnbWVudCwgNCk7CiAgICBpZiAoY2FuZGlkYXRlcy5sZW5ndGggPT09IDApIHsKICAgICAgY29uc3QgcmVsYXhlZCA9IGZyYWdtZW50CiAgICAgICAgLnNwbGl0KCcgJykKICAgICAgICAubWFwKHRva2VuID0+IHRva2VuLmxlbmd0aCA+IDUgJiYgdG9rZW4uZW5kc1dpdGgoJ3MnKSA/IHRva2VuLnNsaWNlKDAsIC0xKSA6IHRva2VuKQogICAgICAgIC5qb2luKCcgJyk7CiAgICAgIGlmIChyZWxheGVkICE9PSBmcmFnbWVudCkgY2FuZGlkYXRlcyA9IGF3YWl0IHJlc29sdmVDYXRhbG9ndWVQcm9kdWN0KHJlbGF4ZWQsIDQpOwogICAgfQogICAgcmV0dXJuIE5leHRSZXNwb25zZS5qc29uKHsKICAgICAgcHJvZHVjdHM6IGNhbmRpZGF0ZXMubWFwKGNhbmRpZGF0ZSA9PiAoewogICAgICAgIG5hbWU6IGNhbmRpZGF0ZS5jYW5vbmljYWxfbmFtZSwKICAgICAgICBjYXRlZ29yeTogY2FuZGlkYXRlLmNhdGVnb3J5LAogICAgICAgIGJlc3RfcHJpY2U6IGNhbmRpZGF0ZS5iZXN0X3ByaWNlLAogICAgICAgIGJlc3Rfc3RvcmU6IGNhbmRpZGF0ZS5iZXN0X3N0b3JlLAogICAgICAgIG9uX3Byb21vdGlvbjogY2FuZGlkYXRlLm9uX3Byb21vdGlvbiwKICAgICAgfSkpLAogICAgfSwgewogICAgICBoZWFkZXJzOiB7ICdDYWNoZS1Db250cm9sJzogJ3B1YmxpYywgcy1tYXhhZ2U9MzAwLCBzdGFsZS13aGlsZS1yZXZhbGlkYXRlPTE4MDAnIH0sCiAgICB9KTsKICB9IGNhdGNoIHsKICAgIHJldHVybiBOZXh0UmVzcG9uc2UuanNvbih7IHByb2R1Y3RzOiBbXSB9KTsKICB9Cn0K
+import { NextResponse } from 'next/server';
+import { resolveCatalogueProduct } from '@/lib/catalogue-resolution';
+import { extractCatalogueFragment } from '@/lib/agent-suggestions';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request) {
+  const input = new URL(request.url).searchParams.get('q')?.trim() ?? '';
+  if (input.length < 2) return NextResponse.json({ products: [] });
+
+  const fragment = extractCatalogueFragment(input);
+  if (fragment.length < 2) return NextResponse.json({ products: [] });
+
+  try {
+    let candidates = await resolveCatalogueProduct(fragment, 4);
+    if (candidates.length === 0) {
+      const relaxed = fragment
+        .split(' ')
+        .map(token => token.length > 5 && token.endsWith('s') ? token.slice(0, -1) : token)
+        .join(' ');
+      if (relaxed !== fragment) candidates = await resolveCatalogueProduct(relaxed, 4);
+    }
+    return NextResponse.json({
+      products: candidates.map(candidate => ({
+        name: candidate.canonical_name,
+        category: candidate.category,
+        best_price: candidate.best_price,
+        best_store: candidate.best_store,
+        on_promotion: candidate.on_promotion,
+      })),
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=1800' },
+    });
+  } catch {
+    return NextResponse.json({ products: [] });
+  }
+}
