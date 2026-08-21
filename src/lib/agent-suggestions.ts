@@ -28,7 +28,7 @@ export function normaliseSuggestionText(value: string): string {
 
 export function inferSuggestionIntent(input: string): SuggestionIntent {
   const query = normaliseSuggestionText(input);
-  if (/\b(dinner|meal|cook|make|recipe|lunch|breakfast|ingredient|vegetarian|vegan)\b/.test(query)) return 'meal';
+  if (/\b(dinners?|meals?|cook|make|recipes?|lunch(?:es)?|breakfasts?|ingredients?|vegetarian|vegan)\b/.test(query)) return 'meal';
   if (/€|£|\b(budget|spend|under|less than|shop for|family of|adults?|people)\b/.test(query)) return 'budget';
   if (/\b(compare|versus|vs|difference|which store|cheapest)\b/.test(query)) return 'compare';
   if (/\b(offer|offers|promotion|promotions|sale|reduced|deal)\b/.test(query)) return 'offer';
@@ -117,7 +117,11 @@ export function buildPredictiveSuggestions(
   limit = 4,
 ): PredictiveSuggestion[] {
   const intent = inferSuggestionIntent(input);
-  const candidates = products.flatMap(product => productSuggestions(product, intent));
+  const productSets = products.map(product => productSuggestions(product, intent));
+  const candidates = [
+    ...productSets.slice(0, 2).map(set => set[0]),
+    ...(productSets[0]?.slice(1) ?? []),
+  ];
   const combined = [...candidates, ...contextualSuggestions(input, intent)];
   const seen = new Set<string>();
   return combined.filter(item => {
