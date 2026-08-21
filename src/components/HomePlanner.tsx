@@ -18,6 +18,7 @@ import {
 import { loadSession } from '@/lib/session';
 import {
   buildPredictiveSuggestions,
+  inferSuggestionIntent,
   type CatalogueSuggestionProduct,
 } from '@/lib/agent-suggestions';
 
@@ -175,7 +176,8 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
     : [];
 
   useEffect(() => {
-    if (input.trim().length < 2) {
+    const intent = inferSuggestionIntent(input);
+    if (input.trim().length < 2 || intent === 'meal' || intent === 'budget') {
       setCatalogueSuggestions([]);
       return;
     }
