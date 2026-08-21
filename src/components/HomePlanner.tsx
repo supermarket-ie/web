@@ -180,6 +180,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
       return;
     }
 
+    setCatalogueSuggestions([]);
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
