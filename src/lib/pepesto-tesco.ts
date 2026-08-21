@@ -23,7 +23,7 @@ export async function getPepestoCreditsCents(){ const j=await post('/credits',{}
 export async function submitPepestoSearch(products:TescoQueueProduct[]){ if(products.length<1||products.length>10) throw new Error('Pepesto search batch must contain 1-10 products'); const j=await post('/search',{products:products.map(p=>p.storeProductName||p.canonicalName),supermarket_domain:'tesco.ie'}); if(!j?.search_session_id) throw new Error('Pepesto search did not return search_session_id'); return String(j.search_session_id); }
 export async function retrievePepestoSearch(sessionId:string){ return post('/retrieve',{search_session_id:sessionId}); }
 
-async function selectPepestoTescoProducts(limit:number,query?:string){
+export async function selectPepestoTescoProducts(limit:number,query?:string){
   const rows:any[]=[];
   for(let from=0;;from+=1000){
     const {data,error}=await supabaseAdmin.from('store_products').select('id,store_product_name,store_url,store_sku,url_status,products(canonical_name)').eq('store','tesco').range(from,from+999);
