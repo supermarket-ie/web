@@ -27,4 +27,14 @@ describe('predictive agent suggestions', () => {
     expect(suggestions[0].label).toContain('€120');
     expect(suggestions[0].prompt).toContain('4 people');
   });
+
+  it('shows more than one matching catalogue product before secondary actions', () => {
+    const products = [
+      { name: 'Glenisk Natural Yoghurt 500g', category: 'Dairy', best_price: 2.49, best_store: 'Dunnes', on_promotion: false },
+      { name: 'Glenisk Greek Yoghurt 450g', category: 'Dairy', best_price: 3.25, best_store: 'Tesco', on_promotion: true },
+    ];
+    const suggestions = buildPredictiveSuggestions('where can I find gle', products);
+    expect(suggestions[0].label).toContain('Natural Yoghurt');
+    expect(suggestions[1].label).toContain('Greek Yoghurt');
+  });
 });
