@@ -48,6 +48,17 @@ function euro(value: number | null): string | null {
   return value == null ? null : `€${value.toFixed(2)}`;
 }
 
+function readableFragment(fragment: string): string {
+  return fragment
+    .split(' ')
+    .map(token => {
+      if (token === 'hellmanns') return "Hellmann's";
+      if (token === 'mayo') return 'mayonnaise';
+      return token.charAt(0).toUpperCase() + token.slice(1);
+    })
+    .join(' ');
+}
+
 function productSuggestions(product: CatalogueSuggestionProduct, intent: SuggestionIntent): PredictiveSuggestion[] {
   const price = euro(product.best_price);
   const priceDetail = price && product.best_store
@@ -78,6 +89,8 @@ function productSuggestions(product: CatalogueSuggestionProduct, intent: Suggest
 
 function contextualSuggestions(input: string, intent: SuggestionIntent): PredictiveSuggestion[] {
   const query = normaliseSuggestionText(input);
+  const fragment = extractCatalogueFragment(input);
+  const subject = readableFragment(fragment || input.trim());
   const amount = input.match(/[€£]?\s?(\d{2,3})\b/)?.[1];
   const people = query.match(/(?:family of|for|shop for)\s+(\d+)/)?.[1];
 
@@ -104,10 +117,28 @@ function contextualSuggestions(input: string, intent: SuggestionIntent): Predict
     ];
   }
 
+
+  if (intent === 'offer') {
+    return [
+      { label: `Is ${subject} on offer?`, detail: 'Check current promotions across Irish supermarkets', prompt: `Where is ${subject} currently on offer?` },
+      { label: `Compare current prices for ${subject}`, detail: 'Compare available products, stores and pack sizes', prompt: `Compare current prices for ${subject}` },
+      { label: `Find a better-value alternative to ${subject}`, detail: 'Compare genuinely relevant alternatives', prompt: `Find a better-value alternative to ${subject}` },
+      { label: `Where can I buy ${subject}?`, detail: 'Check current products, prices and availability', prompt: `Where can I buy ${subject}?` },
+    ];
+  }
+
+  if (intent === 'price' || intent === 'compare' || intent === 'find') {
+    return [
+      { label: intent === 'find' ? `Where can I find ${subject}?` : `Compare current prices for ${subject}`, detail: 'Check current Irish supermarket products and prices', prompt: intent === 'find' ? `Where can I find ${subject}?` : `Compare current prices for ${subject}` },
+      { label: `Is ${subject} on offer?`, detail: 'Check current promotions across Irish supermarkets', prompt: `Where is ${subject} currently on offer?` },
+      { label: `Find a better-value alternative to ${subject}`, detail: 'Compare relevant alternatives, not just the lowest price', prompt: `Find a better-value alternative to ${subject}` },
+    ];
+  }
+
   return [
-    { label: `Find current products matching “${input.trim()}”`, detail: 'Search current Irish supermarket products and prices', prompt: `Find current supermarket products matching ${input.trim()}` },
-    { label: `What is on offer for “${input.trim()}”?`, detail: 'Check current promotions and relevant alternatives', prompt: `What is currently on offer for ${input.trim()}?` },
-    { label: `Compare options for “${input.trim()}”`, detail: 'Compare useful products, sizes and current prices', prompt: `Compare current options for ${input.trim()}` },
+    { label: `Find current products matching “${subject}”`, detail: 'Search current Irish supermarket products and prices', prompt: `Find current supermarket products matching ${subject}` },
+    { label: `What is on offer for “${subject}”?`, detail: 'Check current promotions and relevant alternatives', prompt: `What is currently on offer for ${subject}?` },
+    { label: `Compare options for “${subject}”`, detail: 'Compare useful products, sizes and current prices', prompt: `Compare current options for ${subject}` },
   ];
 }
 
@@ -117,7 +148,12 @@ export function buildPredictiveSuggestions(
   limit = 4,
 ): PredictiveSuggestion[] {
   const intent = inferSuggestionIntent(input);
-  const productSets = products.map(product => productSuggestions(product, intent));
+  const fragmentTokens = extractCatalogueFragment(input).split(' ').filter(Boolean);
+  const brandStem = fragmentTokens.length > 1 ? fragmentTokens[0].slice(0, 5) : '';
+  const trustedProducts = brandStem
+    ? products.filter(product => normaliseSuggestionText(product.name).includes(brandStem))
+    : products;
+  const productSets = trustedProducts.map(product => productSuggestions(product, intent));
   const candidates = [
     ...productSets.slice(0, 2).map(set => set[0]),
     ...(productSets[0]?.slice(1) ?? []),
