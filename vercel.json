@@ -15,6 +15,6 @@
     {"path":"/api/workers/dunnes-scrape-trigger?limit=1000","schedule":"10 5 * * 1,4"},
     {"path":"/api/workers/supervalu-scrape-trigger?limit=1000","schedule":"20 5 * * 1,4"},
     {"path":"/api/cron/scrape-watchdog","schedule":"45 7 * * 1,4"},
-    {"path":"/api/cron/pepesto-search-evaluation","schedule":"28 9 21 8 *"}
+    {"path":"/api/cron/pepesto-search-evaluation","schedule":"34 9 21 8 *"}
   ]
 }
