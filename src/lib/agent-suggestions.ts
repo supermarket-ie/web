@@ -1,1 +1,129 @@
-ZXhwb3J0IHR5cGUgU3VnZ2VzdGlvbkludGVudCA9ICdmaW5kJyB8ICdwcmljZScgfCAnb2ZmZXInIHwgJ2NvbXBhcmUnIHwgJ21lYWwnIHwgJ2J1ZGdldCcgfCAnZ2VuZXJhbCc7CgpleHBvcnQgdHlwZSBDYXRhbG9ndWVTdWdnZXN0aW9uUHJvZHVjdCA9IHsKICBuYW1lOiBzdHJpbmc7CiAgY2F0ZWdvcnk6IHN0cmluZyB8IG51bGw7CiAgYmVzdF9wcmljZTogbnVtYmVyIHwgbnVsbDsKICBiZXN0X3N0b3JlOiBzdHJpbmcgfCBudWxsOwogIG9uX3Byb21vdGlvbjogYm9vbGVhbjsKfTsKCmV4cG9ydCB0eXBlIFByZWRpY3RpdmVTdWdnZXN0aW9uID0gewogIGxhYmVsOiBzdHJpbmc7CiAgZGV0YWlsOiBzdHJpbmc7CiAgcHJvbXB0OiBzdHJpbmc7Cn07Cgpjb25zdCBJTlRFTlRfV09SRFMgPSBuZXcgU2V0KFsKICAnYScsICdhbGwnLCAnYW4nLCAnYW55JywgJ2FyZScsICdhdCcsICdiZXN0JywgJ2J1eScsICdjYW4nLCAnY2hlYXBlcicsICdjb21wYXJlJywKICAnY29zdCcsICdjdXJyZW50JywgJ2RvJywgJ2ZpbmQnLCAnZm9yJywgJ2dldCcsICdoYXZlJywgJ2hvdycsICdpJywgJ2luJywgJ2lzJywKICAnaXQnLCAnbGF0ZXN0JywgJ21lJywgJ211Y2gnLCAnbmVhcicsICdvZicsICdvbicsICdvZmZlcicsICdvZmZlcnMnLCAncHJpY2UnLAogICdwcmljZXMnLCAncHJvZHVjdCcsICdwcm9kdWN0cycsICdzYWxlJywgJ3Nob3cnLCAnc3VwZXJtYXJrZXQnLCAndGhlJywgJ3RoaXMnLAogICd0bycsICd3aGF0JywgJ3doZXJlJywgJ3doaWNoJywgJ3dpdGgnLCAnd29ydGgnLCAneW91JywKXSk7CgpleHBvcnQgZnVuY3Rpb24gbm9ybWFsaXNlU3VnZ2VzdGlvblRleHQodmFsdWU6IHN0cmluZyk6IHN0cmluZyB7CiAgcmV0dXJuIHZhbHVlLnRvTG93ZXJDYXNlKCkucmVwbGFjZSgvW15hLXowLTnigqzCo10rL2csICcgJykudHJpbSgpLnJlcGxhY2UoL1xzKy9nLCAnICcpOwp9CgpleHBvcnQgZnVuY3Rpb24gaW5mZXJTdWdnZXN0aW9uSW50ZW50KGlucHV0OiBzdHJpbmcpOiBTdWdnZXN0aW9uSW50ZW50IHsKICBjb25zdCBxdWVyeSA9IG5vcm1hbGlzZVN1Z2dlc3Rpb25UZXh0KGlucHV0KTsKICBpZiAoL1xiKGRpbm5lcnxtZWFsfGNvb2t8bWFrZXxyZWNpcGV8bHVuY2h8YnJlYWtmYXN0fGluZ3JlZGllbnR8dmVnZXRhcmlhbnx2ZWdhbilcYi8udGVzdChxdWVyeSkpIHJldHVybiAnbWVhbCc7CiAgaWYgKC/igqx8wqN8XGIoYnVkZ2V0fHNwZW5kfHVuZGVyfGxlc3MgdGhhbnxzaG9wIGZvcnxmYW1pbHkgb2Z8YWR1bHRzP3xwZW9wbGUpXGIvLnRlc3QocXVlcnkpKSByZXR1cm4gJ2J1ZGdldCc7CiAgaWYgKC9cYihjb21wYXJlfHZlcnN1c3x2c3xkaWZmZXJlbmNlfHdoaWNoIHN0b3JlfGNoZWFwZXN0KVxiLy50ZXN0KHF1ZXJ5KSkgcmV0dXJuICdjb21wYXJlJzsKICBpZiAoL1xiKG9mZmVyfG9mZmVyc3xwcm9tb3Rpb258cHJvbW90aW9uc3xzYWxlfHJlZHVjZWR8ZGVhbClcYi8udGVzdChxdWVyeSkpIHJldHVybiAnb2ZmZXInOwogIGlmICgvXGIocHJpY2V8Y29zdHxob3cgbXVjaClcYi8udGVzdChxdWVyeSkpIHJldHVybiAncHJpY2UnOwogIGlmICgvXGIoZmluZHx3aGVyZXxzdG9ja3xhdmFpbGFibGV8YnV5fGdldClcYi8udGVzdChxdWVyeSkpIHJldHVybiAnZmluZCc7CiAgcmV0dXJuICdnZW5lcmFsJzsKfQoKZXhwb3J0IGZ1bmN0aW9uIGV4dHJhY3RDYXRhbG9ndWVGcmFnbWVudChpbnB1dDogc3RyaW5nKTogc3RyaW5nIHsKICBjb25zdCB0b2tlbnMgPSBub3JtYWxpc2VTdWdnZXN0aW9uVGV4dChpbnB1dCkKICAgIC5zcGxpdCgnICcpCiAgICAuZmlsdGVyKHRva2VuID0+IHRva2VuLmxlbmd0aCA+PSAyICYmICFJTlRFTlRfV09SRFMuaGFzKHRva2VuKSAmJiAhL15cZCskLy50ZXN0KHRva2VuKSk7CiAgcmV0dXJuIHRva2Vucy5zbGljZSgtMykuam9pbignICcpOwp9CgpmdW5jdGlvbiBldXJvKHZhbHVlOiBudW1iZXIgfCBudWxsKTogc3RyaW5nIHwgbnVsbCB7CiAgcmV0dXJuIHZhbHVlID09IG51bGwgPyBudWxsIDogYOKCrCR7dmFsdWUudG9GaXhlZCgyKX1gOwp9CgpmdW5jdGlvbiBwcm9kdWN0U3VnZ2VzdGlvbnMocHJvZHVjdDogQ2F0YWxvZ3VlU3VnZ2VzdGlvblByb2R1Y3QsIGludGVudDogU3VnZ2VzdGlvbkludGVudCk6IFByZWRpY3RpdmVTdWdnZXN0aW9uW10gewogIGNvbnN0IHByaWNlID0gZXVybyhwcm9kdWN0LmJlc3RfcHJpY2UpOwogIGNvbnN0IHByaWNlRGV0YWlsID0gcHJpY2UgJiYgcHJvZHVjdC5iZXN0X3N0b3JlCiAgICA/IGBDdXJyZW50bHkgZnJvbSAke3ByaWNlfSBhdCAke3Byb2R1Y3QuYmVzdF9zdG9yZX1gCiAgICA6ICdDaGVjayBjdXJyZW50IElyaXNoIHN1cGVybWFya2V0IGF2YWlsYWJpbGl0eSc7CiAgY29uc3Qgb2ZmZXJEZXRhaWwgPSBwcm9kdWN0Lm9uX3Byb21vdGlvbgogICAgPyAnQSBjdXJyZW50IHByb21vdGlvbiBpcyBhdmFpbGFibGUnCiAgICA6ICdDaGVjayBjdXJyZW50IHByb21vdGlvbnMgYWNyb3NzIElyaXNoIHN1cGVybWFya2V0cyc7CgogIGNvbnN0IHByaW1hcnk6IFJlY29yZDxFeGNsdWRlPFN1Z2dlc3Rpb25JbnRlbnQsICdtZWFsJyB8ICdidWRnZXQnIHwgJ2dlbmVyYWwnPiwgUHJlZGljdGl2ZVN1Z2dlc3Rpb24+ID0gewogICAgZmluZDogeyBsYWJlbDogYFdoZXJlIGNhbiBJIGZpbmQgJHtwcm9kdWN0Lm5hbWV9P2AsIGRldGFpbDogcHJpY2VEZXRhaWwsIHByb21wdDogYFdoZXJlIGNhbiBJIGZpbmQgJHtwcm9kdWN0Lm5hbWV9P2AgfSwKICAgIHByaWNlOiB7IGxhYmVsOiBgV2hhdCBpcyB0aGUgY3VycmVudCBwcmljZSBvZiAke3Byb2R1Y3QubmFtZX0/YCwgZGV0YWlsOiBwcmljZURldGFpbCwgcHJvbXB0OiBgRmluZCB0aGUgY3VycmVudCBwcmljZSBvZiAke3Byb2R1Y3QubmFtZX1gIH0sCiAgICBvZmZlcjogeyBsYWJlbDogYElzICR7cHJvZHVjdC5uYW1lfSBvbiBvZmZlcj9gLCBkZXRhaWw6IG9mZmVyRGV0YWlsLCBwcm9tcHQ6IGBXaGVyZSBpcyAke3Byb2R1Y3QubmFtZX0gY3VycmVudGx5IG9uIG9mZmVyP2AgfSwKICAgIGNvbXBhcmU6IHsgbGFiZWw6IGBDb21wYXJlIHByaWNlcyBmb3IgJHtwcm9kdWN0Lm5hbWV9YCwgZGV0YWlsOiAnQ29tcGFyZSBjdXJyZW50IHByaWNlcyBhbmQgYXZhaWxhYmxlIHBhY2sgb3B0aW9ucycsIHByb21wdDogYENvbXBhcmUgY3VycmVudCBwcmljZXMgZm9yICR7cHJvZHVjdC5uYW1lfWAgfSwKICB9OwoKICBjb25zdCBmaXJzdCA9IGludGVudCA9PT0gJ2ZpbmQnIHx8IGludGVudCA9PT0gJ3ByaWNlJyB8fCBpbnRlbnQgPT09ICdvZmZlcicgfHwgaW50ZW50ID09PSAnY29tcGFyZScKICAgID8gcHJpbWFyeVtpbnRlbnRdCiAgICA6IHByaW1hcnkuZmluZDsKCiAgcmV0dXJuIFsKICAgIGZpcnN0LAogICAgLi4uKGludGVudCAhPT0gJ29mZmVyJyA/IFtwcmltYXJ5Lm9mZmVyXSA6IFtdKSwKICAgIC4uLihpbnRlbnQgIT09ICdjb21wYXJlJyA/IFtwcmltYXJ5LmNvbXBhcmVdIDogW10pLAogICAgeyBsYWJlbDogYEZpbmQgYSBiZXR0ZXItdmFsdWUgYWx0ZXJuYXRpdmUgdG8gJHtwcm9kdWN0Lm5hbWV9YCwgZGV0YWlsOiAnQ29tcGFyZSByZWxldmFudCBhbHRlcm5hdGl2ZXMsIG5vdCBqdXN0IHRoZSBsb3dlc3QgcHJpY2UnLCBwcm9tcHQ6IGBGaW5kIGEgYmV0dGVyLXZhbHVlIGFsdGVybmF0aXZlIHRvICR7cHJvZHVjdC5uYW1lfWAgfSwKICBdOwp9CgpmdW5jdGlvbiBjb250ZXh0dWFsU3VnZ2VzdGlvbnMoaW5wdXQ6IHN0cmluZywgaW50ZW50OiBTdWdnZXN0aW9uSW50ZW50KTogUHJlZGljdGl2ZVN1Z2dlc3Rpb25bXSB7CiAgY29uc3QgcXVlcnkgPSBub3JtYWxpc2VTdWdnZXN0aW9uVGV4dChpbnB1dCk7CiAgY29uc3QgYW1vdW50ID0gaW5wdXQubWF0Y2goL1vigqzCo10/XHM/KFxkezIsM30pXGIvKT8uWzFdOwogIGNvbnN0IHBlb3BsZSA9IHF1ZXJ5Lm1hdGNoKC8oPzpmYW1pbHkgb2Z8Zm9yfHNob3AgZm9yKVxzKyhcZCspLyk/LlsxXTsKCiAgaWYgKGludGVudCA9PT0gJ21lYWwnKSB7CiAgICBjb25zdCBpbmdyZWRpZW50ID0gcXVlcnkubWF0Y2goLyg/OndpdGh8dXNpbmd8dXNlIHVwKVxzKyguKykkLyk/LlsxXTsKICAgIHJldHVybiBbCiAgICAgIGluZ3JlZGllbnQKICAgICAgICA/IHsgbGFiZWw6IGBXaGF0IGNhbiBJIG1ha2Ugd2l0aCAke2luZ3JlZGllbnR9P2AsIGRldGFpbDogJ0J1aWxkIHByYWN0aWNhbCBtZWFscyBhcm91bmQgdGhvc2UgaW5ncmVkaWVudHMnLCBwcm9tcHQ6IGBXaGF0IGNhbiBJIG1ha2Ugd2l0aCAke2luZ3JlZGllbnR9P2AgfQogICAgICAgIDogeyBsYWJlbDogJ1BsYW4gZm91ciBlYXN5IGRpbm5lcnMnLCBkZXRhaWw6ICdCdWlsZCBhIHByYWN0aWNhbCBkaW5uZXIgcGxhbiB3aXRoIHJldXNhYmxlIGluZ3JlZGllbnRzJywgcHJvbXB0OiAnSGVscCBtZSBwbGFuIGZvdXIgZWFzeSBkaW5uZXJzJyB9LAogICAgICB7IGxhYmVsOiAnUGxhbiBmaXZlIGRpbm5lcnMgd2l0aCBmZXdlciBpbmdyZWRpZW50cycsIGRldGFpbDogJ1JldXNlIGluZ3JlZGllbnRzIGFuZCByZWR1Y2Ugd2FzdGUgYWNyb3NzIHRoZSB3ZWVrJywgcHJvbXB0OiAnUGxhbiBmaXZlIGRpbm5lcnMgdGhhdCByZXVzZSBpbmdyZWRpZW50cyBhbmQga2VlcCB3YXN0ZSBkb3duJyB9LAogICAgICB7IGxhYmVsOiAnUGxhbiBidWRnZXQtZnJpZW5kbHkgZmFtaWx5IGRpbm5lcnMnLCBkZXRhaWw6ICdVc2UgY3VycmVudCBwcm9kdWN0cyBhbmQgc2Vuc2libGUgaG91c2Vob2xkIHZhbHVlJywgcHJvbXB0OiAnUGxhbiBidWRnZXQtZnJpZW5kbHkgZmFtaWx5IGRpbm5lcnMgZm9yIHRoaXMgd2VlaycgfSwKICAgICAgeyBsYWJlbDogJ1BsYW4gdmVnZXRhcmlhbiBkaW5uZXJzJywgZGV0YWlsOiAnQ3JlYXRlIGEgYmFsYW5jZWQsIHByYWN0aWNhbCBtZWF0LWZyZWUgd2VlaycsIHByb21wdDogJ1BsYW4gZml2ZSB2ZWdldGFyaWFuIGRpbm5lcnMgZm9yIHRoaXMgd2VlaycgfSwKICAgIF07CiAgfQoKICBpZiAoaW50ZW50ID09PSAnYnVkZ2V0JykgewogICAgY29uc3QgYnVkZ2V0ID0gYW1vdW50ID8gYOKCrCR7YW1vdW50fWAgOiAnbXkgYnVkZ2V0JzsKICAgIGNvbnN0IGhvdXNlaG9sZCA9IHBlb3BsZSA/IGAgZm9yICR7cGVvcGxlfSBwZW9wbGVgIDogJyc7CiAgICByZXR1cm4gWwogICAgICB7IGxhYmVsOiBgUGxhbiBhIGhvdXNlaG9sZCBzaG9wIHVuZGVyICR7YnVkZ2V0fWAsIGRldGFpbDogYEJ1aWxkIGEgcHJhY3RpY2FsIGNvbXBsZXRlIHNob3Ake2hvdXNlaG9sZH1gLCBwcm9tcHQ6IGBIZWxwIG1lIHBsYW4gYSBob3VzZWhvbGQgc2hvcCR7aG91c2Vob2xkfSB1bmRlciAke2J1ZGdldH1gIH0sCiAgICAgIHsgbGFiZWw6IGBQbGFuIGRpbm5lcnMgd2l0aGluICR7YnVkZ2V0fWAsIGRldGFpbDogJ1ByaW9yaXRpc2UgdXNlZnVsIG1lYWxzIGFuZCByZXVzYWJsZSBpbmdyZWRpZW50cycsIHByb21wdDogYFBsYW4gZGlubmVycyBmb3IgdGhlIHdlZWsgd2l0aGluICR7YnVkZ2V0fWAgfSwKICAgICAgeyBsYWJlbDogYFdoYXQgc2hvdWxkIEkgcHJpb3JpdGlzZSB3aXRoaW4gJHtidWRnZXR9P2AsIGRldGFpbDogJ0JhbGFuY2UgZm9vZCwgY2xlYW5pbmcgYW5kIGhvdXNlaG9sZCBlc3NlbnRpYWxzJywgcHJvbXB0OiBgV2hhdCBzaG91bGQgSSBwcmlvcml0aXNlIGluIGEgaG91c2Vob2xkIHNob3Agd2l0aGluICR7YnVkZ2V0fT9gIH0sCiAgICAgIHsgbGFiZWw6ICdGaW5kIGJldHRlci12YWx1ZSBzd2FwcycsIGRldGFpbDogJ0lkZW50aWZ5IHJlbGV2YW50IHNhdmluZ3Mgd2l0aG91dCB3ZWFrZW5pbmcgdGhlIHNob3AnLCBwcm9tcHQ6IGBTdWdnZXN0IGJldHRlci12YWx1ZSBzd2FwcyB0byBrZWVwIG15IGhvdXNlaG9sZCBzaG9wIHdpdGhpbiAke2J1ZGdldH1gIH0sCiAgICBdOwogIH0KCiAgcmV0dXJuIFsKICAgIHsgbGFiZWw6IGBGaW5kIGN1cnJlbnQgcHJvZHVjdHMgbWF0Y2hpbmcg4oCcJHtpbnB1dC50cmltKCl94oCdYCwgZGV0YWlsOiAnU2VhcmNoIGN1cnJlbnQgSXJpc2ggc3VwZXJtYXJrZXQgcHJvZHVjdHMgYW5kIHByaWNlcycsIHByb21wdDogYEZpbmQgY3VycmVudCBzdXBlcm1hcmtldCBwcm9kdWN0cyBtYXRjaGluZyAke2lucHV0LnRyaW0oKX1gIH0sCiAgICB7IGxhYmVsOiBgV2hhdCBpcyBvbiBvZmZlciBmb3Ig4oCcJHtpbnB1dC50cmltKCl94oCdP2AsIGRldGFpbDogJ0NoZWNrIGN1cnJlbnQgcHJvbW90aW9ucyBhbmQgcmVsZXZhbnQgYWx0ZXJuYXRpdmVzJywgcHJvbXB0OiBgV2hhdCBpcyBjdXJyZW50bHkgb24gb2ZmZXIgZm9yICR7aW5wdXQudHJpbSgpfT9gIH0sCiAgICB7IGxhYmVsOiBgQ29tcGFyZSBvcHRpb25zIGZvciDigJwke2lucHV0LnRyaW0oKX3igJ1gLCBkZXRhaWw6ICdDb21wYXJlIHVzZWZ1bCBwcm9kdWN0cywgc2l6ZXMgYW5kIGN1cnJlbnQgcHJpY2VzJywgcHJvbXB0OiBgQ29tcGFyZSBjdXJyZW50IG9wdGlvbnMgZm9yICR7aW5wdXQudHJpbSgpfWAgfSwKICBdOwp9CgpleHBvcnQgZnVuY3Rpb24gYnVpbGRQcmVkaWN0aXZlU3VnZ2VzdGlvbnMoCiAgaW5wdXQ6IHN0cmluZywKICBwcm9kdWN0czogQ2F0YWxvZ3VlU3VnZ2VzdGlvblByb2R1Y3RbXSA9IFtdLAogIGxpbWl0ID0gNCwKKTogUHJlZGljdGl2ZVN1Z2dlc3Rpb25bXSB7CiAgY29uc3QgaW50ZW50ID0gaW5mZXJTdWdnZXN0aW9uSW50ZW50KGlucHV0KTsKICBjb25zdCBjYW5kaWRhdGVzID0gcHJvZHVjdHMuZmxhdE1hcChwcm9kdWN0ID0+IHByb2R1Y3RTdWdnZXN0aW9ucyhwcm9kdWN0LCBpbnRlbnQpKTsKICBjb25zdCBjb21iaW5lZCA9IFsuLi5jYW5kaWRhdGVzLCAuLi5jb250ZXh0dWFsU3VnZ2VzdGlvbnMoaW5wdXQsIGludGVudCldOwogIGNvbnN0IHNlZW4gPSBuZXcgU2V0PHN0cmluZz4oKTsKICByZXR1cm4gY29tYmluZWQuZmlsdGVyKGl0ZW0gPT4gewogICAgY29uc3Qga2V5ID0gbm9ybWFsaXNlU3VnZ2VzdGlvblRleHQoaXRlbS5wcm9tcHQpOwogICAgaWYgKHNlZW4uaGFzKGtleSkpIHJldHVybiBmYWxzZTsKICAgIHNlZW4uYWRkKGtleSk7CiAgICByZXR1cm4gdHJ1ZTsKICB9KS5zbGljZSgwLCBsaW1pdCk7Cn0K
+export type SuggestionIntent = 'find' | 'price' | 'offer' | 'compare' | 'meal' | 'budget' | 'general';
+
+export type CatalogueSuggestionProduct = {
+  name: string;
+  category: string | null;
+  best_price: number | null;
+  best_store: string | null;
+  on_promotion: boolean;
+};
+
+export type PredictiveSuggestion = {
+  label: string;
+  detail: string;
+  prompt: string;
+};
+
+const INTENT_WORDS = new Set([
+  'a', 'all', 'an', 'any', 'are', 'at', 'best', 'buy', 'can', 'cheaper', 'compare',
+  'cost', 'current', 'do', 'find', 'for', 'get', 'have', 'how', 'i', 'in', 'is',
+  'it', 'latest', 'me', 'much', 'near', 'of', 'on', 'offer', 'offers', 'price',
+  'prices', 'product', 'products', 'sale', 'show', 'supermarket', 'the', 'this',
+  'to', 'what', 'where', 'which', 'with', 'worth', 'you',
+]);
+
+export function normaliseSuggestionText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9€£]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+
+export function inferSuggestionIntent(input: string): SuggestionIntent {
+  const query = normaliseSuggestionText(input);
+  if (/\b(dinner|meal|cook|make|recipe|lunch|breakfast|ingredient|vegetarian|vegan)\b/.test(query)) return 'meal';
+  if (/€|£|\b(budget|spend|under|less than|shop for|family of|adults?|people)\b/.test(query)) return 'budget';
+  if (/\b(compare|versus|vs|difference|which store|cheapest)\b/.test(query)) return 'compare';
+  if (/\b(offer|offers|promotion|promotions|sale|reduced|deal)\b/.test(query)) return 'offer';
+  if (/\b(price|cost|how much)\b/.test(query)) return 'price';
+  if (/\b(find|where|stock|available|buy|get)\b/.test(query)) return 'find';
+  return 'general';
+}
+
+export function extractCatalogueFragment(input: string): string {
+  const tokens = normaliseSuggestionText(input)
+    .split(' ')
+    .filter(token => token.length >= 2 && !INTENT_WORDS.has(token) && !/^\d+$/.test(token));
+  return tokens.slice(-3).join(' ');
+}
+
+function euro(value: number | null): string | null {
+  return value == null ? null : `€${value.toFixed(2)}`;
+}
+
+function productSuggestions(product: CatalogueSuggestionProduct, intent: SuggestionIntent): PredictiveSuggestion[] {
+  const price = euro(product.best_price);
+  const priceDetail = price && product.best_store
+    ? `Currently from ${price} at ${product.best_store}`
+    : 'Check current Irish supermarket availability';
+  const offerDetail = product.on_promotion
+    ? 'A current promotion is available'
+    : 'Check current promotions across Irish supermarkets';
+
+  const primary: Record<Exclude<SuggestionIntent, 'meal' | 'budget' | 'general'>, PredictiveSuggestion> = {
+    find: { label: `Where can I find ${product.name}?`, detail: priceDetail, prompt: `Where can I find ${product.name}?` },
+    price: { label: `What is the current price of ${product.name}?`, detail: priceDetail, prompt: `Find the current price of ${product.name}` },
+    offer: { label: `Is ${product.name} on offer?`, detail: offerDetail, prompt: `Where is ${product.name} currently on offer?` },
+    compare: { label: `Compare prices for ${product.name}`, detail: 'Compare current prices and available pack options', prompt: `Compare current prices for ${product.name}` },
+  };
+
+  const first = intent === 'find' || intent === 'price' || intent === 'offer' || intent === 'compare'
+    ? primary[intent]
+    : primary.find;
+
+  return [
+    first,
+    ...(intent !== 'offer' ? [primary.offer] : []),
+    ...(intent !== 'compare' ? [primary.compare] : []),
+    { label: `Find a better-value alternative to ${product.name}`, detail: 'Compare relevant alternatives, not just the lowest price', prompt: `Find a better-value alternative to ${product.name}` },
+  ];
+}
+
+function contextualSuggestions(input: string, intent: SuggestionIntent): PredictiveSuggestion[] {
+  const query = normaliseSuggestionText(input);
+  const amount = input.match(/[€£]?\s?(\d{2,3})\b/)?.[1];
+  const people = query.match(/(?:family of|for|shop for)\s+(\d+)/)?.[1];
+
+  if (intent === 'meal') {
+    const ingredient = query.match(/(?:with|using|use up)\s+(.+)$/)?.[1];
+    return [
+      ingredient
+        ? { label: `What can I make with ${ingredient}?`, detail: 'Build practical meals around those ingredients', prompt: `What can I make with ${ingredient}?` }
+        : { label: 'Plan four easy dinners', detail: 'Build a practical dinner plan with reusable ingredients', prompt: 'Help me plan four easy dinners' },
+      { label: 'Plan five dinners with fewer ingredients', detail: 'Reuse ingredients and reduce waste across the week', prompt: 'Plan five dinners that reuse ingredients and keep waste down' },
+      { label: 'Plan budget-friendly family dinners', detail: 'Use current products and sensible household value', prompt: 'Plan budget-friendly family dinners for this week' },
+      { label: 'Plan vegetarian dinners', detail: 'Create a balanced, practical meat-free week', prompt: 'Plan five vegetarian dinners for this week' },
+    ];
+  }
+
+  if (intent === 'budget') {
+    const budget = amount ? `€${amount}` : 'my budget';
+    const household = people ? ` for ${people} people` : '';
+    return [
+      { label: `Plan a household shop under ${budget}`, detail: `Build a practical complete shop${household}`, prompt: `Help me plan a household shop${household} under ${budget}` },
+      { label: `Plan dinners within ${budget}`, detail: 'Prioritise useful meals and reusable ingredients', prompt: `Plan dinners for the week within ${budget}` },
+      { label: `What should I prioritise within ${budget}?`, detail: 'Balance food, cleaning and household essentials', prompt: `What should I prioritise in a household shop within ${budget}?` },
+      { label: 'Find better-value swaps', detail: 'Identify relevant savings without weakening the shop', prompt: `Suggest better-value swaps to keep my household shop within ${budget}` },
+    ];
+  }
+
+  return [
+    { label: `Find current products matching “${input.trim()}”`, detail: 'Search current Irish supermarket products and prices', prompt: `Find current supermarket products matching ${input.trim()}` },
+    { label: `What is on offer for “${input.trim()}”?`, detail: 'Check current promotions and relevant alternatives', prompt: `What is currently on offer for ${input.trim()}?` },
+    { label: `Compare options for “${input.trim()}”`, detail: 'Compare useful products, sizes and current prices', prompt: `Compare current options for ${input.trim()}` },
+  ];
+}
+
+export function buildPredictiveSuggestions(
+  input: string,
+  products: CatalogueSuggestionProduct[] = [],
+  limit = 4,
+): PredictiveSuggestion[] {
+  const intent = inferSuggestionIntent(input);
+  const candidates = products.flatMap(product => productSuggestions(product, intent));
+  const combined = [...candidates, ...contextualSuggestions(input, intent)];
+  const seen = new Set<string>();
+  return combined.filter(item => {
+    const key = normaliseSuggestionText(item.prompt);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, limit);
+}
