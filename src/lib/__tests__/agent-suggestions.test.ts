@@ -11,6 +11,20 @@ describe('predictive agent suggestions', () => {
     expect(inferSuggestionIntent('where can I find butter')).toBe('find');
     expect(inferSuggestionIntent('is butter on offer')).toBe('offer');
     expect(inferSuggestionIntent('plan dinners under €80')).toBe('meal');
+    expect(inferSuggestionIntent('gluten-free bread')).toBe('dietary');
+    expect(inferSuggestionIntent('low protein meals')).toBe('dietary');
+    expect(inferSuggestionIntent('dairy f')).toBe('dietary');
+    expect(inferSuggestionIntent('vegan dinners')).toBe('dietary');
+  });
+
+  it('predicts dietary searches without claiming medical suitability', () => {
+    const suggestions = buildPredictiveSuggestions('gluten f bread');
+    expect(suggestions[0].label).toBe('Find gluten-free bread');
+    expect(suggestions[0].detail).toContain('check available ingredient');
+
+    const lowProtein = buildPredictiveSuggestions('low prot meals');
+    expect(lowProtein[0].label).toContain('low protein');
+    expect(lowProtein.some(item => item.prompt.includes('low protein requirement'))).toBe(true);
   });
 
   it('grounds product predictions in catalogue candidates', () => {
