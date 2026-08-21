@@ -16,6 +16,11 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { loadSession } from '@/lib/session';
+import {
+  buildPredictiveSuggestions,
+  inferSuggestionIntent,
+  type CatalogueSuggestionProduct,
+} from '@/lib/agent-suggestions';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 
@@ -50,60 +55,6 @@ const HOUSEHOLD_STARTERS: Starter[] = [
   { label: 'Keep my shop under €120', detail: 'Review your current shop against the budget', prompt: 'Keep my shop under €120', icon: ClipboardList },
   { label: 'Show what you are watching', detail: 'Review active product watches and reminders', prompt: 'Show me what you are watching', icon: Eye },
 ];
-
-const GUEST_TYPEAHEAD = [
-  "Where can I find Hellmann's mayonnaise?",
-  'Where can I find Glenisk natural yoghurt?',
-  'Where can I find Glenisk Greek-style yoghurt?',
-  'Find the current price of Glenisk yoghurt',
-  'Where can I find gluten-free bread?',
-  'Where can I find laundry detergent on offer?',
-  'Compare current prices for Irish butter',
-  'Compare current prices for whole milk',
-  'Compare current prices for dishwasher tablets',
-  'Help me plan four easy family dinners',
-  'Plan five vegetarian dinners for this week',
-  'What can I make with chicken and rice?',
-  'How can I keep a household shop under €120?',
-  'Suggest a practical shop for two adults',
-];
-
-const HOUSEHOLD_TYPEAHEAD = [
-  ...GUEST_TYPEAHEAD,
-  'Prepare my usual shop for this week',
-  'What have you noticed about my usual products?',
-  'Keep my current shop under €120',
-  'Show me what you are watching for me',
-  "Remind me when Hellmann's mayonnaise is on offer",
-];
-
-function normalisePrompt(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9€]+/g, ' ').trim();
-}
-
-function typeaheadSuggestions(input: string, isGuest: boolean): string[] {
-  const query = normalisePrompt(input);
-  if (query.length < 2) return [];
-  const queryWords = query.split(' ');
-  const lastWord = queryWords.at(-1) ?? query;
-  const candidates = isGuest ? GUEST_TYPEAHEAD : HOUSEHOLD_TYPEAHEAD;
-
-  return candidates
-    .map((prompt, index) => {
-      const normalised = normalisePrompt(prompt);
-      const words = normalised.split(' ');
-      const sharedWords = queryWords.filter(word => word.length > 1 && normalised.includes(word)).length;
-      let score = sharedWords * 12;
-      if (normalised.startsWith(query)) score += 100;
-      if (normalised.includes(query)) score += 65;
-      if (lastWord.length > 1 && words.some(word => word.startsWith(lastWord))) score += 45;
-      return { prompt, score, index };
-    })
-    .filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, 4)
-    .map(item => item.prompt);
-}
 
 function scopedEveChatKey(): string | null {
   const email = loadSession()?.email?.trim().toLowerCase();
@@ -190,6 +141,7 @@ function AgentComposer({ input, setInput, send, busy, gated, prominent = false }
 function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveChat; storageKey: string | null; isGuest: boolean }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const agent = useEveAgent({
@@ -219,7 +171,39 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   ));
   const starters = isGuest ? GUEST_STARTERS : HOUSEHOLD_STARTERS;
   const isEmpty = messages.length === 0;
-  const liveSuggestions = typeaheadSuggestions(input, isGuest);
+  const liveSuggestions = input.trim().length >= 2
+    ? buildPredictiveSuggestions(input, catalogueSuggestions)
+    : [];
+
+  useEffect(() => {
+    const intent = inferSuggestionIntent(input);
+    if (input.trim().length < 2 || intent === 'meal' || intent === 'budget' || intent === 'dietary') {
+      setCatalogueSuggestions([]);
+      return;
+    }
+
+    setCatalogueSuggestions([]);
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/agent/suggestions?q=${encodeURIComponent(input)}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const data = await response.json() as { products?: CatalogueSuggestionProduct[] };
+        setCatalogueSuggestions(data.products ?? []);
+      } catch (nextError) {
+        if (!(nextError instanceof DOMException && nextError.name === 'AbortError')) {
+          setCatalogueSuggestions([]);
+        }
+      }
+    }, 220);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [input]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -259,13 +243,16 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
             <div className="mt-2 overflow-hidden rounded-2xl border border-[#e3e8e4] bg-white py-1 shadow-[0_18px_45px_rgba(25,57,38,0.1)]">
               {liveSuggestions.map(suggestion => (
                 <button
-                  key={suggestion}
+                  key={suggestion.prompt}
                   type="button"
-                  onClick={() => void send(suggestion)}
+                  onClick={() => void send(suggestion.prompt)}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-[#435047] transition-colors hover:bg-[#f3f7f4] hover:text-[#142019]"
                 >
                   <Search className="size-4 shrink-0 text-[#7c8980]" />
-                  <span>{suggestion}</span>
+                  <span className="min-w-0">
+                    <span className="block font-medium text-[#26342b]">{suggestion.label}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-[#879089]">{suggestion.detail}</span>
+                  </span>
                 </button>
               ))}
             </div>
