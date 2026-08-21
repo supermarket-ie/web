@@ -177,7 +177,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
 
   useEffect(() => {
     const intent = inferSuggestionIntent(input);
-    if (input.trim().length < 2 || intent === 'meal' || intent === 'budget') {
+    if (input.trim().length < 2 || intent === 'meal' || intent === 'budget' || intent === 'dietary') {
       setCatalogueSuggestions([]);
       return;
     }
