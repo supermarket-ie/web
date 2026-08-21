@@ -37,4 +37,12 @@ describe('predictive agent suggestions', () => {
     expect(suggestions[0].label).toContain('Natural Yoghurt');
     expect(suggestions[1].label).toContain('Greek Yoghurt');
   });
+
+  it('preserves a named brand when a generic catalogue mapping loses it', () => {
+    const suggestions = buildPredictiveSuggestions('is hellmanns mayo on offer', [
+      { name: 'Mayonnaise', category: 'Condiments', best_price: 0.99, best_store: 'Aldi', on_promotion: false },
+    ]);
+    expect(suggestions[0].label).toBe("Is Hellmann's mayonnaise on offer?");
+    expect(suggestions[0].detail).not.toContain('€0.99');
+  });
 });
