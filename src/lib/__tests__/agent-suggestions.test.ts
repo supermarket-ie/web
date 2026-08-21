@@ -1,1 +1,30 @@
-aW1wb3J0IHsgZGVzY3JpYmUsIGV4cGVjdCwgaXQgfSBmcm9tICd2aXRlc3QnOwppbXBvcnQgeyBidWlsZFByZWRpY3RpdmVTdWdnZXN0aW9ucywgZXh0cmFjdENhdGFsb2d1ZUZyYWdtZW50LCBpbmZlclN1Z2dlc3Rpb25JbnRlbnQgfSBmcm9tICcuLi9hZ2VudC1zdWdnZXN0aW9ucyc7CgpkZXNjcmliZSgncHJlZGljdGl2ZSBhZ2VudCBzdWdnZXN0aW9ucycsICgpID0+IHsKICBpdCgnZXh0cmFjdHMgdGhlIHVuZmluaXNoZWQgcHJvZHVjdCByYXRoZXIgdGhhbiB0aGUgc3Vycm91bmRpbmcgcXVlc3Rpb24nLCAoKSA9PiB7CiAgICBleHBlY3QoZXh0cmFjdENhdGFsb2d1ZUZyYWdtZW50KCd3aGVyZSBjYW4gSSBmaW5kIGdsZScpKS50b0JlKCdnbGUnKTsKICAgIGV4cGVjdChleHRyYWN0Q2F0YWxvZ3VlRnJhZ21lbnQoJ2lzIEhlbGxtYW5ucyBtYXlvbm5haXNlIG9uIG9mZmVyJykpLnRvQmUoJ2hlbGxtYW5ucyBtYXlvbm5haXNlJyk7CiAgfSk7CgogIGl0KCd1bmRlcnN0YW5kcyBjb21tb24gZ3Vlc3QgaW50ZW50cycsICgpID0+IHsKICAgIGV4cGVjdChpbmZlclN1Z2dlc3Rpb25JbnRlbnQoJ3doZXJlIGNhbiBJIGZpbmQgYnV0dGVyJykpLnRvQmUoJ2ZpbmQnKTsKICAgIGV4cGVjdChpbmZlclN1Z2dlc3Rpb25JbnRlbnQoJ2lzIGJ1dHRlciBvbiBvZmZlcicpKS50b0JlKCdvZmZlcicpOwogICAgZXhwZWN0KGluZmVyU3VnZ2VzdGlvbkludGVudCgncGxhbiBkaW5uZXJzIHVuZGVyIOKCrDgwJykpLnRvQmUoJ21lYWwnKTsKICB9KTsKCiAgaXQoJ2dyb3VuZHMgcHJvZHVjdCBwcmVkaWN0aW9ucyBpbiBjYXRhbG9ndWUgY2FuZGlkYXRlcycsICgpID0+IHsKICAgIGNvbnN0IHN1Z2dlc3Rpb25zID0gYnVpbGRQcmVkaWN0aXZlU3VnZ2VzdGlvbnMoJ3doZXJlIGNhbiBJIGZpbmQgZ2xlJywgW3sKICAgICAgbmFtZTogJ0dsZW5pc2sgTmF0dXJhbCBZb2dodXJ0IDUwMGcnLCBjYXRlZ29yeTogJ0RhaXJ5JywgYmVzdF9wcmljZTogMi40OSwgYmVzdF9zdG9yZTogJ0R1bm5lcycsIG9uX3Byb21vdGlvbjogZmFsc2UsCiAgICB9XSk7CiAgICBleHBlY3Qoc3VnZ2VzdGlvbnNbMF0ubGFiZWwpLnRvQ29udGFpbignR2xlbmlzayBOYXR1cmFsIFlvZ2h1cnQgNTAwZycpOwogICAgZXhwZWN0KHN1Z2dlc3Rpb25zWzBdLmRldGFpbCkudG9Db250YWluKCfigqwyLjQ5Jyk7CiAgICBleHBlY3Qoc3VnZ2VzdGlvbnMuc29tZShpdGVtID0+IGl0ZW0ubGFiZWwuaW5jbHVkZXMoJ29uIG9mZmVyJykpKS50b0JlKHRydWUpOwogIH0pOwoKICBpdCgndXNlcyB0eXBlZCBob3VzZWhvbGQgYnVkZ2V0cyBpbiBwcmFjdGljYWwgcHJlZGljdGlvbnMnLCAoKSA9PiB7CiAgICBjb25zdCBzdWdnZXN0aW9ucyA9IGJ1aWxkUHJlZGljdGl2ZVN1Z2dlc3Rpb25zKCdzaG9wIGZvciA0IHVuZGVyIDEyMCcpOwogICAgZXhwZWN0KHN1Z2dlc3Rpb25zWzBdLmxhYmVsKS50b0NvbnRhaW4oJ+KCrDEyMCcpOwogICAgZXhwZWN0KHN1Z2dlc3Rpb25zWzBdLnByb21wdCkudG9Db250YWluKCc0IHBlb3BsZScpOwogIH0pOwp9KTsK
+import { describe, expect, it } from 'vitest';
+import { buildPredictiveSuggestions, extractCatalogueFragment, inferSuggestionIntent } from '../agent-suggestions';
+
+describe('predictive agent suggestions', () => {
+  it('extracts the unfinished product rather than the surrounding question', () => {
+    expect(extractCatalogueFragment('where can I find gle')).toBe('gle');
+    expect(extractCatalogueFragment('is Hellmanns mayonnaise on offer')).toBe('hellmanns mayonnaise');
+  });
+
+  it('understands common guest intents', () => {
+    expect(inferSuggestionIntent('where can I find butter')).toBe('find');
+    expect(inferSuggestionIntent('is butter on offer')).toBe('offer');
+    expect(inferSuggestionIntent('plan dinners under €80')).toBe('meal');
+  });
+
+  it('grounds product predictions in catalogue candidates', () => {
+    const suggestions = buildPredictiveSuggestions('where can I find gle', [{
+      name: 'Glenisk Natural Yoghurt 500g', category: 'Dairy', best_price: 2.49, best_store: 'Dunnes', on_promotion: false,
+    }]);
+    expect(suggestions[0].label).toContain('Glenisk Natural Yoghurt 500g');
+    expect(suggestions[0].detail).toContain('€2.49');
+    expect(suggestions.some(item => item.label.includes('on offer'))).toBe(true);
+  });
+
+  it('uses typed household budgets in practical predictions', () => {
+    const suggestions = buildPredictiveSuggestions('shop for 4 under 120');
+    expect(suggestions[0].label).toContain('€120');
+    expect(suggestions[0].prompt).toContain('4 people');
+  });
+});
