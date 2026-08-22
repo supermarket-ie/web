@@ -1,4 +1,4 @@
-name: SuperValu production catch-up
+name: Manual three-store production scrape
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  supervalu-catchup:
+  vercel-triggers:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -19,10 +19,36 @@ jobs:
     steps:
       - name: Validate cron secret
         shell: bash
-        run: test -n "${CRON_SECRET:-}"
-      - name: Trigger SuperValu stale-first catch-up
+        run: |
+          test -n "${CRON_SECRET:-}"
+      - name: Trigger Dunnes full production cycle
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "https://supermarket.ie/api/workers/supervalu-scrape-trigger?limit=852"
+            "https://supermarket.ie/api/workers/dunnes-scrape-trigger?limit=1000"
+      - name: Trigger SuperValu full production cycle
+        shell: bash
+        run: |
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://supermarket.ie/api/workers/supervalu-scrape-trigger?limit=1000"
+
+  aldi-full:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    env:
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SCRAPE_RUN_ID: gha_aldi_manual_${{ github.run_id }}_${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Aldi full refresh
+        run: node scripts/aldi_scraper.js --refresh
