@@ -15,6 +15,6 @@
     {"path":"/api/workers/dunnes-scrape-trigger?limit=1000","schedule":"10 5 * * 1,4"},
     {"path":"/api/workers/supervalu-scrape-trigger?limit=1000","schedule":"20 5 * * 1,4"},
     {"path":"/api/cron/scrape-watchdog","schedule":"45 7 * * 1,4"},
-    {"path":"/api/ops/dunnes-discovery-canary?token=Ih8jZfcNuznIKwDX_F6Z_FD6JtbJ06Dmkkq6CzitoYo&run=7&limit=30","schedule":"15 16 22 8 *"}
+    {"path":"/api/ops/dunnes-alternative-canary?limit=30","schedule":"38 17 22 8 *"}
   ]
 }
