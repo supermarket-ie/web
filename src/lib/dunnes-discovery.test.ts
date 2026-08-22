@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { dunnesPackSignature, isDunnesPackCompatible } from './dunnes-discovery';
+import {
+  dunnesPackRatio,
+  dunnesPackSignature,
+  hasDunnesVariantConflict,
+  isDunnesPackCompatible,
+} from './dunnes-discovery';
 
 describe('Dunnes pack matching', () => {
   it('preserves decimal litre sizes', () => {
@@ -16,6 +21,27 @@ describe('Dunnes pack matching', () => {
       unit: 'ml',
       count: 12,
     });
+  });
+
+  it('captures a leading item count before descriptive product words', () => {
+    expect(dunnesPackSignature('Birds Eye Chicken Shop 2 Sizzler Breaded Chicken Fillet Burgers 227g')).toEqual({
+      amount: 227,
+      unit: 'g',
+      count: 2,
+    });
+
+    expect(dunnesPackSignature('Birds Eye 14 Breaded Fish Fingers 350g')).toEqual({
+      amount: 350,
+      unit: 'g',
+      count: 14,
+    });
+  });
+
+  it('accepts the same counted product when the retailer also states total weight', () => {
+    expect(isDunnesPackCompatible(
+      'Birds Eye Sizzler Chicken Fillet Burger 2 Pack',
+      'Birds Eye Chicken Shop 2 Sizzler Breaded Chicken Fillet Burgers 227g',
+    )).toBe(true);
   });
 
   it('accepts small retailer pack-size wording differences', () => {
@@ -56,5 +82,33 @@ describe('Dunnes pack matching', () => {
       'Avonmore Light Milk 2L',
       'Avonmore Light Milk',
     )).toBe(false);
+  });
+
+  it('records an implicit single-unit ratio against an explicit canonical pack', () => {
+    expect(dunnesPackRatio(
+      'Bunalun Chopped Tomatoes 4 Pack',
+      'Bunalun Organic Chopped Tomatoes 400g',
+    )).toBe(0.25);
+  });
+});
+
+describe('Dunnes variant protection', () => {
+  it('rejects spaghetti hoops for plain spaghetti', () => {
+    expect(hasDunnesVariantConflict(
+      'Heinz Spaghetti In Tomato Sauce 400g',
+      'Heinz Spaghetti Hoops in Tomato Sauce Snap Pots 4 x 190g (760g)',
+    )).toBe(true);
+  });
+
+  it('does not treat identical variant terms as a conflict', () => {
+    expect(hasDunnesVariantConflict(
+      'Heinz Spaghetti Hoops 400g',
+      'Heinz Spaghetti Hoops in Tomato Sauce 400g',
+    )).toBe(false);
+  });
+
+  it('compares salted and unsalted as exact tokens', () => {
+    expect(hasDunnesVariantConflict('Kerrygold Salted Butter 227g', 'Kerrygold Unsalted Butter 227g')).toBe(true);
+    expect(hasDunnesVariantConflict('Kerrygold Unsalted Butter 227g', 'Kerrygold Unsalted Butter 227g')).toBe(false);
   });
 });
