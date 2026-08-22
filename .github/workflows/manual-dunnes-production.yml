@@ -3,14 +3,14 @@ name: Manual Dunnes production scrape
 on:
   workflow_dispatch:
   issues:
-    types: [opened]
+    types: [opened, reopened]
 
 permissions:
   contents: read
 
 jobs:
   trigger:
-    if: github.event_name == 'workflow_dispatch' || (github.event.issue.user.login == github.repository_owner && github.event.issue.title == '[ops] Dunnes catch-up')
+    if: github.event_name == 'workflow_dispatch' || (github.event.issue.user.login == 'supermarket-ie' && github.event.issue.title == '[ops] Dunnes catch-up')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
