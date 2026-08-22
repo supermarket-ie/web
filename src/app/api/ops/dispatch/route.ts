@@ -23,6 +23,10 @@ const OPERATIONS: Record<string, Operation> = {
     name: 'dunnes-alternative-canary',
     target: '/api/ops/dunnes-alternative-canary?limit=30',
   },
+  '[ops] Dunnes usage-ranked discovery': {
+    name: 'dunnes-usage-ranked-discovery',
+    target: '/api/workers/dunnes-discovery-trigger?limit=250&batch_size=5&stagger_seconds=2',
+  },
   '[ops] Dunnes catch-up': {
     name: 'dunnes-catch-up',
     target: '/api/workers/dunnes-scrape-trigger?limit=275',
