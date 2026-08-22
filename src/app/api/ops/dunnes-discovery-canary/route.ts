@@ -92,7 +92,7 @@ export async function GET(request: Request) {
 
   const acceptedCount = results.filter(r => r.accepted).length;
   const runId = `dunnes_discovery_canary_${new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14)}`;
-  await supabaseAdmin.from('scrape_runs').insert({
+  const { error: insertError } = await supabaseAdmin.from('scrape_runs').insert({
     run_id: runId,
     store: 'dunnes',
     started_at: new Date().toISOString(),
@@ -107,9 +107,10 @@ export async function GET(request: Request) {
     coverage_pct: targets.length ? (acceptedCount / targets.length) * 100 : 0,
     retrieval_method: 'dunnes_discovery_canary_dry_run',
     threshold_pct: 0,
-    status: 'completed',
+    status: 'success',
     error_summary: JSON.stringify(results.map(r => ({ canonical_name:r.canonical_name, brand:r.brand, accepted:r.accepted, best:r.best }))),
   });
+  if (insertError) return Response.json({ error: insertError.message, dry_run:true, results }, { status: 500 });
 
   return Response.json({ dry_run:true, run_id:runId, target_count:targets.length, accepted_count:acceptedCount, results });
 }
