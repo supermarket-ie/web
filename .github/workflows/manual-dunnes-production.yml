@@ -14,21 +14,13 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/ops/dunnes-operation.txt
-  issues:
-    types: [opened, reopened]
+      - .github/triggers/dunnes-production.txt
 
 permissions:
   contents: read
 
 jobs:
   trigger:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      (github.event.issue.user.login == 'supermarket-ie' &&
-       (github.event.issue.title == '[ops] Dunnes catch-up' ||
-        github.event.issue.title == '[ops] Dunnes alternative canary'))
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -48,16 +40,11 @@ jobs:
         shell: bash
         env:
           DISPATCH_OPERATION: ${{ github.event.inputs.operation }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             operation="${DISPATCH_OPERATION:-catch-up}"
-          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-            operation="$(head -n 1 .github/ops/dunnes-operation.txt | tr -d '\r\n')"
-          elif [ "${ISSUE_TITLE}" = "[ops] Dunnes alternative canary" ]; then
-            operation="alternative-canary"
           else
-            operation="catch-up"
+            operation="$(head -n 1 .github/triggers/dunnes-production.txt | tr -d '\r\n')"
           fi
           case "${operation}" in
             catch-up|alternative-canary) ;;
