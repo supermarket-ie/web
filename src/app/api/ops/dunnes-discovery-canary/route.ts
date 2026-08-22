@@ -18,8 +18,7 @@ function norm(value: string) {
 }
 
 function size(value: string) {
-  const n = norm(value);
-  const m = n.match(/(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
+  const m = norm(value).match(/(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
   if (!m) return null;
   let qty = Number(m[1]);
   let unit = m[2].toLowerCase();
@@ -91,5 +90,26 @@ export async function GET(request: Request) {
     results.push({ id:p.id, canonical_name:p.canonical_name, brand:p.brand, category:p.category, accepted, best, candidates:ranked.slice(0,3) });
   }
 
-  return Response.json({ dry_run:true, target_count:targets.length, accepted_count:results.filter(r=>r.accepted).length, results });
+  const acceptedCount = results.filter(r => r.accepted).length;
+  const runId = `dunnes_discovery_canary_${new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14)}`;
+  await supabaseAdmin.from('scrape_runs').insert({
+    run_id: runId,
+    store: 'dunnes',
+    started_at: new Date().toISOString(),
+    finished_at: new Date().toISOString(),
+    target_count: targets.length,
+    attempted_count: targets.length,
+    fetched: targets.length,
+    extracted: acceptedCount,
+    inserted: 0,
+    unchanged_count: 0,
+    failed: targets.length - acceptedCount,
+    coverage_pct: targets.length ? (acceptedCount / targets.length) * 100 : 0,
+    retrieval_method: 'dunnes_discovery_canary_dry_run',
+    threshold_pct: 0,
+    status: 'completed',
+    error_summary: JSON.stringify(results.map(r => ({ canonical_name:r.canonical_name, brand:r.brand, accepted:r.accepted, best:r.best }))),
+  });
+
+  return Response.json({ dry_run:true, run_id:runId, target_count:targets.length, accepted_count:acceptedCount, results });
 }
