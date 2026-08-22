@@ -55,7 +55,7 @@ function brandMatches(brand: string, candidate: string) {
 }
 
 async function searchDunnes(query: string) {
-  const q = query.split(' ').slice(0, 7).join(' ').slice(0, 80);
+  const q = query.split(' ').slice(0, 8).join(' ').slice(0, 90);
   const url = `${API_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(q)}&take=8&page=1&skip=0`;
   const response = await fetch(url, { cache: 'no-store', headers: {
     Accept: 'application/json, text/plain, */*',
@@ -83,7 +83,8 @@ export async function GET(request: Request) {
 
   const results = [] as any[];
   for (const p of targets) {
-    const candidates = await searchDunnes(p.canonical_name);
+    const searchQuery = norm(p.canonical_name).includes(norm(p.brand)) ? p.canonical_name : `${p.brand} ${p.canonical_name}`;
+    const candidates = await searchDunnes(searchQuery);
     const ranked = candidates.map(c => ({...c, score: score(p.canonical_name,c.name), brand_match: brandMatches(p.brand,c.name), size_match: compatibleSize(p.canonical_name,c.name)})).sort((a,b)=>b.score-a.score);
     const best = ranked[0] ?? null;
     const accepted = Boolean(best && best.sku && best.price && best.brand_match && best.size_match && best.score >= 0.72);
