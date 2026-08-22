@@ -25,7 +25,7 @@ const OPERATIONS: Record<string, Operation> = {
   },
   '[ops] Dunnes usage-ranked discovery': {
     name: 'dunnes-usage-ranked-discovery',
-    target: '/api/workers/dunnes-discovery-trigger?limit=250&batch_size=5&stagger_seconds=2',
+    target: '/api/workers/dunnes-discovery-trigger?limit=250&batch_size=1&stagger_seconds=2',
   },
   '[ops] Dunnes catch-up': {
     name: 'dunnes-catch-up',
