@@ -1,16 +1,16 @@
 name: Manual Dunnes production scrape
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/triggers/dunnes-production.txt
+  workflow_dispatch:
+  issues:
+    types: [opened]
 
 permissions:
   contents: read
 
 jobs:
   trigger:
+    if: github.event_name == 'workflow_dispatch' || (github.event.issue.user.login == github.repository_owner && github.event.issue.title == '[ops] Dunnes catch-up')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
