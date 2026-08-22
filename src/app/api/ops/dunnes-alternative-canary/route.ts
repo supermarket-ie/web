@@ -23,6 +23,24 @@ export async function GET(request: Request) {
   });
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
+  const targetIds = (targets ?? []).map(target => target.product_id).filter(Boolean);
+  if (targetIds.length) {
+    const { error: supersedeError } = await supabaseAdmin
+      .from('store_product_alternative_candidates')
+      .update({
+        status: 'rejected',
+        reason: 'Superseded by a newer Dunnes alternative revalidation.',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('store', 'dunnes')
+      .in('product_id', targetIds)
+      .eq('status', 'candidate');
+
+    if (supersedeError) {
+      return Response.json({ error: `Failed superseding prior Dunnes candidates: ${supersedeError.message}` }, { status: 500 });
+    }
+  }
+
   const exactMatches: Array<Record<string, unknown>> = [];
   const alternativeCandidates: Array<Record<string, unknown>> = [];
 
