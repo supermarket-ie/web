@@ -12,6 +12,7 @@ export type DunnesDiscoveryCandidate = {
   brandMatch: boolean;
   packMatch: boolean;
   productSignalMatch: boolean;
+  variantConflict: boolean;
   canonicalPack: PackSignature;
   candidatePack: PackSignature;
 };
@@ -62,7 +63,7 @@ export function dunnesPackSignature(value: string): PackSignature {
     return { amount: base.amount, unit: base.unit, count: Number(multi[1]) };
   }
 
-  const countMatch = raw.match(/\b(\d+)\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?)\b/i);
+  const countMatch = raw.match(/\b(\d+)\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?|burgers?|fish\s+fingers?|fingers?|singles?|slices?)\b/i);
   const amountMatch = raw.match(/\b(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
   const base = amountMatch ? toBaseAmount(Number(amountMatch[1]), amountMatch[2]) : null;
 
@@ -77,7 +78,7 @@ function sizeText(value: string) {
   const raw = plain(value).replace(/,/g, '.').replace(/×/g, 'x');
   const multi = raw.match(/\b\d+\s*x\s*\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl)\b/i);
   if (multi) return multi[0];
-  const count = raw.match(/\b\d+\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?)\b/i);
+  const count = raw.match(/\b\d+\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?|burgers?|fish\s+fingers?|fingers?|singles?|slices?)\b/i);
   const amount = raw.match(/\b\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl)\b/i);
   return [count?.[0], amount?.[0]].filter(Boolean).join(' ').trim();
 }
@@ -94,6 +95,18 @@ export function isDunnesPackCompatible(canonical: string, candidate: string) {
     if (actual.count === null || expected.count !== actual.count) return false;
   }
   return true;
+}
+
+export function dunnesPackRatio(canonical: string, candidate: string): number | null {
+  const expected = dunnesPackSignature(canonical);
+  const actual = dunnesPackSignature(candidate);
+  if (expected.amount !== null && actual.amount !== null && expected.unit === actual.unit) {
+    return actual.amount / expected.amount;
+  }
+  if (expected.count !== null && actual.count !== null) {
+    return actual.count / expected.count;
+  }
+  return null;
 }
 
 const GENERIC = new Set([
@@ -138,6 +151,24 @@ function productSignalMatches(canonicalName: string, candidate: string) {
   const candidateNorm = normaliseDunnesName(candidate);
   const matched = productWords.filter(w => candidateNorm.includes(w)).length;
   return matched / productWords.length >= 0.6;
+}
+
+const VARIANT_GROUPS = [
+  ['spaghetti', 'hoops'],
+  ['salted', 'unsalted'],
+  ['smooth', 'crunchy'],
+  ['regular', 'zero', 'diet'],
+  ['white', 'wholemeal', 'wholegrain'],
+];
+
+function hasVariantConflict(canonicalName: string, candidate: string) {
+  const canonicalNorm = normaliseDunnesName(canonicalName);
+  const candidateNorm = normaliseDunnesName(candidate);
+  return VARIANT_GROUPS.some(group => {
+    const expected = group.filter(term => canonicalNorm.includes(term));
+    const actual = group.filter(term => candidateNorm.includes(term));
+    return expected.length > 0 && actual.length > 0 && !expected.some(term => actual.includes(term));
+  });
 }
 
 function coreTerms(canonicalName: string, brand: string) {
@@ -221,13 +252,14 @@ export async function discoverDunnesProduct(canonicalName: string, brand: string
     brandMatch: brandMatches(brand, candidate.name),
     packMatch: isDunnesPackCompatible(canonicalName, candidate.name),
     productSignalMatch: productSignalMatches(canonicalName, candidate.name),
+    variantConflict: hasVariantConflict(canonicalName, candidate.name),
     canonicalPack: dunnesPackSignature(canonicalName),
     candidatePack: dunnesPackSignature(candidate.name),
   })).sort((a, b) => b.score - a.score);
 
   const best = ranked[0] ?? null;
   const accepted = Boolean(
-    best && best.sku && best.price && best.price > 0 && best.brandMatch && best.packMatch && best.productSignalMatch && best.score >= 0.72
+    best && best.sku && best.price && best.price > 0 && best.brandMatch && best.packMatch && best.productSignalMatch && !best.variantConflict && best.score >= 0.72
   );
 
   return { queryVariants: variants, candidates: ranked, best, accepted };
