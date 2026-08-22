@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       .update({
         status: 'rejected',
         reason: 'Superseded by a newer Dunnes alternative revalidation.',
-        updated_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
       })
       .eq('store', 'dunnes')
       .in('product_id', targetIds)
