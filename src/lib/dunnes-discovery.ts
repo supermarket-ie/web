@@ -63,9 +63,11 @@ export function dunnesPackSignature(value: string): PackSignature {
     return { amount: base.amount, unit: base.unit, count: Number(multi[1]) };
   }
 
-  const countMatch = raw.match(/\b(\d+)\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?|burgers?|fish\s+fingers?|fingers?|singles?|slices?)\b/i);
+  const explicitCountMatch = raw.match(/\b(\d+)\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?|burgers?|fish\s+fingers?|fingers?|singles?|slices?)\b/i);
+  const leadingItemCountMatch = raw.match(/\b(\d+)\s+(?:(?:[a-z0-9'-]+)\s+){0,5}(?:burgers?|fish\s+fingers?|fingers?|singles?|slices?|rolls?|cans?|bottles?|wipes?|bags?|sachets?|boxes?)\b/i);
   const amountMatch = raw.match(/\b(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
   const base = amountMatch ? toBaseAmount(Number(amountMatch[1]), amountMatch[2]) : null;
+  const countMatch = explicitCountMatch ?? leadingItemCountMatch;
 
   return {
     amount: base?.amount ?? null,
@@ -105,6 +107,9 @@ export function dunnesPackRatio(canonical: string, candidate: string): number | 
   }
   if (expected.count !== null && actual.count !== null) {
     return actual.count / expected.count;
+  }
+  if (expected.count !== null && actual.count === null && actual.amount !== null) {
+    return 1 / expected.count;
   }
   return null;
 }
@@ -161,13 +166,18 @@ const VARIANT_GROUPS = [
   ['white', 'wholemeal', 'wholegrain'],
 ];
 
-function hasVariantConflict(canonicalName: string, candidate: string) {
-  const canonicalNorm = normaliseDunnesName(canonicalName);
-  const candidateNorm = normaliseDunnesName(candidate);
+function variantTerms(value: string, group: string[]) {
+  const tokens = new Set(normaliseDunnesName(value).split(/\s+/).filter(Boolean));
+  return group.filter(term => tokens.has(term));
+}
+
+export function hasDunnesVariantConflict(canonicalName: string, candidate: string) {
   return VARIANT_GROUPS.some(group => {
-    const expected = group.filter(term => canonicalNorm.includes(term));
-    const actual = group.filter(term => candidateNorm.includes(term));
-    return expected.length > 0 && actual.length > 0 && !expected.some(term => actual.includes(term));
+    const expected = variantTerms(canonicalName, group);
+    const actual = variantTerms(candidate, group);
+    if (!expected.length && !actual.length) return false;
+    if (expected.length !== actual.length) return true;
+    return expected.some(term => !actual.includes(term));
   });
 }
 
@@ -252,7 +262,7 @@ export async function discoverDunnesProduct(canonicalName: string, brand: string
     brandMatch: brandMatches(brand, candidate.name),
     packMatch: isDunnesPackCompatible(canonicalName, candidate.name),
     productSignalMatch: productSignalMatches(canonicalName, candidate.name),
-    variantConflict: hasVariantConflict(canonicalName, candidate.name),
+    variantConflict: hasDunnesVariantConflict(canonicalName, candidate.name),
     canonicalPack: dunnesPackSignature(canonicalName),
     candidatePack: dunnesPackSignature(candidate.name),
   })).sort((a, b) => b.score - a.score);
