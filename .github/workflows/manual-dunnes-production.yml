@@ -11,6 +11,10 @@ on:
         options:
           - catch-up
           - alternative-canary
+  push:
+    branches: [main]
+    paths:
+      - .github/ops/dunnes-operation.txt
   issues:
     types: [opened, reopened]
 
@@ -21,6 +25,7 @@ jobs:
   trigger:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event.issue.user.login == 'supermarket-ie' &&
        (github.event.issue.title == '[ops] Dunnes catch-up' ||
         github.event.issue.title == '[ops] Dunnes alternative canary'))
@@ -34,6 +39,10 @@ jobs:
         shell: bash
         run: test -n "${CRON_SECRET:-}"
 
+      - name: Checkout operation marker
+        if: github.event_name == 'push'
+        uses: actions/checkout@v6
+
       - name: Resolve operation
         id: operation
         shell: bash
@@ -43,11 +52,17 @@ jobs:
         run: |
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             operation="${DISPATCH_OPERATION:-catch-up}"
+          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            operation="$(head -n 1 .github/ops/dunnes-operation.txt | tr -d '\r\n')"
           elif [ "${ISSUE_TITLE}" = "[ops] Dunnes alternative canary" ]; then
             operation="alternative-canary"
           else
             operation="catch-up"
           fi
+          case "${operation}" in
+            catch-up|alternative-canary) ;;
+            *) echo "Unsupported Dunnes operation: ${operation}" >&2; exit 2 ;;
+          esac
           echo "operation=${operation}" >> "$GITHUB_OUTPUT"
 
       - name: Trigger Dunnes stale-first production cycle
