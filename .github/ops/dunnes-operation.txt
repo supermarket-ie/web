@@ -1,3 +1,0 @@
-alternative-canary
-2026-08-22T21:23:30Z
-Tightened 30-product Dunnes validation after variant/count fixes.
