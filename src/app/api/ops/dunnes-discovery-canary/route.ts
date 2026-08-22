@@ -1,22 +1,17 @@
-import { createHash, timingSafeEqual } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase';
 import { discoverDunnesProduct } from '@/lib/dunnes-discovery';
 
-const TOKEN_HASH = '095a26423e44b12e813e8b42072531af616243363fac63dacdd5a90ba63a76d4';
-
-function validToken(token: string | null) {
-  if (!token) return false;
-  const actual = createHash('sha256').update(token).digest();
-  const expected = Buffer.from(TOKEN_HASH, 'hex');
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+function authorized(request: Request) {
+  const secret = process.env.CRON_SECRET;
+  return Boolean(secret && request.headers.get('authorization') === `Bearer ${secret}`);
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  if (!validToken(url.searchParams.get('token'))) {
+  if (!process.env.CRON_SECRET || !authorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const url = new URL(request.url);
   const requestedLimit = Number(url.searchParams.get('limit') ?? '30');
   const requestedOffset = Number(url.searchParams.get('offset') ?? '0');
   const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 30, 50));
