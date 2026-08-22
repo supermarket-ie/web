@@ -35,6 +35,7 @@ export type PackSignature = {
   amount: number | null;
   unit: 'g' | 'ml' | null;
   count: number | null;
+  multipack: boolean;
 };
 
 function plain(value: string) {
@@ -60,7 +61,7 @@ export function dunnesPackSignature(value: string): PackSignature {
   const multi = raw.match(/\b(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
   if (multi) {
     const base = toBaseAmount(Number(multi[2]), multi[3]);
-    return { amount: base.amount, unit: base.unit, count: Number(multi[1]) };
+    return { amount: base.amount, unit: base.unit, count: Number(multi[1]), multipack: true };
   }
 
   const explicitCountMatch = raw.match(/\b(\d+)\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?|burgers?|fish\s+fingers?|fingers?|singles?|slices?)\b/i);
@@ -73,6 +74,7 @@ export function dunnesPackSignature(value: string): PackSignature {
     amount: base?.amount ?? null,
     unit: base?.unit ?? null,
     count: countMatch ? Number(countMatch[1]) : null,
+    multipack: false,
   };
 }
 
@@ -90,12 +92,13 @@ export function isDunnesPackCompatible(canonical: string, candidate: string) {
   const actual = dunnesPackSignature(candidate);
 
   if (expected.amount !== null) {
-    if (actual.amount === null || expected.unit !== actual.unit) return false;
-    if (Math.max(expected.amount, actual.amount) / Math.min(expected.amount, actual.amount) > 1.1) return false;
+    if (actual.amount === null || expected.unit !== actual.unit || expected.amount !== actual.amount) return false;
   }
   if (expected.count !== null) {
     if (actual.count === null || expected.count !== actual.count) return false;
   }
+  if (!expected.multipack && actual.multipack) return false;
+  if (expected.multipack && !actual.multipack) return false;
   return true;
 }
 
@@ -103,6 +106,11 @@ export function dunnesPackRatio(canonical: string, candidate: string): number | 
   const expected = dunnesPackSignature(canonical);
   const actual = dunnesPackSignature(candidate);
   if (expected.amount !== null && actual.amount !== null && expected.unit === actual.unit) {
+    if (expected.multipack || actual.multipack) {
+      const expectedTotal = expected.amount * (expected.count ?? 1);
+      const actualTotal = actual.amount * (actual.count ?? 1);
+      return actualTotal / expectedTotal;
+    }
     return actual.amount / expected.amount;
   }
   if (expected.count !== null && actual.count !== null) {
@@ -220,7 +228,9 @@ async function searchDunnes(query: string): Promise<RawCandidate[]> {
       'x-shopping-mode': '22222222-2222-2222-2222-222222222222',
     },
   });
-  if (!response.ok) return [];
+  if (!response.ok) {
+    throw new Error(`Dunnes discovery search HTTP ${response.status}`);
+  }
 
   const body = await response.json() as {
     items?: Array<{ sku?: string | number | null; name?: string | null; priceNumeric?: number | null }>;
