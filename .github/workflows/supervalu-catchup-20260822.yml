@@ -1,0 +1,28 @@
+name: SuperValu catch-up 2026-08-22
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/supervalu-catchup-20260822.yml
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Validate cron secret
+        shell: bash
+        run: test -n "${CRON_SECRET:-}"
+      - name: Trigger SuperValu stale-first catch-up
+        shell: bash
+        run: |
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://supermarket.ie/api/workers/supervalu-scrape-trigger?limit=852"
