@@ -1,7 +1,16 @@
-name: Manual Dunnes production scrape
+name: Manual Dunnes production operations
 
 on:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Dunnes production operation
+        required: true
+        default: catch-up
+        type: choice
+        options:
+          - catch-up
+          - alternative-canary
   issues:
     types: [opened, reopened]
 
@@ -10,7 +19,11 @@ permissions:
 
 jobs:
   trigger:
-    if: github.event_name == 'workflow_dispatch' || (github.event.issue.user.login == 'supermarket-ie' && github.event.issue.title == '[ops] Dunnes catch-up')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.user.login == 'supermarket-ie' &&
+       (github.event.issue.title == '[ops] Dunnes catch-up' ||
+        github.event.issue.title == '[ops] Dunnes alternative canary'))
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -20,9 +33,35 @@ jobs:
       - name: Validate cron secret
         shell: bash
         run: test -n "${CRON_SECRET:-}"
+
+      - name: Resolve operation
+        id: operation
+        shell: bash
+        env:
+          DISPATCH_OPERATION: ${{ github.event.inputs.operation }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            operation="${DISPATCH_OPERATION:-catch-up}"
+          elif [ "${ISSUE_TITLE}" = "[ops] Dunnes alternative canary" ]; then
+            operation="alternative-canary"
+          else
+            operation="catch-up"
+          fi
+          echo "operation=${operation}" >> "$GITHUB_OUTPUT"
+
       - name: Trigger Dunnes stale-first production cycle
+        if: steps.operation.outputs.operation == 'catch-up'
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "https://supermarket.ie/api/workers/dunnes-scrape-trigger?limit=275"
+
+      - name: Trigger tightened Dunnes alternative validation
+        if: steps.operation.outputs.operation == 'alternative-canary'
+        shell: bash
+        run: |
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://supermarket.ie/api/ops/dunnes-alternative-canary?limit=30"
