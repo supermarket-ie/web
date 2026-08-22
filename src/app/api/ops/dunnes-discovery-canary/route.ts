@@ -7,6 +7,7 @@ const API_BASE = 'https://storefrontgateway.dunnesstoresgrocery.com/api';
 const SITE_URL = 'https://www.dunnesstoresgrocery.com';
 
 type Candidate = { sku: string | null; name: string; price: number | null };
+type PackSignature = { amount: number | null; unit: 'g' | 'ml' | null; count: number | null };
 
 function validToken(token: string | null) {
   if (!token) return false;
@@ -15,25 +16,64 @@ function validToken(token: string | null) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+function plain(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 function norm(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return plain(value).replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function size(value: string) {
-  const m = norm(value).match(/(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
-  if (!m) return null;
-  let qty = Number(m[1]);
-  let unit = m[2].toLowerCase();
-  if (unit === 'kg') { qty *= 1000; unit = 'g'; }
-  if (unit === 'l') { qty *= 1000; unit = 'ml'; }
-  if (unit === 'cl') { qty *= 10; unit = 'ml'; }
-  return { qty, unit };
+function toBaseAmount(qty: number, unit: string): { amount: number; unit: 'g' | 'ml' } {
+  const u = unit.toLowerCase();
+  if (u === 'kg') return { amount: qty * 1000, unit: 'g' };
+  if (u === 'g') return { amount: qty, unit: 'g' };
+  if (u === 'l') return { amount: qty * 1000, unit: 'ml' };
+  if (u === 'cl') return { amount: qty * 10, unit: 'ml' };
+  return { amount: qty, unit: 'ml' };
 }
 
-function compatibleSize(a: string, b: string) {
-  const x = size(a); const y = size(b);
-  if (!x || !y) return true;
-  return x.unit === y.unit && Math.max(x.qty, y.qty) / Math.min(x.qty, y.qty) <= 1.1;
+function packSignature(value: string): PackSignature {
+  const raw = plain(value).replace(/,/g, '.').replace(/×/g, 'x');
+
+  const multi = raw.match(/\b(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
+  if (multi) {
+    const base = toBaseAmount(Number(multi[2]), multi[3]);
+    return { amount: base.amount, unit: base.unit, count: Number(multi[1]) };
+  }
+
+  const countMatch = raw.match(/\b(\d+)\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?)\b/i);
+  const amountMatch = raw.match(/\b(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
+  const base = amountMatch ? toBaseAmount(Number(amountMatch[1]), amountMatch[2]) : null;
+
+  return {
+    amount: base?.amount ?? null,
+    unit: base?.unit ?? null,
+    count: countMatch ? Number(countMatch[1]) : null,
+  };
+}
+
+function sizeText(value: string) {
+  const raw = plain(value).replace(/,/g, '.').replace(/×/g, 'x');
+  const multi = raw.match(/\b\d+\s*x\s*\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl)\b/i);
+  if (multi) return multi[0];
+  const count = raw.match(/\b\d+\s*(?:pack|pk|rolls?|pieces?|tabs?|tablets?|capsules?|wipes?|bags?|sachets?|boxes?|cans?|bottles?)\b/i);
+  const amount = raw.match(/\b\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl)\b/i);
+  return [count?.[0], amount?.[0]].filter(Boolean).join(' ').trim();
+}
+
+function compatiblePack(a: string, b: string) {
+  const x = packSignature(a);
+  const y = packSignature(b);
+
+  if (x.amount !== null) {
+    if (y.amount === null || x.unit !== y.unit) return false;
+    if (Math.max(x.amount, y.amount) / Math.min(x.amount, y.amount) > 1.1) return false;
+  }
+  if (x.count !== null) {
+    if (y.count === null || x.count !== y.count) return false;
+  }
+  return true;
 }
 
 const GENERIC = new Set([
@@ -43,7 +83,7 @@ const GENERIC = new Set([
 
 function words(value: string) {
   return norm(value)
-    .replace(/\b\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl|x|pk|pack)?\b/g,' ')
+    .replace(/\b\d+(?:\s+\d+)?\s*(?:g|kg|ml|l|cl|x|pk|pack)?\b/g,' ')
     .split(/\s+/)
     .filter(w => w.length > 2 && !GENERIC.has(w));
 }
@@ -58,10 +98,12 @@ function score(expected: string, candidate: string) {
 }
 
 function brandMatches(brand: string, candidate: string) {
-  const bw = words(brand).filter(w => w.length >= 4);
-  if (!bw.length) return false;
+  const bn = norm(brand);
   const cn = norm(candidate);
-  return bw.some(w => cn.includes(w));
+  if (bn && cn.includes(bn)) return true;
+
+  const tokens = norm(brand).split(/\s+/).filter(Boolean).filter(w => w.length >= 4 || (w.length >= 3 && /\d/.test(w)));
+  return tokens.some(w => cn.includes(w));
 }
 
 function productSignalMatches(canonicalName: string, candidate: string) {
@@ -81,12 +123,11 @@ function coreTerms(canonicalName: string, brand: string) {
 function queryVariants(canonicalName: string, brand: string) {
   const enriched = norm(canonicalName).includes(norm(brand)) ? canonicalName : `${brand} ${canonicalName}`;
   const core = coreTerms(canonicalName, brand);
-  const s = size(canonicalName);
-  const sizeText = s ? `${s.qty}${s.unit}` : '';
+  const pack = sizeText(canonicalName);
   const variants = [
     enriched,
     core ? `${brand} ${core}` : brand,
-    core && sizeText ? `${brand} ${core} ${sizeText}` : '',
+    core && pack ? `${brand} ${core} ${pack}` : '',
     canonicalName,
   ];
   return [...new Set(variants.map(v => v.trim()).filter(Boolean))];
@@ -142,12 +183,14 @@ export async function GET(request: Request) {
       ...c,
       score: score(enrichedExpected,c.name),
       brand_match: brandMatches(p.brand,c.name),
-      size_match: compatibleSize(p.canonical_name,c.name),
+      pack_match: compatiblePack(p.canonical_name,c.name),
       product_signal_match: productSignalMatches(p.canonical_name,c.name),
+      canonical_pack: packSignature(p.canonical_name),
+      candidate_pack: packSignature(c.name),
     })).sort((a,b)=>b.score-a.score);
     const best = ranked[0] ?? null;
     const accepted = Boolean(
-      best && best.sku && best.price && best.brand_match && best.size_match && best.product_signal_match && best.score >= 0.72
+      best && best.sku && best.price && best.brand_match && best.pack_match && best.product_signal_match && best.score >= 0.72
     );
     results.push({
       id:p.id, canonical_name:p.canonical_name, brand:p.brand, category:p.category,
