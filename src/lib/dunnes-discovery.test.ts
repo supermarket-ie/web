@@ -12,6 +12,7 @@ describe('Dunnes pack matching', () => {
       amount: 1250,
       unit: 'ml',
       count: null,
+      multipack: false,
     });
   });
 
@@ -20,6 +21,7 @@ describe('Dunnes pack matching', () => {
       amount: 330,
       unit: 'ml',
       count: 12,
+      multipack: true,
     });
   });
 
@@ -28,12 +30,14 @@ describe('Dunnes pack matching', () => {
       amount: 227,
       unit: 'g',
       count: 2,
+      multipack: false,
     });
 
     expect(dunnesPackSignature('Birds Eye 14 Breaded Fish Fingers 350g')).toEqual({
       amount: 350,
       unit: 'g',
       count: 14,
+      multipack: false,
     });
   });
 
@@ -44,11 +48,16 @@ describe('Dunnes pack matching', () => {
     )).toBe(true);
   });
 
-  it('accepts small retailer pack-size wording differences', () => {
+  it('requires exact normalized amount identity for exact mappings', () => {
     expect(isDunnesPackCompatible(
       'Airwick Active Fresh Eucalyptus & Freesia Room Spray 237ml',
       'Air Wick Eucalyptus & Freesia Active Fresh Room Spray 236ml',
-    )).toBe(true);
+    )).toBe(false);
+
+    expect(isDunnesPackCompatible(
+      "Ben's Original Sweet & Sour No Added Sugar Sauce 450g",
+      'Bens Original Sweet and Sour No Added Sugar Sauce 440g',
+    )).toBe(false);
   });
 
   it('rejects a different single bottle size', () => {
@@ -58,10 +67,15 @@ describe('Dunnes pack matching', () => {
     )).toBe(false);
   });
 
-  it('rejects a multipack when the canonical item is a single bottle', () => {
+  it('rejects a multipack when the canonical item is a single item', () => {
     expect(isDunnesPackCompatible(
       '7UP Lemon & Lime Bottle 1.25L',
       '7UP Refreshing Lemon & Lime Taste Can 12 x 330ml',
+    )).toBe(false);
+
+    expect(isDunnesPackCompatible(
+      'Cadbury Dairy Milk Freddo Caramel Chocolate Bar 19g',
+      'Cadbury Dairy Milk Caramel Freddo Chocolate Bar 4 Pack Multipack 78g (4 x 19.5g)',
     )).toBe(false);
   });
 
@@ -89,6 +103,13 @@ describe('Dunnes pack matching', () => {
       'Bunalun Chopped Tomatoes 4 Pack',
       'Bunalun Organic Chopped Tomatoes 400g',
     )).toBe(0.25);
+  });
+
+  it('uses total quantity when comparing multipacks', () => {
+    expect(dunnesPackRatio(
+      'Cadbury Dairy Milk Freddo Caramel Chocolate Bar 19g',
+      'Cadbury Dairy Milk Caramel Freddo Chocolate Bar 4 x 19.5g',
+    )).toBeCloseTo(78 / 19);
   });
 });
 
