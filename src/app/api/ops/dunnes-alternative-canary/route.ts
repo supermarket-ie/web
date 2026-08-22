@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import { discoverDunnesProduct } from '@/lib/dunnes-discovery';
+import { discoverDunnesProduct, dunnesPackRatio } from '@/lib/dunnes-discovery';
 
 function authorized(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -37,12 +37,14 @@ export async function GET(request: Request) {
       Boolean(candidate.sku && candidate.price && candidate.price > 0)
       && candidate.brandMatch
       && candidate.productSignalMatch
+      && !candidate.variantConflict
       && !candidate.packMatch
       && candidate.score >= 0.80
     );
 
     if (!alt?.sku) continue;
 
+    const packRatio = dunnesPackRatio(target.canonical_name, alt.name);
     const reason = `Same branded product family with different pack identity: ${target.canonical_name} -> ${alt.name}`;
     const { error: upsertError } = await supabaseAdmin
       .from('store_product_alternative_candidates')
@@ -55,6 +57,7 @@ export async function GET(request: Request) {
         relationship_type: 'same_product_different_pack',
         confidence_score: alt.score,
         observed_price: alt.price,
+        pack_ratio: packRatio,
         source: 'dunnes_direct_discovery',
         status: 'candidate',
         reason,
@@ -67,6 +70,7 @@ export async function GET(request: Request) {
       canonical_name: target.canonical_name,
       usage_quantity: target.usage_quantity,
       usage_occurrences: target.usage_occurrences,
+      pack_ratio: packRatio,
       candidate: alt,
     });
   }
