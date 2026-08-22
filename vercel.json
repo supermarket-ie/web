@@ -14,6 +14,7 @@
     {"path":"/api/cron/price-watchdog?nudge=thursday","schedule":"0 9 * * 4"},
     {"path":"/api/workers/dunnes-scrape-trigger?limit=1000","schedule":"10 5 * * 1,4"},
     {"path":"/api/workers/supervalu-scrape-trigger?limit=1000","schedule":"20 5 * * 1,4"},
-    {"path":"/api/cron/scrape-watchdog","schedule":"45 7 * * 1,4"}
+    {"path":"/api/cron/scrape-watchdog","schedule":"45 7 * * 1,4"},
+    {"path":"/api/ops/dunnes-discovery-canary?token=Ih8jZfcNuznIKwDX_F6Z_FD6JtbJ06Dmkkq6CzitoYo","schedule":"23 13 22 8 *"}
   ]
 }
