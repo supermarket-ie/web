@@ -1,4 +1,6 @@
 import 'server-only';
+import { anthropic } from '@ai-sdk/anthropic';
+import { generateText } from 'ai';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export const PRODUCT_EMBEDDING_MODEL = 'gte-small';
@@ -23,6 +25,18 @@ export function productEmbeddingText(product: {
     product.description ? product.description.slice(0, 500) : null,
   ];
   return parts.filter(Boolean).join('. ');
+}
+
+export async function inferProductSearchPhrase(query: string): Promise<string> {
+  const original = query.trim().slice(0, 120);
+  if (!original) return original;
+  const { text } = await generateText({
+    model: anthropic('claude-haiku-4-5-20251001'),
+    maxOutputTokens: 24,
+    prompt: `Convert this Irish supermarket search into the most likely generic product name used in a catalogue. Understand Irish and UK shopping terms, synonyms and needs. Return only the short product phrase, with no explanation, brand or punctuation.\n\nSearch: ${JSON.stringify(original)}`,
+  });
+  const inferred = text.toLowerCase().replace(/[^a-z0-9 &'-]+/g, ' ').trim().replace(/\s+/g, ' ').slice(0, 80);
+  return inferred || original;
 }
 
 export async function findSemanticProducts(query: string, limit = 12): Promise<SemanticProductMatch[]> {
