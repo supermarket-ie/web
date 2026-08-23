@@ -253,7 +253,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
   ).slice(0, 2);
 
   return (
-    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
+    <div className="min-h-screen bg-[#f8faf8]">
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
