@@ -77,4 +77,37 @@ describe('shopping catalogue core', () => {
 
     expect(resolveCatalogueRows(query, stapleRows, 2)[0]?.canonical_name).toBe(expected);
   });
+
+  it.each([
+    ['cheese', 'Mature Cheddar Cheese 400g', 'Vanilla Cheesecake'],
+    ['coffee', 'Ground Coffee 227g', 'Coffee Chocolate Biscuits'],
+    ['shampoo', 'Moisturising Shampoo 500ml', 'Shampoo & Conditioner Gift Set'],
+    ['eggs', 'Free Range Eggs 12 Pack', 'Egg Noodles 250g'],
+  ])('uses general title semantics for unseen search %s', (query, expected, incidental) => {
+    const generalRows: CataloguePriceRow[] = [
+      { canonical_name: incidental, category: 'Other', store: 'SuperValu', store_product_name: incidental, price: 0.99, was_price: null, on_promotion: false },
+      { canonical_name: expected, category: 'Other', store: 'Dunnes', store_product_name: expected, price: 3.49, was_price: null, on_promotion: false },
+    ];
+
+    expect(resolveCatalogueRows(query, generalRows, 2)[0]?.canonical_name).toBe(expected);
+  });
+
+  it('prefers a concise product-headed title to an incidental pet-food ingredient', () => {
+    const generalRows: CataloguePriceRow[] = [
+      { canonical_name: 'Pedigree Rodeo with Chicken 7 Pack', category: 'Pet Care', store: 'Tesco', store_product_name: 'Pedigree Rodeo with Chicken 7 Pack', price: 3.79, was_price: null, on_promotion: false },
+      { canonical_name: 'Chicken Drumsticks', category: 'Meat', store: 'SuperValu', store_product_name: 'Chicken Drumsticks', price: 3.99, was_price: null, on_promotion: false },
+    ];
+
+    expect(resolveCatalogueRows('chicken', generalRows, 2)[0]?.canonical_name).toBe('Chicken Drumsticks');
+  });
+
+  it('infers the intended category from strong catalogue matches', () => {
+    const generalRows: CataloguePriceRow[] = [
+      { canonical_name: 'Milk Chocolate Rice Cakes 100g', category: 'Snacks', store: 'SuperValu', store_product_name: 'Milk Chocolate Rice Cakes 100g', price: 1.25, was_price: null, on_promotion: false },
+      { canonical_name: 'Fresh Whole Milk 2L', category: 'Dairy', store: 'Dunnes', store_product_name: 'Fresh Whole Milk 2L', price: 2.25, was_price: null, on_promotion: false },
+      { canonical_name: 'Fresh Low Fat Milk 2L', category: 'Dairy', store: 'Tesco', store_product_name: 'Fresh Low Fat Milk 2L', price: 2.35, was_price: null, on_promotion: false },
+    ];
+
+    expect(resolveCatalogueRows('milk', generalRows, 3)[0]?.category).toBe('Dairy');
+  });
 });
