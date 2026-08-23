@@ -3,6 +3,10 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 const model = new Supabase.ai.Session("gte-small");
 
 Deno.serve(async (request: Request) => {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceKey || request.headers.get("authorization") !== `Bearer ${serviceKey}`) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
   if (request.method !== "POST") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
