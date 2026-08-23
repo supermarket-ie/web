@@ -16,6 +16,7 @@ export function fmt(n: number) { return `€${n.toFixed(2)}`; }
 export function pct(was: number, now: number) { return Math.round(((was - now) / was) * 100); }
 
 export type ProductPrice = {
+  canonical_product_id: string;
   canonical_name: string;
   category: string;
   store: string;
@@ -23,6 +24,12 @@ export type ProductPrice = {
   was_price: number | null;
   on_promotion: boolean;
   store_product_name: string;
+  store_sku: string;
+  store_url: string | null;
+  observed_at: string;
+  source: string;
+  relationship_type: 'exact';
+  freshness_state: 'fresh';
 };
 
 // ── Module-level cache (survives across requests in the same warm Lambda) ─────
@@ -49,7 +56,7 @@ export async function getAllLatestPrices(): Promise<ProductPrice[]> {
 
   const { data: viewRows, error: viewError } = await supabaseAdmin
     .from('latest_prices')
-    .select('canonical_name, category, store, price, was_price, on_promotion, store_product_name');
+    .select('canonical_product_id, canonical_name, category, store, price, was_price, on_promotion, store_product_name, store_sku, store_url, observed_at, source, relationship_type, freshness_state');
 
   if (viewError) {
     console.error('[price-data] latest_prices unavailable; refusing raw-price fallback:', viewError.message);
