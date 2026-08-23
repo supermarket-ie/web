@@ -28,7 +28,9 @@ function hash(value: string): string {
 
 async function processJob(jobId: string) {
   const started = Date.now();
-  const batchSize = 50;
+  // gte-small runs inside the constrained Edge Function runtime. Keep batches
+  // deliberately small; the cursor makes the full refresh resumable.
+  const batchSize = 5;
   let processed = 0;
 
   const { data: job, error: jobError } = await supabaseAdmin
