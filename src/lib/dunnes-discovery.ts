@@ -229,7 +229,7 @@ async function searchDunnes(query: string): Promise<RawCandidate[]> {
     },
   });
   if (!response.ok) {
-    throw new Error(`Dunnes discovery search HTTP ${response.status}`);
+    throw new Error(`Dunnes discovery search HTTP ${response.status} for query ${JSON.stringify(trimmed)}`);
   }
 
   const body = await response.json() as {
@@ -251,15 +251,29 @@ async function searchDunnes(query: string): Promise<RawCandidate[]> {
 export async function discoverDunnesProduct(canonicalName: string, brand: string): Promise<DunnesDiscoveryResult> {
   const variants = queryVariants(canonicalName, brand);
   const byKey = new Map<string, RawCandidate & { queries: string[] }>();
+  const failures: Error[] = [];
+  let successfulQueries = 0;
 
   for (const query of variants) {
-    const candidates = await searchDunnes(query);
+    let candidates: RawCandidate[];
+    try {
+      candidates = await searchDunnes(query);
+      successfulQueries += 1;
+    } catch (error) {
+      failures.push(error instanceof Error ? error : new Error(String(error)));
+      continue;
+    }
+
     for (const candidate of candidates) {
       const key = candidate.sku || `${normaliseDunnesName(candidate.name)}:${candidate.price ?? ''}`;
       const existing = byKey.get(key);
       if (existing) existing.queries.push(query);
       else byKey.set(key, { ...candidate, queries: [query] });
     }
+  }
+
+  if (successfulQueries === 0 && failures.length > 0) {
+    throw new Error(`All Dunnes discovery queries failed: ${failures.map(error => error.message).join(' | ')}`);
   }
 
   const expected = normaliseDunnesName(canonicalName).includes(normaliseDunnesName(brand))
