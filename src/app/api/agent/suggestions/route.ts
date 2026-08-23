@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveCatalogueProduct } from '@/lib/catalogue-resolution';
+import { resolveCatalogueProduct, resolveHybridCatalogueProduct } from '@/lib/catalogue-resolution';
 import { extractCatalogueFragment } from '@/lib/agent-suggestions';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (fragment.length < 2) return NextResponse.json({ products: [] });
 
   try {
-    let candidates = await resolveCatalogueProduct(fragment, 4);
+    let candidates = await resolveHybridCatalogueProduct(fragment, 4);
     if (candidates.length === 0) {
       const relaxed = fragment
         .split(' ')
