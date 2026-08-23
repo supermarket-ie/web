@@ -47,6 +47,45 @@ function isDeterministicSearch400(error: unknown) {
   return text.startsWith('All Dunnes discovery queries failed:') && statuses.length > 0 && statuses.every(status => status === 400);
 }
 
+function normalise(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9+\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function ageStage(value: string) {
+  const match = normalise(value).match(/\b(\d+)\s*\+?\s*months?\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function qualityConflict(canonicalName: string, candidateName: string) {
+  const canonical = normalise(canonicalName);
+  const candidate = normalise(candidateName);
+  const expectedAge = ageStage(canonicalName);
+  const actualAge = ageStage(candidateName);
+  if (expectedAge !== null && actualAge !== null && expectedAge !== actualAge) return true;
+
+  const symmetricGroups = [
+    ['bottle', 'can'],
+  ];
+  for (const group of symmetricGroups) {
+    const expected = group.filter(term => canonical.split(' ').includes(term));
+    const actual = group.filter(term => candidate.split(' ').includes(term));
+    if (expected.length !== actual.length || expected.some(term => !actual.includes(term))) return true;
+  }
+
+  const protectedDescriptors = ['organic', 'sensitive', 'platinum'];
+  for (const descriptor of protectedDescriptors) {
+    const expected = canonical.split(' ').includes(descriptor);
+    const actual = candidate.split(' ').includes(descriptor);
+    if (expected !== actual) return true;
+  }
+  return false;
+}
+
+function nearEquivalentPack(canonicalName: string, candidateName: string) {
+  const ratio = dunnesPackRatio(canonicalName, candidateName);
+  return ratio !== null && ratio >= 0.95 && ratio <= 1.05;
+}
+
 export const POST = handleCallback<Message>(async (message) => {
   if (!message?.runUuid || !Array.isArray(message.targets) || message.targets.length === 0) {
     throw new Error('Invalid Dunnes discovery queue message');
@@ -118,11 +157,35 @@ export const POST = handleCallback<Message>(async (message) => {
       continue;
     }
 
+    const nearExact = discovery.candidates.find(candidate =>
+      Boolean(candidate.sku && candidate.price && candidate.price > 0)
+      && candidate.brandMatch
+      && candidate.productSignalMatch
+      && !candidate.variantConflict
+      && !qualityConflict(target.canonical_name, candidate.name)
+      && nearEquivalentPack(target.canonical_name, candidate.name)
+      && candidate.score >= 0.85
+    );
+
+    if (nearExact?.sku) {
+      const ratio = dunnesPackRatio(target.canonical_name, nearExact.name);
+      await finalize(
+        message,
+        target,
+        'exact',
+        nearExact,
+        ratio,
+        `Near-equivalent Dunnes pack label within 5% tolerance: ${target.canonical_name} -> ${nearExact.name}`,
+      );
+      continue;
+    }
+
     const alt = discovery.candidates.find(candidate =>
       Boolean(candidate.sku && candidate.price && candidate.price > 0)
       && candidate.brandMatch
       && candidate.productSignalMatch
       && !candidate.variantConflict
+      && !qualityConflict(target.canonical_name, candidate.name)
       && !candidate.packMatch
       && candidate.score >= 0.93
     );
