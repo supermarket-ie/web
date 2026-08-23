@@ -124,7 +124,7 @@ export const POST = handleCallback<Message>(async (message) => {
       && candidate.productSignalMatch
       && !candidate.variantConflict
       && !candidate.packMatch
-      && candidate.score >= 0.80
+      && candidate.score >= 0.93
     );
 
     if (alt?.sku) {
