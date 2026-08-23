@@ -3,19 +3,20 @@ import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
 export const revalidate = 43200; // Revalidate every 12 hours
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export const metadata: Metadata = {
-  title: 'Supermarket Price Comparison Ireland — Tesco, Dunnes, SuperValu, Aldi, Lidl',
-  description: 'Compare grocery prices across all 5 major Irish supermarkets: Tesco, Dunnes Stores, SuperValu, Aldi & Lidl. See which is cheapest for your weekly shop with live price data.',
+  title: 'Supermarket Price Comparison Ireland | Ask Supermarket.ie',
+  description: 'Ask Ireland’s supermarket shopping agent to find products, prepare a household shop and use current Tesco, Dunnes, SuperValu and Aldi price evidence in context.',
   keywords: ['supermarket prices Ireland', 'cheapest supermarket Ireland', 'Tesco vs Dunnes Ireland', 'Aldi prices Ireland', 'Lidl prices Ireland', 'grocery comparison Ireland', 'SuperValu price comparison'],
   alternates: { canonical: `${BASE_URL}/compare/supermarket-prices-ireland` },
   openGraph: {
-    title: 'Supermarket Price Comparison Ireland — Which is Cheapest?',
-    description: 'Live prices compared across Tesco, Dunnes, SuperValu, Aldi & Lidl. Updated twice weekly with real prices.',
+    title: 'Supermarket.ie — Ireland’s household shopping agent',
+    description: 'Ask for products, meals, a household shop or a budget. Supermarket.ie uses current Irish supermarket data to help.',
   },
 };
 
@@ -30,8 +31,6 @@ const STORE_INFO: Record<StoreKey, { name: string; color: string; light: string;
   aldi:      { name: 'Aldi',           color: '#00457C', light: '#E8F0FA', tagline: 'Discount leader' },
   lidl:      { name: 'Lidl',           color: '#0050AA', light: '#E6F0FC', tagline: 'Weekly specials' },
 };
-
-const ALL_STORES: StoreKey[] = ['tesco', 'dunnes', 'supervalu', 'aldi', 'lidl'];
 
 const BASKET_CATEGORIES = [
   'Dairy', 'Bakery', 'Meat', 'Fruit', 'Vegetables',
@@ -91,14 +90,15 @@ async function getComparisonData() {
       storeCounts[store] = (storeCounts[store] ?? 0) + 1;
     }
   }
-  const activeStores = ALL_STORES.filter(s => (storeCounts[s] ?? 0) > 10);
+  // Only compare stores across the same matched product set. Aldi currently has
+  // useful live evidence, but not equivalent catalogue coverage on this page;
+  // including its partial totals would produce a misleading "cheapest" claim.
+  const activeStores = MAIN_3.filter(s => (storeCounts[s] ?? 0) > 10);
 
   // Category totals per store (products available in at least 3 stores)
   const minStoresForComparison = Math.min(3, activeStores.length);
   const categoryTotals: Record<string, Record<string, number>> = {};
   const categoryCount: Record<string, number> = {};
-  const overallTotals: Record<string, number> = {};
-  for (const s of activeStores) overallTotals[s] = 0;
   let overallCount = 0;
 
   for (const [, { category, stores }] of byProduct) {
@@ -116,7 +116,6 @@ async function getComparisonData() {
     for (const s of activeStoresWithProduct) {
       const price = stores.get(s)!;
       categoryTotals[category][s] += price;
-      overallTotals[s] += price;
     }
     categoryCount[category]++;
     overallCount++;
@@ -133,19 +132,14 @@ async function getComparisonData() {
     }
   }
 
-  return { categoryTotals, categoryCount, overallTotals, overallCount, samples, activeStores };
+  return { categoryTotals, categoryCount, overallCount, samples, activeStores };
 }
 
 export default async function ComparePage() {
   const data = await getComparisonData();
   if (!data) return <div>Loading...</div>;
 
-  const { categoryTotals, overallTotals, overallCount, samples, activeStores } = data;
-
-  // Rank stores by overall total (only stores with data)
-  const ranked = [...activeStores].sort((a, b) => (overallTotals[a] ?? 0) - (overallTotals[b] ?? 0));
-  const cheapest = ranked[0];
-  const saving = (overallTotals[ranked[ranked.length - 1]] ?? 0) - (overallTotals[cheapest] ?? 0);
+  const { categoryTotals, overallCount, samples, activeStores } = data;
 
   const now = new Date();
   const updatedLabel = now.toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -159,59 +153,28 @@ export default async function ComparePage() {
       <main className="max-w-6xl mx-auto px-6 pb-16">
         {/* Hero */}
         <div className="pt-10 pb-8">
-          <div className="text-xs font-semibold text-[#006A35] uppercase tracking-widest mb-3">Live Price Comparison · Ireland</div>
+          <div className="text-xs font-semibold text-[#006A35] uppercase tracking-widest mb-3">Live Irish supermarket intelligence</div>
           <h1 className="text-3xl font-bold text-[#2F2F2E] mb-3 leading-tight">
-            Supermarket Price Comparison Ireland<br/>
-            <span className="text-[#006A35]">Which is cheapest?</span>
+            Your supermarket shopping agent for Ireland
           </h1>
           <p className="text-[#5c5b5b] text-base max-w-xl">
-            Live prices compared across {storeNames} in Ireland.
-            Based on {overallCount} products. Last updated {updatedLabel}.
+            Ask for a product, meal, household shop or budget. Supermarket.ie uses current evidence from {storeNames} to work out what is useful for you—not just which single price is lowest.
           </p>
+          <p className="mt-2 text-xs text-[#7b827d]">{overallCount} comparable products in this snapshot · Updated {updatedLabel}</p>
         </div>
 
-        {/* Winner banner */}
-        <div
-          className="rounded-2xl p-6 mb-8 text-white"
-          style={{ background: STORE_INFO[cheapest].color }}
-        >
-          <div className="text-sm opacity-80 mb-1 font-medium">Cheapest overall basket</div>
-          <div className="text-3xl font-bold mb-1">{STORE_INFO[cheapest].name}</div>
-          <div className="text-lg opacity-90">
-            {fmt(overallTotals[cheapest])} for a standard weekly basket
-          </div>
-          {saving > 0.01 && (
-            <div className="mt-3 inline-block bg-white/20 rounded-xl px-4 py-2">
-              <span className="font-bold">{fmt(saving)} cheaper</span> than the most expensive option
-            </div>
-          )}
-        </div>
-
-        {/* Store totals grid */}
-        <div className={`grid gap-3 mb-10`} style={{ gridTemplateColumns: `repeat(${Math.min(ranked.length, 5)}, minmax(0, 1fr))` }}>
-          {ranked.map((store, i) => {
-            const info = STORE_INFO[store];
-            const isCheapest = i === 0;
-            return (
-              <div key={store} className="rounded-2xl p-4 border-2 text-center"
-                style={{ borderColor: isCheapest ? info.color : '#E8E2DC', background: isCheapest ? info.light : '#fff' }}>
-                <div className="font-bold text-sm mb-2" style={{ color: isCheapest ? info.color : '#1D2324' }}>{info.name}</div>
-                <div className="text-2xl font-bold mb-1" style={{ color: isCheapest ? info.color : '#1D2324' }}>
-                  {fmt(overallTotals[store] ?? 0)}
-                </div>
-                <div className="text-xs text-[#5c5b5b]">{info.tagline}</div>
-                {isCheapest && (
-                  <div className="mt-2 text-[10px] font-bold uppercase rounded-full px-2 py-0.5 inline-block text-white" style={{ background: info.color }}>
-                    Cheapest ✓
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="mb-10">
+          <AgentLandingCTA
+            context="comparison"
+            title="Tell us what your household actually needs"
+            description="A useful shop depends on pack sizes, preferences, meals, budget and what is worth buying where. Start with your real request and let the agent use the price data in context."
+            prompt="Help me prepare this week’s household shop"
+          />
         </div>
 
         {/* Category breakdown */}
-        <h2 className="text-xl font-bold text-[#2F2F2E] mb-4">Price comparison by category</h2>
+        <h2 className="text-xl font-bold text-[#2F2F2E] mb-1">Current catalogue evidence</h2>
+        <p className="mb-4 text-sm text-[#667169]">A live product snapshot the agent can use. Category totals are catalogue observations, not a claim that every household should buy the full set.</p>
         <div className="space-y-3 mb-10">
           {BASKET_CATEGORIES.filter(cat => categoryTotals[cat]).map(cat => {
             const totals = categoryTotals[cat];
@@ -271,14 +234,14 @@ export default async function ComparePage() {
         {/* CTA */}
         <div className="rounded-2xl p-8 text-center" style={{ background: '#EAE7E7' }}>
           <div className="text-3xl mb-3">🛒</div>
-          <h2 className="text-xl font-bold text-[#2F2F2E] mb-2">Get a personalised price comparison</h2>
+          <h2 className="text-xl font-bold text-[#2F2F2E] mb-2">Make Supermarket.ie your household agent</h2>
           <p className="text-[#5c5b5b] mb-5 max-w-md mx-auto">
-            Tell our AI what you need this week and get a shopping list with live prices from all {activeStores.length} stores — so you know exactly where to shop.
+            Ask it to prepare a shop, remember what matters to your household, save a list or monitor a product for a useful change.
           </p>
           <Link href="/"
             className="inline-block px-8 py-3.5 rounded-full font-semibold text-base transition text-[#004a23]"
             style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
-            Build my weekly list free →
+            Start with the agent →
           </Link>
           <p className="text-xs mt-3" style={{ color: 'rgba(175,173,172,0.8)' }}>No signup required to get started</p>
         </div>
