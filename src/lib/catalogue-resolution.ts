@@ -6,7 +6,7 @@ import {
   resolveCatalogueRows,
   type CataloguePriceRow,
 } from '@/lib/shopping/catalogue-core';
-import { findSemanticProducts } from '@/lib/product-semantic-search';
+import { findSemanticProducts, inferProductSearchPhrase } from '@/lib/product-semantic-search';
 
 export interface CatalogueCandidate {
   canonical_name: string;
@@ -82,8 +82,14 @@ export async function resolveHybridCatalogueProduct(
   if (lexical.length >= limit && hasCompleteLexicalMatch) return lexical;
 
   try {
-    const semantic = await findSemanticProducts(query, Math.max(limit * 3, 12));
-    if (semantic.length === 0) return lexical;
+    const inferredQuery = queryTokens.length >= 2 && !hasCompleteLexicalMatch
+      ? await inferProductSearchPhrase(query)
+      : query;
+    const [inferredLexical, semantic] = await Promise.all([
+      inferredQuery !== query ? resolveCatalogueProduct(inferredQuery, limit) : Promise.resolve([]),
+      findSemanticProducts(inferredQuery, Math.max(limit * 3, 12)),
+    ]);
+    if (semantic.length === 0 && inferredLexical.length === 0) return lexical;
     const semanticIds = semantic.map(match => match.product_id);
     const { data, error } = await supabaseAdmin
       .from('latest_prices')
@@ -121,14 +127,15 @@ export async function resolveHybridCatalogueProduct(
       } satisfies CatalogueCandidate];
     });
 
-    const primary = hasCompleteLexicalMatch ? lexical : semanticCandidates;
-    const secondary = hasCompleteLexicalMatch ? semanticCandidates : lexical;
-    const seen = new Set(primary.map(candidate => candidate.canonical_name));
-    return [...primary, ...secondary.filter(candidate => {
+    const ordered = hasCompleteLexicalMatch
+      ? [lexical, inferredLexical, semanticCandidates]
+      : [inferredLexical, semanticCandidates, lexical];
+    const seen = new Set<string>();
+    return ordered.flat().filter(candidate => {
       if (seen.has(candidate.canonical_name)) return false;
       seen.add(candidate.canonical_name);
       return true;
-    })].slice(0, limit);
+    }).slice(0, limit);
   } catch (error) {
     console.warn('[catalogue-resolution] semantic fallback unavailable', error);
     return lexical;
