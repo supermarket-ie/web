@@ -12,6 +12,11 @@ type AnalyticsReportRequest = {
   dimensions?: Array<{ name: string }>;
   metrics: Array<{ name: string }>;
   limit?: number;
+  orderBys?: Array<{
+    desc?: boolean;
+    dimension?: { dimensionName: string };
+    metric?: { metricName: string };
+  }>;
 };
 
 type AnalyticsReport = {
