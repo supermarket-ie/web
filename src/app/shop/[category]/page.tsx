@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 import { itemListJsonLd } from '@/lib/structured-data';
 import { POSTS } from '@/lib/blog';
+import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
 export const revalidate = 43200; // 12 hours — matches scrape frequency
 
@@ -146,8 +147,6 @@ const STORE_INFO = {
   dunnes:    { name: 'Dunnes Stores', color: '#7B0017', light: '#FAEAEC' },
   supervalu: { name: 'SuperValu',     color: '#D4400F', light: '#FEF0E8' },
 };
-const STORES = ['tesco', 'dunnes', 'supervalu'] as const;
-
 async function getCategoryProducts(category: string) {
   const { data: spRows } = await supabaseAdmin
     .from('store_products')
@@ -237,15 +236,6 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
   if (!products) notFound();
   const hasProducts = products.length > 0;
 
-  const storeTotals: Record<string, number> = { tesco: 0, dunnes: 0, supervalu: 0 };
-  for (const { stores } of products) {
-    for (const [store, { price }] of stores) {
-      storeTotals[store] = (storeTotals[store] ?? 0) + price;
-    }
-  }
-  const rankedStores = [...STORES].filter(s => storeTotals[s] > 0).sort((a, b) => storeTotals[a] - storeTotals[b]);
-  const cheapest = rankedStores[0];
-
   // ItemList structured data
   const jsonLd = itemListJsonLd({
     name: meta?.title ?? `${categoryName} Prices Ireland`,
@@ -273,45 +263,21 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
         <div className="pt-4 pb-6">
           <div className="text-4xl mb-3">{meta?.emoji ?? '🛒'}</div>
           <h1 className="text-3xl font-bold text-[#2F2F2E] mb-2">
-            {categoryName} prices in Ireland
+            {categoryName} for your household shop
           </h1>
           <p className="text-[#5c5b5b]">
-            {meta?.description ?? `Live ${categoryName.toLowerCase()} prices from Tesco, Dunnes Stores and SuperValu. Updated twice weekly.`}
+            Explore current {categoryName.toLowerCase()} products and prices across Irish supermarkets, or ask the agent to choose around your meals, preferences and budget.
           </p>
         </div>
 
-        {/* Cheapest store banner */}
-        {cheapest && hasProducts && (
-          <div className="rounded-2xl p-5 mb-6 text-white" style={{ background: STORE_INFO[cheapest].color }}>
-            <div className="text-sm opacity-80 mb-1">Cheapest for {categoryName.toLowerCase()}</div>
-            <div className="text-2xl font-bold mb-1">{STORE_INFO[cheapest].name}</div>
-            <div className="text-base opacity-90">
-              {fmt(storeTotals[cheapest])} total across {products.filter(p => p.stores.has(cheapest)).length} products
-            </div>
-          </div>
-        )}
-
-        {/* Store comparison bar */}
-        {rankedStores.length > 1 && (
-          <div className="grid grid-cols-3 gap-2 mb-8">
-            {rankedStores.map((store, i) => {
-              const info = STORE_INFO[store];
-              const isBest = i === 0;
-              return (
-                <div key={store} className="rounded-xl p-3 border-2 text-center"
-                  style={{ borderColor: isBest ? info.color : 'rgba(175,173,172,0.2)', background: isBest ? info.light : '#fff' }}>
-                  <div className="text-xs font-bold mb-1" style={{ color: isBest ? info.color : '#2F2F2E' }}>
-                    {info.name.split(' ')[0]}
-                  </div>
-                  <div className="text-lg font-bold" style={{ color: isBest ? info.color : '#2F2F2E' }}>
-                    {fmt(storeTotals[store])}
-                  </div>
-                  {isBest && <div className="text-[10px] font-bold text-white rounded-full px-2 py-0.5 mt-1 inline-block" style={{ background: info.color }}>Cheapest ✓</div>}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div className="mb-8">
+          <AgentLandingCTA
+            context="category"
+            title={`What do you need from ${categoryName.toLowerCase()}?`}
+            description="Ask for a product, dietary requirement, meal or household shop. The agent will use current products and prices rather than giving you a generic category ranking."
+            prompt={`Help me choose ${categoryName.toLowerCase()} for my household shop`}
+          />
+        </div>
 
         {/* Product list */}
         {hasProducts ? (
@@ -371,14 +337,14 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
         {/* AI agent CTA */}
         <div className="rounded-2xl p-6 text-center mb-10" style={{ background: '#EAE7E7' }}>
           <div className="text-2xl mb-2">{meta?.emoji ?? '🛒'}</div>
-          <h3 className="font-bold text-[#2F2F2E] mb-1">Let your AI agent handle this →</h3>
+          <h3 className="font-bold text-[#2F2F2E] mb-1">Continue with your household agent</h3>
           <p className="text-sm text-[#5c5b5b] mb-4">
-            Tell our AI what you want to cook and get a complete shopping list with live prices across Tesco, Dunnes, SuperValu &amp; Aldi.
+            Turn these products into a meal, a list, a saved preference or a monitored item.
           </p>
           <Link href="/"
             className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]"
             style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
-            Try the AI planner free →
+            Ask Supermarket.ie →
           </Link>
         </div>
 
