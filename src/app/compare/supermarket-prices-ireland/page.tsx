@@ -137,7 +137,6 @@ async function getComparisonData() {
   const latestObservation = priceRows[0]?.observed_at ?? null;
 
   return {
-    overallCount: products.length,
     featured,
     moreEvidence,
     activeStores,
@@ -149,7 +148,7 @@ export default async function ComparePage() {
   const data = await getComparisonData();
   if (!data) return <div>Loading...</div>;
 
-  const { overallCount, featured, moreEvidence, activeStores, latestObservation } = data;
+  const { featured, moreEvidence, activeStores, latestObservation } = data;
 
   const updatedLabel = latestObservation
     ? new Date(latestObservation).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -171,7 +170,7 @@ export default async function ComparePage() {
           <p className="max-w-2xl text-base leading-7 text-[#667169] sm:text-lg">
             Ask for a product, meal, household shop or budget. Supermarket.ie uses current evidence from {storeNames} to work out what is useful for you—not just which single price is lowest.
           </p>
-          <p className="mt-3 text-xs font-medium text-[#8b958e]">{overallCount} comparable products in this snapshot · Updated {updatedLabel}</p>
+          <p className="mt-3 text-xs font-medium text-[#8b958e]">Current price observations across {storeNames} · Updated {updatedLabel}</p>
         </div>
 
         <div className="mb-10">
@@ -190,7 +189,7 @@ export default async function ComparePage() {
             <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
             <h2 id="catalogue-evidence-heading" className="text-2xl font-extrabold tracking-[-0.035em] text-[#152219]">What the agent currently understands</h2>
           </div>
-          <p className="max-w-xl text-sm leading-6 text-[#667169]">Examples from {overallCount} products matched across {storeNames}. Prices are evidence the agent can use alongside pack size, preferences, meals and budget.</p>
+          <p className="max-w-xl text-sm leading-6 text-[#667169]">More than 686 products are already matched in the Supermarket.ie catalogue. These examples show current comparable observations across {storeNames}; the agent also uses pack size, preferences, meals and budget.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {featured.map(product => (
