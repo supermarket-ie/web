@@ -54,4 +54,27 @@ describe('shopping catalogue core', () => {
     const [result] = resolveCatalogueRows('Hellmanns mayonnaise', rows, 5);
     expect(result.canonical_name).toContain('Hellmanns');
   });
+
+  it('ranks whole-word grocery staples above cheaper substring matches', () => {
+    const stapleRows: CataloguePriceRow[] = [
+      { canonical_name: 'Buttermilk Pancakes 6 Pack', category: 'Bakery', store: 'SuperValu', store_product_name: 'Buttermilk Pancakes 6 Pack', price: 0.94, was_price: null, on_promotion: false },
+      { canonical_name: 'Butterhead Lettuce 1 Pack', category: 'Vegetables', store: 'SuperValu', store_product_name: 'Butterhead Lettuce', price: 0.95, was_price: null, on_promotion: false },
+      { canonical_name: 'Kerrygold Unsalted Butter 227g', category: 'Dairy', store: 'Dunnes', store_product_name: 'Kerrygold Unsalted Butter 227g', price: 2.99, was_price: null, on_promotion: false },
+    ];
+
+    expect(resolveCatalogueRows('butter', stapleRows, 3)[0]?.canonical_name)
+      .toBe('Kerrygold Unsalted Butter 227g');
+  });
+
+  it.each([
+    ['milk', 'Fresh Whole Milk 2L'],
+    ['bread', 'Brown Bread 800g'],
+  ])('keeps %s suggestions in the expected staple category', (query, expected) => {
+    const stapleRows: CataloguePriceRow[] = [
+      { canonical_name: expected, category: query === 'milk' ? 'Dairy' : 'Bakery', store: 'Dunnes', store_product_name: expected, price: 2.25, was_price: null, on_promotion: false },
+      { canonical_name: query === 'milk' ? 'Milk & Honey Shower Cream 250ml' : 'Breaded Chicken Nuggets', category: query === 'milk' ? 'Personal Care' : 'Meat', store: 'SuperValu', store_product_name: query === 'milk' ? 'Milk Shower Cream' : 'Breaded Chicken Nuggets', price: 1.5, was_price: null, on_promotion: false },
+    ];
+
+    expect(resolveCatalogueRows(query, stapleRows, 2)[0]?.canonical_name).toBe(expected);
+  });
 });

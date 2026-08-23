@@ -46,10 +46,18 @@ export function resolveCatalogueRows(
   }
 
   const queryNorm = normaliseCatalogueText(query);
+  const queryPhrase = ` ${queryNorm} `;
+  const stapleCategories: Record<string, string> = {
+    bread: 'bakery',
+    butter: 'dairy',
+    milk: 'dairy',
+  };
   const scored: ResolvedProduct[] = [];
 
   for (const [canonicalName, productRows] of grouped) {
     const canonicalNorm = normaliseCatalogueText(canonicalName);
+    const canonicalTokens = canonicalNorm.split(' ').filter(Boolean);
+    const paddedCanonical = ` ${canonicalNorm} `;
     const storeNames = productRows
       .map(row => normaliseCatalogueText(row.store_product_name))
       .join(' ');
@@ -57,11 +65,22 @@ export function resolveCatalogueRows(
 
     let score = 0;
     for (const token of tokens) {
-      if (canonicalNorm.includes(token)) score += 3;
+      if (canonicalTokens.includes(token)) score += 8;
+      else if (canonicalNorm.includes(token)) score += 2;
       else if (haystack.includes(token)) score += 1;
     }
-    if (canonicalNorm === queryNorm) score += 10;
-    if (canonicalNorm.startsWith(queryNorm) || queryNorm.startsWith(canonicalNorm)) score += 3;
+    if (canonicalNorm === queryNorm) score += 30;
+    if (paddedCanonical.includes(queryPhrase)) score += 8;
+    if (canonicalNorm.startsWith(`${queryNorm} `) || canonicalNorm.endsWith(` ${queryNorm}`)) score += 3;
+
+    const preferredCategory = tokens.length === 1 ? stapleCategories[queryNorm] : undefined;
+    if (preferredCategory && normaliseCatalogueText(productRows[0]?.category ?? '') === preferredCategory) {
+      score += 8;
+    }
+
+    // When relevance is otherwise equal, a concise canonical name is normally
+    // the user's intended staple rather than a product that merely mentions it.
+    score -= Math.max(0, canonicalTokens.length - tokens.length) * 0.1;
 
     const matchedTokens = tokens.filter(token => haystack.includes(token)).length;
     if (matchedTokens < Math.ceil(tokens.length * 0.6)) continue;

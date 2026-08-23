@@ -56,7 +56,10 @@ export async function resolveCatalogueProduct(
     .from('latest_prices')
     .select('canonical_name, category, store, store_product_name, price, was_price, on_promotion')
     .or(`canonical_name.ilike.%${seed}%,store_product_name.ilike.%${seed}%`)
-    .limit(200);
+    // Broad staple searches (milk, bread, butter) can match hundreds of rows.
+    // Let the shared resolver rank the complete result set instead of ranking an
+    // arbitrary first page returned by PostgREST.
+    .limit(1000);
 
   if (error) throw new Error(`Catalogue lookup failed: ${error.message}`);
 
