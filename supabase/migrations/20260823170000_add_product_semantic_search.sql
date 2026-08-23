@@ -4,7 +4,7 @@ create table if not exists public.product_search_embeddings (
   product_id uuid primary key references public.products(id) on delete cascade,
   source_text text not null,
   source_hash text not null,
-  embedding extensions.vector(1536) not null,
+  embedding extensions.vector(384) not null,
   embedding_model text not null,
   updated_at timestamptz not null default now()
 );
@@ -30,7 +30,7 @@ revoke all on public.product_embedding_jobs from anon, authenticated;
 grant select, insert, update, delete on public.product_embedding_jobs to service_role;
 
 create or replace function public.match_product_search_embeddings(
-  query_embedding extensions.vector(1536),
+  query_embedding extensions.vector(384),
   match_threshold double precision default 0.55,
   match_count integer default 12
 )
