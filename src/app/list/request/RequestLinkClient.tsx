@@ -2,35 +2,68 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { saveSession } from '@/lib/session';
 
-type Status = "idle" | "submitting" | "sent" | "not_found" | "error";
+type Status = "idle" | "submitting" | "error";
 
 export default function RequestLinkPage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("submitting");
+
     try {
-      const res = await fetch("/api/auth/magic-link", {
+      const normalizedEmail = email.trim().toLowerCase();
+
+      // Unified account continuation flow:
+      // - new email -> create the subscriber
+      // - existing email -> refresh their session
+      // /api/subscribe returns a short-lived JWT which is immediately exchanged
+      // for the HttpOnly session cookie below.
+      const res = await fetch("/api/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail, familySize: "2" }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        // If the API returned a flag indicating no subscriber was found
-        if (data.found === false) {
-          setStatus("not_found");
-        } else {
-          setStatus("sent");
-        }
-      } else {
+
+      if (!res.ok) {
         setStatus("error");
+        return;
       }
+
+      const data = await res.json() as { token?: string };
+      if (!data.token) {
+        setStatus("error");
+        return;
+      }
+
+      const sessionRes = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ token: data.token }),
+      });
+
+      if (!sessionRes.ok) {
+        setStatus("error");
+        return;
+      }
+
+      saveSession({
+        token: data.token,
+        familySize: "2",
+        email: normalizedEmail,
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      });
+
+      router.replace("/");
+      router.refresh();
     } catch {
       setStatus("error");
     }
@@ -42,90 +75,50 @@ export default function RequestLinkPage() {
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-16">
         <div className="bg-white rounded-2xl shadow-sm border border-[#E8E2DC] max-w-md w-full p-8">
+          <h1 className="text-2xl font-bold text-[#1D2324] mb-2">Continue free</h1>
+          <p className="text-[#636E72] text-sm mb-6">
+            Enter your email to keep your household agent, shopping preferences and future updates. No password needed.
+          </p>
 
-          {status === "sent" && (
-            <div className="text-center">
-              <div className="w-14 h-14 rounded-full bg-[#5D9B8F]/10 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-7 h-7 text-[#5D9B8F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold text-[#1D2324] mb-2">Check your inbox</h1>
-              <p className="text-[#636E72] text-sm">
-                We&rsquo;ve sent a sign-in link to <strong className="text-[#1D2324]">{email}</strong>. Click it to access your account.
-              </p>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-[#1D2324] mb-2">
+                Email address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+                autoComplete="email"
+                className="w-full px-4 py-3 rounded-xl border-2 border-[#E8E2DC] focus:border-[#5D9B8F] focus:outline-none transition text-[#1D2324] placeholder:text-[#B2BEC3]"
+              />
             </div>
-          )}
 
-          {status === "not_found" && (
-            <div className="text-center">
-              <div className="text-5xl mb-4">🤔</div>
-              <h1 className="text-2xl font-bold text-[#1D2324] mb-2">No list found</h1>
-              <p className="text-[#636E72] text-sm mb-6">
-                We couldn&rsquo;t find a list for <strong className="text-[#1D2324]">{email}</strong>. Use the planner on our homepage to create one — it only takes a minute.
+            {status === "error" && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl">
+                We couldn&rsquo;t continue your account. Please try again.
               </p>
-              <Link
-                href="/"
-                className="inline-flex items-center justify-center w-full px-6 py-3 rounded-full font-semibold text-[#004a23]"
-                style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
-              >
-                Go to the planner →
-              </Link>
-              <button
-                onClick={() => { setStatus("idle"); setEmail(""); }}
-                className="mt-3 text-sm text-[#636E72] hover:underline block w-full text-center"
-              >
-                Try a different email
-              </button>
-            </div>
-          )}
+            )}
 
-          {(status === "idle" || status === "submitting" || status === "error") && (
-            <>
-              <h1 className="text-2xl font-bold text-[#1D2324] mb-2">Sign in</h1>
-              <p className="text-[#636E72] text-sm mb-6">
-                Enter your email and we&rsquo;ll send you a sign-in link. No password needed.
-              </p>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-[#1D2324] mb-2">
-                    Email address
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
-                    className="w-full px-4 py-3 rounded-xl border-2 border-[#E8E2DC] focus:border-[#5D9B8F] focus:outline-none transition text-[#1D2324] placeholder:text-[#B2BEC3]"
-                  />
-                </div>
-                {status === "error" && (
-                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl">
-                    Something went wrong. Please try again.
-                  </p>
-                )}
-                <button
-                  type="submit"
-                  disabled={!email || status === "submitting"}
-                  className="w-full px-6 py-3 rounded-full font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed text-[#004a23]"
-                  style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
-                >
-                  {status === "submitting" ? "Sending..." : "Send sign-in link →"}
-                </button>
-              </form>
-            </>
-          )}
+            <button
+              type="submit"
+              disabled={!email || status === "submitting"}
+              className="w-full px-6 py-3 rounded-full font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed text-[#004a23]"
+              style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}
+            >
+              {status === "submitting" ? "Continuing..." : "Continue →"}
+            </button>
+          </form>
         </div>
 
-        {(status === "idle" || status === "submitting" || status === "error") && (
-          <p className="mt-6 text-sm text-[#636E72]">
-            Not signed up yet?{" "}
-            <Link href="/" className="text-[#006A35] font-medium hover:underline">
-              Get started free →
-            </Link>
-          </p>
-        )}
+        <p className="mt-6 text-sm text-[#636E72] text-center max-w-md">
+          Already have an account? Use the same email and we&rsquo;ll take you straight back in.
+        </p>
+        <Link href="/" className="mt-3 text-sm text-[#006A35] font-medium hover:underline">
+          Back to Supermarket.ie
+        </Link>
       </div>
 
       <SiteFooter />
