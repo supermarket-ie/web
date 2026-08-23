@@ -242,7 +242,7 @@ function PriceTable({ prices, productName }: { prices: PriceRow[]; productName: 
 
   return (
     <div className="mb-6">
-      <h2 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: '#00DCFF', textShadow: '0 0 8px rgba(0,220,255,0.3)' }}>
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#397250]">
         Current prices
       </h2>
       <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
