@@ -248,7 +248,12 @@ export async function POST(request: NextRequest) {
       if (emailError) console.error('[subscribe] welcome email failed:', emailError);
     }
 
-    return NextResponse.json({ success: true, token: jwtToken, list_id: savedListId });
+    return NextResponse.json({
+      success: true,
+      token: jwtToken,
+      list_id: savedListId,
+      is_new_registration: !existing,
+    });
   } catch (error) {
     console.error('Subscribe error:', error);
     return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });

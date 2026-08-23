@@ -15,6 +15,7 @@ const ALLOWED_EVENT_TYPES = new Set([
   'planner_message',
   'list_generated',
   'list_saved',
+  'signup_started',
   'signup_completed',
   'dashboard_visit',
   'conversation_started',

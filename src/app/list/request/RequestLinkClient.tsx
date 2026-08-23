@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { saveSession } from '@/lib/session';
+import { trackEvent } from '@/lib/analytics';
 
 type Status = "idle" | "submitting" | "error";
 
@@ -17,6 +18,10 @@ export default function RequestLinkPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("submitting");
+    trackEvent('signup_started', {
+      method: 'email',
+      flow: 'unified_email_continuation',
+    });
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
@@ -37,7 +42,7 @@ export default function RequestLinkPage() {
         return;
       }
 
-      const data = await res.json() as { token?: string };
+      const data = await res.json() as { token?: string; is_new_registration?: boolean };
       if (!data.token) {
         setStatus("error");
         return;
@@ -61,6 +66,13 @@ export default function RequestLinkPage() {
         email: normalizedEmail,
         expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
       });
+
+      if (data.is_new_registration) {
+        trackEvent('signup_completed', {
+          method: 'email',
+          flow: 'unified_email_continuation',
+        }, data.token);
+      }
 
       router.replace("/");
       router.refresh();

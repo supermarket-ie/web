@@ -41,13 +41,16 @@ export async function GET(req: Request) {
     const byType = aggregateByType(rows);
     const started = byType['planner_started'] ?? 0;
     const generated = byType['list_generated'] ?? 0;
+    const signupStarted = byType['signup_started'] ?? 0;
     const signedUp = byType['signup_completed'] ?? 0;
     return {
       planner_started: started,
       list_generated: generated,
+      signup_started: signupStarted,
       signup_completed: signedUp,
       started_to_generated: started > 0 ? Math.round((generated / started) * 100) : null,
       generated_to_signup: generated > 0 ? Math.round((signedUp / generated) * 100) : null,
+      signup_conversion: signupStarted > 0 ? Math.round((signedUp / signupStarted) * 100) : null,
     };
   }
 
