@@ -2,6 +2,7 @@ import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase';
 import {
   getCatalogueSeed,
+  normaliseCatalogueText,
   resolveCatalogueRows,
   type CataloguePriceRow,
 } from '@/lib/shopping/catalogue-core';
@@ -73,7 +74,12 @@ export async function resolveHybridCatalogueProduct(
   limit = 5,
 ): Promise<CatalogueCandidate[]> {
   const lexical = await resolveCatalogueProduct(query, limit);
-  if (lexical.length >= limit) return lexical;
+  const queryTokens = normaliseCatalogueText(query).split(' ').filter(token => token.length >= 2);
+  const hasCompleteLexicalMatch = lexical.some(candidate => {
+    const name = normaliseCatalogueText(candidate.canonical_name);
+    return queryTokens.every(token => name.includes(token));
+  });
+  if (lexical.length >= limit && hasCompleteLexicalMatch) return lexical;
 
   try {
     const semantic = await findSemanticProducts(query, Math.max(limit * 3, 12));
@@ -115,8 +121,10 @@ export async function resolveHybridCatalogueProduct(
       } satisfies CatalogueCandidate];
     });
 
-    const seen = new Set(lexical.map(candidate => candidate.canonical_name));
-    return [...lexical, ...semanticCandidates.filter(candidate => {
+    const primary = hasCompleteLexicalMatch ? lexical : semanticCandidates;
+    const secondary = hasCompleteLexicalMatch ? semanticCandidates : lexical;
+    const seen = new Set(primary.map(candidate => candidate.canonical_name));
+    return [...primary, ...secondary.filter(candidate => {
       if (seen.has(candidate.canonical_name)) return false;
       seen.add(candidate.canonical_name);
       return true;
