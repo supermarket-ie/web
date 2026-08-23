@@ -47,7 +47,11 @@ export async function resolveCatalogueProduct(query: string, limit = 5): Promise
     .from('latest_prices')
     .select('canonical_name, category, store, store_product_name, price, was_price, on_promotion')
     .or(`canonical_name.ilike.%${seed}%,store_product_name.ilike.%${seed}%`)
-    .limit(200);
+    // Broad staples such as milk, bread and butter also occur in hundreds of
+    // unrelated or specialist product names. Fetch the complete practical
+    // result set so the shared resolver ranks the catalogue rather than an
+    // arbitrary first PostgREST page.
+    .limit(1000);
 
   if (error) throw new Error(`Catalogue lookup failed: ${error.message}`);
 
