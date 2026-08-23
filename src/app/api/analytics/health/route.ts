@@ -29,11 +29,13 @@ export async function GET() {
       runGoogleAnalyticsReport({ dateRanges: [{ startDate: '28daysAgo', endDate: 'today' }], dimensions: [{ name: 'country' }], metrics: [{ name: 'sessions' }, { name: 'activeUsers' }, { name: 'engagementRate' }], orderBys: [{ desc: true, metric: { metricName: 'sessions' } }], limit: 12 }),
       runGoogleAnalyticsReport({ dateRanges: [{ startDate: '28daysAgo', endDate: 'today' }], dimensions: [{ name: 'eventName' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }, { name: 'keyEvents' }], orderBys: [{ desc: true, metric: { metricName: 'eventCount' } }], limit: 20 }),
     ]);
-    console.info('[google-analytics-assessment]', JSON.stringify({
-      current: rows(current), previous: rows(previous), daily: rows(daily),
-      sources: rows(sources), landings: rows(landings), devices: rows(devices),
-      countries: rows(countries), events: rows(events),
-    }));
+    console.info('[google-analytics-assessment-summary]', JSON.stringify({ current: rows(current), previous: rows(previous) }));
+    console.info('[google-analytics-assessment-daily]', JSON.stringify(rows(daily)));
+    console.info('[google-analytics-assessment-sources]', JSON.stringify(rows(sources)));
+    console.info('[google-analytics-assessment-landings]', JSON.stringify(rows(landings)));
+    console.info('[google-analytics-assessment-devices]', JSON.stringify(rows(devices)));
+    console.info('[google-analytics-assessment-countries]', JSON.stringify(rows(countries)));
+    console.info('[google-analytics-assessment-events]', JSON.stringify(rows(events)));
     return NextResponse.json({ connected: true, assessment_captured: true });
   } catch (error) {
     console.error('[google-analytics-assessment]', error instanceof Error ? error.message : error);
