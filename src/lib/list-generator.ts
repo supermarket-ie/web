@@ -60,50 +60,37 @@ export async function generateList(
   const addedSet    = new Set(customisations?.addedItems ?? []);
   const overrides   = customisations?.storeOverrides ?? {};
 
-  const { data: storeProducts, error: spError } = await supabaseAdmin
-    .from('store_products')
-    .select('id, product_id, store, store_product_name, store_url, products(id, canonical_name, category)')
-    .eq('url_status', 'resolved');
+  // `latest_prices` is the fail-closed trusted-offer boundary. Never rebuild
+  // current offers from raw observations here: that would admit stale prices,
+  // unresolved identity and observations without trusted provenance.
+  const { data: trustedOffers, error: offerError } = await supabaseAdmin
+    .from('latest_prices')
+    .select('canonical_product_id, canonical_name, category, store, store_product_name, store_url, price');
 
-  if (spError) throw spError;
-
-  const { data: priceRows, error: poError } = await supabaseAdmin
-    .from('price_observations')
-    .select('store_product_id, price, observed_at')
-    .order('observed_at', { ascending: false });
-
-  if (poError) throw poError;
-
-  const latestPrice = new Map<string, number>();
-  for (const row of priceRows ?? []) {
-    if (!latestPrice.has(row.store_product_id) && row.price !== null) {
-      latestPrice.set(row.store_product_id, row.price as number);
-    }
-  }
+  if (offerError) throw offerError;
 
   type PriceInfo = { price: number; store_product_name: string; store_url: string | null };
   type ProductEntry = { canonical_name: string; category: string | null; stores: Map<string, PriceInfo> };
 
   const byProduct = new Map<string, ProductEntry>();
 
-  for (const sp of storeProducts ?? []) {
-    const price = latestPrice.get(sp.id);
-    if (price === undefined) continue;
+  for (const offer of trustedOffers ?? []) {
+    const productId = String(offer.canonical_product_id);
+    const price = Number(offer.price);
+    if (!productId || !Number.isFinite(price) || price <= 0) continue;
 
-    const product = sp.products as unknown as { id: string; canonical_name: string; category: string | null };
-
-    if (!byProduct.has(sp.product_id)) {
-      byProduct.set(sp.product_id, {
-        canonical_name: product.canonical_name,
-        category: product.category,
+    if (!byProduct.has(productId)) {
+      byProduct.set(productId, {
+        canonical_name: offer.canonical_name,
+        category: offer.category,
         stores: new Map()
       });
     }
 
-    byProduct.get(sp.product_id)!.stores.set(sp.store, {
+    byProduct.get(productId)!.stores.set(offer.store, {
       price,
-      store_product_name: sp.store_product_name,
-      store_url: sp.store_url
+      store_product_name: offer.store_product_name,
+      store_url: offer.store_url
     });
   }
 
@@ -199,5 +186,4 @@ export async function getAllProducts(): Promise<{ product_id: string; canonical_
   }
   return result.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
 }
-
 
