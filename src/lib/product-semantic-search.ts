@@ -1,8 +1,7 @@
 import 'server-only';
-import { embed } from 'ai';
 import { supabaseAdmin } from '@/lib/supabase';
 
-export const PRODUCT_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
+export const PRODUCT_EMBEDDING_MODEL = 'gte-small';
 
 export type SemanticProductMatch = {
   product_id: string;
@@ -30,10 +29,12 @@ export async function findSemanticProducts(query: string, limit = 12): Promise<S
   const value = query.trim();
   if (value.length < 3) return [];
 
-  const { embedding } = await embed({
-    model: PRODUCT_EMBEDDING_MODEL,
-    value,
+  const { data: generated, error: embeddingError } = await supabaseAdmin.functions.invoke('product-embeddings', {
+    body: { texts: [value] },
   });
+  if (embeddingError) throw new Error(`Query embedding failed: ${embeddingError.message}`);
+  const embedding = generated?.embeddings?.[0];
+  if (!Array.isArray(embedding)) throw new Error('Query embedding was not returned');
   const { data, error } = await supabaseAdmin.rpc('match_product_search_embeddings', {
     query_embedding: embedding,
     match_threshold: 0.55,
