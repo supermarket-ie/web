@@ -4,7 +4,6 @@ const stores = [
   { name: 'Tesco', logo: '/images/stores/tesco-grey.png', width: 394, height: 113 },
   { name: 'Dunnes Stores', logo: '/images/stores/dunnes-grey.png', width: 352, height: 89 },
   { name: 'SuperValu', logo: '/images/stores/supervalu-grey.png', width: 495, height: 141 },
-  { name: 'Aldi', logo: '/images/stores/aldi-grey.png', width: 136, height: 160 },
 ];
 
 export function StoreLogosBar() {
