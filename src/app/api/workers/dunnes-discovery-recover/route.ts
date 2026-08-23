@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     return Response.json({ status: 'no_missing_products', run_id: run.run_id, attempted_count: run.attempted_count });
   }
 
-  const delayStepSeconds = 10;
+  const delayStepSeconds = 5;
   const totalBatches = missing.length;
   let queued = 0;
 
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
       targets: [missing[i]],
     };
     await send(TOPIC, message, {
-      idempotencyKey: `${run.id}:recovery-v2:${missing[i].product_id}`,
+      idempotencyKey: `${run.id}:recovery-v3:${missing[i].product_id}`,
       retentionSeconds: 86_400,
       delaySeconds: i * delayStepSeconds,
     });
