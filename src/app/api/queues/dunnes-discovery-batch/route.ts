@@ -46,6 +46,17 @@ export const POST = handleCallback<Message>(async (message) => {
     throw new Error('Invalid Dunnes discovery queue message');
   }
 
+  const { data: run, error: runError } = await supabaseAdmin
+    .from('scrape_runs')
+    .select('status')
+    .eq('id', message.runUuid)
+    .maybeSingle();
+  if (runError) throw new Error(`Failed checking Dunnes discovery run: ${runError.message}`);
+  if (!run || run.status !== 'running') {
+    console.log('[dunnes-discovery-queue] inactive run acknowledged', { runId: message.runId, status: run?.status ?? 'missing' });
+    return;
+  }
+
   for (const target of message.targets) {
     const { data: existing, error: existingError } = await supabaseAdmin
       .from('dunnes_discovery_receipts')
@@ -56,7 +67,20 @@ export const POST = handleCallback<Message>(async (message) => {
     if (existingError) throw new Error(`Failed checking Dunnes discovery receipt: ${existingError.message}`);
     if (existing) continue;
 
-    const discovery = await discoverDunnesProduct(target.canonical_name, target.brand);
+    let discovery;
+    try {
+      discovery = await discoverDunnesProduct(target.canonical_name, target.brand);
+    } catch (error) {
+      console.error('[dunnes-discovery-queue] discovery failed', {
+        runId: message.runId,
+        batchIndex: message.batchIndex,
+        productId: target.product_id,
+        canonicalName: target.canonical_name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
     if (discovery.accepted && discovery.best) {
       await finalize(
         message,
@@ -103,6 +127,6 @@ export const POST = handleCallback<Message>(async (message) => {
 }, {
   visibilityTimeoutSeconds: 300,
   retry: (_error, metadata) => ({
-    afterSeconds: Math.min(180, Math.max(10, 10 * 2 ** Math.max(0, metadata.deliveryCount - 1))),
+    afterSeconds: Math.min(300, Math.max(30, 30 * 2 ** Math.max(0, metadata.deliveryCount - 1))),
   }),
 });
