@@ -112,18 +112,28 @@ async function getComparisonData() {
     return a.name.length - b.name.length || a.name.localeCompare(b.name);
   });
 
+  // Do not showcase mappings with a price spread large enough to suggest a
+  // pack-size or product-resolution mismatch. The broader catalogue remains
+  // available to the agent, but public evidence should be conservative.
+  const displayProducts = products.filter(product => {
+    const prices = activeStores.map(store => product.prices[store]).filter(Boolean);
+    const lowest = Math.min(...prices);
+    const highest = Math.max(...prices);
+    return prices.length === activeStores.length && highest / lowest <= 1.6;
+  });
+
   const featured: EvidenceProduct[] = [];
   for (const category of EVIDENCE_CATEGORIES) {
-    const candidate = products.find(product => product.category === category && !featured.includes(product));
+    const candidate = displayProducts.find(product => product.category === category && !featured.includes(product));
     if (candidate) featured.push(candidate);
     if (featured.length === 6) break;
   }
-  for (const product of products) {
+  for (const product of displayProducts) {
     if (featured.length === 6) break;
     if (!featured.includes(product)) featured.push(product);
   }
 
-  const moreEvidence = products.filter(product => !featured.includes(product)).slice(0, 18);
+  const moreEvidence = displayProducts.filter(product => !featured.includes(product)).slice(0, 18);
   const latestObservation = priceRows[0]?.observed_at ?? null;
 
   return {
