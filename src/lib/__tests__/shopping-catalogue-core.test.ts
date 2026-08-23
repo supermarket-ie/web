@@ -100,4 +100,14 @@ describe('shopping catalogue core', () => {
 
     expect(resolveCatalogueRows('chicken', generalRows, 2)[0]?.canonical_name).toBe('Chicken Drumsticks');
   });
+
+  it('infers the intended category from strong catalogue matches', () => {
+    const generalRows: CataloguePriceRow[] = [
+      { canonical_name: 'Milk Chocolate Rice Cakes 100g', category: 'Snacks', store: 'SuperValu', store_product_name: 'Milk Chocolate Rice Cakes 100g', price: 1.25, was_price: null, on_promotion: false },
+      { canonical_name: 'Fresh Whole Milk 2L', category: 'Dairy', store: 'Dunnes', store_product_name: 'Fresh Whole Milk 2L', price: 2.25, was_price: null, on_promotion: false },
+      { canonical_name: 'Fresh Low Fat Milk 2L', category: 'Dairy', store: 'Tesco', store_product_name: 'Fresh Low Fat Milk 2L', price: 2.35, was_price: null, on_promotion: false },
+    ];
+
+    expect(resolveCatalogueRows('milk', generalRows, 3)[0]?.category).toBe('Dairy');
+  });
 });
