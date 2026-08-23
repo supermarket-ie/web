@@ -32,21 +32,27 @@ const STORE_INFO: Record<StoreKey, { name: string; color: string; light: string;
   lidl:      { name: 'Lidl',           color: '#0050AA', light: '#E6F0FC', tagline: 'Weekly specials' },
 };
 
-const BASKET_CATEGORIES = [
+const EVIDENCE_CATEGORIES = [
   'Dairy', 'Bakery', 'Meat', 'Fruit', 'Vegetables',
   'Breakfast', 'Pasta & Rice', 'Tinned', 'Beverages', 'Snacks',
   'Condiments', 'Fish', 'Baking', 'Frozen',
 ];
 
+type EvidenceProduct = {
+  name: string;
+  category: string;
+  prices: Record<string, number>;
+};
+
 async function getComparisonData() {
   // Paginate price observations to get all data
-  let priceRows: { price: number; store_products: unknown }[] = [];
+  let priceRows: { price: number; observed_at: string; store_products: unknown }[] = [];
   let offset = 0;
   const PAGE = 1000;
   while (true) {
     const { data } = await supabaseAdmin
       .from('price_observations')
-      .select('price, store_products(store, products(canonical_name, category))')
+      .select('price, observed_at, store_products(store, products(canonical_name, category))')
       .order('observed_at', { ascending: false })
       .range(offset, offset + PAGE - 1);
     if (!data || data.length === 0) break;
@@ -74,7 +80,6 @@ async function getComparisonData() {
     byProduct.get(name)!.stores.set(store, row.price);
   }
 
-  // Find which stores have meaningful data (>10 products)
   const MAIN_3: StoreKey[] = ['tesco', 'dunnes', 'supervalu'];
   
   // Filter to products available in all 3 main stores
@@ -84,65 +89,57 @@ async function getComparisonData() {
     }
   }
 
-  const storeCounts: Record<string, number> = {};
-  for (const [, { stores }] of byProduct) {
-    for (const store of stores.keys()) {
-      storeCounts[store] = (storeCounts[store] ?? 0) + 1;
-    }
-  }
   // Only compare stores across the same matched product set. Aldi currently has
   // useful live evidence, but not equivalent catalogue coverage on this page;
   // including its partial totals would produce a misleading "cheapest" claim.
-  const activeStores = MAIN_3.filter(s => (storeCounts[s] ?? 0) > 10);
-
-  // Category totals per store (products available in at least 3 stores)
-  const minStoresForComparison = Math.min(3, activeStores.length);
-  const categoryTotals: Record<string, Record<string, number>> = {};
-  const categoryCount: Record<string, number> = {};
-  let overallCount = 0;
-
-  for (const [, { category, stores }] of byProduct) {
-    // Count how many active stores have this product
-    const activeStoresWithProduct = activeStores.filter(s => stores.has(s));
-    if (activeStoresWithProduct.length < minStoresForComparison) continue;
-    if (!BASKET_CATEGORIES.includes(category)) continue;
-
-    if (!categoryTotals[category]) {
-      categoryTotals[category] = {};
-      for (const s of activeStores) categoryTotals[category][s] = 0;
-      categoryCount[category] = 0;
-    }
-
-    for (const s of activeStoresWithProduct) {
-      const price = stores.get(s)!;
-      categoryTotals[category][s] += price;
-    }
-    categoryCount[category]++;
-    overallCount++;
-  }
-
-  // Sample products per category
-  const samples: Record<string, { name: string; prices: Record<string, number> }[]> = {};
+  const activeStores = MAIN_3;
+  const products: EvidenceProduct[] = [];
   for (const [name, { category, stores }] of byProduct) {
-    if (stores.size < 2) continue;
-    if (!BASKET_CATEGORIES.includes(category)) continue;
-    if (!samples[category]) samples[category] = [];
-    if (samples[category].length < 5) {
-      samples[category].push({ name, prices: Object.fromEntries(stores) });
-    }
+    if (!EVIDENCE_CATEGORIES.includes(category)) continue;
+    products.push({ name, category, prices: Object.fromEntries(stores) });
   }
 
-  return { categoryTotals, categoryCount, overallCount, samples, activeStores };
+  // Put familiar household staples first, while keeping the visible examples
+  // varied. This is evidence of the agent's understanding, not a store ranking.
+  const staplePattern = /milk|bread|butter|egg|chicken|beef|banana|apple|potato|pasta|rice|coffee|tea/i;
+  products.sort((a, b) => {
+    const stapleDifference = Number(staplePattern.test(b.name)) - Number(staplePattern.test(a.name));
+    if (stapleDifference) return stapleDifference;
+    return a.name.length - b.name.length || a.name.localeCompare(b.name);
+  });
+
+  const featured: EvidenceProduct[] = [];
+  for (const category of EVIDENCE_CATEGORIES) {
+    const candidate = products.find(product => product.category === category && !featured.includes(product));
+    if (candidate) featured.push(candidate);
+    if (featured.length === 6) break;
+  }
+  for (const product of products) {
+    if (featured.length === 6) break;
+    if (!featured.includes(product)) featured.push(product);
+  }
+
+  const moreEvidence = products.filter(product => !featured.includes(product)).slice(0, 18);
+  const latestObservation = priceRows[0]?.observed_at ?? null;
+
+  return {
+    overallCount: products.length,
+    featured,
+    moreEvidence,
+    activeStores,
+    latestObservation,
+  };
 }
 
 export default async function ComparePage() {
   const data = await getComparisonData();
   if (!data) return <div>Loading...</div>;
 
-  const { categoryTotals, overallCount, samples, activeStores } = data;
+  const { overallCount, featured, moreEvidence, activeStores, latestObservation } = data;
 
-  const now = new Date();
-  const updatedLabel = now.toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' });
+  const updatedLabel = latestObservation
+    ? new Date(latestObservation).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' })
+    : 'recently';
 
   const storeNames = activeStores.map(s => STORE_INFO[s].name).join(', ').replace(/, ([^,]+)$/, ' & $1');
 
@@ -172,69 +169,58 @@ export default async function ComparePage() {
           />
         </div>
 
-        {/* Category breakdown */}
+        {/* Compact, indexable evidence of the data available to the agent. */}
+        <section className="mb-10 border-t border-[#e3e8e4] pt-9" aria-labelledby="catalogue-evidence-heading">
         <div className="mb-5 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
           <div>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
-            <h2 className="text-2xl font-extrabold tracking-[-0.035em] text-[#152219]">Current catalogue evidence</h2>
+            <h2 id="catalogue-evidence-heading" className="text-2xl font-extrabold tracking-[-0.035em] text-[#152219]">What the agent currently understands</h2>
           </div>
-          <p className="max-w-xl text-sm leading-6 text-[#667169]">A live product snapshot the agent can use. Category totals are catalogue observations, not a household shopping recommendation.</p>
+          <p className="max-w-xl text-sm leading-6 text-[#667169]">Examples from {overallCount} products matched across {storeNames}. Prices are evidence the agent can use alongside pack size, preferences, meals and budget.</p>
         </div>
-        <div className="space-y-3 mb-10">
-          {BASKET_CATEGORIES.filter(cat => categoryTotals[cat]).map(cat => {
-            const totals = categoryTotals[cat];
-            // Only show stores that have data in this category
-            const storesWithData = activeStores.filter(s => (totals[s] ?? 0) > 0);
-            const catRanked = [...storesWithData].sort((a, b) => (totals[a] ?? 0) - (totals[b] ?? 0));
-            const catCheapest = catRanked[0];
-            if (!catCheapest) return null;
-            return (
-              <div key={cat} className="rounded-[1.35rem] border border-[#e3e8e4] bg-white p-5 shadow-[0_10px_35px_rgba(25,57,38,0.045)]">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-[#2F2F2E]">{cat}</h3>
-                  <span className="rounded-full bg-[#e5f7eb] px-2.5 py-1 text-[11px] font-bold text-[#397250]">
-                    Lowest matched total: {STORE_INFO[catCheapest].name} {fmt(totals[catCheapest] ?? 0)}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {featured.map(product => (
+            <article key={product.name} className="rounded-[1.25rem] border border-[#e3e8e4] bg-white p-4 shadow-[0_10px_35px_rgba(25,57,38,0.035)]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7d8980]">{product.category}</p>
+              <h3 className="mt-1 min-h-10 text-sm font-semibold leading-5 text-[#253128]">{product.name}</h3>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {activeStores.map(store => (
+                  <span key={store} className="rounded-full bg-[#f2f5f2] px-2.5 py-1 text-[11px] text-[#59645c]">
+                    {STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#253128]">{fmt(product.prices[store])}</strong>
                   </span>
-                </div>
-                <div className="flex gap-2 overflow-x-auto">
-                  {catRanked.map((store, i) => {
-                    const info = STORE_INFO[store];
-                    const isBest = i === 0;
-                    return (
-                      <div key={store} className="flex-1 min-w-0 text-center rounded-xl py-2 px-1"
-                        style={{ background: isBest ? '#eef8f1' : '#f5f8f5' }}>
-                        <div className="text-[11px] font-medium mb-0.5 truncate" style={{ color: isBest ? info.color : '#636E72' }}>
-                          {info.name.split(' ')[0]}
-                        </div>
-                        <div className="text-sm font-bold" style={{ color: isBest ? info.color : '#1D2324' }}>
-                          {fmt(totals[store] ?? 0)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Sample products */}
-                {samples[cat] && (
-                  <div className="mt-3 pt-3 border-t border-[#F0ECE8] space-y-1.5">
-                    {samples[cat].slice(0, 3).map(p => (
-                      <div key={p.name} className="flex items-center justify-between text-xs">
-                        <span className="text-[#5c5b5b] truncate flex-1">{p.name}</span>
-                        <div className="flex gap-2 flex-shrink-0 ml-2 overflow-x-auto">
-                          {activeStores.filter(s => p.prices[s]).map(s => (
-                            <span key={s} className="text-[#2F2F2E] whitespace-nowrap">
-                              <span className="text-[#B2BEC3]">{STORE_INFO[s].name.split(' ')[0]} </span>
-                              {fmt(p.prices[s])}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {moreEvidence.length > 0 && (
+          <details className="group mt-4 rounded-[1.25rem] border border-[#e3e8e4] bg-white">
+            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-[#354139] marker:content-none">
+              <span className="flex items-center justify-between gap-4">
+                View more current price evidence
+                <span aria-hidden="true" className="text-lg font-normal text-[#718077] transition group-open:rotate-45">+</span>
+              </span>
+            </summary>
+            <div className="border-t border-[#edf0ed] px-5 py-2">
+              {moreEvidence.map(product => (
+                <div key={product.name} className="flex flex-col gap-2 border-b border-[#edf0ed] py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#354139]">{product.name}</p>
+                    <p className="text-[11px] text-[#8b958e]">{product.category} · tracked at {storeNames}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667169]">
+                    {activeStores.map(store => (
+                      <span key={store}>{STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#354139]">{fmt(product.prices[store])}</strong></span>
                     ))}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+        <p className="mt-3 text-xs text-[#8b958e]">Latest catalogue observation: {updatedLabel}. Prices can change; the agent checks current evidence when helping with a shop.</p>
+        </section>
 
         {/* CTA */}
         <div className="rounded-[1.75rem] bg-[#0e0e0e] p-8 text-center text-white">
