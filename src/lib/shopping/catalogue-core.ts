@@ -68,6 +68,20 @@ export function resolveCatalogueRows(
 
   const queryNorm = normaliseCatalogueText(query);
   const queryPhrase = ` ${queryNorm} `;
+  const boundaryCategoryCounts = new Map<string, number>();
+  for (const [canonicalName, productRows] of grouped) {
+    const titleCore = stripPackSuffix(normaliseCatalogueText(canonicalName).split(' ').filter(Boolean));
+    const coreHead = titleCore.slice(0, tokens.length);
+    const coreTail = titleCore.slice(-tokens.length);
+    const isBoundaryMatch = tokens.length > 0 && (
+      tokens.every((token, index) => catalogueTokenMatches(coreHead[index] ?? '', token))
+      || tokens.every((token, index) => catalogueTokenMatches(coreTail[index] ?? '', token))
+    );
+    if (!isBoundaryMatch) continue;
+    const category = normaliseCatalogueText(productRows[0]?.category ?? '');
+    if (category) boundaryCategoryCounts.set(category, (boundaryCategoryCounts.get(category) ?? 0) + 1);
+  }
+  const strongestCategoryCount = Math.max(0, ...boundaryCategoryCounts.values());
   const scored: ResolvedProduct[] = [];
 
   for (const [canonicalName, productRows] of grouped) {
@@ -104,6 +118,13 @@ export function resolveCatalogueRows(
     if (isProductHead || isProductTail) {
       score += 10;
     }
+
+    // Infer product-family intent from the catalogue itself. Strong boundary
+    // matches establish the likely category for any query, so common products
+    // win over incidental compounds without maintaining a vocabulary by hand.
+    const category = normaliseCatalogueText(productRows[0]?.category ?? '');
+    const categoryCount = boundaryCategoryCounts.get(category) ?? 0;
+    if (strongestCategoryCount > 0) score += (categoryCount / strongestCategoryCount) * 8;
 
     // When relevance is otherwise equal, a concise canonical name is normally
     // the user's intended staple rather than a product that merely mentions it.
