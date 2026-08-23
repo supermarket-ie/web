@@ -95,8 +95,13 @@ export function resolveCatalogueRows(
     // such as "milk chocolate cakes" or "garlic butter chicken" without a
     // hard-coded list of known groceries.
     const titleCore = stripPackSuffix(canonicalTokens);
+    const coreHead = titleCore.slice(0, tokens.length);
     const coreTail = titleCore.slice(-tokens.length);
-    if (tokens.length > 0 && tokens.every((token, index) => catalogueTokenMatches(coreTail[index] ?? '', token))) {
+    const isProductHead = tokens.length > 0
+      && tokens.every((token, index) => catalogueTokenMatches(coreHead[index] ?? '', token));
+    const isProductTail = tokens.length > 0
+      && tokens.every((token, index) => catalogueTokenMatches(coreTail[index] ?? '', token));
+    if (isProductHead || isProductTail) {
       score += 10;
     }
 
