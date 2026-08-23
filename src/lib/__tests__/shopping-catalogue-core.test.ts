@@ -77,4 +77,18 @@ describe('shopping catalogue core', () => {
 
     expect(resolveCatalogueRows(query, stapleRows, 2)[0]?.canonical_name).toBe(expected);
   });
+
+  it.each([
+    ['cheese', 'Mature Cheddar Cheese 400g', 'Vanilla Cheesecake'],
+    ['coffee', 'Ground Coffee 227g', 'Coffee Chocolate Biscuits'],
+    ['shampoo', 'Moisturising Shampoo 500ml', 'Shampoo & Conditioner Gift Set'],
+    ['eggs', 'Free Range Eggs 12 Pack', 'Egg Noodles 250g'],
+  ])('uses general title semantics for unseen search %s', (query, expected, incidental) => {
+    const generalRows: CataloguePriceRow[] = [
+      { canonical_name: incidental, category: 'Other', store: 'SuperValu', store_product_name: incidental, price: 0.99, was_price: null, on_promotion: false },
+      { canonical_name: expected, category: 'Other', store: 'Dunnes', store_product_name: expected, price: 3.49, was_price: null, on_promotion: false },
+    ];
+
+    expect(resolveCatalogueRows(query, generalRows, 2)[0]?.canonical_name).toBe(expected);
+  });
 });
