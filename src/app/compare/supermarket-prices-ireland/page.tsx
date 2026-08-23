@@ -183,14 +183,8 @@ export default async function ComparePage() {
         </div>
 
         {/* Compact, indexable evidence of the data available to the agent. */}
-        <section className="mb-10 border-t border-[#e3e8e4] pt-9" aria-labelledby="catalogue-evidence-heading">
-        <div className="mb-5 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
-          <div>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
-            <h2 id="catalogue-evidence-heading" className="text-2xl font-extrabold tracking-[-0.035em] text-[#152219]">What the agent currently understands</h2>
-          </div>
-          <p className="max-w-xl text-sm leading-6 text-[#667169]">More than 686 products are already matched in the Supermarket.ie catalogue. These examples show current comparable observations across {storeNames}; the agent also uses pack size, preferences, meals and budget.</p>
-        </div>
+        <section className="mb-10 border-t border-[#e3e8e4] pt-9" aria-label="Current supermarket price evidence">
+        <p className="mb-5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {featured.map(product => (
             <article key={product.name} className="rounded-[1.25rem] border border-[#e3e8e4] bg-white p-4 shadow-[0_10px_35px_rgba(25,57,38,0.035)]">
