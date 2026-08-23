@@ -27,10 +27,11 @@ export async function GET(request: NextRequest) {
     return response;
   }
 
-  const target = new URL('/list', request.url);
+  const next = request.nextUrl.searchParams.get('next');
+  const target = new URL(next === 'home' ? '/' : '/list', request.url);
   const listId = request.nextUrl.searchParams.get('list');
   const intent = request.nextUrl.searchParams.get('intent');
-  if (listId) target.searchParams.set('list', listId);
+  if (listId && next !== 'home') target.searchParams.set('list', listId);
   if (intent) target.searchParams.set('intent', intent);
 
   return setSessionCookie(NextResponse.redirect(target), token);
