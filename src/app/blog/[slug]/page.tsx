@@ -129,7 +129,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   });
 
   return (
-    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
+    <div className="min-h-screen bg-[#f8faf8]">
       <SiteHeader />
 
       <main className="max-w-3xl mx-auto px-6 pb-16">
