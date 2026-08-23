@@ -5,6 +5,7 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { supabaseAdmin } from '@/lib/supabase';
 import { storeDisplayName } from '@/lib/store-utils';
+import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
 export const revalidate = 43200; // 12h — matches scrape frequency
 export const dynamicParams = true; // ISR for slugs not pre-built
@@ -360,6 +361,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               </span>
             )}
           </div>
+        </div>
+
+        <div className="mb-6">
+          <AgentLandingCTA
+            context="product"
+            title={`What would you like to do with ${product.canonical_name}?`}
+            description="Ask for an alternative, check whether it suits a preference, add it to a shop or have the agent watch it for a useful change."
+            prompt={`Help me choose and use ${product.canonical_name} in my household shop`}
+          />
         </div>
 
         {product.description && (
