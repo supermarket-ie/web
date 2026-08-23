@@ -6,6 +6,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { notFound } from 'next/navigation';
 import { POSTS, getPost, type Section } from '@/lib/blog';
 import { articleJsonLd } from '@/lib/structured-data';
+import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
 export const revalidate = 86400;
 
@@ -149,6 +150,15 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           <p className="text-[#5c5b5b]">{post.description}</p>
         </div>
 
+        <div className="mb-8">
+          <AgentLandingCTA
+            context="article"
+            title="Turn this guide into help for your own household"
+            description="Ask Supermarket.ie to apply the information to your products, meals, preferences or weekly budget."
+            prompt={`Apply this guide to my household: ${post.title}`}
+          />
+        </div>
+
         {/* Post content */}
         <article>
           {post.content.map((section, i) => renderSection(section, i))}
@@ -157,14 +167,14 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         {/* AI agent CTA */}
         <div className="mt-10 rounded-2xl p-6 text-center" style={{ background: '#EAE7E7' }}>
           <div className="text-2xl mb-2">🛒</div>
-          <h3 className="font-bold text-[#2F2F2E] mb-1">Let your AI agent handle this →</h3>
+          <h3 className="font-bold text-[#2F2F2E] mb-1">Continue with your household agent</h3>
           <p className="text-sm text-[#5c5b5b] mb-4">
-            Tell it what you need this week. It tracks prices, spots deals, and builds your list automatically.
+            Ask it to prepare, adjust, save or monitor something useful from what you have just read.
           </p>
           <Link href="/"
             className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]"
             style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
-            Try the AI planner free →
+            Ask Supermarket.ie →
           </Link>
         </div>
 
