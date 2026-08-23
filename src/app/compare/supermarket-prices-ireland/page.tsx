@@ -100,9 +100,13 @@ async function getComparisonData() {
   }
 
   // Put familiar household staples first, while keeping the visible examples
-  // varied. This is evidence of the agent's understanding, not a store ranking.
+  // varied. Prefer mappings that identify a pack size so the visible evidence
+  // is more useful than a broad product-family comparison.
   const staplePattern = /milk|bread|butter|egg|chicken|beef|banana|apple|potato|pasta|rice|coffee|tea/i;
+  const packSizePattern = /\b\d+(?:\.\d+)?\s?(?:g|kg|ml|l|pack|pk)\b/i;
   products.sort((a, b) => {
+    const packSizeDifference = Number(packSizePattern.test(b.name)) - Number(packSizePattern.test(a.name));
+    if (packSizeDifference) return packSizeDifference;
     const stapleDifference = Number(staplePattern.test(b.name)) - Number(staplePattern.test(a.name));
     if (stapleDifference) return stapleDifference;
     return a.name.length - b.name.length || a.name.localeCompare(b.name);
