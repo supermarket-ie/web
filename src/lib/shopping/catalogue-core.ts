@@ -1,1 +1,112 @@
-aW1wb3J0IHR5cGUgeyBSZXNvbHZlZFByb2R1Y3QsIFJldGFpbGVyT2ZmZXIgfSBmcm9tICcuL2NvbnRyYWN0cyc7CgpleHBvcnQgdHlwZSBDYXRhbG9ndWVQcmljZVJvdyA9IHsKICBjYW5vbmljYWxfbmFtZTogc3RyaW5nOwogIGNhdGVnb3J5OiBzdHJpbmcgfCBudWxsOwogIHN0b3JlOiBzdHJpbmc7CiAgc3RvcmVfcHJvZHVjdF9uYW1lOiBzdHJpbmc7CiAgcHJpY2U6IG51bWJlcjsKICB3YXNfcHJpY2U6IG51bWJlciB8IG51bGw7CiAgb25fcHJvbW90aW9uOiBib29sZWFuIHwgbnVsbDsKfTsKCmV4cG9ydCBmdW5jdGlvbiBub3JtYWxpc2VDYXRhbG9ndWVUZXh0KHZhbHVlOiBzdHJpbmcpOiBzdHJpbmcgewogIHJldHVybiB2YWx1ZQogICAgLnRvTG93ZXJDYXNlKCkKICAgIC5yZXBsYWNlKC9bXmEtejAtOV0rL2csICcgJykKICAgIC50cmltKCkKICAgIC5yZXBsYWNlKC9ccysvZywgJyAnKTsKfQoKZXhwb3J0IGZ1bmN0aW9uIGdldENhdGFsb2d1ZVF1ZXJ5VG9rZW5zKHF1ZXJ5OiBzdHJpbmcpOiBzdHJpbmdbXSB7CiAgcmV0dXJuIG5vcm1hbGlzZUNhdGFsb2d1ZVRleHQocXVlcnkpCiAgICAuc3BsaXQoJyAnKQogICAgLmZpbHRlcih0b2tlbiA9PiB0b2tlbi5sZW5ndGggPj0gMik7Cn0KCmV4cG9ydCBmdW5jdGlvbiBnZXRDYXRhbG9ndWVTZWVkKHF1ZXJ5OiBzdHJpbmcpOiBzdHJpbmcgfCBudWxsIHsKICBjb25zdCB0b2tlbnMgPSBnZXRDYXRhbG9ndWVRdWVyeVRva2VucyhxdWVyeSk7CiAgaWYgKCF0b2tlbnMubGVuZ3RoKSByZXR1cm4gbnVsbDsKICByZXR1cm4gWy4uLnRva2Vuc10uc29ydCgoYSwgYikgPT4gYi5sZW5ndGggLSBhLmxlbmd0aClbMF0gPz8gbnVsbDsKfQoKZXhwb3J0IGZ1bmN0aW9uIHJlc29sdmVDYXRhbG9ndWVSb3dzKAogIHF1ZXJ5OiBzdHJpbmcsCiAgcm93czogQ2F0YWxvZ3VlUHJpY2VSb3dbXSwKICBsaW1pdCA9IDUsCik6IFJlc29sdmVkUHJvZHVjdFtdIHsKICBjb25zdCB0b2tlbnMgPSBnZXRDYXRhbG9ndWVRdWVyeVRva2VucyhxdWVyeSk7CiAgaWYgKCF0b2tlbnMubGVuZ3RoKSByZXR1cm4gW107CgogIGNvbnN0IGdyb3VwZWQgPSBuZXcgTWFwPHN0cmluZywgQ2F0YWxvZ3VlUHJpY2VSb3dbXT4oKTsKICBmb3IgKGNvbnN0IHJvdyBvZiByb3dzKSB7CiAgICBjb25zdCBleGlzdGluZyA9IGdyb3VwZWQuZ2V0KHJvdy5jYW5vbmljYWxfbmFtZSkgPz8gW107CiAgICBleGlzdGluZy5wdXNoKHJvdyk7CiAgICBncm91cGVkLnNldChyb3cuY2Fub25pY2FsX25hbWUsIGV4aXN0aW5nKTsKICB9CgogIGNvbnN0IHF1ZXJ5Tm9ybSA9IG5vcm1hbGlzZUNhdGFsb2d1ZVRleHQocXVlcnkpOwogIGNvbnN0IHF1ZXJ5UGhyYXNlID0gYCAke3F1ZXJ5Tm9ybX0gYDsKICBjb25zdCBzdGFwbGVDYXRlZ29yaWVzOiBSZWNvcmQ8c3RyaW5nLCBzdHJpbmc+ID0gewogICAgYnJlYWQ6ICdiYWtlcnknLAogICAgYnV0dGVyOiAnZGFpcnknLAogICAgbWlsazogJ2RhaXJ5JywKICB9OwogIGNvbnN0IHNjb3JlZDogUmVzb2x2ZWRQcm9kdWN0W10gPSBbXTsKCiAgZm9yIChjb25zdCBbY2Fub25pY2FsTmFtZSwgcHJvZHVjdFJvd3NdIG9mIGdyb3VwZWQpIHsKICAgIGNvbnN0IGNhbm9uaWNhbE5vcm0gPSBub3JtYWxpc2VDYXRhbG9ndWVUZXh0KGNhbm9uaWNhbE5hbWUpOwogICAgY29uc3QgY2Fub25pY2FsVG9rZW5zID0gY2Fub25pY2FsTm9ybS5zcGxpdCgnICcpLmZpbHRlcihCb29sZWFuKTsKICAgIGNvbnN0IHBhZGRlZENhbm9uaWNhbCA9IGAgJHtjYW5vbmljYWxOb3JtfSBgOwogICAgY29uc3Qgc3RvcmVOYW1lcyA9IHByb2R1Y3RSb3dzCiAgICAgIC5tYXAocm93ID0+IG5vcm1hbGlzZUNhdGFsb2d1ZVRleHQocm93LnN0b3JlX3Byb2R1Y3RfbmFtZSkpCiAgICAgIC5qb2luKCcgJyk7CiAgICBjb25zdCBoYXlzdGFjayA9IGAke2Nhbm9uaWNhbE5vcm19ICR7c3RvcmVOYW1lc31gOwoKICAgIGxldCBzY29yZSA9IDA7CiAgICBmb3IgKGNvbnN0IHRva2VuIG9mIHRva2VucykgewogICAgICBpZiAoY2Fub25pY2FsVG9rZW5zLmluY2x1ZGVzKHRva2VuKSkgc2NvcmUgKz0gODsKICAgICAgZWxzZSBpZiAoY2Fub25pY2FsTm9ybS5pbmNsdWRlcyh0b2tlbikpIHNjb3JlICs9IDI7CiAgICAgIGVsc2UgaWYgKGhheXN0YWNrLmluY2x1ZGVzKHRva2VuKSkgc2NvcmUgKz0gMTsKICAgIH0KICAgIGlmIChjYW5vbmljYWxOb3JtID09PSBxdWVyeU5vcm0pIHNjb3JlICs9IDMwOwogICAgaWYgKHBhZGRlZENhbm9uaWNhbC5pbmNsdWRlcyhxdWVyeVBocmFzZSkpIHNjb3JlICs9IDg7CiAgICBpZiAoY2Fub25pY2FsTm9ybS5zdGFydHNXaXRoKGAke3F1ZXJ5Tm9ybX0gYCkgfHwgY2Fub25pY2FsTm9ybS5lbmRzV2l0aChgICR7cXVlcnlOb3JtfWApKSBzY29yZSArPSAzOwoKICAgIGNvbnN0IHByZWZlcnJlZENhdGVnb3J5ID0gdG9rZW5zLmxlbmd0aCA9PT0gMSA/IHN0YXBsZUNhdGVnb3JpZXNbcXVlcnlOb3JtXSA6IHVuZGVmaW5lZDsKICAgIGlmIChwcmVmZXJyZWRDYXRlZ29yeSAmJiBub3JtYWxpc2VDYXRhbG9ndWVUZXh0KHByb2R1Y3RSb3dzWzBdPy5jYXRlZ29yeSA/PyAnJykgPT09IHByZWZlcnJlZENhdGVnb3J5KSB7CiAgICAgIHNjb3JlICs9IDg7CiAgICB9CgogICAgLy8gV2hlbiByZWxldmFuY2UgaXMgb3RoZXJ3aXNlIGVxdWFsLCBhIGNvbmNpc2UgY2Fub25pY2FsIG5hbWUgaXMgbm9ybWFsbHkKICAgIC8vIHRoZSB1c2VyJ3MgaW50ZW5kZWQgc3RhcGxlIHJhdGhlciB0aGFuIGEgcHJvZHVjdCB0aGF0IG1lcmVseSBtZW50aW9ucyBpdC4KICAgIHNjb3JlIC09IE1hdGgubWF4KDAsIGNhbm9uaWNhbFRva2Vucy5sZW5ndGggLSB0b2tlbnMubGVuZ3RoKSAqIDAuMTsKCiAgICBjb25zdCBtYXRjaGVkVG9rZW5zID0gdG9rZW5zLmZpbHRlcih0b2tlbiA9PiBoYXlzdGFjay5pbmNsdWRlcyh0b2tlbikpLmxlbmd0aDsKICAgIGlmIChtYXRjaGVkVG9rZW5zIDwgTWF0aC5jZWlsKHRva2Vucy5sZW5ndGggKiAwLjYpKSBjb250aW51ZTsKCiAgICBjb25zdCBzb3J0ZWRSb3dzID0gWy4uLnByb2R1Y3RSb3dzXS5zb3J0KChhLCBiKSA9PiBOdW1iZXIoYS5wcmljZSkgLSBOdW1iZXIoYi5wcmljZSkpOwogICAgY29uc3QgYmVzdCA9IHNvcnRlZFJvd3NbMF07CiAgICBjb25zdCBvZmZlcnM6IFJldGFpbGVyT2ZmZXJbXSA9IHNvcnRlZFJvd3MubWFwKHJvdyA9PiAoewogICAgICByZXRhaWxlcjogcm93LnN0b3JlLAogICAgICByZXRhaWxlcl9wcm9kdWN0X25hbWU6IHJvdy5zdG9yZV9wcm9kdWN0X25hbWUsCiAgICAgIHByaWNlOiBOdW1iZXIocm93LnByaWNlKSwKICAgICAgd2FzX3ByaWNlOiByb3cud2FzX3ByaWNlID09IG51bGwgPyBudWxsIDogTnVtYmVyKHJvdy53YXNfcHJpY2UpLAogICAgICBvbl9wcm9tb3Rpb246IHJvdy5vbl9wcm9tb3Rpb24gPT09IHRydWUsCiAgICB9KSk7CgogICAgc2NvcmVkLnB1c2goewogICAgICBjYW5vbmljYWxfbmFtZTogY2Fub25pY2FsTmFtZSwKICAgICAgY2F0ZWdvcnk6IHByb2R1Y3RSb3dzWzBdPy5jYXRlZ29yeSA/PyBudWxsLAogICAgICBzY29yZSwKICAgICAgYmVzdF9wcmljZTogYmVzdCA/IE51bWJlcihiZXN0LnByaWNlKSA6IG51bGwsCiAgICAgIGJlc3Rfc3RvcmU6IGJlc3Q/LnN0b3JlID8/IG51bGwsCiAgICAgIG9uX3Byb21vdGlvbjogcHJvZHVjdFJvd3Muc29tZShyb3cgPT4gcm93Lm9uX3Byb21vdGlvbiA9PT0gdHJ1ZSksCiAgICAgIG9mZmVycywKICAgIH0pOwogIH0KCiAgcmV0dXJuIHNjb3JlZAogICAgLnNvcnQoKGEsIGIpID0+IGIuc2NvcmUgLSBhLnNjb3JlIHx8IChhLmJlc3RfcHJpY2UgPz8gSW5maW5pdHkpIC0gKGIuYmVzdF9wcmljZSA/PyBJbmZpbml0eSkpCiAgICAuc2xpY2UoMCwgbGltaXQpOwp9Cg==
+import type { ResolvedProduct, RetailerOffer } from './contracts';
+
+export type CataloguePriceRow = {
+  canonical_name: string;
+  category: string | null;
+  store: string;
+  store_product_name: string;
+  price: number;
+  was_price: number | null;
+  on_promotion: boolean | null;
+};
+
+export function normaliseCatalogueText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+export function getCatalogueQueryTokens(query: string): string[] {
+  return normaliseCatalogueText(query)
+    .split(' ')
+    .filter(token => token.length >= 2);
+}
+
+export function getCatalogueSeed(query: string): string | null {
+  const tokens = getCatalogueQueryTokens(query);
+  if (!tokens.length) return null;
+  return [...tokens].sort((a, b) => b.length - a.length)[0] ?? null;
+}
+
+export function resolveCatalogueRows(
+  query: string,
+  rows: CataloguePriceRow[],
+  limit = 5,
+): ResolvedProduct[] {
+  const tokens = getCatalogueQueryTokens(query);
+  if (!tokens.length) return [];
+
+  const grouped = new Map<string, CataloguePriceRow[]>();
+  for (const row of rows) {
+    const existing = grouped.get(row.canonical_name) ?? [];
+    existing.push(row);
+    grouped.set(row.canonical_name, existing);
+  }
+
+  const queryNorm = normaliseCatalogueText(query);
+  const queryPhrase = ` ${queryNorm} `;
+  const stapleCategories: Record<string, string> = {
+    bread: 'bakery',
+    butter: 'dairy',
+    milk: 'dairy',
+  };
+  const scored: ResolvedProduct[] = [];
+
+  for (const [canonicalName, productRows] of grouped) {
+    const canonicalNorm = normaliseCatalogueText(canonicalName);
+    const canonicalTokens = canonicalNorm.split(' ').filter(Boolean);
+    const paddedCanonical = ` ${canonicalNorm} `;
+    const storeNames = productRows
+      .map(row => normaliseCatalogueText(row.store_product_name))
+      .join(' ');
+    const haystack = `${canonicalNorm} ${storeNames}`;
+
+    let score = 0;
+    for (const token of tokens) {
+      if (canonicalTokens.includes(token)) score += 8;
+      else if (canonicalNorm.includes(token)) score += 2;
+      else if (haystack.includes(token)) score += 1;
+    }
+    if (canonicalNorm === queryNorm) score += 30;
+    if (paddedCanonical.includes(queryPhrase)) score += 8;
+    if (canonicalNorm.startsWith(`${queryNorm} `) || canonicalNorm.endsWith(` ${queryNorm}`)) score += 3;
+
+    const preferredCategory = tokens.length === 1 ? stapleCategories[queryNorm] : undefined;
+    if (preferredCategory && normaliseCatalogueText(productRows[0]?.category ?? '') === preferredCategory) {
+      score += 8;
+    }
+
+    // When relevance is otherwise equal, a concise canonical name is normally
+    // the user's intended staple rather than a product that merely mentions it.
+    score -= Math.max(0, canonicalTokens.length - tokens.length) * 0.1;
+
+    const matchedTokens = tokens.filter(token => haystack.includes(token)).length;
+    if (matchedTokens < Math.ceil(tokens.length * 0.6)) continue;
+
+    const sortedRows = [...productRows].sort((a, b) => Number(a.price) - Number(b.price));
+    const best = sortedRows[0];
+    const offers: RetailerOffer[] = sortedRows.map(row => ({
+      retailer: row.store,
+      retailer_product_name: row.store_product_name,
+      price: Number(row.price),
+      was_price: row.was_price == null ? null : Number(row.was_price),
+      on_promotion: row.on_promotion === true,
+    }));
+
+    scored.push({
+      canonical_name: canonicalName,
+      category: productRows[0]?.category ?? null,
+      score,
+      best_price: best ? Number(best.price) : null,
+      best_store: best?.store ?? null,
+      on_promotion: productRows.some(row => row.on_promotion === true),
+      offers,
+    });
+  }
+
+  return scored
+    .sort((a, b) => b.score - a.score || (a.best_price ?? Infinity) - (b.best_price ?? Infinity))
+    .slice(0, limit);
+}
