@@ -143,6 +143,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const [error, setError] = useState('');
   const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const landingPromptHandled = useRef(false);
 
   const agent = useEveAgent({
     initialEvents: saved.events ?? [],
@@ -219,6 +220,19 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
     setError('');
     await agent.send([{ type: 'text', text: message }]);
   }
+
+  useEffect(() => {
+    if (landingPromptHandled.current || busy || messages.length > 0) return;
+    const prompt = new URLSearchParams(window.location.search).get('agent_prompt')?.trim();
+    if (!prompt) return;
+
+    landingPromptHandled.current = true;
+    const cleanUrl = `${window.location.pathname}${window.location.hash}`;
+    window.history.replaceState({}, '', cleanUrl);
+    setInput('');
+    setError('');
+    void agent.send([{ type: 'text', text: prompt }]);
+  }, [agent, busy, messages.length]);
 
   if (isEmpty) {
     return (

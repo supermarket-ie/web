@@ -3,19 +3,20 @@ import Link from 'next/link';
 import { supabaseAdmin } from '@/lib/supabase';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
 export const revalidate = 43200; // Revalidate every 12 hours
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export const metadata: Metadata = {
-  title: 'Supermarket Price Comparison Ireland — Tesco, Dunnes, SuperValu, Aldi, Lidl',
-  description: 'Compare grocery prices across all 5 major Irish supermarkets: Tesco, Dunnes Stores, SuperValu, Aldi & Lidl. See which is cheapest for your weekly shop with live price data.',
+  title: 'Supermarket Price Comparison Ireland | Ask Supermarket.ie',
+  description: 'Ask Ireland’s supermarket shopping agent to find products, prepare a household shop and use current Tesco, Dunnes, SuperValu and Aldi price evidence in context.',
   keywords: ['supermarket prices Ireland', 'cheapest supermarket Ireland', 'Tesco vs Dunnes Ireland', 'Aldi prices Ireland', 'Lidl prices Ireland', 'grocery comparison Ireland', 'SuperValu price comparison'],
   alternates: { canonical: `${BASE_URL}/compare/supermarket-prices-ireland` },
   openGraph: {
-    title: 'Supermarket Price Comparison Ireland — Which is Cheapest?',
-    description: 'Live prices compared across Tesco, Dunnes, SuperValu, Aldi & Lidl. Updated twice weekly with real prices.',
+    title: 'Supermarket.ie — Ireland’s household shopping agent',
+    description: 'Ask for products, meals, a household shop or a budget. Supermarket.ie uses current Irish supermarket data to help.',
   },
 };
 
@@ -31,23 +32,27 @@ const STORE_INFO: Record<StoreKey, { name: string; color: string; light: string;
   lidl:      { name: 'Lidl',           color: '#0050AA', light: '#E6F0FC', tagline: 'Weekly specials' },
 };
 
-const ALL_STORES: StoreKey[] = ['tesco', 'dunnes', 'supervalu', 'aldi', 'lidl'];
-
-const BASKET_CATEGORIES = [
+const EVIDENCE_CATEGORIES = [
   'Dairy', 'Bakery', 'Meat', 'Fruit', 'Vegetables',
   'Breakfast', 'Pasta & Rice', 'Tinned', 'Beverages', 'Snacks',
   'Condiments', 'Fish', 'Baking', 'Frozen',
 ];
 
+type EvidenceProduct = {
+  name: string;
+  category: string;
+  prices: Record<string, number>;
+};
+
 async function getComparisonData() {
   // Paginate price observations to get all data
-  let priceRows: { price: number; store_products: unknown }[] = [];
+  let priceRows: { price: number; observed_at: string; store_products: unknown }[] = [];
   let offset = 0;
   const PAGE = 1000;
   while (true) {
     const { data } = await supabaseAdmin
       .from('price_observations')
-      .select('price, store_products(store, products(canonical_name, category))')
+      .select('price, observed_at, store_products(store, products(canonical_name, category))')
       .order('observed_at', { ascending: false })
       .range(offset, offset + PAGE - 1);
     if (!data || data.length === 0) break;
@@ -75,7 +80,6 @@ async function getComparisonData() {
     byProduct.get(name)!.stores.set(store, row.price);
   }
 
-  // Find which stores have meaningful data (>10 products)
   const MAIN_3: StoreKey[] = ['tesco', 'dunnes', 'supervalu'];
   
   // Filter to products available in all 3 main stores
@@ -85,202 +89,159 @@ async function getComparisonData() {
     }
   }
 
-  const storeCounts: Record<string, number> = {};
-  for (const [, { stores }] of byProduct) {
-    for (const store of stores.keys()) {
-      storeCounts[store] = (storeCounts[store] ?? 0) + 1;
-    }
-  }
-  const activeStores = ALL_STORES.filter(s => (storeCounts[s] ?? 0) > 10);
-
-  // Category totals per store (products available in at least 3 stores)
-  const minStoresForComparison = Math.min(3, activeStores.length);
-  const categoryTotals: Record<string, Record<string, number>> = {};
-  const categoryCount: Record<string, number> = {};
-  const overallTotals: Record<string, number> = {};
-  for (const s of activeStores) overallTotals[s] = 0;
-  let overallCount = 0;
-
-  for (const [, { category, stores }] of byProduct) {
-    // Count how many active stores have this product
-    const activeStoresWithProduct = activeStores.filter(s => stores.has(s));
-    if (activeStoresWithProduct.length < minStoresForComparison) continue;
-    if (!BASKET_CATEGORIES.includes(category)) continue;
-
-    if (!categoryTotals[category]) {
-      categoryTotals[category] = {};
-      for (const s of activeStores) categoryTotals[category][s] = 0;
-      categoryCount[category] = 0;
-    }
-
-    for (const s of activeStoresWithProduct) {
-      const price = stores.get(s)!;
-      categoryTotals[category][s] += price;
-      overallTotals[s] += price;
-    }
-    categoryCount[category]++;
-    overallCount++;
-  }
-
-  // Sample products per category
-  const samples: Record<string, { name: string; prices: Record<string, number> }[]> = {};
+  // Only compare stores across the same matched product set. Aldi currently has
+  // useful live evidence, but not equivalent catalogue coverage on this page;
+  // including its partial totals would produce a misleading "cheapest" claim.
+  const activeStores = MAIN_3;
+  const products: EvidenceProduct[] = [];
   for (const [name, { category, stores }] of byProduct) {
-    if (stores.size < 2) continue;
-    if (!BASKET_CATEGORIES.includes(category)) continue;
-    if (!samples[category]) samples[category] = [];
-    if (samples[category].length < 5) {
-      samples[category].push({ name, prices: Object.fromEntries(stores) });
-    }
+    if (!EVIDENCE_CATEGORIES.includes(category)) continue;
+    products.push({ name, category, prices: Object.fromEntries(stores) });
   }
 
-  return { categoryTotals, categoryCount, overallTotals, overallCount, samples, activeStores };
+  // Put familiar household staples first, while keeping the visible examples
+  // varied. Prefer mappings that identify a pack size so the visible evidence
+  // is more useful than a broad product-family comparison.
+  const staplePattern = /milk|bread|butter|egg|chicken|beef|banana|apple|potato|pasta|rice|coffee|tea/i;
+  const packSizePattern = /\b\d+(?:\.\d+)?\s?(?:g|kg|ml|l|pack|pk)\b/i;
+  products.sort((a, b) => {
+    const packSizeDifference = Number(packSizePattern.test(b.name)) - Number(packSizePattern.test(a.name));
+    if (packSizeDifference) return packSizeDifference;
+    const stapleDifference = Number(staplePattern.test(b.name)) - Number(staplePattern.test(a.name));
+    if (stapleDifference) return stapleDifference;
+    return a.name.length - b.name.length || a.name.localeCompare(b.name);
+  });
+
+  // Do not showcase mappings with a price spread large enough to suggest a
+  // pack-size or product-resolution mismatch. The broader catalogue remains
+  // available to the agent, but public evidence should be conservative.
+  const displayProducts = products.filter(product => {
+    const prices = activeStores.map(store => product.prices[store]).filter(Boolean);
+    const lowest = Math.min(...prices);
+    const highest = Math.max(...prices);
+    return prices.length === activeStores.length && highest / lowest <= 1.6;
+  });
+
+  const featured: EvidenceProduct[] = [];
+  for (const category of EVIDENCE_CATEGORIES) {
+    const candidate = displayProducts.find(product => product.category === category && !featured.includes(product));
+    if (candidate) featured.push(candidate);
+    if (featured.length === 6) break;
+  }
+  for (const product of displayProducts) {
+    if (featured.length === 6) break;
+    if (!featured.includes(product)) featured.push(product);
+  }
+
+  const moreEvidence = displayProducts.filter(product => !featured.includes(product)).slice(0, 18);
+  const latestObservation = priceRows[0]?.observed_at ?? null;
+
+  return {
+    featured,
+    moreEvidence,
+    activeStores,
+    latestObservation,
+  };
 }
 
 export default async function ComparePage() {
   const data = await getComparisonData();
   if (!data) return <div>Loading...</div>;
 
-  const { categoryTotals, overallTotals, overallCount, samples, activeStores } = data;
+  const { featured, moreEvidence, activeStores, latestObservation } = data;
 
-  // Rank stores by overall total (only stores with data)
-  const ranked = [...activeStores].sort((a, b) => (overallTotals[a] ?? 0) - (overallTotals[b] ?? 0));
-  const cheapest = ranked[0];
-  const saving = (overallTotals[ranked[ranked.length - 1]] ?? 0) - (overallTotals[cheapest] ?? 0);
-
-  const now = new Date();
-  const updatedLabel = now.toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' });
+  const updatedLabel = latestObservation
+    ? new Date(latestObservation).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' })
+    : 'recently';
 
   const storeNames = activeStores.map(s => STORE_INFO[s].name).join(', ').replace(/, ([^,]+)$/, ' & $1');
 
   return (
-    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
+    <div className="min-h-screen bg-[#f8faf8]">
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
         {/* Hero */}
-        <div className="pt-10 pb-8">
-          <div className="text-xs font-semibold text-[#006A35] uppercase tracking-widest mb-3">Live Price Comparison · Ireland</div>
-          <h1 className="text-3xl font-bold text-[#2F2F2E] mb-3 leading-tight">
-            Supermarket Price Comparison Ireland<br/>
-            <span className="text-[#006A35]">Which is cheapest?</span>
+        <div className="pt-12 pb-9 sm:pt-16">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#e5f7eb] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#397250]">Live Irish supermarket intelligence</div>
+          <h1 className="mb-5 max-w-4xl text-balance text-[clamp(2.4rem,5vw,4.25rem)] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#152219]">
+            Your supermarket shopping agent for Ireland
           </h1>
-          <p className="text-[#5c5b5b] text-base max-w-xl">
-            Live prices compared across {storeNames} in Ireland.
-            Based on {overallCount} products. Last updated {updatedLabel}.
+          <p className="max-w-2xl text-base leading-7 text-[#667169] sm:text-lg">
+            Ask for a product, meal, household shop or budget. Supermarket.ie uses current evidence from {storeNames} to work out what is useful for you—not just which single price is lowest.
           </p>
+          <p className="mt-3 text-xs font-medium text-[#8b958e]">Current price observations across {storeNames} · Updated {updatedLabel}</p>
         </div>
 
-        {/* Winner banner */}
-        <div
-          className="rounded-2xl p-6 mb-8 text-white"
-          style={{ background: STORE_INFO[cheapest].color }}
-        >
-          <div className="text-sm opacity-80 mb-1 font-medium">Cheapest overall basket</div>
-          <div className="text-3xl font-bold mb-1">{STORE_INFO[cheapest].name}</div>
-          <div className="text-lg opacity-90">
-            {fmt(overallTotals[cheapest])} for a standard weekly basket
-          </div>
-          {saving > 0.01 && (
-            <div className="mt-3 inline-block bg-white/20 rounded-xl px-4 py-2">
-              <span className="font-bold">{fmt(saving)} cheaper</span> than the most expensive option
-            </div>
-          )}
+        <div className="mb-10">
+          <AgentLandingCTA
+            context="comparison"
+            title="Tell us what your household actually needs"
+            description="A useful shop depends on pack sizes, preferences, meals, budget and what is worth buying where. Start with your real request and let the agent use the price data in context."
+            prompt="Help me prepare this week’s household shop"
+          />
         </div>
 
-        {/* Store totals grid */}
-        <div className={`grid gap-3 mb-10`} style={{ gridTemplateColumns: `repeat(${Math.min(ranked.length, 5)}, minmax(0, 1fr))` }}>
-          {ranked.map((store, i) => {
-            const info = STORE_INFO[store];
-            const isCheapest = i === 0;
-            return (
-              <div key={store} className="rounded-2xl p-4 border-2 text-center"
-                style={{ borderColor: isCheapest ? info.color : '#E8E2DC', background: isCheapest ? info.light : '#fff' }}>
-                <div className="font-bold text-sm mb-2" style={{ color: isCheapest ? info.color : '#1D2324' }}>{info.name}</div>
-                <div className="text-2xl font-bold mb-1" style={{ color: isCheapest ? info.color : '#1D2324' }}>
-                  {fmt(overallTotals[store] ?? 0)}
-                </div>
-                <div className="text-xs text-[#5c5b5b]">{info.tagline}</div>
-                {isCheapest && (
-                  <div className="mt-2 text-[10px] font-bold uppercase rounded-full px-2 py-0.5 inline-block text-white" style={{ background: info.color }}>
-                    Cheapest ✓
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Category breakdown */}
-        <h2 className="text-xl font-bold text-[#2F2F2E] mb-4">Price comparison by category</h2>
-        <div className="space-y-3 mb-10">
-          {BASKET_CATEGORIES.filter(cat => categoryTotals[cat]).map(cat => {
-            const totals = categoryTotals[cat];
-            // Only show stores that have data in this category
-            const storesWithData = activeStores.filter(s => (totals[s] ?? 0) > 0);
-            const catRanked = [...storesWithData].sort((a, b) => (totals[a] ?? 0) - (totals[b] ?? 0));
-            const catCheapest = catRanked[0];
-            if (!catCheapest) return null;
-            return (
-              <div key={cat} className="bg-white rounded-2xl border border-[rgba(175,173,172,0.2)] p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-[#2F2F2E]">{cat}</h3>
-                  <span className="text-xs text-[#006A35] font-semibold">
-                    Best: {STORE_INFO[catCheapest].name} {fmt(totals[catCheapest] ?? 0)}
+        {/* Compact, indexable evidence of the data available to the agent. */}
+        <section className="mb-10 border-t border-[#e3e8e4] pt-9" aria-label="Current supermarket price evidence">
+        <p className="mb-5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {featured.map(product => (
+            <article key={product.name} className="rounded-[1.25rem] border border-[#e3e8e4] bg-white p-4 shadow-[0_10px_35px_rgba(25,57,38,0.035)]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7d8980]">{product.category}</p>
+              <h3 className="mt-1 min-h-10 text-sm font-semibold leading-5 text-[#253128]">{product.name}</h3>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {activeStores.map(store => (
+                  <span key={store} className="rounded-full bg-[#f2f5f2] px-2.5 py-1 text-[11px] text-[#59645c]">
+                    {STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#253128]">{fmt(product.prices[store])}</strong>
                   </span>
-                </div>
-                <div className="flex gap-2 overflow-x-auto">
-                  {catRanked.map((store, i) => {
-                    const info = STORE_INFO[store];
-                    const isBest = i === 0;
-                    return (
-                      <div key={store} className="flex-1 min-w-0 text-center rounded-xl py-2 px-1"
-                        style={{ background: isBest ? info.light : '#F9F7F5' }}>
-                        <div className="text-[11px] font-medium mb-0.5 truncate" style={{ color: isBest ? info.color : '#636E72' }}>
-                          {info.name.split(' ')[0]}
-                        </div>
-                        <div className="text-sm font-bold" style={{ color: isBest ? info.color : '#1D2324' }}>
-                          {fmt(totals[store] ?? 0)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Sample products */}
-                {samples[cat] && (
-                  <div className="mt-3 pt-3 border-t border-[#F0ECE8] space-y-1.5">
-                    {samples[cat].slice(0, 3).map(p => (
-                      <div key={p.name} className="flex items-center justify-between text-xs">
-                        <span className="text-[#5c5b5b] truncate flex-1">{p.name}</span>
-                        <div className="flex gap-2 flex-shrink-0 ml-2 overflow-x-auto">
-                          {activeStores.filter(s => p.prices[s]).map(s => (
-                            <span key={s} className="text-[#2F2F2E] whitespace-nowrap">
-                              <span className="text-[#B2BEC3]">{STORE_INFO[s].name.split(' ')[0]} </span>
-                              {fmt(p.prices[s])}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {moreEvidence.length > 0 && (
+          <details className="group mt-4 rounded-[1.25rem] border border-[#e3e8e4] bg-white">
+            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-[#354139] marker:content-none">
+              <span className="flex items-center justify-between gap-4">
+                View more current price evidence
+                <span aria-hidden="true" className="text-lg font-normal text-[#718077] transition group-open:rotate-45">+</span>
+              </span>
+            </summary>
+            <div className="border-t border-[#edf0ed] px-5 py-2">
+              {moreEvidence.map(product => (
+                <div key={product.name} className="flex flex-col gap-2 border-b border-[#edf0ed] py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#354139]">{product.name}</p>
+                    <p className="text-[11px] text-[#8b958e]">{product.category} · tracked at {storeNames}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667169]">
+                    {activeStores.map(store => (
+                      <span key={store}>{STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#354139]">{fmt(product.prices[store])}</strong></span>
                     ))}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+        <p className="mt-3 text-xs text-[#8b958e]">Latest catalogue observation: {updatedLabel}. Prices can change; the agent checks current evidence when helping with a shop.</p>
+        </section>
 
         {/* CTA */}
-        <div className="rounded-2xl p-8 text-center" style={{ background: '#EAE7E7' }}>
+        <div className="rounded-[1.75rem] bg-[#0e0e0e] p-8 text-center text-white">
           <div className="text-3xl mb-3">🛒</div>
-          <h2 className="text-xl font-bold text-[#2F2F2E] mb-2">Get a personalised price comparison</h2>
-          <p className="text-[#5c5b5b] mb-5 max-w-md mx-auto">
-            Tell our AI what you need this week and get a shopping list with live prices from all {activeStores.length} stores — so you know exactly where to shop.
+          <h2 className="mb-2 text-xl font-bold">Make Supermarket.ie your household agent</h2>
+          <p className="mx-auto mb-5 max-w-md text-white/65">
+            Ask it to prepare a shop, remember what matters to your household, save a list or monitor a product for a useful change.
           </p>
           <Link href="/"
             className="inline-block px-8 py-3.5 rounded-full font-semibold text-base transition text-[#004a23]"
             style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
-            Build my weekly list free →
+            Start with the agent →
           </Link>
-          <p className="text-xs mt-3" style={{ color: 'rgba(175,173,172,0.8)' }}>No signup required to get started</p>
+          <p className="mt-3 text-xs text-white/40">No signup required to get started</p>
         </div>
 
       </main>

@@ -5,6 +5,7 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { supabaseAdmin } from '@/lib/supabase';
 import { storeDisplayName } from '@/lib/store-utils';
+import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
 export const revalidate = 43200; // 12h — matches scrape frequency
 export const dynamicParams = true; // ISR for slugs not pre-built
@@ -241,7 +242,7 @@ function PriceTable({ prices, productName }: { prices: PriceRow[]; productName: 
 
   return (
     <div className="mb-6">
-      <h2 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: '#00DCFF', textShadow: '0 0 8px rgba(0,220,255,0.3)' }}>
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#397250]">
         Current prices
       </h2>
       <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
@@ -360,6 +361,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               </span>
             )}
           </div>
+        </div>
+
+        <div className="mb-6">
+          <AgentLandingCTA
+            context="product"
+            title={`What would you like to do with ${product.canonical_name}?`}
+            description="Ask for an alternative, check whether it suits a preference, add it to a shop or have the agent watch it for a useful change."
+            prompt={`Help me choose and use ${product.canonical_name} in my household shop`}
+          />
         </div>
 
         {product.description && (
