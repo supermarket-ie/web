@@ -41,6 +41,12 @@ async function finalize(message: Message, target: Target, outcome: 'exact' | 'al
   if (error) throw new Error(`Dunnes discovery finalization failed: ${error.message}`);
 }
 
+function isDeterministicSearch400(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error);
+  const statuses = [...text.matchAll(/HTTP\s+(\d{3})/g)].map(match => Number(match[1]));
+  return text.startsWith('All Dunnes discovery queries failed:') && statuses.length > 0 && statuses.every(status => status === 400);
+}
+
 export const POST = handleCallback<Message>(async (message) => {
   if (!message?.runUuid || !Array.isArray(message.targets) || message.targets.length === 0) {
     throw new Error('Invalid Dunnes discovery queue message');
@@ -71,6 +77,25 @@ export const POST = handleCallback<Message>(async (message) => {
     try {
       discovery = await discoverDunnesProduct(target.canonical_name, target.brand);
     } catch (error) {
+      if (isDeterministicSearch400(error)) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.warn('[dunnes-discovery-queue] all retailer queries rejected with HTTP 400; no mapping made', {
+          runId: message.runId,
+          batchIndex: message.batchIndex,
+          productId: target.product_id,
+          canonicalName: target.canonical_name,
+        });
+        await finalize(
+          message,
+          target,
+          'rejected',
+          undefined,
+          null,
+          `No trusted Dunnes mapping: retailer search rejected every query variant with HTTP 400. ${detail}`,
+        );
+        continue;
+      }
+
       console.error('[dunnes-discovery-queue] discovery failed', {
         runId: message.runId,
         batchIndex: message.batchIndex,
