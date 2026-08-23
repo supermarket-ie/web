@@ -64,6 +64,7 @@ export async function GET(request: Request) {
 
   const delayStepSeconds = 5;
   const totalBatches = missing.length;
+  const recoveryAttempt = crypto.randomUUID();
   let queued = 0;
 
   for (let i = 0; i < missing.length; i += 1) {
@@ -75,7 +76,7 @@ export async function GET(request: Request) {
       targets: [missing[i]],
     };
     await send(TOPIC, message, {
-      idempotencyKey: `${run.id}:recovery-v3:${missing[i].product_id}`,
+      idempotencyKey: `${run.id}:recovery:${recoveryAttempt}:${missing[i].product_id}`,
       retentionSeconds: 86_400,
       delaySeconds: i * delayStepSeconds,
     });
@@ -86,6 +87,7 @@ export async function GET(request: Request) {
     status: 'recovery_queued',
     run_id: run.run_id,
     run_uuid: run.id,
+    recovery_attempt: recoveryAttempt,
     already_completed: completed.size,
     missing_count: missing.length,
     queued,
