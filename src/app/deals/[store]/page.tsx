@@ -62,7 +62,7 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
   const otherStores = VALID_STORES.filter(s => s !== storeKey);
 
   return (
-    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
+    <div className="min-h-screen bg-[#f8faf8]">
       <SiteHeader />
       <main className="max-w-6xl mx-auto px-6 pb-16">
         <Breadcrumbs items={[
@@ -92,19 +92,19 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
         </div>
 
         {/* Summary banner */}
-        <div className="rounded-2xl p-5 mb-8 text-white" style={{ background: info.color }}>
+        <div className="mb-8 rounded-[1.5rem] border border-[#e3e8e4] bg-white p-5 shadow-[0_10px_35px_rgba(25,57,38,0.045)]">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div className="text-3xl font-bold">{storeDeals.length}</div>
-              <div className="text-sm opacity-80">Offers</div>
+              <div className="text-3xl font-bold" style={{ color: info.color }}>{storeDeals.length}</div>
+              <div className="text-sm text-[#7c867f]">Offers</div>
             </div>
             <div>
-              <div className="text-3xl font-bold">{sortedCats.length}</div>
-              <div className="text-sm opacity-80">Categories</div>
+              <div className="text-3xl font-bold text-[#152219]">{sortedCats.length}</div>
+              <div className="text-sm text-[#7c867f]">Categories</div>
             </div>
             <div>
-              <div className="text-3xl font-bold">{withSavings.length}</div>
-              <div className="text-sm opacity-80">With savings</div>
+              <div className="text-3xl font-bold text-[#152219]">{withSavings.length}</div>
+              <div className="text-sm text-[#7c867f]">With savings</div>
             </div>
           </div>
         </div>
