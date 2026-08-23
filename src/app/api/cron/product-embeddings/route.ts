@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { embedMany } from 'ai';
 import { NextResponse } from 'next/server';
 import {
   PRODUCT_EMBEDDING_MODEL,
@@ -29,7 +28,7 @@ function hash(value: string): string {
 
 async function processJob(jobId: string) {
   const started = Date.now();
-  const batchSize = 100;
+  const batchSize = 50;
   let processed = 0;
 
   const { data: job, error: jobError } = await supabaseAdmin
@@ -74,10 +73,14 @@ async function processJob(jobId: string) {
     });
 
     if (pending.length > 0) {
-      const { embeddings } = await embedMany({
-        model: PRODUCT_EMBEDDING_MODEL,
-        values: pending.map(item => item.source_text),
+      const { data: generated, error: embeddingError } = await supabaseAdmin.functions.invoke('product-embeddings', {
+        body: { texts: pending.map(item => item.source_text) },
       });
+      if (embeddingError) throw new Error(`Embedding generation failed: ${embeddingError.message}`);
+      const embeddings = generated?.embeddings;
+      if (!Array.isArray(embeddings) || embeddings.length !== pending.length) {
+        throw new Error('Embedding generation returned an incomplete batch');
+      }
       const rows = pending.map((item, index) => ({
         product_id: item.product.id,
         source_text: item.source_text,
