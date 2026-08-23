@@ -91,4 +91,13 @@ describe('shopping catalogue core', () => {
 
     expect(resolveCatalogueRows(query, generalRows, 2)[0]?.canonical_name).toBe(expected);
   });
+
+  it('prefers a concise product-headed title to an incidental pet-food ingredient', () => {
+    const generalRows: CataloguePriceRow[] = [
+      { canonical_name: 'Pedigree Rodeo with Chicken 7 Pack', category: 'Pet Care', store: 'Tesco', store_product_name: 'Pedigree Rodeo with Chicken 7 Pack', price: 3.79, was_price: null, on_promotion: false },
+      { canonical_name: 'Chicken Drumsticks', category: 'Meat', store: 'SuperValu', store_product_name: 'Chicken Drumsticks', price: 3.99, was_price: null, on_promotion: false },
+    ];
+
+    expect(resolveCatalogueRows('chicken', generalRows, 2)[0]?.canonical_name).toBe('Chicken Drumsticks');
+  });
 });
