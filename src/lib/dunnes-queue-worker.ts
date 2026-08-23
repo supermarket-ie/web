@@ -331,6 +331,14 @@ async function finalize(
   },
 ) {
   const candidate = params.candidate;
+  const verifiedPriceDrop = Boolean(
+    candidate?.price
+    && product.previousPrice
+    && product.previousPrice - candidate.price >= 0.05
+    && candidate.price / product.previousPrice >= 0.4,
+  );
+  const wasPrice = candidate?.wasPrice ?? (verifiedPriceDrop ? product.previousPrice : null);
+  const onPromotion = Boolean(candidate?.onPromotion || verifiedPriceDrop);
   const { error } = await supabaseAdmin.rpc('finalize_store_scrape_product', {
     p_run_uuid: message.runUuid,
     p_store: STORE,
@@ -338,8 +346,8 @@ async function finalize(
     p_success: params.success,
     p_price: candidate?.price ?? null,
     p_previous_price: product.previousPrice,
-    p_was_price: candidate?.wasPrice ?? null,
-    p_on_promotion: candidate?.onPromotion ?? false,
+    p_was_price: wasPrice,
+    p_on_promotion: onPromotion,
     p_store_url: candidate?.url ?? product.storeUrl,
     p_store_sku: candidate?.sku ?? product.storeSku,
     p_store_product_name: candidate?.name ?? product.storeProductName,

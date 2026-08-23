@@ -148,6 +148,19 @@ function firstPositiveEuroPrice(html: string): number | null {
   return null;
 }
 
+function extractPromotion(html: string, price: number) {
+  const wasCandidates = [
+    ...html.matchAll(/class=["'][^"']*(?:was|original|regular|old)[^"']*["'][^>]*>[\s\S]{0,120}?€\s*(\d+(?:\.\d{1,2})?)/gi),
+    ...html.matchAll(/\bwas\s*(?:price)?\s*[:\-]?\s*€\s*(\d+(?:\.\d{1,2})?)/gi),
+  ];
+  const wasPrice = wasCandidates
+    .map(match => numericPrice(match[1]))
+    .find(candidate => candidate != null && candidate > price) ?? null;
+  const retailerMarked = /class=["'][^"']*(?:promotion|promo-badge|offer-badge|special-offer)[^"']*["']/i.test(html)
+    || /\bsave\s+€\s*\d/i.test(stripTags(html));
+  return { wasPrice, onPromotion: Boolean(wasPrice || retailerMarked) };
+}
+
 export function parseSupervaluProductPage(html: string): Candidate | null {
   const scriptRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let scriptMatch: RegExpExecArray | null;
@@ -161,7 +174,14 @@ export function parseSupervaluProductPage(html: string): Candidate | null {
       const offers = Array.isArray(offersRaw) ? offersRaw[0] : offersRaw;
       const offer = offers && typeof offers === 'object' ? offers as Record<string, unknown> : null;
       const price = numericPrice(offer?.price ?? offer?.lowPrice);
-      if (name && price) return { name, price, wasPrice: null, onPromotion: false };
+      if (name && price) {
+        const promotion = extractPromotion(html, price);
+        const structuredWasPrice = numericPrice(offer?.highPrice ?? offer?.listPrice);
+        const wasPrice = structuredWasPrice && structuredWasPrice > price
+          ? structuredWasPrice
+          : promotion.wasPrice;
+        return { name, price, wasPrice, onPromotion: Boolean(wasPrice || promotion.onPromotion) };
+      }
     } catch {
       // Continue to the retailer HTML fallbacks.
     }
@@ -177,7 +197,8 @@ export function parseSupervaluProductPage(html: string): Candidate | null {
     ?? html.match(/<meta[^>]+content=["'](\d+(?:\.\d{1,2})?)["'][^>]+(?:property|itemprop)=["'](?:product:price:amount|price)["']/i)?.[1];
   const price = numericPrice(metaPrice) ?? firstPositiveEuroPrice(html);
   if (!name || !price) return null;
-  return { name, price, wasPrice: null, onPromotion: false };
+  const promotion = extractPromotion(html, price);
+  return { name, price, wasPrice: promotion.wasPrice, onPromotion: promotion.onPromotion };
 }
 
 export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Promise<Candidate | null> {
@@ -283,6 +304,14 @@ async function finalize(
   },
 ) {
   const candidate = params.candidate;
+  const verifiedPriceDrop = Boolean(
+    candidate?.price
+    && product.previousPrice
+    && product.previousPrice - candidate.price >= 0.05
+    && candidate.price / product.previousPrice >= 0.4,
+  );
+  const wasPrice = candidate?.wasPrice ?? (verifiedPriceDrop ? product.previousPrice : null);
+  const onPromotion = Boolean(candidate?.onPromotion || verifiedPriceDrop);
   const { error } = await supabaseAdmin.rpc('finalize_store_scrape_product', {
     p_run_uuid: message.runUuid,
     p_store: STORE,
@@ -290,8 +319,8 @@ async function finalize(
     p_success: params.success,
     p_price: candidate?.price ?? null,
     p_previous_price: product.previousPrice,
-    p_was_price: candidate?.wasPrice ?? null,
-    p_on_promotion: candidate?.onPromotion ?? false,
+    p_was_price: wasPrice,
+    p_on_promotion: onPromotion,
     p_store_url: product.storeUrl,
     p_store_sku: product.storeSku,
     p_store_product_name: candidate?.name ?? product.storeProductName,

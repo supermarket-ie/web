@@ -3,20 +3,23 @@ import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
-import { supabaseAdmin } from '@/lib/supabase';
+import { getAllLatestPrices, type ProductPrice } from '@/lib/price-data';
+import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
 
-export const revalidate = 43200; // 12h — matches scrape cycle
+// Always read the validated catalogue on the next request after a refresh.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
 export const metadata: Metadata = {
   title: 'Supermarket Deals & Offers This Week Ireland | supermarket.ie',
-  description: 'This week\'s best grocery deals and offers across Tesco, Dunnes Stores, SuperValu and Aldi in Ireland. Updated twice weekly with live promotion data.',
+  description: 'Current grocery deals and verified price reductions across Tesco, Dunnes Stores and SuperValu in Ireland, refreshed with the latest validated product data.',
   keywords: ['supermarket deals Ireland', 'Tesco deals this week', 'Dunnes offers this week', 'SuperValu offers', 'grocery offers Ireland', 'best supermarket deals Ireland'],
   alternates: { canonical: `${BASE_URL}/deals` },
   openGraph: {
     title: 'Supermarket Deals & Offers This Week — Ireland',
-    description: 'Live grocery offers across Tesco, Dunnes, SuperValu & Aldi. Updated twice weekly.',
+    description: 'Current grocery offers across Tesco, Dunnes Stores and SuperValu, refreshed from validated retailer product data.',
   },
 };
 
@@ -27,7 +30,7 @@ const STORE_INFO: Record<string, { name: string; color: string; light: string }>
   aldi:      { name: 'Aldi',          color: '#00447C', light: '#EDF3FA' },
 };
 
-const STORE_ORDER = ['tesco', 'dunnes', 'supervalu', 'aldi'];
+const STORE_ORDER = ['tesco', 'dunnes', 'supervalu'];
 
 type Deal = {
   canonical_name: string;
@@ -36,53 +39,31 @@ type Deal = {
   price: number;
   was_price: number | null;
   store_product_name: string;
+  observed_at: string;
 };
 
 function fmt(n: number) { return `€${n.toFixed(2)}`; }
 function pct(was: number, now: number) { return Math.round(((was - now) / was) * 100); }
 
-async function getDeals(): Promise<Deal[]> {
-  const allRows: Deal[] = [];
-  let offset = 0;
-  const PAGE = 1000;
-
-  while (true) {
-    const { data } = await supabaseAdmin
-      .from('price_observations')
-      .select('price, was_price, store_product_id, store_products!inner(store, store_product_name, products!inner(canonical_name, category))')
-      .eq('on_promotion', true)
-      .order('observed_at', { ascending: false })
-      .range(offset, offset + PAGE - 1);
-
-    if (!data || data.length === 0) break;
-
-    for (const row of data) {
-      const sp = row.store_products as unknown as { store: string; store_product_name: string; products: { canonical_name: string; category: string } };
-      allRows.push({
-        canonical_name: sp.products.canonical_name,
-        category: sp.products.category,
-        store: sp.store,
-        price: row.price,
-        was_price: row.was_price,
-        store_product_name: sp.store_product_name,
-      });
-    }
-
-    if (data.length < PAGE) break;
-    offset += PAGE;
-  }
-
-  const seen = new Map<string, Deal>();
-  for (const deal of allRows) {
-    const key = `${deal.canonical_name}::${deal.store}`;
-    if (!seen.has(key)) seen.set(key, deal);
-  }
-
-  return Array.from(seen.values());
+function getDeals(prices: ProductPrice[]): Deal[] {
+  return prices.filter(isCurrentDeal).map(price => ({
+    canonical_name: price.canonical_name,
+    category: price.category,
+    store: price.store,
+    price: price.price,
+    was_price: price.was_price,
+    store_product_name: price.store_product_name,
+    observed_at: price.observed_at,
+  }));
 }
 
 export default async function DealsPage() {
-  const deals = await getDeals();
+  const allPrices = await getAllLatestPrices({ bypassCache: true });
+  const deals = getDeals(allPrices);
+  const latestObservation = latestObservationAt(allPrices);
+  const updatedLabel = latestObservation
+    ? new Date(latestObservation).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
 
   const byStore = new Map<string, Deal[]>();
   for (const deal of deals) {
@@ -110,26 +91,26 @@ export default async function DealsPage() {
             🏷️ Supermarket Deals This Week
           </h1>
           <p className="text-[#5c5b5b] max-w-2xl">
-            Live offers across Tesco, Dunnes Stores, SuperValu and Aldi in Ireland.
-            Updated twice weekly from real store data — {deals.length} deals right now.
+            Current retailer-marked offers and verified price reductions across Tesco, Dunnes Stores and SuperValu — {deals.length} deals right now.
+            {updatedLabel ? ` Product data refreshed ${updatedLabel}.` : ''}
           </p>
         </div>
 
         {/* Store summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
-          {STORE_ORDER.filter(s => byStore.has(s)).map(store => {
+          {STORE_ORDER.map(store => {
             const info = STORE_INFO[store];
-            const storeDeals = byStore.get(store)!;
+            const storeDeals = byStore.get(store) ?? [];
             const withWas = storeDeals.filter(d => d.was_price && d.was_price > d.price);
             return (
-              <a key={store} href={`#${store}`} className="rounded-xl p-4 border-2 transition hover:shadow-md"
+              <Link key={store} href={`/deals/${store}`} className="rounded-xl p-4 border-2 transition hover:shadow-md"
                 style={{ borderColor: info.color, background: info.light }}>
                 <div className="text-xs font-bold mb-1" style={{ color: info.color }}>{info.name}</div>
                 <div className="text-2xl font-bold" style={{ color: info.color }}>{storeDeals.length}</div>
                 <div className="text-xs text-[#5c5b5b]">
                   deals{withWas.length > 0 ? ` · ${withWas.length} with savings` : ''}
                 </div>
-              </a>
+              </Link>
             );
           })}
         </div>

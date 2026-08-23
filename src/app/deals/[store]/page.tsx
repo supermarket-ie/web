@@ -5,9 +5,12 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { getAllLatestPrices, STORE_INFO, fmt, pct, type StoreKey } from '@/lib/price-data';
+import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
 import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
-export const revalidate = 43200; // 12h
+// Always read the validated catalogue on the next request after a refresh.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
@@ -40,8 +43,9 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
   const storeKey = store as StoreKey;
   const info = STORE_INFO[storeKey];
 
-  const allPrices = await getAllLatestPrices();
-  const storeDeals = allPrices.filter(p => p.store === storeKey && p.on_promotion);
+  const allPrices = await getAllLatestPrices({ bypassCache: true });
+  const storePrices = allPrices.filter(p => p.store === storeKey);
+  const storeDeals = storePrices.filter(isCurrentDeal);
 
   const byCategory = new Map<string, typeof storeDeals>();
   for (const deal of storeDeals) {
@@ -57,7 +61,10 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
 
   const topSavings = withSavings.slice(0, 8);
 
-  const updatedLabel = new Date().toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' });
+  const latestObservation = latestObservationAt(storePrices);
+  const updatedLabel = latestObservation
+    ? new Date(latestObservation).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
 
   const otherStores = VALID_STORES.filter(s => s !== storeKey);
 
@@ -78,7 +85,7 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
           <p className="text-[#5c5b5b] max-w-2xl">
             {storeDeals.length} current offers at {info.name} in Ireland.
             {withSavings.length > 0 ? ` ${withSavings.length} with confirmed savings.` : ''}
-            {' '}Updated {updatedLabel}.
+            {updatedLabel ? ` Product data refreshed ${updatedLabel}.` : ' No recent verified product refresh is available.'}
           </p>
         </div>
 
@@ -167,7 +174,7 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
         {storeDeals.length === 0 && (
           <div className="bg-white rounded-2xl p-8 text-center text-[#5c5b5b] mb-8" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
             <p className="text-lg mb-2">No current offers</p>
-            <p className="text-sm">Check back after our next price update for {info.name} deals.</p>
+            <p className="text-sm">No retailer-marked promotion or verified price reduction was found in the latest {info.name} product refresh.</p>
           </div>
         )}
 

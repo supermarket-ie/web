@@ -49,8 +49,8 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
  * known-contaminated data. supermarket.ie deliberately prefers a missing price
  * to a false price.
  */
-export async function getAllLatestPrices(): Promise<ProductPrice[]> {
-  if (_priceCache && Date.now() - _priceCacheAt < CACHE_TTL_MS) {
+export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}): Promise<ProductPrice[]> {
+  if (!options.bypassCache && _priceCache && Date.now() - _priceCacheAt < CACHE_TTL_MS) {
     return _priceCache;
   }
 
@@ -80,8 +80,10 @@ export async function getAllLatestPrices(): Promise<ProductPrice[]> {
     results.push(r);
   }
 
-  _priceCache = results;
-  _priceCacheAt = Date.now();
+  if (!options.bypassCache) {
+    _priceCache = results;
+    _priceCacheAt = Date.now();
+  }
   return results;
 }
 
