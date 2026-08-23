@@ -147,20 +147,20 @@ export default async function ComparePage() {
   const storeNames = activeStores.map(s => STORE_INFO[s].name).join(', ').replace(/, ([^,]+)$/, ' & $1');
 
   return (
-    <div className="min-h-screen" style={{ background: '#F9F6F5' }}>
+    <div className="min-h-screen bg-[#f8faf8]">
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
         {/* Hero */}
-        <div className="pt-10 pb-8">
-          <div className="text-xs font-semibold text-[#006A35] uppercase tracking-widest mb-3">Live Irish supermarket intelligence</div>
-          <h1 className="text-3xl font-bold text-[#2F2F2E] mb-3 leading-tight">
+        <div className="pt-12 pb-9 sm:pt-16">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#e5f7eb] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#397250]">Live Irish supermarket intelligence</div>
+          <h1 className="mb-5 max-w-4xl text-balance text-[clamp(2.4rem,5vw,4.25rem)] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#152219]">
             Your supermarket shopping agent for Ireland
           </h1>
-          <p className="text-[#5c5b5b] text-base max-w-xl">
+          <p className="max-w-2xl text-base leading-7 text-[#667169] sm:text-lg">
             Ask for a product, meal, household shop or budget. Supermarket.ie uses current evidence from {storeNames} to work out what is useful for you—not just which single price is lowest.
           </p>
-          <p className="mt-2 text-xs text-[#7b827d]">{overallCount} comparable products in this snapshot · Updated {updatedLabel}</p>
+          <p className="mt-3 text-xs font-medium text-[#8b958e]">{overallCount} comparable products in this snapshot · Updated {updatedLabel}</p>
         </div>
 
         <div className="mb-10">
@@ -173,8 +173,13 @@ export default async function ComparePage() {
         </div>
 
         {/* Category breakdown */}
-        <h2 className="text-xl font-bold text-[#2F2F2E] mb-1">Current catalogue evidence</h2>
-        <p className="mb-4 text-sm text-[#667169]">A live product snapshot the agent can use. Category totals are catalogue observations, not a claim that every household should buy the full set.</p>
+        <div className="mb-5 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
+            <h2 className="text-2xl font-extrabold tracking-[-0.035em] text-[#152219]">Current catalogue evidence</h2>
+          </div>
+          <p className="max-w-xl text-sm leading-6 text-[#667169]">A live product snapshot the agent can use. Category totals are catalogue observations, not a household shopping recommendation.</p>
+        </div>
         <div className="space-y-3 mb-10">
           {BASKET_CATEGORIES.filter(cat => categoryTotals[cat]).map(cat => {
             const totals = categoryTotals[cat];
@@ -184,11 +189,11 @@ export default async function ComparePage() {
             const catCheapest = catRanked[0];
             if (!catCheapest) return null;
             return (
-              <div key={cat} className="bg-white rounded-2xl border border-[rgba(175,173,172,0.2)] p-4">
+              <div key={cat} className="rounded-[1.35rem] border border-[#e3e8e4] bg-white p-5 shadow-[0_10px_35px_rgba(25,57,38,0.045)]">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-[#2F2F2E]">{cat}</h3>
-                  <span className="text-xs text-[#006A35] font-semibold">
-                    Best: {STORE_INFO[catCheapest].name} {fmt(totals[catCheapest] ?? 0)}
+                  <span className="rounded-full bg-[#e5f7eb] px-2.5 py-1 text-[11px] font-bold text-[#397250]">
+                    Lowest matched total: {STORE_INFO[catCheapest].name} {fmt(totals[catCheapest] ?? 0)}
                   </span>
                 </div>
                 <div className="flex gap-2 overflow-x-auto">
@@ -197,7 +202,7 @@ export default async function ComparePage() {
                     const isBest = i === 0;
                     return (
                       <div key={store} className="flex-1 min-w-0 text-center rounded-xl py-2 px-1"
-                        style={{ background: isBest ? info.light : '#F9F7F5' }}>
+                        style={{ background: isBest ? '#eef8f1' : '#f5f8f5' }}>
                         <div className="text-[11px] font-medium mb-0.5 truncate" style={{ color: isBest ? info.color : '#636E72' }}>
                           {info.name.split(' ')[0]}
                         </div>
@@ -232,10 +237,10 @@ export default async function ComparePage() {
         </div>
 
         {/* CTA */}
-        <div className="rounded-2xl p-8 text-center" style={{ background: '#EAE7E7' }}>
+        <div className="rounded-[1.75rem] bg-[#0e0e0e] p-8 text-center text-white">
           <div className="text-3xl mb-3">🛒</div>
-          <h2 className="text-xl font-bold text-[#2F2F2E] mb-2">Make Supermarket.ie your household agent</h2>
-          <p className="text-[#5c5b5b] mb-5 max-w-md mx-auto">
+          <h2 className="mb-2 text-xl font-bold">Make Supermarket.ie your household agent</h2>
+          <p className="mx-auto mb-5 max-w-md text-white/65">
             Ask it to prepare a shop, remember what matters to your household, save a list or monitor a product for a useful change.
           </p>
           <Link href="/"
@@ -243,7 +248,7 @@ export default async function ComparePage() {
             style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
             Start with the agent →
           </Link>
-          <p className="text-xs mt-3" style={{ color: 'rgba(175,173,172,0.8)' }}>No signup required to get started</p>
+          <p className="mt-3 text-xs text-white/40">No signup required to get started</p>
         </div>
 
       </main>
