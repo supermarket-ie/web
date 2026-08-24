@@ -49,3 +49,22 @@ export function trackEvent(
     keepalive: true,
   }).catch(() => {}); // Swallow errors - analytics should never break the app
 }
+
+export function trackEventOnce(
+  eventType: string,
+  metadata?: Record<string, unknown>,
+  token?: string,
+) {
+  if (typeof window === 'undefined') return;
+
+  const key = `smi_event_once:${eventType}`;
+  try {
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+  } catch {
+    // If storage is unavailable, preserve analytics delivery rather than
+    // affecting the agent experience.
+  }
+
+  trackEvent(eventType, metadata, token);
+}

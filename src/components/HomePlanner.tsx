@@ -16,6 +16,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { loadSession } from '@/lib/session';
+import { trackEventOnce } from '@/lib/analytics';
 import {
   buildPredictiveSuggestions,
   inferSuggestionIntent,
@@ -99,16 +100,18 @@ function FormattedAgentText({ text }: { text: string }) {
 type ComposerProps = {
   input: string;
   setInput: (value: string) => void;
-  send: (value: string) => Promise<void>;
+  send: (value: string, source: AgentStartSource) => Promise<void>;
   busy: boolean;
   gated: boolean;
   prominent?: boolean;
 };
 
+type AgentStartSource = 'typed' | 'starter' | 'predictive' | 'landing_page';
+
 function AgentComposer({ input, setInput, send, busy, gated, prominent = false }: ComposerProps) {
   return (
     <form
-      onSubmit={event => { event.preventDefault(); void send(input); }}
+      onSubmit={event => { event.preventDefault(); void send(input, 'typed'); }}
       className={`relative rounded-[1.35rem] border bg-white shadow-[0_14px_45px_rgba(26,54,39,0.08)] transition-shadow focus-within:shadow-[0_18px_60px_rgba(26,54,39,0.13)] ${prominent ? 'min-h-20' : 'min-h-14'}`}
       style={{ borderColor: 'rgba(20, 46, 31, 0.12)' }}
     >
@@ -118,7 +121,7 @@ function AgentComposer({ input, setInput, send, busy, gated, prominent = false }
         onKeyDown={event => {
           if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            void send(input);
+            void send(input, 'typed');
           }
         }}
         rows={prominent ? 2 : 1}
@@ -213,9 +216,14 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
     return () => cancelAnimationFrame(frame);
   }, [messages, busy, showGuestGate]);
 
-  async function send(text: string) {
+  async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
     if (!message || busy) return;
+    trackEventOnce('agent_started', {
+      auth_state: isGuest ? 'guest' : 'signed_in',
+      entry_path: window.location.pathname,
+      prompt_source: source,
+    });
     setInput('');
     setError('');
     await agent.send([{ type: 'text', text: message }]);
@@ -223,16 +231,22 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
 
   useEffect(() => {
     if (landingPromptHandled.current || busy || messages.length > 0) return;
-    const prompt = new URLSearchParams(window.location.search).get('agent_prompt')?.trim();
+    const params = new URLSearchParams(window.location.search);
+    const prompt = params.get('agent_prompt')?.trim();
     if (!prompt) return;
+
+    const landingPath = params.get('agent_landing');
 
     landingPromptHandled.current = true;
     const cleanUrl = `${window.location.pathname}${window.location.hash}`;
     window.history.replaceState({}, '', cleanUrl);
-    setInput('');
-    setError('');
+    trackEventOnce('agent_started', {
+      auth_state: isGuest ? 'guest' : 'signed_in',
+      entry_path: landingPath?.startsWith('/') ? landingPath : window.location.pathname,
+      prompt_source: 'landing_page',
+    });
     void agent.send([{ type: 'text', text: prompt }]);
-  }, [agent, busy, messages.length]);
+  }, [agent, busy, isGuest, messages.length]);
 
   if (isEmpty) {
     return (
@@ -259,7 +273,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
                 <button
                   key={suggestion.prompt}
                   type="button"
-                  onClick={() => void send(suggestion.prompt)}
+                  onClick={() => void send(suggestion.prompt, 'predictive')}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-[#435047] transition-colors hover:bg-[#f3f7f4] hover:text-[#142019]"
                 >
                   <Search className="size-4 shrink-0 text-[#7c8980]" />
@@ -275,7 +289,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
               {starters.map(starter => {
                 const Icon = starter.icon;
                 return (
-                  <button key={starter.prompt} type="button" onClick={() => void send(starter.prompt)} className="group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors hover:bg-[#f5f8f5]">
+                  <button key={starter.prompt} type="button" onClick={() => void send(starter.prompt, 'starter')} className="group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors hover:bg-[#f5f8f5]">
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e5eae6] bg-white text-[#176b3a] shadow-sm"><Icon className="size-4" /></span>
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-[#26342b]">{starter.label}</span>
