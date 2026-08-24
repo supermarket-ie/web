@@ -17,6 +17,8 @@ const ALLOWED_EVENT_TYPES = new Set([
   'list_saved',
   'signup_started',
   'signup_completed',
+  'signup_prompt_viewed',
+  'signup_cta_clicked',
   'landing_agent_started',
   'agent_started',
   'dashboard_visit',

@@ -108,6 +108,42 @@ type ComposerProps = {
 
 type AgentStartSource = 'typed' | 'starter' | 'predictive' | 'landing_page';
 
+type SignupPrompt = {
+  title: string;
+  description: string;
+};
+
+function signupPromptFor(intent: ReturnType<typeof inferSuggestionIntent>): SignupPrompt {
+  if (intent === 'meal') {
+    return {
+      title: 'Keep this meal plan',
+      description: 'Save it, build the rest of your weekly shop and return without starting again.',
+    };
+  }
+  if (intent === 'budget') {
+    return {
+      title: 'Remember your household budget',
+      description: 'Keep this result and let your agent use the same budget for future shops.',
+    };
+  }
+  if (intent === 'dietary') {
+    return {
+      title: 'Remember this household requirement',
+      description: 'Save it so your agent can use it when finding products and planning future shops.',
+    };
+  }
+  if (intent === 'find' || intent === 'price' || intent === 'offer' || intent === 'compare') {
+    return {
+      title: 'Keep this product with your agent',
+      description: 'Save this result, watch for useful changes and continue without starting again.',
+    };
+  }
+  return {
+    title: 'Make this your household agent',
+    description: 'Save this result and let your agent remember what matters for future shops.',
+  };
+}
+
 function AgentComposer({ input, setInput, send, busy, gated, prominent = false }: ComposerProps) {
   return (
     <form
@@ -175,6 +211,14 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   ));
   const starters = isGuest ? GUEST_STARTERS : HOUSEHOLD_STARTERS;
   const isEmpty = messages.length === 0;
+  const firstUserRequest = messages.find(message => message.role === 'user');
+  const firstRequestText = firstUserRequest ? messageText(firstUserRequest) : '';
+  const firstRequestIntent = inferSuggestionIntent(firstRequestText);
+  const signupPrompt = signupPromptFor(firstRequestIntent);
+  const hasCompletedAnswer = !busy && messages.some(message =>
+    message.role === 'assistant' && Boolean(messageText(message).trim())
+  );
+  const showSignupPrompt = isGuest && guestTurns === 1 && hasCompletedAnswer && !showGuestGate;
   const liveSuggestions = input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
@@ -215,6 +259,23 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
     });
     return () => cancelAnimationFrame(frame);
   }, [messages, busy, showGuestGate]);
+
+  useEffect(() => {
+    if (!showSignupPrompt && !showGuestGate) return;
+    trackEventOnce('signup_prompt_viewed', {
+      entry_path: window.location.pathname,
+      intent: firstRequestIntent,
+      placement: showGuestGate ? 'guest_gate' : 'first_answer',
+    });
+  }, [firstRequestIntent, showGuestGate, showSignupPrompt]);
+
+  function trackSignupClick(placement: 'first_answer' | 'guest_gate') {
+    trackEventOnce('signup_cta_clicked', {
+      entry_path: window.location.pathname,
+      intent: firstRequestIntent,
+      placement,
+    });
+  }
 
   async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
@@ -324,6 +385,20 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
           );
         })}
 
+        {showSignupPrompt && (
+          <div className="ml-9 rounded-2xl border border-[#dbe9df] bg-[#f5faf6] px-4 py-4 sm:px-5">
+            <p className="text-sm font-bold text-[#17452a]">{signupPrompt.title}</p>
+            <p className="mt-1 text-xs leading-5 text-[#52705d]">{signupPrompt.description}</p>
+            <Link
+              href="/list/request"
+              onClick={() => trackSignupClick('first_answer')}
+              className="mt-3 inline-flex rounded-full bg-[#0b1710] px-4 py-2 text-xs font-bold text-white"
+            >
+              Continue free with email
+            </Link>
+          </div>
+        )}
+
         {busy && (
           <div className="flex items-center gap-2 pl-9 text-xs text-[#758078]">
             <span className="flex gap-1">{[0, 1, 2].map(i => <span key={i} className="size-1.5 animate-bounce rounded-full bg-[#0a8f45]" style={{ animationDelay: `${i * 140}ms` }} />)}</span>
@@ -340,7 +415,13 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
               <div>
                 <p className="text-sm font-bold text-[#17452a]">Make this your household agent</p>
                 <p className="mt-1 text-xs leading-5 text-[#52705d]">Sign in so Supermarket.ie can remember your household, prepare your shop and keep watch for useful changes.</p>
-                <Link href="/list/request" className="mt-3 inline-flex rounded-full bg-[#0b1710] px-4 py-2 text-xs font-bold text-white">Sign in free</Link>
+                <Link
+                  href="/list/request"
+                  onClick={() => trackSignupClick('guest_gate')}
+                  className="mt-3 inline-flex rounded-full bg-[#0b1710] px-4 py-2 text-xs font-bold text-white"
+                >
+                  Continue free with email
+                </Link>
               </div>
             </div>
           </div>
