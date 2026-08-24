@@ -30,7 +30,11 @@ export function AgentLandingCTA({
       context,
       landing_path: window.location.pathname,
     });
-    window.location.assign(`/?agent_prompt=${encodeURIComponent(nextRequest)}`);
+    const params = new URLSearchParams({
+      agent_prompt: nextRequest,
+      agent_landing: window.location.pathname,
+    });
+    window.location.assign(`/?${params.toString()}`);
   }
 
   return (
