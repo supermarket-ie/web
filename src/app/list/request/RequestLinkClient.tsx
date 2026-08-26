@@ -2,39 +2,35 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
-import { saveSession } from '@/lib/session';
-import { trackEvent } from '@/lib/analytics';
+import { getAnalyticsSessionId, trackEvent } from '@/lib/analytics';
 
-type Status = "idle" | "submitting" | "error";
+type Status = "idle" | "submitting" | "sent" | "error";
 
-export default function RequestLinkPage() {
+export default function RequestLinkPage({ expired = false }: { expired?: boolean }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
-  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("submitting");
     trackEvent('signup_started', {
       method: 'email',
-      flow: 'unified_email_continuation',
+      flow: 'verified_email_continuation',
     });
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
 
-      // Unified account continuation flow:
-      // - new email -> create the subscriber
-      // - existing email -> refresh their session
-      // /api/subscribe returns a short-lived JWT which is immediately exchanged
-      // for the HttpOnly session cookie below.
       const res = await fetch("/api/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail, familySize: "2" }),
+        body: JSON.stringify({
+          email: normalizedEmail,
+          familySize: "2",
+          sessionId: getAnalyticsSessionId(),
+        }),
       });
 
       if (!res.ok) {
@@ -42,40 +38,7 @@ export default function RequestLinkPage() {
         return;
       }
 
-      const data = await res.json() as { token?: string; is_new_registration?: boolean };
-      if (!data.token) {
-        setStatus("error");
-        return;
-      }
-
-      const sessionRes = await fetch("/api/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ token: data.token }),
-      });
-
-      if (!sessionRes.ok) {
-        setStatus("error");
-        return;
-      }
-
-      saveSession({
-        token: data.token,
-        familySize: "2",
-        email: normalizedEmail,
-        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      });
-
-      if (data.is_new_registration) {
-        trackEvent('signup_completed', {
-          method: 'email',
-          flow: 'unified_email_continuation',
-        }, data.token);
-      }
-
-      router.replace("/");
-      router.refresh();
+      setStatus("sent");
     } catch {
       setStatus("error");
     }
@@ -92,7 +55,18 @@ export default function RequestLinkPage() {
             Enter your email to keep your household agent, shopping preferences and future updates. No password needed.
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {expired && (
+            <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              That link has expired or is invalid. Request a new one below.
+            </p>
+          )}
+
+          {status === "sent" ? (
+            <div className="rounded-xl border border-[#cfe3d5] bg-[#f3faf5] px-4 py-4 text-sm text-[#17452a]">
+              <p className="font-bold">Check your email</p>
+              <p className="mt-1 leading-6">Open the secure link we sent to confirm your email and continue. It is valid for 15 minutes.</p>
+            </div>
+          ) : <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-[#1D2324] mb-2">
                 Email address
@@ -122,11 +96,11 @@ export default function RequestLinkPage() {
             >
               {status === "submitting" ? "Continuing..." : "Continue →"}
             </button>
-          </form>
+          </form>}
         </div>
 
         <p className="mt-6 text-sm text-[#636E72] text-center max-w-md">
-          Already have an account? Use the same email and we&rsquo;ll take you straight back in.
+          Already have an account? Use the same email and we&rsquo;ll send you a secure sign-in link.
         </p>
         <Link href="/" className="mt-3 text-sm text-[#006A35] font-medium hover:underline">
           Back to Supermarket.ie
