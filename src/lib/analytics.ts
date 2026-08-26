@@ -6,7 +6,7 @@ declare global {
   }
 }
 
-function getSessionId(): string {
+export function getAnalyticsSessionId(): string {
   if (typeof window === 'undefined') return '';
   let id = sessionStorage.getItem(SESSION_KEY);
   if (!id) {
@@ -37,7 +37,7 @@ export function trackEvent(
   // Fire and forget - never block UI
   const body: Record<string, unknown> = {
     event_type: eventType,
-    session_id: getSessionId(),
+    session_id: getAnalyticsSessionId(),
   };
   if (metadata) body.metadata = metadata;
   if (token) body.token = token;
@@ -48,6 +48,16 @@ export function trackEvent(
     body: JSON.stringify(body),
     keepalive: true,
   }).catch(() => {}); // Swallow errors - analytics should never break the app
+}
+
+export function trackVerifiedSignupInGoogle() {
+  if (typeof window === 'undefined') return;
+  window.gtag?.('event', 'signup_completed', {
+    method: 'email',
+    flow: 'verified_email_continuation',
+    verified: true,
+  });
+  window.gtag?.('event', 'sign_up', { method: 'email' });
 }
 
 export function trackEventOnce(

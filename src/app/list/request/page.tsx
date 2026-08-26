@@ -9,6 +9,11 @@ export const metadata: Metadata = {
   alternates: { canonical: `${BASE_URL}/list/request` },
 };
 
-export default function RequestLinkPage() {
-  return <RequestLinkClient />;
+export default async function RequestLinkPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const params = await searchParams;
+  return <RequestLinkClient expired={params.error === 'expired'} />;
 }
