@@ -6,7 +6,10 @@ import type { DunnesQueueProduct } from './dunnes-queue-worker-base';
 const STORE = 'dunnes';
 
 export async function selectDunnesProducts(limit: number, query?: string): Promise<DunnesQueueProduct[]> {
-  const rows = await selectStoreProductsForRefresh(STORE, limit, { query });
+  const rows = await selectStoreProductsForRefresh(STORE, limit, {
+    productUrlOnly: true,
+    query,
+  });
 
   return rows.map((row) => ({
     storeProductId: row.store_product_id,
