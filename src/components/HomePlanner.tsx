@@ -23,6 +23,7 @@ import {
 } from '@/lib/agent-suggestions';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
+const GUEST_EVE_CHAT_KEY = `${LEGACY_EVE_CHAT_KEY}:guest`;
 
 type EveAgentOptions = NonNullable<Parameters<typeof useEveAgent>[0]>;
 type SavedEveChat = {
@@ -65,11 +66,30 @@ function loadSavedEveChat(): LoadedEveChat {
   try {
     localStorage.removeItem(LEGACY_EVE_CHAT_KEY);
     const storageKey = scopedEveChatKey();
-    if (!storageKey) return { saved: {}, storageKey: null };
-    const raw = localStorage.getItem(storageKey);
-    return { saved: raw ? JSON.parse(raw) as SavedEveChat : {}, storageKey };
+
+    if (!storageKey) {
+      const guestRaw = localStorage.getItem(GUEST_EVE_CHAT_KEY);
+      return {
+        saved: guestRaw ? JSON.parse(guestRaw) as SavedEveChat : {},
+        storageKey: GUEST_EVE_CHAT_KEY,
+      };
+    }
+
+    const accountRaw = localStorage.getItem(storageKey);
+    if (accountRaw) {
+      return { saved: JSON.parse(accountRaw) as SavedEveChat, storageKey };
+    }
+
+    const guestRaw = localStorage.getItem(GUEST_EVE_CHAT_KEY);
+    if (guestRaw) {
+      localStorage.setItem(storageKey, guestRaw);
+      localStorage.removeItem(GUEST_EVE_CHAT_KEY);
+      return { saved: JSON.parse(guestRaw) as SavedEveChat, storageKey };
+    }
+
+    return { saved: {}, storageKey };
   } catch {
-    return { saved: {}, storageKey: null };
+    return { saved: {}, storageKey: scopedEveChatKey() ?? GUEST_EVE_CHAT_KEY };
   }
 }
 
