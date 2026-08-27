@@ -1,3 +1,5 @@
+import { GUEST_PREVIEW_STARTED_KEY } from '@/lib/session';
+
 const SESSION_KEY = 'smi_session_id';
 
 declare global {
@@ -22,6 +24,14 @@ export function trackEvent(
   token?: string,
 ) {
   if (typeof window !== 'undefined') {
+    if (eventType === 'agent_started' && metadata?.auth_state === 'guest') {
+      try {
+        if (!localStorage.getItem(GUEST_PREVIEW_STARTED_KEY)) {
+          localStorage.setItem(GUEST_PREVIEW_STARTED_KEY, String(Date.now()));
+        }
+      } catch {}
+    }
+
     const gaParameters = metadata ? { ...metadata } : undefined;
     window.gtag?.('event', eventType, gaParameters);
 
