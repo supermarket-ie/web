@@ -2,6 +2,7 @@ import { HomePlanner } from '@/components/HomePlanner';
 import { PlannerSSRShell } from '@/components/PlannerSSRShell';
 import { HideAfterHydration } from '@/components/HideAfterHydration';
 import { LiveDealChip } from '@/components/LiveDealChip';
+import { PreviewAgentPositioning } from '@/components/homepage/PreviewAgentPositioning';
 
 export function HeroSection() {
   return (
@@ -13,6 +14,7 @@ export function HeroSection() {
 
       <div className="relative z-10 mx-auto max-w-5xl">
         <div id="grocery-agent" className="relative scroll-mt-20">
+          <PreviewAgentPositioning />
           <div className="absolute -inset-8 -z-10 rounded-[3rem] bg-[radial-gradient(circle_at_top,rgba(118,224,153,0.2),transparent_66%)] blur-2xl" />
           <div className="overflow-hidden rounded-[1.8rem] border border-[#dfe6e0] bg-white shadow-[0_28px_90px_rgba(25,57,38,0.12)]">
             <HideAfterHydration>
