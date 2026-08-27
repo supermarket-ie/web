@@ -373,7 +373,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
 
   async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
-    if (!message || busy) return;
+    if (!message || busy || showSignupPrompt || showGuestGate) return;
     trackEventOnce('agent_started', {
       auth_state: isGuest ? 'guest' : 'signed_in',
       entry_path: window.location.pathname,
@@ -514,7 +514,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
       </div>
 
       <div className="border-t border-[#edf0ed] bg-white p-3 sm:p-4">
-        <AgentComposer input={input} setInput={setInput} send={send} busy={busy} gated={showGuestGate} />
+        <AgentComposer input={input} setInput={setInput} send={send} busy={busy} gated={showGuestGate || showSignupPrompt} />
       </div>
     </div>
   );
