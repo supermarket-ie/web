@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resend } from '@/lib/resend';
+import { supabaseAdmin } from '@/lib/supabase';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
@@ -111,6 +112,13 @@ export async function POST(request: NextRequest) {
       console.error('[subscribe] verification email failed:', error);
       return NextResponse.json({ error: 'We could not send the verification email.' }, { status: 502 });
     }
+
+    const { error: analyticsError } = await supabaseAdmin.from('agent_events').insert({
+      event_type: 'verification_email_sent',
+      session_id: sessionId,
+      metadata: { method: 'email', flow: 'verified_email_continuation' },
+    });
+    if (analyticsError) console.error('[subscribe] analytics insert failed:', analyticsError);
 
     return NextResponse.json({ success: true, verification_required: true });
   } catch (error) {

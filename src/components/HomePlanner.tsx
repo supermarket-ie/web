@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import { useEveAgent } from 'eve/react';
-import Link from 'next/link';
 import {
   ArrowUp,
   BadgeEuro,
@@ -16,7 +15,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { loadSession } from '@/lib/session';
-import { trackEventOnce } from '@/lib/analytics';
+import { getAnalyticsSessionId, trackEvent, trackEventOnce } from '@/lib/analytics';
 import {
   buildPredictiveSuggestions,
   inferSuggestionIntent,
@@ -107,41 +106,143 @@ type ComposerProps = {
 };
 
 type AgentStartSource = 'typed' | 'starter' | 'predictive' | 'landing_page';
+type SignupPlacement = 'first_answer' | 'guest_gate';
 
 type SignupPrompt = {
   title: string;
   description: string;
 };
 
-function signupPromptFor(intent: ReturnType<typeof inferSuggestionIntent>): SignupPrompt {
-  if (intent === 'meal') {
+function signupPromptFor(request: string): SignupPrompt {
+  const inferredNextStep = buildPredictiveSuggestions(request, [], 1)[0];
+
+  if (isPersistentGuestRequest(request)) {
     return {
-      title: 'Keep this meal plan',
-      description: 'Save it, build the rest of your weekly shop and return without starting again.',
+      title: 'Want me to keep this active?',
+      description: 'Add your email and Supermarket.ie can remember this request and keep working on it after you leave.',
     };
   }
-  if (intent === 'budget') {
+
+  if (inferredNextStep) {
     return {
-      title: 'Remember your household budget',
-      description: 'Keep this result and let your agent use the same budget for future shops.',
+      title: 'Want me to keep working on this?',
+      description: `I can remember this conversation and pick it up with “${inferredNextStep.label}” instead of making you start again.`,
     };
   }
-  if (intent === 'dietary') {
-    return {
-      title: 'Remember this household requirement',
-      description: 'Save it so your agent can use it when finding products and planning future shops.',
-    };
-  }
-  if (intent === 'find' || intent === 'price' || intent === 'offer' || intent === 'compare') {
-    return {
-      title: 'Keep this product with your agent',
-      description: 'Save this result, watch for useful changes and continue without starting again.',
-    };
-  }
+
   return {
-    title: 'Make this your household agent',
-    description: 'Save this result and let your agent remember what matters for future shops.',
+    title: 'Want me to keep this going?',
+    description: 'Add your email and Supermarket.ie will remember this conversation so you can continue without starting again.',
   };
+}
+
+function InlineEmailSignup({
+  prompt,
+  placement,
+  intent,
+}: {
+  prompt: SignupPrompt;
+  placement: SignupPlacement;
+  intent: ReturnType<typeof inferSuggestionIntent>;
+}) {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
+  const engaged = useRef(false);
+  const submitted = useRef(false);
+
+  function markEngaged() {
+    if (engaged.current) return;
+    engaged.current = true;
+    trackEvent('signup_email_engaged', {
+      entry_path: window.location.pathname,
+      intent,
+      placement,
+      flow: 'inline_agent_continuation',
+    });
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || status === 'submitting') return;
+
+    if (!submitted.current) {
+      submitted.current = true;
+      trackEvent('signup_cta_clicked', {
+        entry_path: window.location.pathname,
+        intent,
+        placement,
+        flow: 'inline_agent_continuation',
+      });
+      trackEvent('signup_started', {
+        method: 'email',
+        intent,
+        placement,
+        flow: 'verified_email_continuation',
+      });
+    }
+
+    setStatus('submitting');
+    try {
+      const response = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          familySize: '2',
+          sessionId: getAnalyticsSessionId(),
+        }),
+      });
+      if (!response.ok) {
+        setStatus('error');
+        submitted.current = false;
+        return;
+      }
+      setStatus('sent');
+    } catch {
+      setStatus('error');
+      submitted.current = false;
+    }
+  }
+
+  if (status === 'sent') {
+    return (
+      <div>
+        <p className="text-sm font-bold text-[#17452a]">Check your email</p>
+        <p className="mt-1 text-xs leading-5 text-[#52705d]">Open the secure link we sent to confirm your email and continue this conversation. It is valid for 15 minutes.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-bold text-[#17452a]">{prompt.title}</p>
+      <p className="mt-1 text-xs leading-5 text-[#52705d]">{prompt.description}</p>
+      <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <input
+          type="email"
+          value={email}
+          onFocus={markEngaged}
+          onChange={event => setEmail(event.target.value)}
+          placeholder="Your email address"
+          autoComplete="email"
+          required
+          className="min-w-0 flex-1 rounded-full border border-[#cddbd1] bg-white px-4 py-2.5 text-xs text-[#1d2b22] outline-none transition focus:border-[#74a985]"
+        />
+        <button
+          type="submit"
+          disabled={!email.trim() || status === 'submitting'}
+          className="rounded-full bg-[#0b1710] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+        >
+          {status === 'submitting' ? 'Sending…' : 'Save and continue'}
+        </button>
+      </form>
+      <p className="mt-2 text-[10px] leading-4 text-[#789083]">No password. We’ll email a secure confirmation link.</p>
+      {status === 'error' && (
+        <p className="mt-2 text-xs text-red-700">We couldn’t send the confirmation email. Please check the address and try again.</p>
+      )}
+    </div>
+  );
 }
 
 function AgentComposer({ input, setInput, send, busy, gated, prominent = false }: ComposerProps) {
@@ -214,7 +315,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const firstUserRequest = messages.find(message => message.role === 'user');
   const firstRequestText = firstUserRequest ? messageText(firstUserRequest) : '';
   const firstRequestIntent = inferSuggestionIntent(firstRequestText);
-  const signupPrompt = signupPromptFor(firstRequestIntent);
+  const signupPrompt = signupPromptFor(firstRequestText);
   const hasCompletedAnswer = !busy && messages.some(message =>
     message.role === 'assistant' && Boolean(messageText(message).trim())
   );
@@ -266,16 +367,9 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
       entry_path: window.location.pathname,
       intent: firstRequestIntent,
       placement: showGuestGate ? 'guest_gate' : 'first_answer',
+      flow: 'inline_agent_continuation',
     });
   }, [firstRequestIntent, showGuestGate, showSignupPrompt]);
-
-  function trackSignupClick(placement: 'first_answer' | 'guest_gate') {
-    trackEventOnce('signup_cta_clicked', {
-      entry_path: window.location.pathname,
-      intent: firstRequestIntent,
-      placement,
-    });
-  }
 
   async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
@@ -387,15 +481,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
 
         {showSignupPrompt && (
           <div className="ml-9 rounded-2xl border border-[#dbe9df] bg-[#f5faf6] px-4 py-4 sm:px-5">
-            <p className="text-sm font-bold text-[#17452a]">{signupPrompt.title}</p>
-            <p className="mt-1 text-xs leading-5 text-[#52705d]">{signupPrompt.description}</p>
-            <Link
-              href="/list/request"
-              onClick={() => trackSignupClick('first_answer')}
-              className="mt-3 inline-flex rounded-full bg-[#0b1710] px-4 py-2 text-xs font-bold text-white"
-            >
-              Continue free with email
-            </Link>
+            <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} />
           </div>
         )}
 
@@ -412,16 +498,15 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
           <div className="ml-9 rounded-2xl border border-[#cce6d5] bg-[#f0faf3] px-5 py-5">
             <div className="flex items-start gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#d9f2e1] text-[#0a773a]"><Bell className="size-4" /></span>
-              <div>
-                <p className="text-sm font-bold text-[#17452a]">Make this your household agent</p>
-                <p className="mt-1 text-xs leading-5 text-[#52705d]">Sign in so Supermarket.ie can remember your household, prepare your shop and keep watch for useful changes.</p>
-                <Link
-                  href="/list/request"
-                  onClick={() => trackSignupClick('guest_gate')}
-                  className="mt-3 inline-flex rounded-full bg-[#0b1710] px-4 py-2 text-xs font-bold text-white"
-                >
-                  Continue free with email
-                </Link>
+              <div className="min-w-0 flex-1">
+                <InlineEmailSignup
+                  prompt={{
+                    title: 'Keep working with your household agent',
+                    description: 'Add your email so Supermarket.ie can remember your household, this conversation and the useful changes you want it to keep track of.',
+                  }}
+                  placement="guest_gate"
+                  intent={firstRequestIntent}
+                />
               </div>
             </div>
           </div>

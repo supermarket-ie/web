@@ -35,6 +35,14 @@ export async function GET(request: NextRequest) {
   const email = verification.email.toLowerCase().trim();
   const familySize = verification.familySize || '2';
   const unsubscribeToken = crypto.randomBytes(32).toString('hex');
+
+  const { error: openedEventError } = await supabaseAdmin.from('agent_events').insert({
+    event_type: 'verification_link_opened',
+    session_id: verification.analyticsSessionId ?? null,
+    metadata: { method: 'email', flow: 'verified_email_continuation' },
+  });
+  if (openedEventError) console.error('[complete-registration] verification-open analytics insert failed:', openedEventError);
+
   const { data: existing, error: lookupError } = await supabaseAdmin
     .from('subscribers')
     .select('id, family_size')
