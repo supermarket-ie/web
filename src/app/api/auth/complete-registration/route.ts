@@ -13,6 +13,25 @@ type VerificationPayload = {
   analyticsSessionId?: string | null;
 };
 
+async function notifyTelegram(text: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return;
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    });
+    if (!response.ok) {
+      console.error('[complete-registration] Telegram notification failed:', response.status, await response.text());
+    }
+  } catch (error) {
+    console.error('[complete-registration] Telegram notification failed:', error);
+  }
+}
+
 function failed(request: NextRequest) {
   return NextResponse.redirect(new URL('/list/request?error=expired', request.url));
 }
@@ -97,6 +116,20 @@ export async function GET(request: NextRequest) {
       metadata: { method: 'email', flow: 'verified_email_continuation', verified: true },
     });
     if (error) console.error('[complete-registration] analytics insert failed:', error);
+
+    const { count } = await supabaseAdmin
+      .from('subscribers')
+      .select('*', { count: 'exact', head: true })
+      .eq('subscribed', true);
+    const familyLabel: Record<string, string> = {
+      '1': '1 person',
+      '2': '2 people',
+      '3-4': '3–4 people',
+      '5+': '5+ people',
+    };
+    await notifyTelegram(
+      `🆕 New verified subscriber on supermarket.ie!\n\n📧 ${email}\n👥 ${familyLabel[familySize] ?? familySize ?? 'Not set'}\n📊 Total subscribers: ${count ?? '?'}`,
+    );
   }
 
   const target = new URL('/auth/complete', request.url);
