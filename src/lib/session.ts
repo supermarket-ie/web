@@ -3,6 +3,9 @@
 
 export const SESSION_KEY = 'sm_session';
 export const PROFILE_KEY = 'sm_planner_profile';
+export const GUEST_PREVIEW_STARTED_KEY = 'sm_guest_preview_started_at';
+const GUEST_EVE_CHAT_KEY = 'sm_eve_household_chat_v1:guest';
+const GUEST_PREVIEW_TTL_MS = 24 * 60 * 60 * 1000;
 const CLIENT_SESSION_TOKEN = '__cookie__';
 
 export interface PlannerProfile {
@@ -35,6 +38,26 @@ function markerSession(data: SessionData): SessionData {
   return { ...data, token: CLIENT_SESSION_TOKEN };
 }
 
+function clearExpiredGuestPreview() {
+  try {
+    const guestChat = localStorage.getItem(GUEST_EVE_CHAT_KEY);
+    if (!guestChat) {
+      localStorage.removeItem(GUEST_PREVIEW_STARTED_KEY);
+      return;
+    }
+
+    const startedAtRaw = localStorage.getItem(GUEST_PREVIEW_STARTED_KEY);
+    const startedAt = startedAtRaw ? Number(startedAtRaw) : NaN;
+
+    // Guest chats created before the timed-preview policy have no timestamp.
+    // Treat them as expired once so previously permanent gates are released.
+    if (!Number.isFinite(startedAt) || Date.now() - startedAt >= GUEST_PREVIEW_TTL_MS) {
+      localStorage.removeItem(GUEST_EVE_CHAT_KEY);
+      localStorage.removeItem(GUEST_PREVIEW_STARTED_KEY);
+    }
+  } catch {}
+}
+
 export function saveSession(data: SessionData) {
   try { localStorage.setItem(SESSION_KEY, JSON.stringify(markerSession(data))); } catch {}
 }
@@ -43,6 +66,12 @@ export function loadSession(): SessionData | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
+
+    // Anonymous agent conversations are deliberately temporary. A refresh does
+    // not bypass the guest gate, but after 24 hours the browser receives a fresh
+    // preview. Signed-in sessions are never affected by this cleanup.
+    if (!raw) clearExpiredGuestPreview();
+
     if (!raw) return null;
     const d = JSON.parse(raw) as SessionData;
     if (Date.now() > d.expiresAt) { clearSession(); return null; }
