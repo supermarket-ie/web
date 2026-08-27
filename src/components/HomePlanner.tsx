@@ -316,10 +316,10 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const firstRequestText = firstUserRequest ? messageText(firstUserRequest) : '';
   const firstRequestIntent = inferSuggestionIntent(firstRequestText);
   const signupPrompt = signupPromptFor(firstRequestText);
-  const hasCompletedAnswer = !busy && messages.some(message =>
+  const hasVisibleAnswer = messages.some(message =>
     message.role === 'assistant' && Boolean(messageText(message).trim())
   );
-  const showSignupPrompt = isGuest && guestTurns === 1 && hasCompletedAnswer && !showGuestGate;
+  const showSignupPrompt = isGuest && guestTurns === 1 && hasVisibleAnswer && !showGuestGate;
   const liveSuggestions = input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
@@ -485,7 +485,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
           </div>
         )}
 
-        {busy && (
+        {busy && !hasVisibleAnswer && (
           <div className="flex items-center gap-2 pl-9 text-xs text-[#758078]">
             <span className="flex gap-1">{[0, 1, 2].map(i => <span key={i} className="size-1.5 animate-bounce rounded-full bg-[#0a8f45]" style={{ animationDelay: `${i * 140}ms` }} />)}</span>
             Working on that…
