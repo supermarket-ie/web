@@ -4,249 +4,215 @@
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
-> This file is the canonical technical/strategic project memory. Do not infer current project state solely from chat history or an old handoff prompt. Inspect the referenced code/PRs/branches before changing implementation.
+> This file is the canonical technical/strategic project memory. Do not infer current project state solely from chat history or an old handoff prompt. Inspect referenced code, PRs, branches and specialist docs before changing implementation.
 >
-> Update this file whenever a material architecture decision, experiment, integration, production change, or retailer-execution finding occurs. Never place credentials or secret values in this document.
+> Update this file whenever a material architecture decision, experiment, integration, production change or retailer-execution finding occurs. Never place credentials or secret values here.
 
 ## 1. North star
 
-Supermarket.ie is intended to become **Ireland's retailer-neutral AI grocery and household shopping infrastructure**.
+Supermarket.ie should become **Ireland's retailer-neutral AI grocery and household shopping infrastructure**.
 
 Target flow:
 
 `Household intent → Shopping Capability Layer → basket → retailer execution → retailer checkout`
 
-Supermarket.ie should own:
+Supermarket.ie owns household understanding, shopping intent, product/ingredient intelligence, cross-retailer reasoning, basket construction, retailer selection, transaction origination and eventually rewards/referrals/AI-agent distribution.
 
-- household understanding and memory
-- shopping intent
-- product/ingredient intelligence
-- cross-retailer reasoning
-- basket construction
-- retailer selection and transaction origination
-- eventual rewards/referrals and AI-agent distribution
+Retailers initially remain merchant of record and own checkout, payment, picking and fulfilment.
 
-Retailers should initially remain merchant of record and own inventory, checkout, payment, picking and fulfilment.
+Supermarket.ie is **not primarily a price-comparison website**. Long-term promise: **"the service that runs your household shop."**
 
-Supermarket.ie is **not primarily a price-comparison website**. Price is an important input to deciding how to buy the household's shop, not the entire proposition.
+## 2. Shared Shopping Capability Layer
 
-Long-term product promise: **"the service that runs your household shop."**
+PR #20 merged to `main` on 18 August 2026.
 
-## 2. Target capability architecture
+Merge commit: `715889a9e61d4fb7293e9691491cdd5caeb98c52`
 
-The same Shopping Capability Layer should ultimately serve:
-
-- Eve / Supermarket.ie agent
-- Supermarket.ie website
-- REST/API
-- MCP
-- ChatGPT and other external AI agents
-
-Target external capabilities:
-
-- `find_product()`
-- `get_household_context()`
-- `prepare_household_shop()`
-- `build_basket()`
-- `compare_shop()`
-- `handoff_to_retailer()`
-- `record_shop_outcome()`
-
-Do not recreate business logic separately in Eve, API, MCP or website surfaces.
-
-## 3. Shopping Capability Layer — completed
-
-PR #20 was merged into `main` on 18 August 2026.
-
-Merge commit:
-
-`715889a9e61d4fb7293e9691491cdd5caeb98c52`
-
-It moved the architecture away from:
+Architecture moved from:
 
 `Eve tool → business logic`
 
-and toward:
+toward:
 
-`Shopping Capability Service → Eve / website / future API / future MCP`
+`Shopping Capability Service → Eve / website / API / MCP`
 
-Current shared shopping code is under `src/lib/shopping/**` and includes contracts, catalogue/product resolution, retailer offers, household-context normalisation, basket construction, retailer preferences, store totals, whole-basket comparison and household-shop preparation/replenishment reasoning.
+Shared code under `src/lib/shopping/**` includes contracts, catalogue/product resolution, retailer offers, household context, basket construction, retailer preferences, store totals, whole-basket comparison and household-shop preparation/replenishment reasoning.
+
+Target external capabilities include `find_product()`, `get_household_context()`, `prepare_household_shop()`, `build_basket()`, `compare_shop()`, `handoff_to_retailer()` and `record_shop_outcome()`.
 
 **Do not rebuild this layer before inspecting current `main`.**
 
-## 4. Retailer execution objective
-
-Immediate transaction milestone:
+## 3. Immediate retailer-execution milestone
 
 `prepare_household_shop → retailer basket → populated retailer trolley → shopper checkout`
 
-A successful initial transaction means Supermarket.ie prepared/originated the shop and the shopper completed checkout directly with the retailer. Supermarket.ie must not handle retailer payment credentials.
+Desired UX:
 
-Actual retailer execution requires explicit shopper approval.
+1. Eve prepares the household shop.
+2. Shopping Capability Layer compares retailer fulfilment/price.
+3. Shopper chooses a retailer.
+4. Shopper explicitly selects **Shop this basket**.
+5. Retailer trolley is populated where actually supported.
+6. Shopper reviews delivery/collection and pays retailer directly.
 
-Desired experience:
+Supermarket.ie must not handle retailer passwords, payment credentials or retailer session tokens merely to populate a cart.
 
-1. Shopper asks Eve to sort out the household shop.
-2. Supermarket.ie prepares the basket.
-3. Shopping Capability Layer compares retailer fulfilment/price.
-4. Shopper chooses a retailer (or accepts a recommendation).
-5. Shopper selects **Shop this basket**.
-6. Retailer trolley is populated as far as legitimately/reliably supported.
-7. Shopper reviews delivery/collection details and pays retailer directly.
+## 4. Retailer status
 
-## 5. Retailer execution matrix
+| Retailer | Current understanding | Truthful status |
+|---|---|---|
+| SuperValu | Strong mapping; Instacart Storefront; store-scoped single + bulk cart operations understood; anonymous cart disabled; OIDC login required | `product_links` today; authenticated cart technically understood but no acceptable no-extension execution path yet |
+| Dunnes | Wynshop; shopping lists/favourites/past purchases; first-party multi-item **Add selected to cart** behaviour | Under investigation; potentially promising list-to-cart path; also supported by Pepesto |
+| Tesco | Existing retailer data plus extensive prior Pepesto work, including checkout-protocol and 3-product basket session tests | **Prior basket-handoff work exists and must be recovered before any new Tesco implementation** |
+| Aldi | Catalogue/pricing pipeline; no equivalent online grocery checkout target established | No transaction adapter currently |
 
-| Retailer | Product identity/data | Cart/execution finding | Authentication | Current truthful status |
-|---|---|---|---|---|
-| SuperValu | Strong: `store_sku`, `store_url`, product name, price; store-scoped `rsid` | Instacart Storefront. Cart mutation known. Supports single and bulk line-item add. | SuperValu OIDC; live config has anonymous cart disabled | `product_links`; authenticated cart technically understood but not authorised/browser-native from supermarket.ie |
-| Dunnes | Existing mapped catalogue/product data | Wynshop platform; first-party shopping lists/past items include multi-item **Add selected to cart** behaviour. Needs deeper execution probe | Dunnes/Wynshop auth | Under investigation; potentially stronger no-extension path than SuperValu |
-| Tesco | Existing data; direct scraping historically problematic | Existing Pepesto work used Tesco search/retrieval; Pepesto supports retailer execution | To verify for execution | Pepesto is highest-leverage execution route to investigate |
-| Aldi | Catalogue/pricing pipeline | No equivalent online grocery checkout target currently established | — | No transactional handoff currently |
+See `docs/retailer-execution.md` for detailed retailer findings.
 
-Detailed findings live in `docs/retailer-execution.md`.
-
-## 6. SuperValu handoff — PR #21
+## 5. SuperValu handoff — PR #21
 
 Branch: `agent/retailer-handoff`
 
-Draft PR #21: **feat: add SuperValu retailer handoff adapter**
+Draft PR #21 established:
 
-PR #21 established:
-
-- shared `RetailerAdapter` abstraction
+- shared `RetailerAdapter`
 - retailer registry
 - SuperValu adapter
-- SuperValu basket-item mapping
-- selection of SuperValu alternatives when current selected offer is another retailer
+- basket-item mapping
+- selection of SuperValu alternatives
 - quantity preservation
-- retailer SKU/product identity
+- SKU/product identity
 - direct product URLs
 - safe-domain validation
 - complete/partial/missing mapping states
 - tests
 
-Important: PR #21 intentionally reports a truthful `product_links` handoff. It does **not** claim trolley population.
+It intentionally reports `product_links`; it does **not** claim trolley population.
 
-PR #21 is old relative to current `main`; do not merge it blindly. Preserve the architecture/findings and rebase/reimplement carefully against current `main` when execution direction is settled.
+PR #21 predates many later `main` commits. Preserve its architecture/findings; do not merge blindly.
 
-## 7. SuperValu cart investigation — 29 August 2026
+## 6. SuperValu cart findings — 29 August 2026
 
-A read-only live Storefront probe established:
+Live Storefront inspection established:
 
-- SuperValu's online store is Instacart Storefront infrastructure.
-- `rsid` is the retailer store identifier.
-- Normal add uses a store-scoped cart resource: `POST stores/{retailerStoreId}/cart`.
-- The add-product contract contains quantity, SKU, catalog source and shopping-mode ID.
-- Storefront client code exposes both single-line and bulk line-item add operations (`AddProductLineItemToCart` and `AddProductLineItemsToCart`).
-- Quantity changes use the same cart resource with a different operation/domain model.
-- Delivery/collection slot selection is not required merely to build/review the cart.
-- Live SuperValu configuration has `anonymousCart: false`.
-- A guest pressing Add is directed into SuperValu authentication rather than being given an anonymous trolley.
-- Authentication is OIDC-based (`sts.supervalu.ie` observed in client configuration).
-- Supermarket.ie must not capture/replay SuperValu credentials, bearer tokens or session cookies.
+- SuperValu uses Instacart Storefront.
+- `rsid` is retailer-store context.
+- Cart is store-scoped.
+- Add uses `POST stores/{retailerStoreId}/cart`.
+- Add payload includes SKU, quantity, catalog source and shopping-mode ID.
+- Client exposes single and bulk add operations (`AddProductLineItemToCart`, `AddProductLineItemsToCart`).
+- Delivery/collection slot is not required merely to build/review cart.
+- Live config has `anonymousCart: false`.
+- Logged-out Add redirects into SuperValu auth.
+- OIDC auth references include `sts.supervalu.ie`.
 
-Conclusion: the cart primitive is real and bulk basket population is technically straightforward **inside an authorised SuperValu shopper context**. The unresolved problem is delegated/authenticated execution, not product mapping or basket construction.
+Conclusion: bulk trolley population is technically straightforward **inside an authorised SuperValu shopper context**. The blocker is execution/auth context, not product mapping.
 
-### Rejected SuperValu approach
+### Rejected extension route
 
-A Chrome browser-bridge proof of concept was created on branch `agent/supervalu-browser-bridge-poc`, draft PR #56. It drove SuperValu's visible Add control inside the shopper's browser without handling credentials.
+Branch `agent/supervalu-browser-bridge-poc`, draft PR #56, proved a browser-side Add-to-Trolley model but required a Chrome extension.
 
-This was **rejected as a product direction** because requiring users to install an extension is unacceptable for the mainstream Supermarket.ie experience.
+**Product requirement: no extension.** Do not merge PR #56 as mainstream UX.
 
-Do not merge PR #56 into production. Preserve it only as evidence/experimental learning unless deliberately superseded/closed.
+A normal supermarket.ie page cannot manipulate an authenticated `shop.supervalu.ie` tab because of browser same-origin/security boundaries. Do not seek brittle bypasses.
 
-A normal supermarket.ie webpage cannot manipulate the shopper's authenticated `shop.supervalu.ie` context because of browser same-origin/security boundaries. Do not waste time seeking brittle browser-security bypasses.
+## 7. Dunnes findings — 29 August 2026
 
-## 8. Dunnes execution findings — 29 August 2026
+Dunnes grocery uses a Wynshop-based platform with OIDC-style authentication.
 
-Dunnes grocery currently uses a Wynshop-based platform and an OIDC-style authentication flow.
+First-party behaviour includes shopping lists, favourites, past purchases and multi-item **Add selected to cart** behaviour. Cart review occurs before delivery-slot/payment completion.
 
-Relevant first-party behaviour includes:
+Key question: can a Dunnes list/session be prepared or transferred so that, after shopper login, it becomes a populated Dunnes cart without an extension or Supermarket.ie taking credentials?
 
-- authenticated shopping lists
-- favourites/past purchases
-- multi-item **Add selected to cart** behaviour from saved items/lists
-- cart can be built/reviewed before delivery-slot/payment completion
+Before substantial bespoke reverse engineering, evaluate Pepesto because Pepesto already supports Dunnes.
 
-This makes Dunnes potentially more promising than SuperValu for a clean list-to-cart primitive.
+## 8. Pepesto — EXISTING INTEGRATION AND CHECKOUT WORK, DO NOT REDISCOVER
 
-Key unanswered question: can a Dunnes/Wynshop list/session be prepared before authentication and adopted by the shopper after login, or otherwise legitimately handed into the authenticated cart without an extension?
+This is a critical historical area that was previously lost between chats.
 
-Before doing substantial bespoke Dunnes reverse engineering, evaluate Pepesto execution because Pepesto already supports Dunnes.
+Existing branch: `pepesto-tesco-adapter`
 
-## 9. Pepesto — EXISTING INTEGRATION, DO NOT REDISCOVER
+Historical adapter: `src/lib/pepesto-tesco.ts`
 
-This is particularly important because prior chats lost track of this work.
+API base used: `https://s.pepesto.com/api`
 
-There is an existing branch:
+### Credential architecture
 
-`pepesto-tesco-adapter`
-
-Historical commits on/around 21 August 2026 include:
-
-- `schedule second Pepesto result retrieval`
-- `add durable Pepesto Tesco search sessions`
-- `add Pepesto Tesco adapter`
-
-Historical adapter file:
-
-`src/lib/pepesto-tesco.ts`
-
-Pepesto API base used by the implementation:
-
-`https://s.pepesto.com/api`
-
-The historical implementation used endpoints including:
-
-- `/credits`
-- `/search`
-- `/retrieve`
-
-### Pepesto credential architecture
-
-**Do not search for or expose a raw Pepesto secret in chat or source.**
-
-The historical server-side adapter retrieves the credential via:
+Historical server-side code gets the Pepesto credential via:
 
 `supabaseAdmin.rpc('get_pepesto_api_key')`
 
-and then sends it to Pepesto as a Bearer token.
+and sends it as a Bearer token.
 
-Therefore the established access path is:
+Established access path:
 
 `Supermarket.ie server → Supabase get_pepesto_api_key() → Pepesto API`
 
-Do not assume a missing visible `PEPESTO_API_KEY` Vercel variable means Pepesto access is absent. Verify the RPC/integration path safely.
+Do not search for, print or expose the secret value.
+
+### Phase 1 — Tesco search/retrieval
+
+Earlier Pepesto work did use `/credits`, `/search` and `/retrieve` for Tesco product discovery/pricing because direct Tesco scraping was problematic.
+
+### Phase 2 — Tesco basket / checkout-protocol work
+
+**Do not describe the prior Pepesto work as search/retrieval only.**
+
+On 21 August 2026 we explicitly investigated how Pepesto creates a Tesco basket and began reproducing that approach for Supermarket.ie handoff.
+
+Repo history includes commits such as:
+
+- `add one-time Pepesto checkout protocol test`
+- `add three-product Pepesto checkout protocol test`
+- `schedule three-product Pepesto checkout protocol test`
+- `add one-time Pepesto checkout continuation`
+- `add one-time Pepesto checkout recovery turn`
+- `add fresh recorded Pepesto checkout session`
+- `schedule fresh Pepesto checkout recording`
+
+The three-product test implemented this sequence:
+
+`/products` with exact Tesco preferred URLs → exact matches → Pepesto `session_token`s → `/session` with quantities → Pepesto `session_id` → `/checkout` → record protocol instruction → continue `/checkout` on same session`
+
+The checkout protocol parser explicitly inspected instructions including:
+
+- `load_page`
+- `await_element`
+- `run_js`
+- `prompt_user_action`
+- `await_js_out_change`
+- `done`
+
+A later fresh three-product session stored the full first checkout response, and continuation/recovery routes reused prior `session_id` values.
+
+Therefore historical `scrape_runs` records may contain highly valuable checkout instructions/session metadata. **Inspect those before creating new paid Pepesto sessions or writing new Tesco handoff code.**
+
+The evidence shows meaningful basket-handoff/protocol implementation work. It does not by itself prove a production customer completed Tesco checkout end-to-end; recover the stored results to determine exactly how far we got.
 
 ### Pepesto strategic role
 
-Pepesto should be evaluated primarily as **retailer execution infrastructure**, not as Supermarket.ie's shopping intelligence.
+Preferred role:
 
-Preferred boundary:
+`Shopping Capability Layer → PepestoExecutionAdapter → retailer execution`
 
-`Shopping Capability Layer → Pepesto retailer-execution adapter → retailer basket/checkout`
+Supermarket.ie should continue to decide household needs, products, quantities, retailer comparison and recommendations. Pepesto can potentially supply brittle retailer-specific execution.
 
-Supermarket.ie should continue to decide household needs, products, quantities, retailer comparison and recommendations. Pepesto can potentially handle brittle retailer-specific checkout/browser execution.
+The major product question is whether Pepesto's execution can support the required **no-extension** experience under Supermarket.ie, or whether our previously recorded protocol knowledge can be used to build an acceptable execution runtime ourselves.
 
-Pepesto publicly describes support for Dunnes, SuperValu and Tesco Ireland and a session/checkout execution model. Their checkout architecture is browser-driving: a checkout service returns instructions such as page loading, waiting for elements, JavaScript execution and shopper actions; the client executes these in an appropriate browser/WebView/automation context. Do not assume Pepesto has a magic public retailer cart URL.
+## 9. Retailer-selection UX
 
-Before consuming paid credits, inspect public Pepesto implementation/docs and any existing historical sessions/results. If a new paid session is genuinely needed, keep the first experiment tiny and explicit.
+After basket preparation, show retailer-neutral fulfilment/price options, for example:
 
-## 10. Retailer-selection UX
+- SuperValu — X/Y items — approx. €A
+- Dunnes — X/Y items — approx. €B
+- Tesco — X/Y items — approx. €C
 
-The target user experience after basket preparation is retailer-neutral. Example conceptual output:
+Supermarket.ie may recommend based on fulfilment, price and household preferences, but the shopper chooses.
 
-- SuperValu — X/Y items available — approx. €A
-- Dunnes — X/Y items available — approx. €B
-- Tesco — X/Y items available — approx. €C
+Only show **Shop this basket** as true trolley population where it has actually been proven. Never claim `authenticated_cart` merely because mappings or protocol instructions exist.
 
-Supermarket.ie may recommend a retailer based on fulfilment, price and household preferences, but the shopper chooses the retailer.
+## 10. Transaction instrumentation
 
-Only show **Shop this basket** as a true trolley-population capability for retailers where the execution method has actually been proven. Do not imply cart population when only product links/guided handoff are available.
-
-## 11. Transaction instrumentation
-
-Strategic events should include:
+Target events:
 
 - `basket_prepared`
 - `retailer_selected`
@@ -254,95 +220,70 @@ Strategic events should include:
 - `handoff_items_mapped`
 - `retailer_trolley_prepared`
 - `retailer_checkout_opened`
-- eventually `purchase_confirmed` only where confirmation is legitimately available
+- `purchase_confirmed` only where legitimately observable
 
-Never emit `retailer_trolley_prepared` unless a retailer trolley has actually been populated.
+Never emit `retailer_trolley_prepared` unless the retailer trolley was actually populated.
 
-Long-term commercial leverage should be measured partly as retailer-attributable transaction volume / GMV.
+Long-term leverage should include retailer-attributable GMV.
 
-## 12. Data/scraping context relevant to execution
-
-Retailer scraping/data refresh is a separate workstream from retailer handoff. Do not confuse them.
-
-Relevant current architecture/history:
-
-- SuperValu and Dunnes refresh work runs through current production infrastructure/Vercel paths.
-- Aldi has historically used GitHub execution because retailer access was blocked from Vercel.
-- Tesco direct scraping has been problematic and Pepesto was previously explored/implemented for Tesco search/retrieval.
-- `store_products` is the important retailer-product identity layer used by execution mapping.
-
-Before changing a retailer adapter, inspect the current retailer scraper and `store_products` fields for that retailer.
-
-## 13. Current branches / PRs requiring awareness
+## 11. Current branches / PRs requiring awareness
 
 ### PR #21 / `agent/retailer-handoff`
-
-Purpose: original SuperValu `RetailerAdapter` / `product_links` handoff.
-
-Status: valuable architecture but stale relative to current main. Preserve; do not blindly merge.
+Original SuperValu `RetailerAdapter` / `product_links` handoff. Valuable but stale relative to current main.
 
 ### PR #56 / `agent/supervalu-browser-bridge-poc`
-
-Purpose: prove shopper-side authenticated SuperValu interaction without Supermarket.ie handling credentials.
-
-Status: experiment only. Extension requirement makes it unsuitable as mainstream UX. Do not promote as product direction.
+Extension-based SuperValu proof. Experimental only; not mainstream product direction.
 
 ### `pepesto-tesco-adapter`
+Historical Pepesto Tesco work covering **both product retrieval and checkout/basket-protocol investigation**. This branch and associated 21 August commits must be inspected before new Pepesto/Tesco handoff work.
 
-Purpose: historical Pepesto Tesco search/retrieval integration.
+## 12. Strategic guardrails
 
-Status: crucial prior work. Inspect and selectively bring forward concepts/client code rather than rediscovering Pepesto access.
-
-## 14. Strategic guardrails
-
-- Do not turn Supermarket.ie back into primarily a price-comparison site.
+- Do not turn Supermarket.ie back into primarily price comparison.
 - Do not build Supermarket.ie-owned grocery fulfilment at this stage.
 - Do not become merchant of record initially.
 - Do not make marketplace/vendor onboarding a prerequisite for proving transactions.
-- Do not make retailer commercial agreements a prerequisite where a legitimate technical handoff exists.
+- Do not require retailer commercial agreements where a legitimate technical handoff exists.
 - Do not circumvent retailer security controls.
-- Do not make the business fundamentally dependent on bypassing anti-automation/security protections.
+- Do not make the business dependent on bypassing anti-automation/security protections.
 - Do not handle retailer payment credentials.
-- Do not capture/replay retailer passwords or session tokens merely to populate a cart.
-- Do not use hidden sponsored recommendations. User trust and retailer-neutral reasoning are core.
-- Do not claim an execution state that has not actually happened.
+- Do not capture/replay retailer passwords/session tokens merely to populate carts.
+- Do not require consumer browser extensions.
+- Do not use hidden sponsored recommendations.
+- Do not claim an execution state that has not happened.
 
-## 15. Current recommended next sequence
+## 13. Current recommended next sequence
 
-1. Treat this file and `docs/retailer-execution.md` as canonical context.
-2. Verify the historical Pepesto access path (`get_pepesto_api_key`) remains operational without exposing the secret.
-3. Study Pepesto's SuperValu/Dunnes execution mechanism using public docs/code and existing historical data before spending credits.
-4. Determine whether Pepesto can provide an acceptable no-extension customer experience under the Supermarket.ie brand/surface.
-5. If a paid experiment is needed, test a tiny 2–3 item basket for Dunnes and SuperValu.
-6. Decide the execution backend strategy: direct retailer adapter, Pepesto-backed adapter, or authorised retailer integration per retailer.
-7. Bring the chosen execution interface into the current Shopping Capability Layer.
-8. Add transaction attribution events.
-9. Connect the proven handoff to Eve with explicit shopper approval.
-10. Only then expose the same primitive through API/MCP.
+1. Read this file and `docs/retailer-execution.md` before retailer work.
+2. **Recover the 21 August Pepesto Tesco checkout-protocol results from repo history / `scrape_runs`.**
+3. Determine exactly how far the prior Tesco basket-handoff implementation progressed.
+4. Verify historical Pepesto access path remains operational without exposing the credential.
+5. Use prior Tesco/Pepesto learning to understand SuperValu and Dunnes execution before spending credits.
+6. Determine whether Pepesto or our own execution runtime can satisfy the no-extension requirement.
+7. If genuinely necessary, run only a minimal new paid experiment.
+8. Bring chosen execution method behind current Shopping Capability Layer.
+9. Add transaction attribution events.
+10. Connect proven handoff to Eve with explicit shopper approval.
+11. Only then expose the same primitive through API/MCP.
 
-## 16. Documentation discipline
+## 14. Documentation discipline
 
 For every material Supermarket.ie development session:
 
 1. Read `PROJECT_STATE.md` first.
-2. Inspect current `main` and referenced branches/PRs before coding.
-3. Read the relevant specialist document under `docs/`.
+2. Inspect current `main` and referenced branches/PRs.
+3. Read relevant specialist docs.
 4. Do the work.
-5. Update the relevant state/documentation **in the same workstream** when findings or decisions change.
-6. Record important abandoned approaches as well as successful ones so future sessions do not repeat them.
+5. Update documentation in the same workstream when findings/decisions change.
+6. Record abandoned approaches as well as successful ones.
 7. Never put secrets, tokens, passwords, customer credentials or payment data into project-state documents.
 
-### Decision-log format
+## 15. Decision log
 
-Append material decisions below using:
-
-`YYYY-MM-DD — Decision — Reason — Consequence`
-
-## 17. Decision log
-
-- **2026-08-18 — Shared Shopping Capability Layer established (PR #20).** Reason: business logic must be reusable by Eve, website, API and MCP. Consequence: new shopping features should extend shared capability code rather than Eve-specific logic.
-- **2026-08-18 — SuperValu selected as first retailer-handoff adapter (PR #21).** Reason: useful execution identifiers and reliable product URLs already available. Consequence: truthful `product_links` handoff created while trolley mechanism remained unproven.
-- **2026-08-29 — SuperValu cart mechanism established.** Reason: live Storefront investigation. Consequence: bulk cart population is technically understood, but anonymous cart is disabled and authenticated browser context is required.
-- **2026-08-29 — Browser-extension requirement rejected for mainstream handoff.** Reason: unacceptable user friction. Consequence: PR #56 remains experimental evidence only; no-extension is a product requirement.
-- **2026-08-29 — Pepesto prior work rediscovered and elevated.** Reason: existing `pepesto-tesco-adapter` branch and Supabase-backed credential architecture show retailer execution infrastructure was already being explored. Consequence: investigate Pepesto before further bespoke retailer reverse engineering.
-- **2026-08-29 — Repository documentation becomes canonical project memory.** Reason: chat history was causing rediscovery and loss of prior technical decisions. Consequence: future sessions must read and maintain this file.
+- **2026-08-18 — Shared Shopping Capability Layer established (PR #20).** Reusable shopping logic becomes the architectural core.
+- **2026-08-18 — SuperValu selected as first retailer-handoff adapter (PR #21).** Truthful `product_links` handoff created while cart execution remained unproven.
+- **2026-08-21 — Pepesto Tesco checkout protocol investigated.** Three-product session, checkout instruction and continuation/recovery work were performed; this was the start of basket-handoff implementation, not merely search/retrieval.
+- **2026-08-29 — SuperValu cart mechanism established.** Bulk cart operation understood; authenticated execution remains the blocker.
+- **2026-08-29 — Browser-extension requirement rejected.** No-extension is a product requirement.
+- **2026-08-29 — Pepesto prior work rediscovered.** Historical execution work must be recovered before new retailer reverse engineering.
+- **2026-08-29 — Repository documentation becomes canonical project memory.** Future sessions must read and maintain these docs.
