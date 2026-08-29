@@ -8,7 +8,6 @@
     "src/app/api/queues/agent-product-change/route.ts": {"maxDuration":120,"experimentalTriggers":[{"type":"queue/v2beta","topic":"agent-product-changes","retryAfterSeconds":15,"initialDelaySeconds":0}]}
   },
   "crons": [
-    {"path":"/api/analytics/traffic-agent-check","schedule":"* * * * *"},
     {"path":"/api/cron/weekly-digest","schedule":"0 8 * * 0"},
     {"path":"/api/cron/check-alerts","schedule":"30 7 * * *"},
     {"path":"/api/cron/agent-tasks","schedule":"35 7 * * *"},
