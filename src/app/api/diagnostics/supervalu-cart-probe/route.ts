@@ -3,19 +3,6 @@ import { supabaseAdmin } from '@/lib/supabase';
 const SUPERVALU_HOST = 'shop.supervalu.ie';
 const MAX_SCRIPTS = 10;
 const MAX_SCRIPT_BYTES = 1_500_000;
-const TERMS = [
-  'anonymouscart',
-  'addlineitem',
-  'requestlineitem',
-  'domain-model=',
-  'retailerstoreid',
-  'stores/${',
-  'addtocart',
-  'cartitemdictionary',
-  '/cart',
-  'quantity',
-  'rsid',
-];
 
 function authorized(request: Request) {
   if (process.env.VERCEL_ENV === 'preview') return true;
@@ -42,25 +29,40 @@ function extractScriptUrls(html: string, base: string) {
   return [...urls];
 }
 
-function snippets(text: string) {
-  const lower = text.toLowerCase();
-  const hits: Array<{ term: string; snippet: string }> = [];
-  for (const term of TERMS) {
-    let from = 0;
-    while (hits.length < 60) {
-      const index = lower.indexOf(term, from);
-      if (index < 0) break;
-      const start = Math.max(0, index - 320);
-      const end = Math.min(text.length, index + term.length + 620);
-      hits.push({
-        term,
-        snippet: text.slice(start, end).replace(/\s+/g, ' ').slice(0, 1000),
-      });
-      from = index + term.length;
-    }
-    if (hits.length >= 60) break;
+function extractRetailerStoreId(html: string) {
+  const match = html.match(/\\?"retailerStoreId\\?"\s*:\s*\\?"(\d+)\\?"/i);
+  return match?.[1] ?? null;
+}
+
+function extractAnonymousCart(html: string) {
+  if (/\\?"anonymousCart\\?"\s*:\s*false/i.test(html)) return false;
+  if (/\\?"anonymousCart\\?"\s*:\s*true/i.test(html)) return true;
+  return null;
+}
+
+function extractShoppingModeId(html: string) {
+  const patterns = [
+    /\\?"selectedShoppingMode\\?"\s*:\s*\{[^}]*\\?"shoppingModeId\\?"\s*:\s*\\?"([^"\\]+)\\?"/i,
+    /\\?"shoppingModeId\\?"\s*:\s*\\?"([^"\\]+)\\?"[^}]*\\?"displayName\\?"\s*:\s*\\?"delivery\\?"/i,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) return match[1];
   }
-  return hits;
+  return null;
+}
+
+function detectCartContract(text: string) {
+  return {
+    add_product_line_item: text.includes('domain-model=AddProductLineItemToCart'),
+    add_many_product_line_items: text.includes('domain-model=AddProductLineItemsToCart'),
+    set_line_item_quantity: text.includes('domain-model=SetLineItemQuantity'),
+    endpoint_store_scoped: text.includes('stores/${') && text.includes('/cart'),
+    payload_has_quantity: text.includes('quantity:t.quantity'),
+    payload_has_sku: text.includes('sku:t.sku'),
+    payload_has_catalog_source: text.includes('source:{type:"catalog"}'),
+    payload_has_shopping_mode: text.includes('shoppingModeId:o.shoppingModes.selectedShoppingMode.shoppingModeId'),
+  };
 }
 
 async function fetchText(url: string) {
@@ -115,20 +117,27 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const scriptUrls = extractScriptUrls(page.text, storeUrl);
-  const scriptResults = [];
+  const contracts = {
+    add_product_line_item: false,
+    add_many_product_line_items: false,
+    set_line_item_quantity: false,
+    endpoint_store_scoped: false,
+    payload_has_quantity: false,
+    payload_has_sku: false,
+    payload_has_catalog_source: false,
+    payload_has_shopping_mode: false,
+  };
 
   for (const url of scriptUrls) {
     try {
       const result = await fetchText(url);
-      const hits = result.text ? snippets(result.text) : [];
-      if (hits.length) scriptResults.push({ url, status: result.status, hits });
-    } catch (error) {
-      scriptResults.push({
-        url,
-        status: 0,
-        error: error instanceof Error ? error.message : String(error),
-        hits: [],
-      });
+      if (!result.text) continue;
+      const detected = detectCartContract(result.text);
+      for (const key of Object.keys(contracts) as Array<keyof typeof contracts>) {
+        contracts[key] ||= detected[key];
+      }
+    } catch {
+      // A missing bundle should not cause the read-only probe to expose raw errors or response state.
     }
   }
 
@@ -143,12 +152,20 @@ export async function GET(request: Request): Promise<Response> {
       store_sku: row.store_sku,
       store_url: storeUrl,
     },
-    page: {
-      status: page.status,
-      storefront_markers: snippets(page.text),
+    storefront: {
+      page_status: page.status,
+      retailer_store_id: extractRetailerStoreId(page.text),
+      anonymous_cart_enabled: extractAnonymousCart(page.text),
+      shopping_mode_id: extractShoppingModeId(page.text),
       script_count: scriptUrls.length,
     },
-    scripts: scriptResults,
-    note: 'This diagnostic performs GET requests only. It does not create or modify a SuperValu trolley and does not capture cookies, credentials, or payment data.',
+    cart_contract: contracts,
+    add_product_contract: {
+      method: 'POST',
+      path: 'stores/{retailerStoreId}/cart',
+      content_type: 'application/vnd.cart.v1+json;domain-model=AddProductLineItemToCart',
+      body_fields: ['quantity', 'sku', 'source.type=catalog', 'shoppingModeId'],
+    },
+    note: 'Read-only structural probe. Raw Storefront state, cookies, session identifiers, credentials and payment data are never returned.',
   });
 }
