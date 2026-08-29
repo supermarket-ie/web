@@ -1,0 +1,24 @@
+name: Storefront targeted validation
+
+on:
+  push:
+    branches:
+      - agent/storefront-execution-core
+    paths:
+      - .github/workflows/storefront-targeted.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx vitest run src/lib/shopping/retailers/storefront.test.ts
