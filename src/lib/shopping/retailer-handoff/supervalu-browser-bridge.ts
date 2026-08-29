@@ -41,13 +41,13 @@ export function buildSupervaluBrowserBridgeUrl(items: SupervaluBrowserBridgeItem
   const normalizedItems = items.map((item) => {
     const productUrl = assertSafeProductUrl(item.productUrl);
     if (!item.sku.trim()) throw new Error('Each SuperValu item requires a SKU');
-    if (!Number.isInteger(item.quantity) || item.quantity < 1) {
-      throw new Error('Each SuperValu item requires a positive integer quantity');
+    if (item.quantity !== 1) {
+      throw new Error('The browser bridge proof of concept currently supports quantity 1 only');
     }
 
     return {
       sku: item.sku.trim(),
-      quantity: item.quantity,
+      quantity: 1,
       productUrl: productUrl.toString(),
       ...(item.name?.trim() ? { name: item.name.trim() } : {}),
     };
