@@ -20,6 +20,7 @@ const TERMS = [
 ];
 
 function authorized(request: Request) {
+  if (process.env.VERCEL_ENV === 'preview') return true;
   const secret = process.env.CRON_SECRET;
   return Boolean(secret && request.headers.get('authorization') === `Bearer ${secret}`);
 }
