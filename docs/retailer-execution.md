@@ -18,20 +18,14 @@ Supermarket.ie remains outside retailer payment and does not capture retailer cr
 |---|---|---|---|---|---|
 | SuperValu | Instacart Storefront | `store_sku`, `store_url`, `rsid`/retailer store ID, price/name | Store-scoped cart; single + bulk add observed in client | `anonymousCart:false`; OIDC login required | Product-link handoff proven; automatic authenticated trolley population unresolved |
 | Dunnes | Wynshop | Existing retailer product mappings | First-party list/past-items multi-select → Add selected to cart | Dunnes/Wynshop auth | Investigate list/session adoption and Pepesto route |
-| Tesco | Tesco Ireland + historical Pepesto integration | Existing store product mapping/queue fields | Pepesto previously used for search/retrieve; execution supported by Pepesto | To verify | Prefer Pepesto investigation before bespoke checkout work |
+| Tesco | Tesco Ireland + historical Pepesto integration | Existing store product mapping; exact Tesco product URLs used in prior tests | **Pepesto checkout protocol was tested with a three-product Tesco basket and continuation turns** | Pepesto browser-driving checkout protocol; final customer runtime still unresolved | Prior basket-handoff work exists and must be recovered before new implementation |
 | Aldi | Retailer catalogue pipeline | Existing catalogue mapping | No established online grocery checkout | — | No execution adapter target currently |
 
 ## SuperValu
 
 ### Data available
 
-The SuperValu data pipeline captures execution-relevant identifiers including:
-
-- `store_sku`
-- `store_url`
-- retailer product name
-- current price
-- store-scoped URLs containing `rsid`
+The SuperValu data pipeline captures execution-relevant identifiers including `store_sku`, `store_url`, retailer product name, current price and store-scoped URLs containing `rsid`.
 
 ### PR #21
 
@@ -57,12 +51,7 @@ Read-only Storefront inspection established:
 
 ### Security/product boundary
 
-Do not:
-
-- replay SuperValu auth/session tokens server-side
-- capture passwords
-- attempt to bypass the retailer login requirement
-- report `authenticated_cart` until a real trolley has been populated through a legitimate user-authorised path
+Do not replay SuperValu auth/session tokens server-side, capture passwords, bypass retailer login, or report `authenticated_cart` until a real trolley has been populated through a legitimate user-authorised path.
 
 ### Browser bridge experiment
 
@@ -74,99 +63,129 @@ A normal supermarket.ie webpage cannot execute authenticated SuperValu cart oper
 
 ### Authorised route
 
-Instacart Storefront has retailer/partner cart integration capabilities. If SuperValu/Instacart authorises Supermarket.ie, the desired bulk cart population should be technically straightforward.
+Instacart Storefront has retailer/partner cart integration capabilities. If SuperValu/Instacart authorises Supermarket.ie, desired bulk cart population should be technically straightforward.
 
 ## Dunnes
 
-### Platform findings
-
 Dunnes grocery uses a Wynshop-based platform with OIDC-style authentication.
 
-First-party UX includes:
+First-party UX includes shopping lists, favourites, past purchases, multi-select / **Add selected to cart** behaviour and cart review before delivery-slot/payment completion.
 
-- shopping lists
-- favourites
-- past purchases
-- multi-select / **Add selected to cart** behaviour
-- cart review before delivery-slot/payment completion
-
-### Key experiment
-
-Determine whether a list/session can be created or transferred in a way that survives/adopts into shopper authentication, allowing:
+Key experiment: determine whether a list/session can be created or transferred in a way that survives/adopts into shopper authentication, allowing:
 
 `Supermarket.ie basket → Dunnes login → populated Dunnes cart`
 
 without an extension and without Supermarket.ie handling Dunnes credentials.
 
-Before bespoke reverse engineering, evaluate Pepesto because it already claims Dunnes execution support.
+Before bespoke reverse engineering, evaluate Pepesto because it already supports Dunnes.
 
-## Pepesto
+## Tesco / Pepesto — PRIOR CHECKOUT WORK EXISTS
 
-### Existing Supermarket.ie work
+This section is critical. **Do not describe the prior Pepesto work as search/retrieval only.**
+
+### Existing branch and access
 
 Existing branch: `pepesto-tesco-adapter`
 
 Historical adapter: `src/lib/pepesto-tesco.ts`
 
-Historical API base: `https://s.pepesto.com/api`
+API base: `https://s.pepesto.com/api`
 
-Historical endpoints used:
-
-- `/credits`
-- `/search`
-- `/retrieve`
-
-Historical code retrieved the API credential server-side via:
+Credential retrieval was server-side through:
 
 `supabaseAdmin.rpc('get_pepesto_api_key')`
 
-Do not expose the returned value. The presence/absence of a visible Vercel env variable is not the canonical Pepesto-access check.
+Do not expose the returned value.
 
-### Historical purpose
+### Phase 1 — Tesco product retrieval
 
-The previous work used Pepesto primarily for Tesco product search/retrieval because direct Tesco scraping was difficult.
+Earlier work did include `/credits`, `/search` and `/retrieve` to improve Tesco product discovery/pricing where direct retailer scraping was difficult.
 
-### Current strategic opportunity
+### Phase 2 — Pepesto checkout protocol reverse-engineering
 
-Pepesto now matters more as a possible retailer execution layer for:
+On 21 August 2026, we deliberately moved from product retrieval into **basket creation / checkout protocol investigation**.
 
-- Dunnes
-- SuperValu
-- Tesco Ireland
+Repo history includes, among others:
 
-Desired architecture if adopted:
+- `add one-time Pepesto checkout protocol test`
+- `add three-product Pepesto checkout protocol test`
+- `schedule three-product Pepesto checkout protocol test`
+- `add one-time Pepesto checkout continuation`
+- `add one-time Pepesto checkout recovery turn`
+- `add fresh recorded Pepesto checkout session`
+- `schedule fresh Pepesto checkout recording`
+
+The three-product protocol test used known Tesco product URLs and implemented this exact sequence:
+
+1. Call Pepesto `/products` with a manual shopping list, `supermarket_domain: 'tesco.ie'` and `preferred_product_urls` containing exact Tesco URLs.
+2. Flatten returned products and select exact URL matches.
+3. Extract Pepesto `session_token` for each selected product.
+4. Build the requested basket as `skus`, each containing `session_token` and `num_units_to_buy`.
+5. Call `/session` with `supermarket_domain: 'tesco.ie'`, locale and those basket items.
+6. Receive a Pepesto `session_id`.
+7. Call `/checkout` with `continue_session_id: session_id`.
+8. Inspect/record the returned checkout protocol instruction.
+9. Continue the same checkout session in later turns using `/checkout` again.
+
+The checkout instruction parser explicitly looked for protocol operations including:
+
+- `load_page`
+- `await_element`
+- `run_js`
+- `prompt_user_action`
+- `await_js_out_change`
+- `done`
+
+This demonstrates that we had already gone through Pepesto's execution steps to understand how it drives retailer basket creation and had begun translating that learning into our own Tesco basket-handoff work.
+
+### Recorded sessions
+
+A later test deliberately created a fresh three-product Tesco Pepesto session and stored the full first `/checkout` response in the run record. Continuation/recovery routes then reused existing `session_id` values for additional protocol turns.
+
+Therefore **historical `scrape_runs` data may contain useful recorded Pepesto checkout responses/session metadata**. Inspect those records before paying for or recreating protocol tests.
+
+### What is not yet established
+
+The repository evidence proves protocol/session investigation and early basket-handoff implementation work. It does **not by itself prove that a production supermarket.ie customer completed an end-to-end Tesco checkout**.
+
+Before writing new Tesco handoff code, recover the historical protocol results and determine exactly how far the prior implementation got.
+
+## Pepesto as execution infrastructure
+
+Pepesto should be evaluated primarily as **retailer execution infrastructure**, not as Supermarket.ie's shopping intelligence.
+
+Preferred boundary:
 
 `Shopping Capability Layer → PepestoExecutionAdapter → retailer checkout runtime`
 
-Supermarket.ie should send already-decided products/quantities; Pepesto should not replace household reasoning or retailer-neutral product intelligence.
+Supermarket.ie should decide household needs, products, quantities, retailer comparison and recommendations. Pepesto can handle retailer-specific execution where useful.
 
-### Checkout mechanism
+Pepesto's checkout architecture is browser-driving rather than a magic deep-link cart. It returns instructions to a compatible execution client. This is consistent with the Tesco protocol we already recorded and the retailer-origin/session constraints independently observed on SuperValu.
 
-Pepesto's public checkout architecture is browser-driving rather than a magic deep-link cart. The checkout service can instruct a compatible client to load pages, wait for retailer UI, execute JavaScript and request shopper actions. This is consistent with the retailer-origin/session constraints independently observed on SuperValu.
-
-Important question: can Pepesto's execution runtime be delivered in a no-extension experience acceptable for Supermarket.ie (for example an embeddable/hosted browser/WebView model), or does it require the Pepesto app/extension/client environment?
+The key product question remains whether Pepesto's execution runtime can be delivered in a **no-extension experience acceptable for Supermarket.ie**, or whether we can reproduce the necessary retailer-specific execution ourselves from the previously recorded protocol learning.
 
 ### Credit discipline
 
-Do not consume paid Pepesto session/search credits merely to rediscover documented behaviour. First inspect:
+Do not consume paid Pepesto credits merely to rediscover prior work. First inspect:
 
-1. public Pepesto docs/client behaviour;
-2. historical Supermarket.ie Pepesto code;
-3. historical session/result data if available;
-4. existing free checkout turns for any valid prior session if available.
+1. the historical checkout-protocol commits;
+2. `scrape_runs` records with retrieval methods such as `pepesto_checkout_protocol` / continuation variants;
+3. stored `error_summary` checkout responses from those runs;
+4. any still-valid prior session IDs where a free continuation is legitimately supported;
+5. public Pepesto documentation/client behaviour.
 
-If a new paid session is required to answer a decisive execution question, use a minimal 2–3 item experiment.
+Only create a new paid session if the historical records cannot answer a decisive question.
 
 ## Retailer adapter semantics
 
-Execution methods must be named truthfully. Suggested conceptual levels:
+Execution methods must be named truthfully:
 
 - `product_links` — mapped retailer product links only
-- `guided_cart` — Supermarket.ie guides shopper through retailer additions but does not populate cart automatically
+- `guided_cart` — shopper is guided through retailer additions but cart is not automatically populated
 - `authenticated_cart` — shopper-authorised retailer trolley is actually populated
 - `authorised_partner_cart` — cart populated through a retailer/commerce partner integration
 
-Do not use `authenticated_cart` or emit `retailer_trolley_prepared` merely because mappings exist.
+Do not use `authenticated_cart` or emit `retailer_trolley_prepared` merely because mappings or protocol instructions exist.
 
 ## Transaction events
 
@@ -184,9 +203,9 @@ Capture retailer, mapped/total item count, approximate basket value and executio
 
 ## Next investigation
 
-1. Verify Pepesto access path remains operational via the existing Supabase RPC without exposing the key.
-2. Inspect Pepesto's current no-extension execution options.
-3. Study Pepesto SuperValu execution behaviour without consuming credits where possible.
-4. Check historical data for reusable Pepesto sessions/results.
-5. If necessary, run a minimal paid basket experiment for Dunnes and SuperValu.
-6. Decide whether direct retailer adapters or Pepesto-backed execution should be the default per retailer.
+1. **Recover the recorded Tesco Pepesto checkout-protocol results from 21 August before doing any new Pepesto experiments.**
+2. Determine how far the previous Tesco basket-handoff build actually progressed after the recorded protocol tests.
+3. Verify the existing Supabase Pepesto access path remains operational without exposing the key.
+4. Use the Tesco learning to understand Pepesto's SuperValu and Dunnes execution strategy without spending credits where possible.
+5. Determine whether Pepesto or a reproduced retailer-specific adapter can provide the required no-extension experience.
+6. Only if necessary, run a minimal new paid basket experiment.
