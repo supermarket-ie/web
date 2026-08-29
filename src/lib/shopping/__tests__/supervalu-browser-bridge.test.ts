@@ -12,7 +12,7 @@ describe('buildSupervaluBrowserBridgeUrl', () => {
       },
       {
         sku: '1234567890',
-        quantity: 2,
+        quantity: 1,
         productUrl: 'https://shop.supervalu.ie/sm/delivery/rsid/5550/product/example-id-1234567890',
       },
     ]);
@@ -44,5 +44,17 @@ describe('buildSupervaluBrowserBridgeUrl', () => {
         },
       ]),
     ).toThrow(/store-scoped/);
+  });
+
+  it('does not claim quantity support before the stepper is proven', () => {
+    expect(() =>
+      buildSupervaluBrowserBridgeUrl([
+        {
+          sku: '1020723000',
+          quantity: 2,
+          productUrl: 'https://shop.supervalu.ie/sm/delivery/rsid/5550/product/premier-low-fat-milk-2-l-id-1020723000',
+        },
+      ]),
+    ).toThrow(/quantity 1 only/);
   });
 });
