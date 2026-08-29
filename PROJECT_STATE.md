@@ -57,16 +57,18 @@ Desired UX:
 
 Supermarket.ie must not handle retailer passwords, payment credentials or retailer session tokens merely to populate a cart.
 
+**Product requirement: no browser extension.** The shopper may authenticate directly with the retailer, but Supermarket.ie must not require an extension as part of normal checkout.
+
 ## 4. Retailer status
 
 | Retailer | Current understanding | Truthful status |
 |---|---|---|
-| SuperValu | Strong mapping; Instacart Storefront; store-scoped single + bulk cart operations understood; anonymous cart disabled; OIDC login required | `product_links` today; authenticated cart technically understood but no acceptable no-extension execution path yet |
-| Dunnes | Wynshop; shopping lists/favourites/past purchases; first-party multi-item **Add selected to cart** behaviour | Under investigation; potentially promising list-to-cart path; also supported by Pepesto |
+| SuperValu | Instacart Storefront; strong SKU/URL/store mapping; store-scoped single + bulk cart operations understood; anonymous cart disabled; OIDC login required | `product_links` today; authenticated cart mechanics understood but no acceptable browser-only/no-extension execution path yet |
+| Dunnes | **Instacart Storefront**; production refresh uses `storefrontgateway.dunnesstoresgrocery.com/api`, store `258`; mapped SKUs/rsid URLs; `/api/stores/258/cart` exists and allows GET/POST; unauthenticated GET returns 401 | Cart resource and auth boundary proven read-only; exact authenticated add payload still to be confirmed, but architecture strongly converges with SuperValu |
 | Tesco | Existing retailer data plus extensive prior Pepesto work, including checkout-protocol and 3-product basket session tests | **Prior basket-handoff work exists and must be recovered before any new Tesco implementation** |
 | Aldi | Catalogue/pricing pipeline; no equivalent online grocery checkout target established | No transaction adapter currently |
 
-See `docs/retailer-execution.md` for detailed retailer findings.
+See `docs/retailer-execution.md` for detailed findings.
 
 ## 5. SuperValu handoff — PR #21
 
@@ -100,6 +102,7 @@ Live Storefront inspection established:
 - Add uses `POST stores/{retailerStoreId}/cart`.
 - Add payload includes SKU, quantity, catalog source and shopping-mode ID.
 - Client exposes single and bulk add operations (`AddProductLineItemToCart`, `AddProductLineItemsToCart`).
+- Quantity update uses `SetLineItemQuantity`.
 - Delivery/collection slot is not required merely to build/review cart.
 - Live config has `anonymousCart: false`.
 - Logged-out Add redirects into SuperValu auth.
@@ -111,19 +114,49 @@ Conclusion: bulk trolley population is technically straightforward **inside an a
 
 Branch `agent/supervalu-browser-bridge-poc`, draft PR #56, proved a browser-side Add-to-Trolley model but required a Chrome extension.
 
-**Product requirement: no extension.** Do not merge PR #56 as mainstream UX.
+**Do not merge PR #56 as mainstream UX.**
 
 A normal supermarket.ie page cannot manipulate an authenticated `shop.supervalu.ie` tab because of browser same-origin/security boundaries. Do not seek brittle bypasses.
 
-## 7. Dunnes findings — 29 August 2026
+## 7. Dunnes cart findings — 29 August 2026
 
-Dunnes grocery uses a Wynshop-based platform with OIDC-style authentication.
+### Important correction
 
-First-party behaviour includes shopping lists, favourites, past purchases and multi-item **Add selected to cart** behaviour. Cart review occurs before delivery-slot/payment completion.
+Do **not** describe current Dunnes grocery as a separate Wynshop execution surface. Current production code and live retailer URLs show that Dunnes is using **Instacart Storefront infrastructure**.
 
-Key question: can a Dunnes list/session be prepared or transferred so that, after shopper login, it becomes a populated Dunnes cart without an extension or Supermarket.ie taking credentials?
+Production code explicitly uses:
 
-Before substantial bespoke reverse engineering, evaluate Pepesto because Pepesto already supports Dunnes.
+- gateway: `https://storefrontgateway.dunnesstoresgrocery.com/api`
+- retailer store ID: `258`
+- site: `https://www.dunnesstoresgrocery.com`
+- shopping mode: `22222222-2222-2222-2222-222222222222`
+- search path: `/api/stores/258/search`
+- headers including `x-site-host`, `x-site-location`, `x-correlation-id`, `x-shopping-mode`
+
+Mapped Dunnes `store_products` already contain stable numeric `store_sku` values and store-scoped `rsid/258` URLs.
+
+### Read-only cart probe
+
+Branch: `agent/dunnes-cart-probe`
+
+A read-only Vercel-side probe used the same headers/transport as the production Dunnes refresh. It performed no login, no POST and no cart mutation.
+
+Results:
+
+- production-style `/api/stores/258/search`: **HTTP 200**
+- `OPTIONS /api/stores/258/cart`: **HTTP 405**, with `Allow: GET, POST`
+- unauthenticated `GET /api/stores/258/cart`: **HTTP 401**
+
+This proves:
+
+1. Dunnes has a store-scoped Storefront cart resource at `/api/stores/258/cart`.
+2. The cart resource supports POST mutations.
+3. The cart is authentication/session-bound rather than a freely writable server-side guest cart.
+4. Dunnes and SuperValu now appear to share the same underlying Instacart Storefront execution family, so a shared Storefront execution engine is preferable to duplicating retailer-specific cart logic if/when authenticated execution is solved.
+
+Exact Dunnes POST domain-model/body has **not yet been sent or inferred as proven**. Do not mutate a Dunnes cart merely to discover it. First exploit the common Storefront architecture/public client behaviour or Pepesto protocol evidence.
+
+The temporary one-shot GitHub probe workflow was removed after the test.
 
 ## 8. Pepesto — EXISTING INTEGRATION AND CHECKOUT WORK, DO NOT REDISCOVER
 
@@ -151,7 +184,7 @@ Do not search for, print or expose the secret value.
 
 ### Phase 1 — Tesco search/retrieval
 
-Earlier Pepesto work did use `/credits`, `/search` and `/retrieve` for Tesco product discovery/pricing because direct Tesco scraping was problematic.
+Earlier Pepesto work used `/credits`, `/search` and `/retrieve` for Tesco product discovery/pricing because direct Tesco scraping was problematic.
 
 ### Phase 2 — Tesco basket / checkout-protocol work
 
@@ -169,11 +202,11 @@ Repo history includes commits such as:
 - `add fresh recorded Pepesto checkout session`
 - `schedule fresh Pepesto checkout recording`
 
-The three-product test implemented this sequence:
+The three-product test implemented:
 
-`/products` with exact Tesco preferred URLs → exact matches → Pepesto `session_token`s → `/session` with quantities → Pepesto `session_id` → `/checkout` → record protocol instruction → continue `/checkout` on same session`
+`/products` with exact Tesco preferred URLs → exact matches → Pepesto session tokens → `/session` with quantities → Pepesto session ID → `/checkout` → record protocol instruction → continue `/checkout` on the same session`
 
-The checkout protocol parser explicitly inspected instructions including:
+The checkout protocol parser explicitly inspected:
 
 - `load_page`
 - `await_element`
@@ -182,21 +215,27 @@ The checkout protocol parser explicitly inspected instructions including:
 - `await_js_out_change`
 - `done`
 
-A later fresh three-product session stored the full first checkout response, and continuation/recovery routes reused prior `session_id` values.
+Historical Supabase records still include session/checkout metadata. One known session is `76a090b1-f7f9-437d-b505-2b996f00718a`; later continuation/recovery checkout calls were charged €0.00. Do not create a new paid session merely to rediscover this protocol.
 
-Therefore historical `scrape_runs` records may contain highly valuable checkout instructions/session metadata. **Inspect those before creating new paid Pepesto sessions or writing new Tesco handoff code.**
+### Pepesto public runtime boundary — 29 August 2026
 
-The evidence shows meaningful basket-handoff/protocol implementation work. It does not by itself prove a production customer completed Tesco checkout end-to-end; recover the stored results to determine exactly how far we got.
+Pepesto's current public docs confirm `/checkout` is a turn-by-turn browser-driving protocol. A compatible client must be able to load retailer pages, run server-provided JS, wait for DOM state and prompt the shopper.
+
+Pepesto's hosted Agent-to-Cart/MCP route is free to initiate, but the actual consumer checkout handoff goes into the **Pepesto mobile app**. On desktop it shows a QR code and asks the user to continue on the phone. Pepesto says the app runs the checkout loop and then redirects to the retailer cart/login page.
+
+Pepesto's iframe/dockable UI can host its basket-review UI, but current public documentation says the actual checkout-driving step moves into the Pepesto mobile app. Therefore **Pepesto has not revealed a normal browser-only cross-origin trick that supermarket.ie can simply copy**.
+
+This validates our own browser-origin analysis: the hard part is executing inside the retailer-authenticated context. Pepesto solves that with a controlled client runtime (mobile WebView/app; their API also cites browser extensions or Playwright as examples).
 
 ### Pepesto strategic role
 
-Preferred role:
+Preferred role if used:
 
 `Shopping Capability Layer → PepestoExecutionAdapter → retailer execution`
 
-Supermarket.ie should continue to decide household needs, products, quantities, retailer comparison and recommendations. Pepesto can potentially supply brittle retailer-specific execution.
+Supermarket.ie should continue to decide household needs, products, quantities, retailer comparison and recommendations. Pepesto should not replace our shopping intelligence.
 
-The major product question is whether Pepesto's execution can support the required **no-extension** experience under Supermarket.ie, or whether our previously recorded protocol knowledge can be used to build an acceptable execution runtime ourselves.
+However, because the user experience must not require a browser extension and ideally should remain Supermarket.ie-led, continue studying/reproducing the underlying retailer Storefront operations before adopting Pepesto's mobile-app handoff as the primary UX.
 
 ## 9. Retailer-selection UX
 
@@ -234,8 +273,11 @@ Original SuperValu `RetailerAdapter` / `product_links` handoff. Valuable but sta
 ### PR #56 / `agent/supervalu-browser-bridge-poc`
 Extension-based SuperValu proof. Experimental only; not mainstream product direction.
 
+### `agent/dunnes-cart-probe`
+Read-only Dunnes gateway/cart discovery branch. Confirmed Storefront cart path/auth boundary. One-shot workflow removed after test. Do not treat as production implementation.
+
 ### `pepesto-tesco-adapter`
-Historical Pepesto Tesco work covering **both product retrieval and checkout/basket-protocol investigation**. This branch and associated 21 August commits must be inspected before new Pepesto/Tesco handoff work.
+Historical Pepesto Tesco work covering **both product retrieval and checkout/basket-protocol investigation**. Inspect before new Pepesto/Tesco handoff work.
 
 ## 12. Strategic guardrails
 
@@ -255,16 +297,15 @@ Historical Pepesto Tesco work covering **both product retrieval and checkout/bas
 ## 13. Current recommended next sequence
 
 1. Read this file and `docs/retailer-execution.md` before retailer work.
-2. **Recover the 21 August Pepesto Tesco checkout-protocol results from repo history / `scrape_runs`.**
-3. Determine exactly how far the prior Tesco basket-handoff implementation progressed.
-4. Verify historical Pepesto access path remains operational without exposing the credential.
-5. Use prior Tesco/Pepesto learning to understand SuperValu and Dunnes execution before spending credits.
-6. Determine whether Pepesto or our own execution runtime can satisfy the no-extension requirement.
-7. If genuinely necessary, run only a minimal new paid experiment.
-8. Bring chosen execution method behind current Shopping Capability Layer.
-9. Add transaction attribution events.
-10. Connect proven handoff to Eve with explicit shopper approval.
-11. Only then expose the same primitive through API/MCP.
+2. Treat Dunnes and SuperValu as likely members of a common **Instacart Storefront execution family**, not completely separate checkout integrations.
+3. Recover the most detailed historical Tesco Pepesto checkout instructions/results available from repo history and `scrape_runs`.
+4. Continue zero-credit inspection of public Pepesto and Instacart client/runtime behaviour for retailer-specific execution details.
+5. Determine whether a legitimate browser-native authenticated Storefront handoff exists; do not seek same-origin bypasses.
+6. If a retailer-specific Pepesto session becomes the only way to reveal a decisive missing instruction, tell the user before spending credits and keep the test minimal.
+7. Bring the chosen execution method behind the current Shopping Capability Layer / retailer adapter interface.
+8. Add transaction attribution events.
+9. Connect proven handoff to Eve with explicit shopper approval.
+10. Only then expose the same primitive through API/MCP.
 
 ## 14. Documentation discipline
 
@@ -286,4 +327,6 @@ For every material Supermarket.ie development session:
 - **2026-08-29 — SuperValu cart mechanism established.** Bulk cart operation understood; authenticated execution remains the blocker.
 - **2026-08-29 — Browser-extension requirement rejected.** No-extension is a product requirement.
 - **2026-08-29 — Pepesto prior work rediscovered.** Historical execution work must be recovered before new retailer reverse engineering.
-- **2026-08-29 — Repository documentation becomes canonical project memory.** Future sessions must read and maintain these docs.
+- **2026-08-29 — Dunnes confirmed as Instacart Storefront execution.** Production gateway/search works at store 258; cart resource allows GET/POST and returns 401 without authentication. Consequence: design toward a shared Storefront execution engine for Dunnes/SuperValu rather than duplicate retailer-specific cart plumbing.
+- **2026-08-29 — Pepesto public runtime boundary clarified.** Free MCP/list handoff still finishes through Pepesto's mobile app/WebView; no browser-only cross-origin shortcut has been identified.
+- **2026-08-29 — Repository documentation is canonical project memory.** Future sessions must read and maintain these docs.
