@@ -65,6 +65,19 @@ function detectCartContract(text: string) {
   };
 }
 
+function detectSessionContract(text: string) {
+  const lower = text.toLowerCase();
+  return {
+    has_authorization_header_logic: lower.includes('authorization') && lower.includes('bearer'),
+    has_oidc_client: lower.includes('oidc_client_id') || lower.includes('oidcprovider'),
+    has_user_session_cart_id: lower.includes('usersession') && lower.includes('cartid'),
+    has_customer_session_cookie: lower.includes('customer_session_id_cookie'),
+    has_rsid_session_cookie: lower.includes('rsid_session_cookie'),
+    public_gateway_referenced: lower.includes('storefrontgateway.supervalu.ie/api/'),
+    auth_host_referenced: lower.includes('sts.supervalu.ie'),
+  };
+}
+
 async function fetchText(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -127,17 +140,35 @@ export async function GET(request: Request): Promise<Response> {
     payload_has_catalog_source: false,
     payload_has_shopping_mode: false,
   };
+  const session = {
+    has_authorization_header_logic: false,
+    has_oidc_client: false,
+    has_user_session_cart_id: false,
+    has_customer_session_cookie: false,
+    has_rsid_session_cookie: false,
+    public_gateway_referenced: false,
+    auth_host_referenced: false,
+  };
 
+  const allText = [page.text];
   for (const url of scriptUrls) {
     try {
       const result = await fetchText(url);
       if (!result.text) continue;
+      allText.push(result.text);
       const detected = detectCartContract(result.text);
       for (const key of Object.keys(contracts) as Array<keyof typeof contracts>) {
         contracts[key] ||= detected[key];
       }
     } catch {
       // A missing bundle should not cause the read-only probe to expose raw errors or response state.
+    }
+  }
+
+  for (const text of allText) {
+    const detected = detectSessionContract(text);
+    for (const key of Object.keys(session) as Array<keyof typeof session>) {
+      session[key] ||= detected[key];
     }
   }
 
@@ -160,6 +191,7 @@ export async function GET(request: Request): Promise<Response> {
       script_count: scriptUrls.length,
     },
     cart_contract: contracts,
+    session_contract: session,
     add_product_contract: {
       method: 'POST',
       path: 'stores/{retailerStoreId}/cart',
