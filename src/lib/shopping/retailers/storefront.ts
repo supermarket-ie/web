@@ -4,7 +4,7 @@ export type StorefrontExecutionConfig = {
   retailer: StorefrontRetailer;
   platform: 'instacart_storefront';
   productHosts: readonly string[];
-  gatewayHost: string;
+  gatewayHost: string | null;
   cartResourceConfirmed: boolean;
   authRequired: boolean;
   singleAddContractConfirmed: boolean;
@@ -37,7 +37,9 @@ export const STOREFRONT_EXECUTION_CONFIG: Record<StorefrontRetailer, StorefrontE
     retailer: 'supervalu',
     platform: 'instacart_storefront',
     productHosts: ['shop.supervalu.ie'],
-    gatewayHost: 'storefrontgateway.supervalu.ie',
+    // The cart contract was recovered from the Storefront client. Keep the gateway
+    // hostname unset here until it is independently captured from current production.
+    gatewayHost: null,
     cartResourceConfirmed: true,
     authRequired: true,
     singleAddContractConfirmed: true,
