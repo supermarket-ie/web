@@ -15,21 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe Dunnes Storefront gateway cart metadata
+      - name: Run read-only Dunnes gateway probe via Vercel
         shell: bash
         run: |
           set -euo pipefail
-          base='https://storefrontgateway.dunnesstoresgrocery.com/api/stores/258/cart'
-          common=(-H 'Accept: application/json, text/plain, */*' -H 'x-site-host: https://www.dunnesstoresgrocery.com' -H 'x-site-location: HeadersBuilderInterceptor' -H 'x-shopping-mode: 22222222-2222-2222-2222-222222222222' -H 'User-Agent: Mozilla/5.0')
-
-          echo '=== OPTIONS ==='
-          curl -sS -D /tmp/options.headers -o /tmp/options.body -X OPTIONS "${common[@]}" "$base" || true
-          grep -Ei '^(HTTP/|allow:|access-control-allow-|content-type:|www-authenticate:)' /tmp/options.headers || true
-          head -c 500 /tmp/options.body || true
+          url='https://web-git-agent-dunnes-cart-probe-supermarket-ie.vercel.app/api/diagnostics/dunnes-cart-probe'
+          status=$(curl -sS -L -o /tmp/probe.json -w '%{http_code}' "$url")
+          echo "HTTP $status"
+          cat /tmp/probe.json
           echo
-
-          echo '=== unauthenticated GET ==='
-          curl -sS -D /tmp/get.headers -o /tmp/get.body "${common[@]}" "$base" || true
-          grep -Ei '^(HTTP/|allow:|access-control-allow-|content-type:|www-authenticate:)' /tmp/get.headers || true
-          head -c 500 /tmp/get.body || true
-          echo
+          test "$status" = '200'
