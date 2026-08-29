@@ -4,18 +4,16 @@ const SUPERVALU_HOST = 'shop.supervalu.ie';
 const MAX_SCRIPTS = 10;
 const MAX_SCRIPT_BYTES = 1_500_000;
 const TERMS = [
+  'anonymouscart',
+  'addlineitem',
+  'requestlineitem',
+  'domain-model=',
+  'retailerstoreid',
+  'stores/${',
   'addtocart',
-  'add_to_cart',
-  'add-to-cart',
-  'addtotrolley',
-  'trolley',
-  'cartitem',
-  'cart_items',
-  'graphql',
+  'cartitemdictionary',
   '/cart',
   'quantity',
-  'retailerlocationid',
-  'retailer_location_id',
   'rsid',
 ];
 
@@ -49,18 +47,18 @@ function snippets(text: string) {
   const hits: Array<{ term: string; snippet: string }> = [];
   for (const term of TERMS) {
     let from = 0;
-    while (hits.length < 40) {
+    while (hits.length < 60) {
       const index = lower.indexOf(term, from);
       if (index < 0) break;
-      const start = Math.max(0, index - 180);
-      const end = Math.min(text.length, index + term.length + 260);
+      const start = Math.max(0, index - 320);
+      const end = Math.min(text.length, index + term.length + 620);
       hits.push({
         term,
-        snippet: text.slice(start, end).replace(/\s+/g, ' ').slice(0, 500),
+        snippet: text.slice(start, end).replace(/\s+/g, ' ').slice(0, 1000),
       });
       from = index + term.length;
     }
-    if (hits.length >= 40) break;
+    if (hits.length >= 60) break;
   }
   return hits;
 }
