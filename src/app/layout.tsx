@@ -25,11 +25,11 @@ const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_SI
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
-    default: 'supermarket.ie — Ireland\'s smartest grocery list',
-    template: '%s | supermarket.ie',
+    default: 'Supermarket.ie — Your AI Grocery Agent for Ireland',
+    template: '%s | Supermarket.ie',
   },
   description:
-    'Free weekly grocery lists with the best prices across Tesco, Dunnes Stores, SuperValu, Lidl and Aldi in Ireland. Save €1,200+ per year. Join 2,400+ Irish households.',
+    'Ask a grocery question and get a useful answer grounded in current Irish supermarket prices and ingredient data. Compare products and plan a smarter weekly shop.',
   keywords: [
     'Ireland grocery prices',
     'cheapest supermarket Ireland',
@@ -43,9 +43,10 @@ export const metadata: Metadata = {
     'grocery savings Ireland',
     'supermarket.ie',
   ],
-  authors: [{ name: 'supermarket.ie', url: BASE_URL }],
-  creator: 'supermarket.ie',
-  publisher: 'supermarket.ie',
+  applicationName: 'Supermarket.ie',
+  authors: [{ name: 'Supermarket.ie', url: BASE_URL }],
+  creator: 'Supermarket.ie',
+  publisher: 'Supermarket.ie',
   robots: {
     index: true,
     follow: true,
@@ -55,24 +56,24 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_IE',
     url: BASE_URL,
-    siteName: 'supermarket.ie',
-    title: 'supermarket.ie — Ireland\'s smartest grocery list',
+    siteName: 'Supermarket.ie',
+    title: 'Supermarket.ie — Your AI Grocery Agent for Ireland',
     description:
-      'Free weekly grocery lists with the best prices across Tesco, Dunnes, SuperValu, Lidl and Aldi. Save €1,200+ per year.',
+      'Ask a grocery question and get a useful answer grounded in current Irish supermarket prices and ingredient data.',
     images: [
       {
-        url: '/og-image.png',
+        url: '/og.jpg',
         width: 1200,
         height: 630,
-        alt: 'supermarket.ie — Ireland\'s smartest grocery list',
+        alt: 'Supermarket.ie — Your AI Grocery Agent for Ireland',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'supermarket.ie — Ireland\'s smartest grocery list',
-    description: 'Free weekly grocery lists with the best prices across Irish supermarkets.',
-    images: ['/og-image.png'],
+    title: 'Supermarket.ie — Your AI Grocery Agent for Ireland',
+    description: 'Current prices, ingredient intelligence and smarter weekly shops across Ireland.',
+    images: ['/og.jpg'],
   },
   alternates: {
     canonical: BASE_URL,
@@ -101,11 +102,11 @@ export default function RootLayout({
             __html: JSON.stringify({
               '@context': 'https://schema.org',
               '@type': 'WebSite',
-              name: 'supermarket.ie',
-              alternateName: 'Supermarket Ireland',
+              name: 'Supermarket.ie',
+              alternateName: ['Supermarket IE', 'Supermarket Ireland'],
               url: BASE_URL,
               description:
-                'Ireland\'s AI-powered grocery price comparison platform. Weekly shopping lists with the best prices across Tesco, Dunnes Stores, SuperValu, Lidl and Aldi.',
+                'Ireland\'s AI grocery agent, grounded in current supermarket prices and ingredient data.',
               potentialAction: {
                 '@type': 'SearchAction',
                 target: {
@@ -116,7 +117,7 @@ export default function RootLayout({
               },
               publisher: {
                 '@type': 'Organization',
-                name: 'supermarket.ie',
+                name: 'Supermarket.ie',
                 url: BASE_URL,
                 logo: {
                   '@type': 'ImageObject',
