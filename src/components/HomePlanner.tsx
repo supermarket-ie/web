@@ -134,25 +134,46 @@ type SignupPrompt = {
 };
 
 function signupPromptFor(request: string): SignupPrompt {
-  const inferredNextStep = buildPredictiveSuggestions(request, [], 1)[0];
+  const intent = inferSuggestionIntent(request);
 
   if (isPersistentGuestRequest(request)) {
     return {
-      title: 'Want me to keep this active?',
-      description: 'Add your email and Supermarket.ie can remember this request and keep working on it after you leave.',
+      title: 'Keep this active with your agent',
+      description: 'Add your email so Supermarket.ie can remember this request, keep watching it and pick it up again without starting over.',
     };
   }
 
-  if (inferredNextStep) {
+  if (intent === 'meal') {
     return {
-      title: 'Want me to keep working on this?',
-      description: `I can remember this conversation and pick it up with “${inferredNextStep.label}” instead of making you start again.`,
+      title: 'Keep this meal plan',
+      description: 'Save it, build the rest of your weekly shop and return without starting again.',
+    };
+  }
+
+  if (intent === 'budget') {
+    return {
+      title: 'Remember your household budget',
+      description: 'Keep this result and let your agent use the same budget when planning and reviewing future shops.',
+    };
+  }
+
+  if (intent === 'dietary') {
+    return {
+      title: 'Remember this household requirement',
+      description: 'Save it so your agent can apply it automatically when finding products and planning future shops.',
+    };
+  }
+
+  if (intent === 'find' || intent === 'price' || intent === 'offer' || intent === 'compare') {
+    return {
+      title: 'Keep this product with your agent',
+      description: 'Save this result, compare the rest of your shop and keep watch for useful price or product changes.',
     };
   }
 
   return {
-    title: 'Want me to keep this going?',
-    description: 'Add your email and Supermarket.ie will remember this conversation so you can continue without starting again.',
+    title: 'Make this your household agent',
+    description: 'Save this result and let Supermarket.ie remember what matters, prepare future shops and keep useful changes on your radar.',
   };
 }
 
