@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 const STORE_ID = 258;
 const SITE_URL = 'https://www.dunnesstoresgrocery.com';
 const GATEWAY_BASE = 'https://storefrontgateway.dunnesstoresgrocery.com/api';
+const GATEWAY_ORIGIN = 'https://storefrontgateway.dunnesstoresgrocery.com';
 const SHOPPING_MODE = '22222222-2222-2222-2222-222222222222';
 
 function authorized(request: Request) {
@@ -27,17 +28,24 @@ async function probe(url: string, method: 'GET' | 'OPTIONS') {
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
     const response = await fetch(url, { method, headers: headers(), cache: 'no-store', redirect: 'manual', signal: controller.signal });
+    const contentType = response.headers.get('content-type');
+    let bodyHint: string | null = null;
+    if (method === 'GET' && response.ok && contentType?.includes('json')) {
+      const text = (await response.text()).slice(0, 2000);
+      bodyHint = [
+        text.includes('openapi') ? 'openapi' : null,
+        text.includes('swagger') ? 'swagger' : null,
+        text.includes('AddProductLineItemToCart') ? 'single_add_model' : null,
+        text.includes('AddProductLineItemsToCart') ? 'bulk_add_model' : null,
+      ].filter(Boolean).join(',') || null;
+    }
     return {
       status: response.status,
       ok: response.ok,
-      content_type: response.headers.get('content-type'),
+      content_type: contentType,
       allow: response.headers.get('allow'),
       www_authenticate_present: Boolean(response.headers.get('www-authenticate')),
-      location_host: (() => {
-        const location = response.headers.get('location');
-        if (!location) return null;
-        try { return new URL(location, url).hostname; } catch { return null; }
-      })(),
+      body_hint: bodyHint,
     };
   } catch (error) {
     return { status: null, ok: false, error: error instanceof Error ? error.name : 'unknown' };
@@ -64,11 +72,13 @@ export async function GET(request: Request): Promise<Response> {
   const canonical = row.products as unknown as { canonical_name: string };
   const searchUrl = `${GATEWAY_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(String(row.store_product_name).split(' ').slice(0, 4).join(' '))}&take=1&page=1&skip=0`;
   const cartUrl = `${GATEWAY_BASE}/stores/${STORE_ID}/cart`;
+  const schemaPaths = ['/openapi.json', '/swagger/v1/swagger.json', '/swagger.json', '/api/openapi.json'];
 
-  const [searchGet, cartOptions, cartGet] = await Promise.all([
+  const [searchGet, cartOptions, cartGet, ...schemaResults] = await Promise.all([
     probe(searchUrl, 'GET'),
     probe(cartUrl, 'OPTIONS'),
     probe(cartUrl, 'GET'),
+    ...schemaPaths.map((path) => probe(`${GATEWAY_ORIGIN}${path}`, 'GET')),
   ]);
 
   return Response.json({
@@ -89,7 +99,8 @@ export async function GET(request: Request): Promise<Response> {
       search_get: searchGet,
       cart_options: cartOptions,
       cart_get_unauthenticated: cartGet,
+      schema_probes: schemaPaths.map((path, index) => ({ path, result: schemaResults[index] })),
     },
-    note: 'Read-only gateway metadata probe. No POST, cart mutation, shopper authentication, cookies, session identifiers, credentials or payment data are used or returned.',
+    note: 'Read-only gateway/schema metadata probe. No POST, cart mutation, shopper authentication, cookies, session identifiers, credentials or payment data are used or returned.',
   });
 }
