@@ -9,7 +9,13 @@ export type StorefrontExecutionConfig = {
   authRequired: boolean;
   singleAddContractConfirmed: boolean;
   bulkAddContractConfirmed: boolean;
+  quantitySetContractConfirmed: boolean;
+  controlledBrowserRuntimeConfirmed: boolean;
   mutationEnabled: boolean;
+  mutationResource?: string | null;
+  singleAddContentType?: string | null;
+  quantitySetContentType?: string | null;
+  cartReadResource?: string | null;
   knownShoppingModeId?: string | null;
 };
 
@@ -44,10 +50,16 @@ export const STOREFRONT_EXECUTION_CONFIG: Record<StorefrontRetailer, StorefrontE
     authRequired: true,
     singleAddContractConfirmed: true,
     bulkAddContractConfirmed: true,
-    // The cart mutation contract is understood, but Supermarket.ie still has no
-    // approved no-extension shopper-auth execution context. Keep actual mutation off.
+    quantitySetContractConfirmed: true,
+    controlledBrowserRuntimeConfirmed: true,
+    // Authenticated three-item trolley population is proven in a controlled
+    // browser, but the production runtime is not yet implemented.
     mutationEnabled: false,
     knownShoppingModeId: null,
+    mutationResource: null,
+    singleAddContentType: null,
+    quantitySetContentType: null,
+    cartReadResource: null,
   },
   dunnes: {
     retailer: 'dunnes',
@@ -56,12 +68,20 @@ export const STOREFRONT_EXECUTION_CONFIG: Record<StorefrontRetailer, StorefrontE
     gatewayHost: 'storefrontgateway.dunnesstoresgrocery.com',
     cartResourceConfirmed: true,
     authRequired: true,
-    singleAddContractConfirmed: false,
+    // Shopper observations prove distinct zero-to-one add and quantity-change
+    // domain models at POST /api/lists. Native bulk add remains unconfirmed.
+    singleAddContractConfirmed: true,
     bulkAddContractConfirmed: false,
+    quantitySetContractConfirmed: true,
+    controlledBrowserRuntimeConfirmed: false,
     // Read-only probing confirms GET/POST cart resource + auth boundary, but the
     // exact Dunnes mutation media type/body has not yet been independently proven.
     mutationEnabled: false,
     knownShoppingModeId: DELIVERY_SHOPPING_MODE_ID,
+    mutationResource: '/api/lists',
+    singleAddContentType: 'application/vnd.lists.v1+json;domain-model=AddItemToPlanningList',
+    quantitySetContentType: 'application/vnd.lists.v1+json;domain-model=ChangeItemQuantityInPlanningList',
+    cartReadResource: '/api/lists/planning/{listId}',
   },
 };
 
@@ -134,8 +154,8 @@ export function assertStorefrontMutationAllowed(retailer: StorefrontRetailer): v
   const config = STOREFRONT_EXECUTION_CONFIG[retailer];
   if (!config.mutationEnabled) {
     const reason = retailer === 'dunnes'
-      ? 'Dunnes cart mutation is disabled until its exact authenticated Storefront POST contract is independently confirmed.'
-      : 'SuperValu cart mutation is disabled until an approved shopper-authorised no-extension execution context exists.';
+      ? 'Dunnes cart mutation is disabled because its controlled-browser runtime is not proven.'
+      : 'SuperValu cart mutation is disabled until the production checkout runtime provider is configured.';
     throw new Error(reason);
   }
 }

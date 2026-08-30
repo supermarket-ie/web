@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
+import { trackEvent } from '@/lib/analytics';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ interface Props {
   activeListId: string;
   householdMemory?: HouseholdMemory | null;
   intent?: string;
+  checkoutRuntimePreviewEnabled?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -487,8 +489,15 @@ function HouseholdIntelligence({ memory, currentItems }: { memory: HouseholdMemo
 
 // ─── Checkout card ────────────────────────────────────────────────────────────
 
-function CheckoutCard({ structuredItems, storeTotals, listName }: { structuredItems?: StructuredItem[] | null; storeTotals: StoreTotal[]; listName: string }) {
+function CheckoutCard({ structuredItems, storeTotals, listName, listId, runtimePreviewEnabled }: {
+  structuredItems?: StructuredItem[] | null;
+  storeTotals: StoreTotal[];
+  listName: string;
+  listId: string;
+  runtimePreviewEnabled: boolean;
+}) {
   const [copied, setCopied] = useState(false);
+  const supervaluTotal = storeTotals.find(total => total.store.toLowerCase() === 'supervalu');
 
   function buildPlainText() {
     if (structuredItems && structuredItems.length > 0) {
@@ -511,14 +520,30 @@ function CheckoutCard({ structuredItems, storeTotals, listName }: { structuredIt
     <Section title="Checkout">
       <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
         {/* SuperValu integration */}
-        <div className="flex items-center justify-between px-4"
+        <div className="flex items-center justify-between gap-4 px-4"
           style={{ background: 'var(--surface-container-lowest)', borderBottom: '1px solid var(--surface-container)', minHeight: '56px' }}>
           <div className="flex items-center gap-3">
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>Send to checkout</p>
-              <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Coming soon</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>Shop with SuperValu</p>
+              <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+                {supervaluTotal ? `${supervaluTotal.item_count ?? '?'} items · approx. ${fmt(supervaluTotal.total)}` : 'No mapped SuperValu basket'}
+              </p>
             </div>
           </div>
+          {runtimePreviewEnabled && supervaluTotal ? (
+            <Link
+              href={`/checkout/supervalu?list=${encodeURIComponent(listId)}`}
+              onClick={() => {
+                trackEvent('retailer_selected', { retailer: 'supervalu', list_id: listId }, '__cookie__');
+                trackEvent('handoff_started', { retailer: 'supervalu', list_id: listId, execution_method: 'controlled_browser' }, '__cookie__');
+              }}
+              className="shrink-0 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white"
+            >
+              Review basket
+            </Link>
+          ) : (
+            <span className="shrink-0 text-xs font-medium" style={{ color: 'var(--on-surface-variant)' }}>Pilot</span>
+          )}
         </div>
 
         {/* Copy list */}
@@ -592,7 +617,7 @@ function HistorySwitcher({ allLists, activeListId, token }: { allLists: ListSumm
 export function SavedListView({
   listContent, structuredItems, storeTotals, listName, createdAt,
   conversationId, token, allLists, activeListId, householdMemory,
-  intent,
+  intent, checkoutRuntimePreviewEnabled = false,
 }: Props) {
   const router = useRouter();
   const [showSameAgainBanner, setShowSameAgainBanner] = useState(intent === 'same-again');
@@ -664,7 +689,13 @@ export function SavedListView({
         )}
 
         {/* Checkout card */}
-        <CheckoutCard structuredItems={structuredItems} storeTotals={storeTotals} listName={listName} />
+        <CheckoutCard
+          structuredItems={structuredItems}
+          storeTotals={storeTotals}
+          listName={listName}
+          listId={activeListId}
+          runtimePreviewEnabled={checkoutRuntimePreviewEnabled}
+        />
 
         {/* History switcher */}
         <HistorySwitcher allLists={allLists} activeListId={activeListId} token={token} />

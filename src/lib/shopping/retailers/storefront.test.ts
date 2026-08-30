@@ -17,8 +17,14 @@ describe('Storefront execution contract', () => {
     expect(config.platform).toBe('instacart_storefront');
     expect(config.cartResourceConfirmed).toBe(true);
     expect(config.authRequired).toBe(true);
-    expect(config.singleAddContractConfirmed).toBe(false);
+    expect(config.singleAddContractConfirmed).toBe(true);
     expect(config.bulkAddContractConfirmed).toBe(false);
+    expect(config.quantitySetContractConfirmed).toBe(true);
+    expect(config.controlledBrowserRuntimeConfirmed).toBe(false);
+    expect(config.mutationResource).toBe('/api/lists');
+    expect(config.singleAddContentType).toBe('application/vnd.lists.v1+json;domain-model=AddItemToPlanningList');
+    expect(config.quantitySetContentType).toBe('application/vnd.lists.v1+json;domain-model=ChangeItemQuantityInPlanningList');
+    expect(config.cartReadResource).toBe('/api/lists/planning/{listId}');
     expect(config.mutationEnabled).toBe(false);
   });
 
@@ -26,6 +32,7 @@ describe('Storefront execution contract', () => {
     const config = STOREFRONT_EXECUTION_CONFIG.supervalu;
     expect(config.singleAddContractConfirmed).toBe(true);
     expect(config.bulkAddContractConfirmed).toBe(true);
+    expect(config.controlledBrowserRuntimeConfirmed).toBe(true);
     expect(config.mutationEnabled).toBe(false);
   });
 
@@ -72,7 +79,7 @@ describe('Storefront execution contract', () => {
     ])).toThrow(/invalid dunnes storefront product url/i);
   });
 
-  it('hard-stops Dunnes mutation until its POST contract is confirmed', () => {
-    expect(() => assertStorefrontMutationAllowed('dunnes')).toThrow(/exact authenticated Storefront POST contract/i);
+  it('hard-stops Dunnes mutation while its controlled-browser runtime is unproven', () => {
+    expect(() => assertStorefrontMutationAllowed('dunnes')).toThrow(/controlled-browser runtime is not proven/i);
   });
 });

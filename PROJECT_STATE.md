@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 29 August 2026
+**Last updated:** 30 August 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -154,7 +154,47 @@ This proves:
 3. The cart is authentication/session-bound rather than a freely writable server-side guest cart.
 4. Dunnes and SuperValu now appear to share the same underlying Instacart Storefront execution family, so a shared Storefront execution engine is preferable to duplicating retailer-specific cart logic if/when authenticated execution is solved.
 
-Exact Dunnes POST domain-model/body has **not yet been sent or inferred as proven**. Do not mutate a Dunnes cart merely to discover it. First exploit the common Storefront architecture/public client behaviour or Pepesto protocol evidence.
+An ordinary shopper-authorised Network observation on 30 August established the live Dunnes quantity-set contract:
+
+- `POST https://storefrontgateway.dunnesstoresgrocery.com/api/lists`
+- response: `202 Accepted`
+- content type/domain model: `application/vnd.lists.v1+json;domain-model=ChangeItemQuantityInPlanningList`
+- sanitized JSON payload shape: `{ sku, quantity: { value, type: "each" } }`
+- the observed quantity type was `each`
+- a subsequent `GET /api/lists/planning/{listId}` refreshed the trolley state
+
+This proves Dunnes quantity-set mutation but materially corrects the earlier assumption that its wire model would necessarily match SuperValu's `/stores/{id}/cart` domain model. At that point, zero-to-one add and native multi-item/bulk mutation still required independent observation. Do not store the shopper session ID or infer unobserved contracts.
+
+A second sanitized shopper observation then established zero-to-one add:
+
+- `POST https://storefrontgateway.dunnesstoresgrocery.com/api/lists`
+- response: `202 Accepted`
+- content type/domain model: `application/vnd.lists.v1+json;domain-model=AddItemToPlanningList`
+- sanitized JSON payload shape: `{ sku, quantity: { value: 1, type: "each" } }`
+
+Therefore Dunnes single-item add and quantity-set contracts are both confirmed. Native multi-item/bulk mutation remains unconfirmed, and actual mutation remains disabled while the acceptable shopper-authorised execution runtime is unresolved.
+
+### Controlled cloud-browser access finding — 30 August 2026
+
+A temporary controlled Chrome session was opened against `www.dunnesstoresgrocery.com` to test the proposed no-extension checkout-runtime hypothesis. Dunnes/Cloudflare presented an interactive human-verification challenge before the retailer site loaded. The challenge did not clear in the controlled browser after one user-authorised attempt, and manual control of the same session also remained blocked.
+
+No login, credentials, authenticated retailer state or cart mutation occurred.
+
+This is evidence that a generic cloud-hosted controlled Chromium session is **not currently a proven Dunnes execution runtime**. Do not attempt to evade the retailer's security controls. A subsequent sanitized Network observation from a shopper's ordinary local browser established the quantity-set contract above without intentionally retaining credentials, cookies or tokens.
+
+### SuperValu controlled cloud-browser comparison — 30 August 2026
+
+The same controlled cloud-browser environment successfully loaded `shop.supervalu.ie`, resolved a live retailer store context and reached SuperValu's OIDC login form without a Cloudflare/security challenge.
+
+The shopper then completed OIDC login and selected the retailer delivery/store context directly. The controlled browser added and verified three real products in the authenticated SuperValu trolley:
+
+- SuperValu Fresh Irish Whole Milk 2L — quantity 1
+- SuperValu Irish Creamery Butter 227g — quantity 1
+- Brennans Sliced White Pan 800g — quantity 1
+
+The real trolley reported 3 items and €6.33. The experiment stopped before checkout/payment.
+
+This confirms the controlled-browser runtime proof for SuperValu. It does **not** yet enable production mutation: session lifecycle, shopper-facing runtime UI, secure destruction, failure recovery and instrumentation still require implementation. Runtime feasibility must remain retailer-specific rather than assumed for the shared Storefront platform.
 
 The temporary one-shot GitHub probe workflow was removed after the test.
 
@@ -265,6 +305,19 @@ Never emit `retailer_trolley_prepared` unless the retailer trolley was actually 
 
 Long-term leverage should include retailer-attributable GMV.
 
+### Checkout Runtime v0 scaffold — 30 August 2026
+
+The application now has a fail-closed, feature-gated foundation for the proven SuperValu controlled-browser route:
+
+- `CheckoutRuntimeProvider` defines session creation, state polling and destruction without coupling the product to a particular browser vendor.
+- The state model is `prepared → awaiting_shopper_auth → awaiting_store_context → populating_trolley → trolley_ready`, with explicit `failed` and `expired` outcomes.
+- `POST /api/checkout/runtime/prepare` verifies saved-list ownership and maps only fresh `trusted_retailer_offers` into a retailer basket plan.
+- `/checkout/supervalu?list=…` previews mapped products and value; it does not claim that a retailer trolley exists.
+- `CHECKOUT_RUNTIME_PREVIEW_ENABLED=true` exposes the preview entry point.
+- `CHECKOUT_RUNTIME_PROVIDER_CONFIGURED=true` may enable launch only after a production interactive-browser provider is genuinely connected. It must remain false otherwise.
+
+No retailer credentials, cookies or bearer tokens are accepted or persisted by this scaffold. No `retailer_trolley_prepared` event is emitted until a provider has populated and verified the live trolley.
+
 ## 11. Current branches / PRs requiring awareness
 
 ### PR #21 / `agent/retailer-handoff`
@@ -298,14 +351,13 @@ Historical Pepesto Tesco work covering **both product retrieval and checkout/bas
 
 1. Read this file and `docs/retailer-execution.md` before retailer work.
 2. Treat Dunnes and SuperValu as likely members of a common **Instacart Storefront execution family**, not completely separate checkout integrations.
-3. Recover the most detailed historical Tesco Pepesto checkout instructions/results available from repo history and `scrape_runs`.
-4. Continue zero-credit inspection of public Pepesto and Instacart client/runtime behaviour for retailer-specific execution details.
-5. Determine whether a legitimate browser-native authenticated Storefront handoff exists; do not seek same-origin bypasses.
-6. If a retailer-specific Pepesto session becomes the only way to reveal a decisive missing instruction, tell the user before spending credits and keep the test minimal.
-7. Bring the chosen execution method behind the current Shopping Capability Layer / retailer adapter interface.
-8. Add transaction attribution events.
-9. Connect proven handoff to Eve with explicit shopper approval.
-10. Only then expose the same primitive through API/MCP.
+3. Select and configure a production interactive-browser provider for SuperValu with per-shopper isolation, direct shopper authentication, expiry and guaranteed destruction.
+4. Implement the provider session endpoints and emit `retailer_trolley_prepared` only after live trolley verification.
+5. Recover the most detailed historical Tesco Pepesto checkout instructions/results available from repo history and `scrape_runs`.
+6. Continue zero-credit inspection of public Pepesto and Instacart client/runtime behaviour for retailer-specific execution details.
+7. Determine whether a legitimate Dunnes runtime can pass Cloudflare without circumventing security controls.
+8. Connect the proven handoff to Eve with explicit shopper approval.
+9. Only then expose the same primitive through API/MCP.
 
 ## 14. Documentation discipline
 

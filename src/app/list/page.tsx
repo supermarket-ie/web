@@ -191,6 +191,7 @@ export default async function ListPage({
         }))}
         activeListId={activeList.id}
         intent={intent}
+        checkoutRuntimePreviewEnabled={process.env.CHECKOUT_RUNTIME_PREVIEW_ENABLED === 'true'}
       />
       <SiteFooter />
     </>

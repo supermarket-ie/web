@@ -24,6 +24,12 @@ const ALLOWED_EVENT_TYPES = new Set([
   'dashboard_visit',
   'conversation_started',
   'page_view',
+  'basket_prepared',
+  'retailer_selected',
+  'handoff_started',
+  'handoff_items_mapped',
+  'retailer_trolley_prepared',
+  'retailer_checkout_opened',
 ]);
 
 function clientKey(req: NextRequest) {
