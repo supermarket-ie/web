@@ -284,10 +284,6 @@ function PriceTable({ prices, productName }: { prices: PriceRow[]; productName: 
           );
         })}
       </div>
-      <p className="text-xs mt-2" style={{ color: 'var(--on-surface-variant)' }}>
-        Prices updated twice weekly · Last scraped from store websites
-      </p>
-
       {/* Planner CTA */}
       <div className="mt-4 rounded-2xl p-4"
         style={{ background: 'linear-gradient(135deg, #006A35 0%, #00944A 100%)', border: '1px solid rgba(255,255,255,0.1)' }}>
