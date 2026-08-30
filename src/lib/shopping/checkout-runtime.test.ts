@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { assertCheckoutRuntimeTransition, createCheckoutRuntimePlan } from './checkout-runtime';
+import {
+  assertCheckoutRuntimeSessionOwner,
+  assertCheckoutRuntimeTransition,
+  createCheckoutRuntimePlan,
+  isVerifiedTrolleyLineSnapshot,
+} from './checkout-runtime';
 
 const supervaluItems = [
   {
@@ -46,5 +51,15 @@ describe('Checkout Runtime v0', () => {
     expect(() => assertCheckoutRuntimeTransition('populating_trolley', 'trolley_ready')).not.toThrow();
     expect(() => assertCheckoutRuntimeTransition('prepared', 'trolley_ready')).toThrow(/invalid checkout runtime transition/i);
     expect(() => assertCheckoutRuntimeTransition('expired', 'prepared')).toThrow(/invalid checkout runtime transition/i);
+  });
+
+  it('prevents one shopper from accessing another shopper session', () => {
+    expect(() => assertCheckoutRuntimeSessionOwner('shopper-a', 'shopper-a')).not.toThrow();
+    expect(() => assertCheckoutRuntimeSessionOwner('shopper-a', 'shopper-b')).toThrow(/does not belong/i);
+  });
+
+  it('cannot report trolley success from a partial retailer snapshot', () => {
+    expect(isVerifiedTrolleyLineSnapshot('SuperValu Fresh Irish Whole Milk 2L', 2, 'SuperValu Fresh Irish Whole Milk 2L · Qty 1')).toBe(false);
+    expect(isVerifiedTrolleyLineSnapshot('SuperValu Fresh Irish Whole Milk 2L', 2, 'SuperValu Fresh Irish Whole Milk 2L · Qty 2')).toBe(true);
   });
 });

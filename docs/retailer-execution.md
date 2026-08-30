@@ -326,6 +326,20 @@ The first production-facing scaffold is intentionally provider-neutral and fail-
 
 The provider must isolate shoppers, let the shopper authenticate directly on the retailer origin, expire sessions, destroy browser state and report verified trolley state. A prepared mapping is not a prepared retailer trolley.
 
+## Browserbase provider checkpoint
+
+Browserbase is implemented behind `CheckoutRuntimeProvider` for a SuperValu-only pilot on branch `agent/browserbase-checkout-runtime`.
+
+Session controls are `eu-central-1`, a 20-minute hard timeout, `keepAlive:true`, `recordSession:false`, `logSession:false` and no persistent Browserbase Context. The API key, connection URL and lifecycle controls remain server-side; Browserbase infers the project from the API key. The database stores only the opaque provider session ID, basket plan, application state and non-sensitive verification outcome. Every status, advance, view and destroy route is bound to the authenticated `subscriber_id`.
+
+The shopper Live View is fetched only after an ownership check and is embedded with a no-referrer policy. Explicit close, failure and expiry request Browserbase `REQUEST_RELEASE`; the provider timeout is the final cleanup boundary if application cleanup cannot run.
+
+After direct retailer login, server-side Playwright reconnects to the same isolated browser. It advances one mapped product at a time through conservative visible SuperValu controls. Final completion requires every mapped retailer product name and its exact requested quantity in the live trolley. Missing products, ambiguous quantity markup, changed controls or unexpected origins fail closed and release the session. Only successful verification writes `trolley_ready` and emits `retailer_trolley_prepared`.
+
+No account, billing, database migration, environment variable, runtime flag, preview deployment or live trolley mutation was created by this checkpoint. The live test still requires Browserbase vendor/DPA review, a Preview project and secrets, migration application, and likely Developer-plan billing because Browserbase documents keep-alive sessions as a paid-plan feature.
+
+Dunnes is excluded by both application and provider allowlists. Sharing the provider class does not constitute a Dunnes runtime proof.
+
 ## Transaction events
 
 Target events:
@@ -342,8 +356,8 @@ Capture retailer, mapped/total item count, approximate basket value and executio
 
 ## Next investigation
 
-1. Select and configure a production interactive-browser provider for SuperValu with shopper isolation and guaranteed session destruction.
-2. Connect provider session creation/state/destruction behind `CheckoutRuntimeProvider` and verify the trolley before reporting success.
+1. Complete Browserbase vendor/DPA review and approve the small paid pilot if keep-alive requires it.
+2. Apply the migration and configure Browserbase only in Preview, then run one shopper-authorised SuperValu compatibility test before enabling any runtime flag in production.
 3. Treat SuperValu and Dunnes as a common Instacart Storefront execution family while preserving retailer-specific runtime proof.
 4. Determine whether Dunnes can legitimately pass its Cloudflare boundary; do not seek a bypass.
 5. Recover the most detailed historical Tesco/Pepesto checkout instruction payloads available without new paid sessions.

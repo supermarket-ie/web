@@ -48,6 +48,28 @@ export function assertCheckoutRuntimeTransition(from: CheckoutRuntimeState, to: 
   }
 }
 
+export function assertCheckoutRuntimeSessionOwner(sessionSubscriberId: string, requestSubscriberId: string): void {
+  if (!sessionSubscriberId || sessionSubscriberId !== requestSubscriberId) {
+    throw new Error('Checkout runtime session does not belong to this shopper.');
+  }
+}
+
+export function isVerifiedTrolleyLineSnapshot(
+  expectedProductName: string,
+  expectedQuantity: number,
+  visibleLineText: string,
+): boolean {
+  const visible = visibleLineText.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+  const expected = expectedProductName.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+  if (!expected || !visible.includes(expected)) return false;
+  const quantity = Math.max(1, Math.floor(expectedQuantity));
+  return [
+    new RegExp(`(?:quantity|qty)\\s*[:×x]?\\s*${quantity}(?:\\D|$)`, 'i'),
+    new RegExp(`(?:^|\\D)${quantity}\\s*[×x]`, 'i'),
+    new RegExp(`(?:^|\\s)${quantity}(?:\\s|$)`, 'i'),
+  ].some(pattern => pattern.test(visible));
+}
+
 export function createCheckoutRuntimePlan(input: {
   retailer: StorefrontRetailer;
   items: CheckoutRuntimeItem[];

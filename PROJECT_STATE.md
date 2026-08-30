@@ -318,6 +318,18 @@ The application now has a fail-closed, feature-gated foundation for the proven S
 
 No retailer credentials, cookies or bearer tokens are accepted or persisted by this scaffold. No `retailer_trolley_prepared` event is emitted until a provider has populated and verified the live trolley.
 
+### Browserbase provider integration — implementation checkpoint
+
+Branch: `agent/browserbase-checkout-runtime`
+
+Browserbase is the selected provider for a **SuperValu-only, non-production pilot**. The implementation adds Frankfurt (`eu-central-1`) sessions, a 20-minute hard timeout, one isolated provider session per authenticated shopper, embedded Live View for direct retailer-origin login, disabled provider recording/logging, no persistent browser context, ownership-bound lifecycle routes, explicit release/expiry cleanup and conservative visible-UI product addition.
+
+Final completion requires every mapped product name and exact requested quantity to be visible in the live SuperValu trolley. Only that successful verification path writes `trolley_ready` and emits `retailer_trolley_prepared`. Dunnes is excluded by both route and provider allowlists.
+
+The integration remains inactive until the migration is applied and `BROWSERBASE_API_KEY` plus `CHECKOUT_RUNTIME_PROVIDER_CONFIGURED=true` are deliberately configured. Browserbase now infers the project from the API key, so no separate project ID is required. `CHECKOUT_RUNTIME_PREVIEW_ENABLED` remains a separate exposure control. No flag, deployment or live Browserbase session has been enabled.
+
+Browserbase keep-alive sessions are required for the serverless shopper handoff. Current Browserbase documentation lists keep-alive for paid plans, so the live compatibility test may require the $20/month Developer plan. Obtain approval before enabling billing. The first credentialed test must validate SuperValu's actual accessible names and DOM; the adapter fails closed if controls or exact quantities cannot be verified.
+
 ## 11. Current branches / PRs requiring awareness
 
 ### PR #21 / `agent/retailer-handoff`
@@ -351,13 +363,14 @@ Historical Pepesto Tesco work covering **both product retrieval and checkout/bas
 
 1. Read this file and `docs/retailer-execution.md` before retailer work.
 2. Treat Dunnes and SuperValu as likely members of a common **Instacart Storefront execution family**, not completely separate checkout integrations.
-3. Select and configure a production interactive-browser provider for SuperValu with per-shopper isolation, direct shopper authentication, expiry and guaranteed destruction.
-4. Implement the provider session endpoints and emit `retailer_trolley_prepared` only after live trolley verification.
-5. Recover the most detailed historical Tesco Pepesto checkout instructions/results available from repo history and `scrape_runs`.
-6. Continue zero-credit inspection of public Pepesto and Instacart client/runtime behaviour for retailer-specific execution details.
-7. Determine whether a legitimate Dunnes runtime can pass Cloudflare without circumventing security controls.
-8. Connect the proven handoff to Eve with explicit shopper approval.
-9. Only then expose the same primitive through API/MCP.
+3. Review the Browserbase DPA/subprocessor position and approve the paid pilot if required for keep-alive sessions.
+4. Apply the checkout-runtime migration and configure Browserbase credentials only in a non-production environment.
+5. Run one shopper-authorised SuperValu compatibility test and adjust only documented visible-UI selectors if necessary.
+6. Recover the most detailed historical Tesco Pepesto checkout instructions/results available from repo history and `scrape_runs`.
+7. Continue zero-credit inspection of public Pepesto and Instacart client/runtime behaviour for retailer-specific execution details.
+8. Determine whether a legitimate Dunnes runtime can pass Cloudflare without circumventing security controls.
+9. Connect the proven handoff to Eve with explicit shopper approval.
+10. Only then expose the same primitive through API/MCP.
 
 ## 14. Documentation discipline
 
@@ -382,3 +395,4 @@ For every material Supermarket.ie development session:
 - **2026-08-29 — Dunnes confirmed as Instacart Storefront execution.** Production gateway/search works at store 258; cart resource allows GET/POST and returns 401 without authentication. Consequence: design toward a shared Storefront execution engine for Dunnes/SuperValu rather than duplicate retailer-specific cart plumbing.
 - **2026-08-29 — Pepesto public runtime boundary clarified.** Free MCP/list handoff still finishes through Pepesto's mobile app/WebView; no browser-only cross-origin shortcut has been identified.
 - **2026-08-29 — Repository documentation is canonical project memory.** Future sessions must read and maintain these docs.
+- **2026-08-30 — Browserbase selected for the SuperValu pilot.** Provider integration is implemented fail-closed with EU sessions, zero recording/logging, shopper ownership binding, explicit expiry/release and exact live-trolley verification. Dunnes remains disabled; no deployment or billing was enabled.
