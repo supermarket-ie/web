@@ -4,9 +4,9 @@ import { useEffect, useRef, useState, type ComponentType } from 'react';
 import { useEveAgent } from 'eve/react';
 import {
   ArrowUp,
-  BadgeEuro,
   Bell,
   ClipboardList,
+  Flame,
   Eye,
   Search,
   ShoppingBasket,
@@ -21,6 +21,7 @@ import {
   inferSuggestionIntent,
   type CatalogueSuggestionProduct,
 } from '@/lib/agent-suggestions';
+import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 const GUEST_EVE_CHAT_KEY = `${LEGACY_EVE_CHAT_KEY}:guest`;
@@ -44,11 +45,27 @@ type Starter = {
 };
 
 const GUEST_STARTERS: Starter[] = [
-  { label: "Find Hellmann's mayonnaise", detail: 'Check current products, prices and stores', prompt: "Find the current price of Hellmann's mayonnaise", icon: Search },
-  { label: 'Compare Irish butter', detail: 'See how a product compares across stores', prompt: 'Compare current prices for Irish butter', icon: BadgeEuro },
-  { label: 'Plan four easy dinners', detail: 'Turn a simple idea into a practical week', prompt: 'Help me plan four easy family dinners', icon: Utensils },
-  { label: 'Keep a shop under €120', detail: 'Get a sensible household shopping strategy', prompt: 'How can I keep a household shop under €120?', icon: WalletCards },
+  { label: 'What offers are genuinely useful today?', detail: 'Check verified current promotions across Irish supermarkets', prompt: 'Show me the most useful current supermarket offers for a household shop', icon: Flame },
+  { label: 'Where are everyday essentials best value?', detail: 'Compare current matched products across stores', prompt: 'Compare current prices for useful everyday household essentials', icon: Search },
+  { label: 'Plan dinners around current value', detail: 'Use available products and practical reusable ingredients', prompt: 'Plan four practical dinners around products that are good value now', icon: Utensils },
+  { label: 'Build a complete value-led shop', detail: 'Balance food, cleaning and toiletries in one shop', prompt: 'Build a sensible complete household shop using current supermarket value', icon: WalletCards },
 ];
+
+const MARKET_STARTER_ICONS: Record<MarketStarterIcon, Starter['icon']> = {
+  offer: Flame,
+  compare: Search,
+  meal: Utensils,
+  shop: ShoppingBasket,
+};
+
+function asStarters(items: MarketStarter[]): Starter[] {
+  return items.map(item => ({
+    label: item.label,
+    detail: item.detail,
+    prompt: item.prompt,
+    icon: MARKET_STARTER_ICONS[item.icon],
+  }));
+}
 
 const HOUSEHOLD_STARTERS: Starter[] = [
   { label: 'Prepare my usual shop', detail: 'Use what your household is likely to need now', prompt: 'Prepare my usual shop', icon: ShoppingBasket },
@@ -323,6 +340,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
+  const [marketStarters, setMarketStarters] = useState<Starter[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const landingPromptHandled = useRef(false);
 
@@ -351,7 +369,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const showGuestGate = isGuest && (guestTurns >= 2 || messages.some(message =>
     message.role === 'user' && isPersistentGuestRequest(messageText(message))
   ));
-  const starters = isGuest ? GUEST_STARTERS : HOUSEHOLD_STARTERS;
+  const starters = isGuest ? (marketStarters ?? GUEST_STARTERS) : HOUSEHOLD_STARTERS;
   const isEmpty = messages.length === 0;
   const firstUserRequest = messages.find(message => message.role === 'user');
   const firstRequestText = firstUserRequest ? messageText(firstUserRequest) : '';
@@ -366,8 +384,27 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
     : [];
 
   useEffect(() => {
+    if (!isGuest) return;
+    const controller = new AbortController();
+    fetch('/api/agent/starter-prompts', { signal: controller.signal })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Starter prompt request failed')))
+      .then((data: { starters?: MarketStarter[] }) => {
+        if (Array.isArray(data.starters) && data.starters.length > 0) {
+          setMarketStarters(asStarters(data.starters));
+        }
+      })
+      .catch(nextError => {
+        if (!(nextError instanceof DOMException && nextError.name === 'AbortError')) {
+          setMarketStarters(GUEST_STARTERS);
+        }
+      });
+    return () => controller.abort();
+  }, [isGuest]);
+
+  useEffect(() => {
     const intent = inferSuggestionIntent(input);
     if (input.trim().length < 2 || intent === 'meal' || intent === 'budget' || intent === 'dietary') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale catalogue results when predictive lookup is not applicable
       setCatalogueSuggestions([]);
       return;
     }
@@ -481,19 +518,26 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
               ))}
             </div>
           ) : (
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {starters.map(starter => {
-                const Icon = starter.icon;
-                return (
-                  <button key={starter.prompt} type="button" onClick={() => void send(starter.prompt, 'starter')} className="group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors hover:bg-[#f5f8f5]">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e5eae6] bg-white text-[#176b3a] shadow-sm"><Icon className="size-4" /></span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-[#26342b]">{starter.label}</span>
-                      <span className="mt-0.5 block truncate text-[11px] text-[#879089]">{starter.detail}</span>
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="mt-4">
+              {isGuest && marketStarters && (
+                <p className="mb-1.5 px-3.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#6e7d73]">
+                  Shaped by today&apos;s verified prices and offers
+                </p>
+              )}
+              <div className="grid gap-2 sm:grid-cols-2">
+                {starters.map(starter => {
+                  const Icon = starter.icon;
+                  return (
+                    <button key={starter.prompt} type="button" onClick={() => void send(starter.prompt, 'starter')} className="group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors hover:bg-[#f5f8f5]">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e5eae6] bg-white text-[#176b3a] shadow-sm"><Icon className="size-4" /></span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-[#26342b]">{starter.label}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-[#879089]">{starter.detail}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
