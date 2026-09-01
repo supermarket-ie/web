@@ -18,18 +18,18 @@
   --primary-fixed:         #6BFE9C;
 
   /* Surface hierarchy — lightest to most elevated */
-  --surface:                   #F9F6F5;
+  --surface:                   #FFFFFF;
   --surface-container-lowest:  #FFFFFF;
-  --surface-container-low:     #F3F0EF;
-  --surface-container:         #EAE7E7;
-  --surface-container-high:    #DEDAD7;
-  --surface-container-highest: #D0CBC8;
+  --surface-container-low:     #F5F7F5;
+  --surface-container:         #E9EEE9;
+  --surface-container-high:    #DCE4DD;
+  --surface-container-highest: #CBD6CD;
 
   /* On-surface text scale */
-  --on-background:      #2F2F2E;
-  --on-surface:         #5c5b5b;
-  --on-surface-variant: #afadac;
-  --outline-variant:    #afadac;
+  --on-background:      #142019;
+  --on-surface:         #566159;
+  --on-surface-variant: #89928B;
+  --outline-variant:    #AAB4AC;
 
   /* Inverse surface (footer / dark sections) */
   --inverse-surface:    #0E0E0E;
@@ -204,7 +204,7 @@ body {
 
 /* Glass surface — for sticky nav, floating elements */
 .glass {
-  background: rgba(249, 246, 245, 0.72);
+  background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
