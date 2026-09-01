@@ -2,7 +2,7 @@ import { MessageSquare, Brain, Zap, ShoppingCart, TrendingDown, Bell } from 'luc
 
 export function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="py-20 px-6 noise-bg relative" style={{ background: 'var(--surface)' }}>
+    <section id="how-it-works" className="relative border-b border-[#e2e8e3] bg-white px-6 py-20">
       <div className="max-w-6xl mx-auto relative z-10">
         <div className="mb-16">
           <span
@@ -22,7 +22,7 @@ export function HowItWorksSection() {
         <div className="grid md:grid-cols-2 gap-6">
           {/* Card 1 - Learns you */}
           <div
-            className="rounded-2xl p-8 relative overflow-hidden"
+            className="relative overflow-hidden rounded-2xl border border-[#e0e7e2] p-8 shadow-[0_10px_32px_rgba(27,55,38,0.05)]"
             style={{ background: 'var(--surface-container-lowest)' }}
           >
             <div
@@ -41,7 +41,7 @@ export function HowItWorksSection() {
 
           {/* Card 2 - Agent capabilities (large) */}
           <div
-            className="rounded-2xl p-8 relative overflow-hidden md:row-span-2"
+            className="relative overflow-hidden rounded-2xl p-8 shadow-[0_18px_50px_rgba(0,106,53,0.2)] md:row-span-2"
             style={{ background: '#006A35' }}
           >
             {/* Decorative blobs */}
@@ -95,7 +95,7 @@ export function HowItWorksSection() {
 
           {/* Card 3 - Conversational */}
           <div
-            className="rounded-2xl p-8 relative overflow-hidden"
+            className="relative overflow-hidden rounded-2xl border border-[#e0e7e2] p-8 shadow-[0_10px_32px_rgba(27,55,38,0.05)]"
             style={{ background: 'var(--surface-container-lowest)' }}
           >
             <div
