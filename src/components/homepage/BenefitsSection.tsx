@@ -29,7 +29,7 @@ const categories = [
 
 export function BenefitsSection() {
   return (
-    <section className="relative bg-surface-low px-6 py-20 noise-bg">
+    <section className="relative bg-[#f5f7f5] px-6 py-20">
       <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-16 md:grid-cols-2">
         <div>
           <span className="type-label mb-4 inline-flex rounded-full bg-surface-container px-3 py-1.5 text-on-surface">
