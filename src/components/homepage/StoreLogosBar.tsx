@@ -8,14 +8,14 @@ const stores = [
 
 export function StoreLogosBar() {
   return (
-    <section className="bg-surface-low px-6 py-10">
+    <section className="border-y border-[#e2e8e3] bg-white px-6 py-10">
       <div className="mx-auto max-w-6xl">
-        <p className="mb-6 text-center text-xs font-extrabold uppercase tracking-[0.09em] text-on-surface-variant">
+        <p className="mb-6 text-center text-xs font-extrabold uppercase tracking-[0.12em] text-[#68756d]">
           Your agent understands Ireland&apos;s supermarkets
         </p>
         <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12">
           {stores.map((store) => (
-            <div key={store.name} className="opacity-50 grayscale">
+            <div key={store.name} className="opacity-60 grayscale transition-all duration-200 hover:opacity-90 hover:grayscale-0">
               <Image
                 src={store.logo}
                 alt={store.name}
