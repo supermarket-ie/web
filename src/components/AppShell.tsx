@@ -101,18 +101,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-40 w-full border-b border-black/[0.05] bg-white/90 px-6 py-3.5 backdrop-blur-xl">
-        <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-40 w-full border-b border-[#dfe7e1] bg-white/95 px-5 py-3 backdrop-blur-xl sm:px-6">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between">
           <Link href="/" className="flex flex-shrink-0 items-center gap-2.5" onClick={() => setMenuOpen(false)}>
             <AgentMark className="size-8" label="Supermarket.ie basket" />
-            <span className="text-[28px] font-extrabold tracking-tight" style={{ color: '#132019', letterSpacing: '-0.02em' }}>
+            <span className="text-[26px] font-extrabold tracking-tight sm:text-[28px]" style={{ color: '#132019', letterSpacing: '-0.025em' }}>
               supermarket<span style={{ color: '#168049' }}>.ie</span>
             </span>
           </Link>
 
           <div className="hidden sm:flex items-center gap-4">
             {!showNav && !hideNav && (
-              <Link href="/shop" className="text-sm font-semibold text-[#536058] transition-colors hover:text-[#132019]">
+              <Link href="/shop" className="rounded-full px-3 py-2 text-sm font-semibold text-[#435249] transition-colors hover:bg-[#f2f6f3] hover:text-[#132019]">
                 Browse
               </Link>
             )}
@@ -122,7 +122,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   Sign out
                 </button>
               ) : (
-                <Link href="/list/request" className="inline-flex items-center rounded-full bg-[#0b1710] px-5 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.02]">
+                <Link href="/list/request" className="inline-flex items-center rounded-full bg-[#006a35] px-5 py-2 text-sm font-bold text-white shadow-[0_5px_16px_rgba(0,106,53,0.18)] transition-all hover:-translate-y-0.5 hover:bg-[#00572c]">
                   Sign in
                 </Link>
               )
@@ -164,6 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
         )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-[linear-gradient(90deg,#006a35_0%,#006a35_72%,#f4c52d_72%,#f4c52d_86%,#d74620_86%,#d74620_100%)]" />
       </header>
 
       <div className="flex flex-1">
