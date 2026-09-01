@@ -20,10 +20,10 @@ export function PlannerSSRShell() {
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-hidden="true">
           {[
-            ["Find Hellmann's mayonnaise", 'Check current products, prices and stores'],
-            ['Compare Irish butter', 'See how a product compares across stores'],
-            ['Plan four easy dinners', 'Turn a simple idea into a practical week'],
-            ['Keep a shop under €120', 'Get a sensible household shopping strategy'],
+            ['Checking today’s useful offers', 'Using verified current supermarket prices'],
+            ['Finding meaningful store comparisons', 'Matching equivalent products across retailers'],
+            ['Looking for practical meal opportunities', 'Connecting current value to useful dinners'],
+            ['Preparing a complete-shop starting point', 'Balancing food and household essentials'],
           ].map(([label, detail]) => (
             <div key={label} className="flex items-center gap-3 rounded-2xl px-3.5 py-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e5eae6] bg-white text-[#176b3a] shadow-sm">↗</span>
