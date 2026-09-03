@@ -6,7 +6,7 @@ import { getIngredientIntelligence } from '../lib/ingredient-intelligence';
 
 export default defineDynamic({
   events: {
-    'session.started': (_event, ctx) =>
+    'turn.started': (_event, ctx) =>
       ctx.session.auth.current?.principalType === 'user'
         ? defineTool({
             description: `Analyse ingredients already planned or on hand and return catalogue-grounded complementary ingredients that can improve meal coherence or reuse across meals. Use this for requests such as "use these ingredients across four dinners", "what am I missing?", "reuse ingredients", or when a meal plan needs evidence-based complementary components. Results are suggestions only: do not add speculative products without the user's request or clear approval.`,
@@ -17,23 +17,13 @@ export default defineDynamic({
             }),
             async execute(input, toolCtx) {
               const subscriberId = requireSubscriber(toolCtx);
-              const { data: household, error } = await agentSupabase
-                .from('households')
-                .select('dietary, dislikes, preferred_stores')
-                .eq('subscriber_id', subscriberId)
-                .maybeSingle();
+              const { data: household, error } = await agentSupabase.from('households').select('dietary, dislikes, preferred_stores').eq('subscriber_id', subscriberId).maybeSingle();
               if (error) throw new Error(`Unable to load household ingredient context: ${error.message}`);
-
-              const intelligence = await getIngredientIntelligence(
-                input.ingredients,
-                {
-                  dietary: (household?.dietary as string[] | null) ?? [],
-                  dislikes: (household?.dislikes as string | null) ?? null,
-                  preferred_stores: (household?.preferred_stores as string[] | null) ?? [],
-                },
-                input.limit,
-              );
-
+              const intelligence = await getIngredientIntelligence(input.ingredients, {
+                dietary: (household?.dietary as string[] | null) ?? [],
+                dislikes: (household?.dislikes as string | null) ?? null,
+                preferred_stores: (household?.preferred_stores as string[] | null) ?? [],
+              }, input.limit);
               return {
                 ok: intelligence.suggestions.length > 0,
                 purpose: input.purpose,
