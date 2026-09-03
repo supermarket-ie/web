@@ -27,6 +27,7 @@ export function getCatalogueQueryTokens(query: string): string[] {
 export function getCatalogueSeed(query: string): string | null {
   const tokens = getCatalogueQueryTokens(query);
   if (!tokens.length) return null;
+  if (/^[^\s]+['’]s\b/i.test(query.trim()) && tokens[0]) return tokens[0];
   return [...tokens].sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
@@ -88,9 +89,7 @@ export function resolveCatalogueRows(
     const canonicalNorm = normaliseCatalogueText(canonicalName);
     const canonicalTokens = canonicalNorm.split(' ').filter(Boolean);
     const paddedCanonical = ` ${canonicalNorm} `;
-    const storeNames = productRows
-      .map(row => normaliseCatalogueText(row.store_product_name))
-      .join(' ');
+    const storeNames = productRows.map(row => normaliseCatalogueText(row.store_product_name)).join(' ');
     const haystack = `${canonicalNorm} ${storeNames}`;
 
     let score = 0;
@@ -103,37 +102,24 @@ export function resolveCatalogueRows(
     if (paddedCanonical.includes(queryPhrase)) score += 8;
     if (canonicalNorm.startsWith(`${queryNorm} `) || canonicalNorm.endsWith(` ${queryNorm}`)) score += 3;
 
-    // Product nouns normally sit at the end of a concise catalogue title, just
-    // before pack-size data: "whole milk 2L", "seeded bread 800g", etc. This
-    // general signal separates the requested product from incidental wording
-    // such as "milk chocolate cakes" or "garlic butter chicken" without a
-    // hard-coded list of known groceries.
     const titleCore = stripPackSuffix(canonicalTokens);
     const coreHead = titleCore.slice(0, tokens.length);
     const coreTail = titleCore.slice(-tokens.length);
-    const isProductHead = tokens.length > 0
-      && tokens.every((token, index) => catalogueTokenMatches(coreHead[index] ?? '', token));
-    const isProductTail = tokens.length > 0
-      && tokens.every((token, index) => catalogueTokenMatches(coreTail[index] ?? '', token));
-    if (isProductHead || isProductTail) {
-      score += 10;
-    }
+    const isProductHead = tokens.length > 0 && tokens.every((token, index) => catalogueTokenMatches(coreHead[index] ?? '', token));
+    const isProductTail = tokens.length > 0 && tokens.every((token, index) => catalogueTokenMatches(coreTail[index] ?? '', token));
 
-    // Infer product-family intent from the catalogue itself. Strong boundary
-    // matches establish the likely category for any query, so common products
-    // win over incidental compounds without maintaining a vocabulary by hand.
+    if (isProductTail) score += 14;
+    else if (isProductHead) score += 10;
+
     const category = normaliseCatalogueText(productRows[0]?.category ?? '');
     const categoryCount = boundaryCategoryCounts.get(category) ?? 0;
     if (strongestCategoryCount > 0) score += (categoryCount / strongestCategoryCount) * 8;
 
-    // When relevance is otherwise equal, a concise canonical name is normally
-    // the user's intended staple rather than a product that merely mentions it.
-    score -= Math.max(0, canonicalTokens.length - tokens.length) * 0.1;
+    score -= Math.max(0, canonicalTokens.length - tokens.length) * 0.75;
 
     const haystackTokens = haystack.split(' ').filter(Boolean);
     const matchedTokens = tokens.filter(token => (
-      haystackTokens.some(candidateToken => catalogueTokenMatches(candidateToken, token))
-      || haystack.includes(token)
+      haystackTokens.some(candidateToken => catalogueTokenMatches(candidateToken, token)) || haystack.includes(token)
     )).length;
     if (matchedTokens < Math.ceil(tokens.length * 0.6)) continue;
 
