@@ -5,7 +5,7 @@ import { loadCurrentShop, persistCurrentShop } from '../lib/shop';
 
 export default defineDynamic({
   events: {
-    'session.started': (_event, ctx) =>
+    'turn.started': (_event, ctx) =>
       ctx.session.auth.current?.principalType === 'user'
         ? defineTool({
             description: 'Remove an exact canonical product from the signed-in household’s current shop. Use when the user explicitly asks to remove, delete, drop or take an item out of the shop.',
