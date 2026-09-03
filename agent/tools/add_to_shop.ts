@@ -26,7 +26,7 @@ function storeTotals(items: ListItem[]) {
 
 export default defineDynamic({
   events: {
-    'session.started': (_event, ctx) =>
+    'turn.started': (_event, ctx) =>
       ctx.session.auth.current?.principalType === 'user'
         ? defineTool({
             description: 'Add an exact canonical catalogue product to the signed-in household’s latest draft shop using its current best available price. Resolve ambiguous product wording first. If no saved shop exists, create a new agent draft.',
