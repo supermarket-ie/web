@@ -27,11 +27,7 @@ export function getCatalogueQueryTokens(query: string): string[] {
 export function getCatalogueSeed(query: string): string | null {
   const tokens = getCatalogueQueryTokens(query);
   if (!tokens.length) return null;
-
-  // A possessive first token is normally a brand (for example, Hellmann's),
-  // and is safer as the initial catalogue seed than the following generic noun.
   if (/^[^\s]+['’]s\b/i.test(query.trim()) && tokens[0]) return tokens[0];
-
   return [...tokens].sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
@@ -109,17 +105,10 @@ export function resolveCatalogueRows(
     const titleCore = stripPackSuffix(canonicalTokens);
     const coreHead = titleCore.slice(0, tokens.length);
     const coreTail = titleCore.slice(-tokens.length);
-    const isProductHead = tokens.length > 0
-      && tokens.every((token, index) => catalogueTokenMatches(coreHead[index] ?? '', token));
-    const isProductTail = tokens.length > 0
-      && tokens.every((token, index) => catalogueTokenMatches(coreTail[index] ?? '', token));
+    const isProductHead = tokens.length > 0 && tokens.every((token, index) => catalogueTokenMatches(coreHead[index] ?? '', token));
+    const isProductTail = tokens.length > 0 && tokens.every((token, index) => catalogueTokenMatches(coreTail[index] ?? '', token));
 
-    // In grocery titles the product noun is most often the final semantic token
-    // before size/pack data ("whole milk 2L", "ground coffee 227g"). Give that
-    // position a modest edge over incidental compounds beginning with the same
-    // word ("milk & honey shower cream", "coffee chocolate biscuits"). Concise
-    // product-headed titles still win where the noun genuinely belongs first.
-    if (isProductTail) score += 13;
+    if (isProductTail) score += 14;
     else if (isProductHead) score += 10;
 
     const category = normaliseCatalogueText(productRows[0]?.category ?? '');
@@ -130,8 +119,7 @@ export function resolveCatalogueRows(
 
     const haystackTokens = haystack.split(' ').filter(Boolean);
     const matchedTokens = tokens.filter(token => (
-      haystackTokens.some(candidateToken => catalogueTokenMatches(candidateToken, token))
-      || haystack.includes(token)
+      haystackTokens.some(candidateToken => catalogueTokenMatches(candidateToken, token)) || haystack.includes(token)
     )).length;
     if (matchedTokens < Math.ceil(tokens.length * 0.6)) continue;
 
