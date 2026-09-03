@@ -4,6 +4,11 @@ import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
 
 export const dynamic='force-dynamic'; export const maxDuration=120;
 function authorized(r:Request){const s=process.env.CRON_SECRET;return Boolean(s&&r.headers.get('authorization')===`Bearer ${s}`)}
+function responseState(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return '';
+  const row = payload as Record<string, unknown>;
+  return String(row.status || row.state || '').toLowerCase();
+}
 
 export async function GET(request:Request){
  if(process.env.PEPESTO_TESCO_ENABLED!=='true') return Response.json({error:'Pepesto Tesco adapter disabled'},{status:503});
@@ -13,14 +18,14 @@ export async function GET(request:Request){
  let completed=0,pending=0,matched=0,failed=0;
  for(const session of sessions??[]){
    try{
-     const payload=await retrievePepestoSearch(session.search_session_id); const state=String(payload?.status||payload?.state||'').toLowerCase();
+     const payload=await retrievePepestoSearch(session.search_session_id); const state=responseState(payload);
      if(state && !['done','complete','completed'].includes(state)){
        await supabaseAdmin.from('pepesto_tesco_sessions').update({status:'in_progress',result_summary:{state},last_error:null}).eq('id',session.id); pending++; continue;
      }
      const products=(session.products||[]) as TescoQueueProduct[]; const items=extractPepestoItems(payload); let batchMatched=0,batchFailed=0;
      for(let i=0;i<products.length;i++){
        const product=products[i]; const target=String(product.storeProductName||product.canonicalName).toLowerCase();
-       const exact=items.find((x:any)=>String(x?.item_name||'').toLowerCase()===target); const item=exact||items[i]||{};
+       const exact=items.find(x=>String(x?.item_name||'').toLowerCase()===target); const item=exact||items[i]||{};
        const candidate=choosePepestoCandidate(product,item); const ok=await finalizePepestoProduct(session.run_uuid,product,candidate);
        if(ok){matched++;batchMatched++;} else {failed++;batchFailed++;}
      }
