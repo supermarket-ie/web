@@ -13,7 +13,7 @@ type PriceRow = {
 
 export default defineDynamic({
   events: {
-    'session.started': (_event, ctx) =>
+    'turn.started': (_event, ctx) =>
       ctx.session.auth.current?.principalType === 'user'
         ? defineTool({
             description: 'Load the signed-in household preferences plus a compact set of current promoted and low-price supermarket products for meal planning. Use before creating dinners or lunches so plans are grounded in the household and current catalogue.',
@@ -49,12 +49,7 @@ export default defineDynamic({
               const promotions = bestRows
                 .filter(row => Boolean(row.on_promotion))
                 .slice(0, 30)
-                .map(row => ({
-                  canonical_name: row.canonical_name,
-                  category: row.category,
-                  store: row.store,
-                  price: Number(row.price),
-                }));
+                .map(row => ({ canonical_name: row.canonical_name, category: row.category, store: row.store, price: Number(row.price) }));
 
               const usefulCategories = input.kind === 'dinners'
                 ? ['meat', 'fish', 'vegetable', 'fruit', 'pasta', 'rice', 'sauce', 'dairy', 'bread', 'frozen']
@@ -66,28 +61,12 @@ export default defineDynamic({
                   return usefulCategories.some(term => category.includes(term) || row.canonical_name.toLowerCase().includes(term));
                 })
                 .slice(0, 60)
-                .map(row => ({
-                  canonical_name: row.canonical_name,
-                  category: row.category,
-                  store: row.store,
-                  price: Number(row.price),
-                  on_promotion: Boolean(row.on_promotion),
-                }));
+                .map(row => ({ canonical_name: row.canonical_name, category: row.category, store: row.store, price: Number(row.price), on_promotion: Boolean(row.on_promotion) }));
 
               return {
                 ok: true,
                 kind: input.kind,
-                household: household ?? {
-                  adults: 2,
-                  children: 0,
-                  weekly_budget: null,
-                  preferred_stores: ['all'],
-                  dietary: [],
-                  dislikes: null,
-                  batch_cooking: false,
-                  skip_days: null,
-                  extra_context: null,
-                },
+                household: household ?? { adults: 2, children: 0, weekly_budget: null, preferred_stores: ['all'], dietary: [], dislikes: null, batch_cooking: false, skip_days: null, extra_context: null },
                 promotions,
                 low_price_products: lowPrice,
                 guidance: [
