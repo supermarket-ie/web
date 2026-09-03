@@ -15,7 +15,7 @@ export async function GET(request:Request){
  const spent=(count||0)*PEPESTO_SEARCH_COST_CENTS;
  if(spent>=dailyCap) return Response.json({error:'Daily Pepesto spend cap reached',spent_cents:spent,cap_cents:dailyCap},{status:429});
  const run=await createPepestoRun(limit,query); if(!run) return Response.json({status:'no_products',submitted:0});
- const batches=[] as any[]; let submitted=0;
+ const batches:string[]=[]; let submitted=0;
  try{
    const needed=Math.ceil(run.products.length/PEPESTO_BATCH_SIZE)*PEPESTO_SEARCH_COST_CENTS;
    if(spent+needed>dailyCap) throw new Error(`Run would exceed daily Pepesto cap (${spent}+${needed}>${dailyCap})`);
