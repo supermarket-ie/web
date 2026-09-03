@@ -5,7 +5,7 @@ import { loadCurrentShop, persistCurrentShop } from '../lib/shop';
 
 export default defineDynamic({
   events: {
-    'session.started': (_event, ctx) =>
+    'turn.started': (_event, ctx) =>
       ctx.session.auth.current?.principalType === 'user'
         ? defineTool({
             description: 'Set the quantity of an exact canonical product already in the signed-in household’s current shop. Use for requests like make that two, change the milk to three, or reduce this to one.',
