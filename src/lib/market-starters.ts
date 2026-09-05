@@ -114,9 +114,9 @@ export function buildMarketStarters(prices: ProductPrice[], rotationWindow = 0):
   if (mealDeal) {
     const name = cleanProductName(mealDeal.canonical_name);
     starters.push({
-      label: `Build a meal around ${name}`,
+      label: `What could I make with ${name}?`,
       detail: `${dealPercentage(mealDeal)}% off at ${storeDisplayName(mealDeal.store)} today`,
-      prompt: `Build a practical family meal around ${mealDeal.canonical_name}, which is currently on offer at ${storeDisplayName(mealDeal.store)}`,
+      prompt: `Suggest a practical meal, snack or recipe idea using ${mealDeal.canonical_name}, which is currently on offer at ${storeDisplayName(mealDeal.store)}`,
       icon: 'meal',
       signal: 'meal_opportunity',
     });
