@@ -81,12 +81,24 @@ export type RetailerHandoffMethod =
   | 'authenticated_cart'
   | 'retailer_api';
 
+export type RetailerHandoffItem = {
+  canonical_name: string;
+  quantity: number;
+  retailer_product_id?: string | null;
+  retailer_product_name?: string | null;
+  retailer_url?: string | null;
+  status: 'matched' | 'missing';
+};
+
 export type RetailerHandoffResult = {
   retailer: RetailerId;
   status: 'ready' | 'partial' | 'unsupported' | 'failed';
   method?: RetailerHandoffMethod;
   matched_items: number;
   unmatched_items: string[];
+  items?: RetailerHandoffItem[];
+  cart_url?: string | null;
   checkout_url?: string | null;
+  requires_retailer_login?: boolean;
   message?: string | null;
 };
