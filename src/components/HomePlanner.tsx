@@ -385,20 +385,32 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
 
   useEffect(() => {
     if (!isGuest) return;
-    const controller = new AbortController();
-    fetch('/api/agent/starter-prompts', { signal: controller.signal })
-      .then(response => response.ok ? response.json() : Promise.reject(new Error('Starter prompt request failed')))
-      .then((data: { starters?: MarketStarter[] }) => {
-        if (Array.isArray(data.starters) && data.starters.length > 0) {
-          setMarketStarters(asStarters(data.starters));
-        }
-      })
-      .catch(nextError => {
-        if (!(nextError instanceof DOMException && nextError.name === 'AbortError')) {
-          setMarketStarters(GUEST_STARTERS);
-        }
-      });
-    return () => controller.abort();
+    let controller = new AbortController();
+
+    function loadMarketStarters() {
+      controller.abort();
+      controller = new AbortController();
+      const rotationWindow = Math.floor(Date.now() / (10 * 60 * 1000));
+      fetch(`/api/agent/starter-prompts?window=${rotationWindow}`, { signal: controller.signal })
+        .then(response => response.ok ? response.json() : Promise.reject(new Error('Starter prompt request failed')))
+        .then((data: { starters?: MarketStarter[] }) => {
+          if (Array.isArray(data.starters) && data.starters.length > 0) {
+            setMarketStarters(asStarters(data.starters));
+          }
+        })
+        .catch(nextError => {
+          if (!(nextError instanceof DOMException && nextError.name === 'AbortError')) {
+            setMarketStarters(GUEST_STARTERS);
+          }
+        });
+    }
+
+    loadMarketStarters();
+    const refreshTimer = window.setInterval(loadMarketStarters, 10 * 60 * 1000);
+    return () => {
+      window.clearInterval(refreshTimer);
+      controller.abort();
+    };
   }, [isGuest]);
 
   useEffect(() => {

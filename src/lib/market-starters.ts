@@ -60,7 +60,7 @@ function currentDeals(prices: ProductPrice[]) {
     });
 }
 
-function comparisonCandidate(prices: ProductPrice[]) {
+function comparisonCandidates(prices: ProductPrice[]) {
   const grouped = new Map<string, ProductPrice[]>();
   for (const row of prices) {
     const rows = grouped.get(row.canonical_name) ?? [];
@@ -78,7 +78,13 @@ function comparisonCandidate(prices: ProductPrice[]) {
       };
     })
     .filter(candidate => candidate.spread >= 0.2)
-    .sort((a, b) => b.spread - a.spread)[0] ?? null;
+    .sort((a, b) => b.spread - a.spread);
+}
+
+function rotatingPick<T>(items: T[], window: number, offset = 0, poolSize = 12): T | undefined {
+  const pool = items.slice(0, poolSize);
+  if (pool.length === 0) return undefined;
+  return pool[(window + offset) % pool.length];
 }
 
 function fallbackStarters(): MarketStarter[] {
@@ -90,22 +96,27 @@ function fallbackStarters(): MarketStarter[] {
   ];
 }
 
-export function buildMarketStarters(prices: ProductPrice[]): MarketStarter[] {
+export function buildMarketStarters(prices: ProductPrice[], rotationWindow = 0): MarketStarter[] {
   if (prices.length === 0) return fallbackStarters();
 
   const deals = currentDeals(prices);
-  const mealDeal = deals.find(row => MEAL_CATEGORIES.has(row.category.toLowerCase())) ?? deals[0];
-  const householdDeal = deals.find(row => HOUSEHOLD_CATEGORIES.has(row.category.toLowerCase()) && row.canonical_name !== mealDeal?.canonical_name)
-    ?? deals.find(row => row.canonical_name !== mealDeal?.canonical_name);
-  const comparison = comparisonCandidate(prices);
+  const mealDeals = deals.filter(row => MEAL_CATEGORIES.has(row.category.toLowerCase()));
+  const householdDeals = deals.filter(row => HOUSEHOLD_CATEGORIES.has(row.category.toLowerCase()));
+  const mealDeal = rotatingPick(mealDeals.length > 0 ? mealDeals : deals, rotationWindow, 0);
+  const householdDeal = rotatingPick(
+    householdDeals.filter(row => row.canonical_name !== mealDeal?.canonical_name),
+    rotationWindow,
+    3,
+  ) ?? rotatingPick(deals.filter(row => row.canonical_name !== mealDeal?.canonical_name), rotationWindow, 3);
+  const comparison = rotatingPick(comparisonCandidates(prices), rotationWindow, 7);
   const starters: MarketStarter[] = [];
 
   if (mealDeal) {
     const name = cleanProductName(mealDeal.canonical_name);
     starters.push({
-      label: `Build a meal around ${name}`,
+      label: `What could I make with ${name}?`,
       detail: `${dealPercentage(mealDeal)}% off at ${storeDisplayName(mealDeal.store)} today`,
-      prompt: `Build a practical family meal around ${mealDeal.canonical_name}, which is currently on offer at ${storeDisplayName(mealDeal.store)}`,
+      prompt: `Suggest a practical meal, snack or recipe idea using ${mealDeal.canonical_name}, which is currently on offer at ${storeDisplayName(mealDeal.store)}`,
       icon: 'meal',
       signal: 'meal_opportunity',
     });
