@@ -43,4 +43,21 @@ describe('buildMarketStarters', () => {
     expect(starters).toHaveLength(4);
     expect(starters.every(item => !item.label.includes('Hellmann'))).toBe(true);
   });
+
+  it('rotates through strong live candidates in successive market windows', () => {
+    const rows = [
+      price({ canonical_name: 'Irish Chicken Fillets 1kg', category: 'Meat', store: 'dunnes', price: 8, was_price: 10 }),
+      price({ canonical_name: 'Salmon Fillets 400g', category: 'Fish', store: 'tesco', price: 6, was_price: 8 }),
+      price({ canonical_name: 'Lean Irish Beef Mince 500g', category: 'Meat', store: 'supervalu', price: 4, was_price: 5 }),
+      price({ canonical_name: 'Laundry Capsules 30 Pack', category: 'Laundry', store: 'tesco', price: 6, was_price: 9 }),
+      price({ canonical_name: 'Dishwasher Tablets 40 Pack', category: 'Cleaning', store: 'dunnes', price: 7, was_price: 10 }),
+      price({ canonical_name: 'Irish Butter 454g', category: 'Dairy', store: 'dunnes', price: 3.5, was_price: null, on_promotion: false }),
+      price({ canonical_name: 'Irish Butter 454g', category: 'Dairy', store: 'supervalu', price: 4.2, was_price: null, on_promotion: false }),
+      price({ canonical_name: 'Whole Milk 2L', category: 'Dairy', store: 'dunnes', price: 2.2, was_price: null, on_promotion: false }),
+      price({ canonical_name: 'Whole Milk 2L', category: 'Dairy', store: 'tesco', price: 2.7, was_price: null, on_promotion: false }),
+    ];
+
+    expect(buildMarketStarters(rows, 1).map(item => item.label))
+      .not.toEqual(buildMarketStarters(rows, 2).map(item => item.label));
+  });
 });
