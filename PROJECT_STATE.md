@@ -380,7 +380,10 @@ Retailer specifics:
   promotion flag and sometimes percentage, but no validated Clubcard label or
   explicit previous price. Do not derive a previous price until arithmetic,
   rounding and history checks have been approved. Balance after the September
-  500-product run was €12.16; verify before every paid run.
+  500-product run was €12.16; verify before every paid run. Paid submissions
+  are enabled by an explicit owner-authorised manual dispatch, `CRON_SECRET`,
+  the daily spending cap and a live balance check—not by a persistent Vercel
+  enable/disable flag. There is no automatic paid submission schedule.
 - **Dunnes:** direct storefront API; prefer exact stored SKU and validate name,
   product signals and pack identity. Scheduled Monday/Thursday 05:10 UTC,
   target 1,000.
