@@ -22,7 +22,7 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] dunnes discovery recovery': { name: 'dunnes-discovery-recovery', target: '/api/workers/dunnes-discovery-recover' },
   '[ops] dunnes catch-up': { name: 'dunnes-catch-up', target: '/api/workers/dunnes-scrape-trigger?limit=275' },
   '[ops] supervalu catch-up': { name: 'supervalu-catch-up', target: '/api/workers/supervalu-scrape-trigger?limit=1000' },
-  '[ops] tesco pepesto refresh': { name: 'tesco-pepesto-refresh', target: '/api/cron/pepesto-tesco-balance-refresh?mode=submit' },
+  '[ops] tesco pepesto refresh': { name: 'tesco-pepesto-refresh', target: '/api/workers/pepesto-tesco-submit?limit=100' },
 };
 
 function normalizeTitle(value: string) {

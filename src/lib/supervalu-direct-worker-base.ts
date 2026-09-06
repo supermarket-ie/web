@@ -156,8 +156,11 @@ function extractPromotion(html: string, price: number) {
   const wasPrice = wasCandidates
     .map(match => numericPrice(match[1]))
     .find(candidate => candidate != null && candidate > price) ?? null;
-  const retailerMarked = /class=["'][^"']*(?:promotion|promo-badge|offer-badge|special-offer)[^"']*["']/i.test(html)
-    || /\bsave\s+€\s*\d/i.test(stripTags(html));
+  // SuperValu includes generic promotion-related classes in shared page
+  // chrome, so a class-name match anywhere in the document marks virtually
+  // every product as promoted. Only accept explicit saving copy here; a
+  // higher visible/structured was-price remains the strongest signal.
+  const retailerMarked = /\bsave\s+€\s*\d/i.test(stripTags(html));
   return { wasPrice, onPromotion: Boolean(wasPrice || retailerMarked) };
 }
 

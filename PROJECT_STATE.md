@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 29 August 2026
+**Last updated:** 6 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -330,3 +330,99 @@ For every material Supermarket.ie development session:
 - **2026-08-29 — Dunnes confirmed as Instacart Storefront execution.** Production gateway/search works at store 258; cart resource allows GET/POST and returns 401 without authentication. Consequence: design toward a shared Storefront execution engine for Dunnes/SuperValu rather than duplicate retailer-specific cart plumbing.
 - **2026-08-29 — Pepesto public runtime boundary clarified.** Free MCP/list handoff still finishes through Pepesto's mobile app/WebView; no browser-only cross-origin shortcut has been identified.
 - **2026-08-29 — Repository documentation is canonical project memory.** Future sessions must read and maintain these docs.
+
+## 16. Trusted pricing architecture and current state
+
+The pricing identity chain is `products` (canonical catalogue identity) →
+`store_products` (retailer mapping) → append-only `price_observations` →
+`trusted_retailer_offers` → `latest_prices`.
+
+`latest_prices` is the fail-closed consumer boundary used by the website,
+shopping agent, product pages, comparisons, list generation, basket repricing,
+deals and household insights. Consumers must not fall back to raw observations
+when it is unavailable or empty.
+
+A live price requires a resolved retailer mapping, non-empty retailer SKU and
+name, positive price, approved provenance and an observation no more than seven
+days old. SuperValu search-result URLs are excluded. Wrong mappings and stale
+prices are worse than missing prices; plausible alternatives must never be
+silently substituted for exact products.
+
+Promotion truth rule: `on_promotion` is retailer evidence, not proof of a
+monetary saving. A confirmed shopper-facing saving requires
+`was_price > price`. Retailer-marked offers without a previous price may be
+described as such, but must not be given an invented before price or claimed
+percentage saving.
+
+Production snapshot on 6 September 2026:
+
+| Retailer | Mapped | Live trusted | Coverage | Retailer-marked | Confirmed savings |
+|---|---:|---:|---:|---:|---:|
+| Tesco | 2,461 | 397 | 16.1% | 132 | 0 |
+| Dunnes | 2,460 | 827 | 33.6% | 189 | 189 |
+| SuperValu | 2,460 | 1,148 | 46.7% | 64 | 64 |
+| **Total** | **7,381** | **2,372** | **32.1%** | **385** | **253** |
+
+There were 1,821 canonical products with at least one live retailer price, 503
+with at least two, and only 48 with all three main retailers. These figures are
+a dated snapshot and must be queried again before decisions.
+
+Refresh selection should prioritise never-observed → stalest → freshest, with
+usage-aware priority for products shoppers request. Transport failures and
+product-identity failures must remain separately observable.
+
+Retailer specifics:
+
+- **Tesco:** uses Pepesto `/search` in batches of ten, not ScrapingBee. Accept
+  only an exact Tesco SKU in the returned product URL. The synchronous
+  `/products` route was tested and is unsafe as the primary refresh because it
+  can generalise branded queries. Pepesto currently returns current price,
+  promotion flag and sometimes percentage, but no validated Clubcard label or
+  explicit previous price. Do not derive a previous price until arithmetic,
+  rounding and history checks have been approved. Balance after the September
+  500-product run was €12.16; verify before every paid run.
+- **Dunnes:** direct storefront API; prefer exact stored SKU and validate name,
+  product signals and pack identity. Scheduled Monday/Thursday 05:10 UTC,
+  target 1,000.
+- **SuperValu:** direct `/product/` pages; reject search-result mappings and
+  validate name/pack identity. Generic promotion CSS in shared page chrome is
+  not promotion evidence. Unsupported flags were cleared in production on
+  6 September. Scheduled Monday/Thursday 05:20 UTC, target 1,000.
+
+Latest run health at this snapshot: Tesco 397/500 exact matches and 103
+rejections; Dunnes 738/1,000 extracted and degraded; SuperValu 828/1,000
+extracted and degraded.
+
+PR #62 (`Fix promotion trust and Tesco retrieval`) is awaiting merge:
+https://github.com/supermarket-ie/web/pull/62. It makes shopper-facing deals and
+agent promotion tools require confirmed savings, fixes the SuperValu parser,
+enforces exact-SKU Tesco matching, repairs manual Tesco dispatch, and adds a
+ten-minute no-cost retrieval schedule. Paid Tesco submissions remain manual,
+balance-aware and capped. The application/scheduling changes are not production
+until explicitly approved, merged, deployed and verified.
+
+## 17. Active project monitoring
+
+- **Supermarket.ie Update:** hourly condition watch for meaningful production-
+  readiness changes. This is the source of the useful supermarket health/status
+  notifications the user has been receiving.
+- **Grocery Market Watch:** daily condition watch for material external grocery
+  marketplace, retailer-onboarding, pricing and product-data developments.
+
+## 18. Next pricing priority
+
+Increase trusted fresh-price coverage without weakening identity standards or
+exhausting Pepesto credit. Begin by measuring the overlap deficit by canonical
+product and shopper usage, then prioritise work that adds the most two-retailer
+and three-retailer coverage per request/euro.
+
+Decision-log additions:
+
+- **2026-09-06 — Promotion truth tightened.** Retailer flags and confirmed
+  monetary savings are distinct; `was_price > price` is required for a saving.
+- **2026-09-06 — SuperValu promotion contamination corrected.** Generic shared
+  promotion classes had marked ordinary products; unsupported live flags were
+  cleared without changing prices.
+- **2026-09-06 — Tesco exact-SKU Pepesto rule confirmed.** Current prices are
+  accepted only for the exact mapped Tesco SKU; no inferred Clubcard before
+  price is approved.
