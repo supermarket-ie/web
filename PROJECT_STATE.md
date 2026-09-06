@@ -644,3 +644,37 @@ Decision-log addition:
   durable Eve result supplies needs and canonical candidates, but trusted server
   code revalidates identity and current pricing before writing `saved_lists` or
   `list_items`; unresolved lines remain explicit in the saved payload.
+
+## 23. Central shopping action gates
+
+Phase 4 introduces reusable deterministic gates in
+`src/lib/shopping/action-gates.ts` and applies them to Eve's signed-in shop
+mutations. Product-specific additions, replacements, removals and quantity
+changes now require an exact canonical product ID. Name-only agent writes are no
+longer accepted. Legacy list rows that predate canonical IDs remain editable only
+when their exact stored canonical name matches a server-validated product; the
+canonical ID is attached during the successful edit.
+
+Adds and replacements obtain their selected offer from `latest_prices` by
+canonical product ID and reject mismatched identity, non-exact relationships,
+non-fresh rows and non-positive prices. The model cannot submit a price or
+retailer identity for persistence. Quantities must be whole numbers from 1 to 20
+and a saved shop is capped at 200 lines.
+
+All edits use the list's previously read `generated_at` value as an optimistic
+concurrency condition. If another request changed the list after it was loaded,
+the stale mutation writes nothing and reports a retryable conflict instead of
+overwriting the newer state. Tool responses confirm success only after the
+conditional database update or insert succeeds.
+
+The structured household-shop proposal remains distinct from these mutations:
+presentation proposes, Phase 3 save creates persisted list state, and the Phase 4
+tools explicitly edit an existing signed-in shop. Retailer trolley and checkout
+claims remain outside this boundary.
+
+Decision-log addition:
+
+- **2026-09-06 — Canonical provenance and mutation gates centralised.** Eve
+  product writes require server-validated canonical identity; price-bearing
+  writes require a matching fresh exact `latest_prices` offer; quantity, line
+  and optimistic-concurrency limits are enforced by application code.
