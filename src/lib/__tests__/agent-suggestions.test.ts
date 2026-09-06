@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildPredictiveSuggestions, extractCatalogueFragment, inferSuggestionIntent } from '../agent-suggestions';
+import {
+  GUEST_CLARIFICATION_MARKER,
+  buildPredictiveSuggestions,
+  extractCatalogueFragment,
+  inferSuggestionIntent,
+  isGuestClarification,
+  signupPromptFor,
+  visibleAgentText,
+} from '../agent-suggestions';
 
 describe('predictive agent suggestions', () => {
   it('extracts the unfinished product rather than the surrounding question', () => {
@@ -15,6 +23,21 @@ describe('predictive agent suggestions', () => {
     expect(inferSuggestionIntent('low protein meals')).toBe('dietary');
     expect(inferSuggestionIntent('dairy f')).toBe('dietary');
     expect(inferSuggestionIntent('vegan dinners')).toBe('dietary');
+    expect(inferSuggestionIntent('plan a complete household shop around current offers')).toBe('shop');
+    expect(inferSuggestionIntent('build my weekly shopping list under €120')).toBe('shop');
+    expect(inferSuggestionIntent('show me useful offers for a household shop')).toBe('offer');
+  });
+
+  it('uses the requested outcome for meaningful continuation CTAs', () => {
+    expect(signupPromptFor('plan a complete household shop around current offers').title).toBe('Save this household shop');
+    expect(signupPromptFor('is butter on offer').title).toBe('Keep this product with your agent');
+    expect(signupPromptFor('plan four dinners').title).toBe('Keep this meal plan');
+  });
+
+  it('recognises and hides the guest clarification control marker', () => {
+    const response = `Who is the shop for?\n${GUEST_CLARIFICATION_MARKER}`;
+    expect(isGuestClarification(response)).toBe(true);
+    expect(visibleAgentText(response)).toBe('Who is the shop for?');
   });
 
   it('predicts dietary searches without claiming medical suitability', () => {

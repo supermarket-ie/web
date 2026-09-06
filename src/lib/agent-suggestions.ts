@@ -1,4 +1,19 @@
-export type SuggestionIntent = 'find' | 'price' | 'offer' | 'compare' | 'meal' | 'budget' | 'dietary' | 'general';
+export type SuggestionIntent = 'find' | 'price' | 'offer' | 'compare' | 'meal' | 'shop' | 'budget' | 'dietary' | 'general';
+
+export type SignupPrompt = {
+  title: string;
+  description: string;
+};
+
+export const GUEST_CLARIFICATION_MARKER = '[[guest_clarification]]';
+
+export function isGuestClarification(text: string): boolean {
+  return text.includes(GUEST_CLARIFICATION_MARKER);
+}
+
+export function visibleAgentText(text: string): string {
+  return text.replaceAll(GUEST_CLARIFICATION_MARKER, '').trim();
+}
 
 export type CatalogueSuggestionProduct = {
   name: string;
@@ -28,6 +43,10 @@ export function normaliseSuggestionText(value: string): string {
 
 export function inferSuggestionIntent(input: string): SuggestionIntent {
   const query = normaliseSuggestionText(input);
+  // Classify the requested outcome before supporting evidence mentioned in the
+  // request. "Plan a household shop around offers" is a shop, not an offer
+  // lookup, and should keep its basket-oriented continuation CTA.
+  if (/\b(?:complete|full|weekly|grocery|value led)\s+(?:household\s+)?(?:shop|shopping list)\b|\b(?:build|plan|prepare|sort out)\b.{0,50}\b(?:shop|shopping list)\b|\bshopping list\b/.test(query)) return 'shop';
   if (/\b(gluten(?:\s+f(?:r(?:e(?:e)?)?)?)?|dairy(?:\s+f(?:r(?:e(?:e)?)?)?)?|lactose(?:\s+f(?:r(?:e(?:e)?)?)?)?|nut(?:\s+f(?:r(?:e(?:e)?)?)?)?|peanut(?:\s+f(?:r(?:e(?:e)?)?)?)?|egg(?:\s+f(?:r(?:e(?:e)?)?)?)?|soy(?:\s+f(?:r(?:e(?:e)?)?)?)?|sesame(?:\s+f(?:r(?:e(?:e)?)?)?)?|low\s+(?:prot(?:e(?:i(?:n)?)?)?|sod(?:i(?:u(?:m)?)?)?|salt|sugar|carb)|high\s+prot(?:e(?:i(?:n)?)?)?|no\s+added\s+sugar|without\s+(?:gluten|dairy|lactose|nuts?|peanuts?|eggs?|soy|sesame)|allerg(?:y|ies|en|ens)|vegetarian|vegan|halal|kosher|keto)\b/.test(query)) return 'dietary';
   if (/\b(dinners?|meals?|cook|make|recipes?|lunch(?:es)?|breakfasts?|ingredients?)\b/.test(query)) return 'meal';
   if (/€|£|\b(budget|spend|under|less than|shop for|family of|adults?|people)\b/.test(query)) return 'budget';
@@ -36,6 +55,61 @@ export function inferSuggestionIntent(input: string): SuggestionIntent {
   if (/\b(price|cost|how much)\b/.test(query)) return 'price';
   if (/\b(find|where|stock|available|buy|get)\b/.test(query)) return 'find';
   return 'general';
+}
+
+export function isPersistentGuestRequest(input: string): boolean {
+  return /\b(watch|monitor|remind|notify|alert|track|tell me when|let me know when)\b/i.test(input);
+}
+
+export function signupPromptFor(request: string): SignupPrompt {
+  const intent = inferSuggestionIntent(request);
+
+  if (isPersistentGuestRequest(request)) {
+    return {
+      title: 'Keep this active with your agent',
+      description: 'Add your email so Supermarket.ie can remember this request, keep watching it and pick it up again without starting over.',
+    };
+  }
+
+  if (intent === 'shop') {
+    return {
+      title: 'Save this household shop',
+      description: 'Keep the shop, adjust it around your household and let your agent prepare future shops without starting again.',
+    };
+  }
+
+  if (intent === 'meal') {
+    return {
+      title: 'Keep this meal plan',
+      description: 'Save it, build the rest of your weekly shop and return without starting again.',
+    };
+  }
+
+  if (intent === 'budget') {
+    return {
+      title: 'Remember your household budget',
+      description: 'Keep this result and let your agent use the same budget when planning and reviewing future shops.',
+    };
+  }
+
+  if (intent === 'dietary') {
+    return {
+      title: 'Remember this household requirement',
+      description: 'Save it so your agent can apply it automatically when finding products and planning future shops.',
+    };
+  }
+
+  if (intent === 'find' || intent === 'price' || intent === 'offer' || intent === 'compare') {
+    return {
+      title: 'Keep this product with your agent',
+      description: 'Save this result, compare the rest of your shop and keep watch for useful price or product changes.',
+    };
+  }
+
+  return {
+    title: 'Make this your household agent',
+    description: 'Save this result and let Supermarket.ie remember what matters, prepare future shops and keep useful changes on your radar.',
+  };
 }
 
 export function extractCatalogueFragment(input: string): string {
@@ -91,7 +165,7 @@ function productSuggestions(product: CatalogueSuggestionProduct, intent: Suggest
     ? 'A current promotion is available'
     : 'Check current promotions across Irish supermarkets';
 
-  const primary: Record<Exclude<SuggestionIntent, 'meal' | 'budget' | 'dietary' | 'general'>, PredictiveSuggestion> = {
+  const primary: Record<Exclude<SuggestionIntent, 'meal' | 'shop' | 'budget' | 'dietary' | 'general'>, PredictiveSuggestion> = {
     find: { label: `Where can I find ${product.name}?`, detail: priceDetail, prompt: `Where can I find ${product.name}?` },
     price: { label: `What is the current price of ${product.name}?`, detail: priceDetail, prompt: `Find the current price of ${product.name}` },
     offer: { label: `Is ${product.name} on offer?`, detail: offerDetail, prompt: `Where is ${product.name} currently on offer?` },
