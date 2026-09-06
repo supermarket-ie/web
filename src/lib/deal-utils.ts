@@ -6,8 +6,13 @@ export type DealCandidate = {
 };
 
 export function isCurrentDeal(price: DealCandidate) {
-  return price.on_promotion === true
-    || (price.was_price != null && price.was_price > price.price);
+  // A retailer promotion flag is useful evidence, but it is not enough to
+  // claim a saving. Shopper-facing deals require a confirmed higher price.
+  return price.was_price != null && price.was_price > price.price;
+}
+
+export function isRetailerMarkedOffer(price: DealCandidate) {
+  return price.on_promotion === true;
 }
 
 export function latestObservationAt(prices: DealCandidate[]) {

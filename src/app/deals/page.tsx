@@ -4,7 +4,7 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { getAllLatestPrices, type ProductPrice } from '@/lib/price-data';
-import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
+import { isCurrentDeal, isRetailerMarkedOffer, latestObservationAt } from '@/lib/deal-utils';
 
 // Always read the validated catalogue on the next request after a refresh.
 export const dynamic = 'force-dynamic';
@@ -60,6 +60,8 @@ function getDeals(prices: ProductPrice[]): Deal[] {
 export default async function DealsPage() {
   const allPrices = await getAllLatestPrices({ bypassCache: true });
   const deals = getDeals(allPrices);
+  const retailerMarkedWithoutSaving = allPrices.filter(price =>
+    isRetailerMarkedOffer(price) && !isCurrentDeal(price));
   const latestObservation = latestObservationAt(allPrices);
   const updatedLabel = latestObservation
     ? new Date(latestObservation).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -91,7 +93,8 @@ export default async function DealsPage() {
             🏷️ Supermarket Deals This Week
           </h1>
           <p className="text-[#5c5b5b] max-w-2xl">
-            Current retailer-marked offers and verified price reductions across Tesco, Dunnes Stores and SuperValu — {deals.length} deals right now.
+            Confirmed price reductions across Tesco, Dunnes Stores and SuperValu — {deals.length} deals right now.
+            {retailerMarkedWithoutSaving.length > 0 ? ` We also track ${retailerMarkedWithoutSaving.length} retailer-marked offers without claiming an unverified saving.` : ''}
             {updatedLabel ? ` Product data refreshed ${updatedLabel}.` : ''}
           </p>
         </div>

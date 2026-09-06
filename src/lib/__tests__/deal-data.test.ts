@@ -4,6 +4,7 @@ vi.mock('@/lib/supabase', () => ({ supabaseAdmin: {} }));
 import type { ProductPrice } from '@/lib/price-data';
 import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
 import { parseSupervaluProductPage } from '@/lib/supervalu-direct-worker';
+import { choosePepestoCandidate } from '@/lib/pepesto-tesco';
 
 function price(overrides: Partial<ProductPrice> = {}): ProductPrice {
   return {
@@ -26,8 +27,8 @@ function price(overrides: Partial<ProductPrice> = {}): ProductPrice {
 }
 
 describe('deal data', () => {
-  it('accepts retailer-marked offers without inventing a previous price', () => {
-    expect(isCurrentDeal(price({ on_promotion: true }))).toBe(true);
+  it('does not present a retailer-marked offer as a confirmed deal without a previous price', () => {
+    expect(isCurrentDeal(price({ on_promotion: true }))).toBe(false);
   });
 
   it('accepts a verified reduction with a higher previous price', () => {
@@ -72,5 +73,49 @@ describe('SuperValu promotion parsing', () => {
     `);
 
     expect(candidate).toMatchObject({ price: 2.25, wasPrice: null, onPromotion: false });
+  });
+
+  it('ignores generic promotion classes elsewhere on the page', () => {
+    const candidate = parseSupervaluProductPage(`
+      <div class="promotion-carousel">Other weekly offers</div>
+      <script type="application/ld+json">
+        {"@type":"Product","name":"Milk 2L","offers":{"@type":"Offer","price":"2.25"}}
+      </script>
+    `);
+
+    expect(candidate).toMatchObject({ price: 2.25, wasPrice: null, onPromotion: false });
+  });
+});
+
+describe('Tesco Pepesto matching', () => {
+  const product = {
+    storeProductId: 'product-1',
+    canonicalName: 'Example Coffee 200g',
+    storeProductName: 'Example Coffee 200g',
+    storeUrl: 'https://www.tesco.ie/groceries/en-IE/products/123456789',
+    storeSku: '123456789',
+    previousPrice: 5,
+  };
+
+  it('accepts an exact Tesco SKU', () => {
+    const candidate = choosePepestoCandidate(product, {
+      products: [{ product: {
+        product_name: 'Example Coffee 200g',
+        product_id: 'https://www.tesco.ie/groceries/en-IE/products/123456789',
+        price: { price: 400 },
+      } }],
+    });
+    expect(candidate?.product_id).toContain('/products/123456789');
+  });
+
+  it('rejects a plausible name match with a different Tesco SKU', () => {
+    const candidate = choosePepestoCandidate(product, {
+      products: [{ product: {
+        product_name: 'Example Coffee 200g',
+        product_id: 'https://www.tesco.ie/groceries/en-IE/products/987654321',
+        price: { price: 400 },
+      } }],
+    });
+    expect(candidate).toBeNull();
   });
 });

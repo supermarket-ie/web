@@ -107,8 +107,10 @@ async function queryPromotions(): Promise<PriceRow[]> {
     .from('latest_prices')
     .select('store, price, was_price, on_promotion, store_product_name, canonical_name, category')
     .eq('on_promotion', true)
+    .not('was_price', 'is', null)
     .limit(200);
-  return (data ?? []) as unknown as PriceRow[];
+  return ((data ?? []) as unknown as PriceRow[])
+    .filter(row => row.was_price != null && Number(row.was_price) > Number(row.price));
 }
 
 async function queryCategoryPrices(category: string): Promise<PriceRow[]> {
@@ -500,7 +502,10 @@ export function makePlannerTools(subscriberId: string | null) {
         return items.map(name => ({
           canonical_name: name,
           prices: rows.filter(r => r.canonical_name === name),
-          promotions: rows.filter(r => r.canonical_name === name && r.on_promotion),
+          promotions: rows.filter(r => r.canonical_name === name
+            && r.on_promotion
+            && r.was_price != null
+            && Number(r.was_price) > Number(r.price)),
         }));
       },
     }),

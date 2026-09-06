@@ -5,7 +5,7 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { getAllLatestPrices, STORE_INFO, fmt, pct, type StoreKey } from '@/lib/price-data';
-import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
+import { isCurrentDeal, isRetailerMarkedOffer, latestObservationAt } from '@/lib/deal-utils';
 import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
 // Always read the validated catalogue on the next request after a refresh.
@@ -26,12 +26,12 @@ export async function generateMetadata({ params }: { params: Promise<{ store: st
   if (!info) return {};
   return {
     title: `${info.name} Deals & Offers This Week Ireland | supermarket.ie`,
-    description: `This week's ${info.name} deals and special offers in Ireland. Live promotion data updated twice weekly — see every current offer at ${info.name}.`,
+    description: `This week's confirmed ${info.name} price reductions in Ireland, based on live promotion data updated twice weekly.`,
     keywords: [`${info.name} deals this week`, `${info.name} offers Ireland`, `${info.name} promotions`, `${info.name} special offers this week Ireland`],
     alternates: { canonical: `${BASE_URL}/deals/${store}` },
     openGraph: {
       title: `${info.name} Deals & Offers This Week — Ireland`,
-      description: `Live ${info.name} offers updated twice weekly.`,
+      description: `Confirmed ${info.name} price reductions updated twice weekly.`,
     },
   };
 }
@@ -46,6 +46,8 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
   const allPrices = await getAllLatestPrices({ bypassCache: true });
   const storePrices = allPrices.filter(p => p.store === storeKey);
   const storeDeals = storePrices.filter(isCurrentDeal);
+  const retailerMarkedWithoutSaving = storePrices.filter(price =>
+    isRetailerMarkedOffer(price) && !isCurrentDeal(price));
 
   const byCategory = new Map<string, typeof storeDeals>();
   for (const deal of storeDeals) {
@@ -83,8 +85,8 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
             🏷️ {info.name} Deals This Week
           </h1>
           <p className="text-[#5c5b5b] max-w-2xl">
-            {storeDeals.length} current offers at {info.name} in Ireland.
-            {withSavings.length > 0 ? ` ${withSavings.length} with confirmed savings.` : ''}
+            {storeDeals.length} confirmed price reductions at {info.name} in Ireland.
+            {retailerMarkedWithoutSaving.length > 0 ? ` ${retailerMarkedWithoutSaving.length} additional retailer-marked offers do not include a confirmed previous price.` : ''}
             {updatedLabel ? ` Product data refreshed ${updatedLabel}.` : ' No recent verified product refresh is available.'}
           </p>
         </div>
@@ -103,7 +105,7 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <div className="text-3xl font-bold" style={{ color: info.color }}>{storeDeals.length}</div>
-              <div className="text-sm text-[#7c867f]">Offers</div>
+              <div className="text-sm text-[#7c867f]">Confirmed deals</div>
             </div>
             <div>
               <div className="text-3xl font-bold text-[#152219]">{sortedCats.length}</div>
