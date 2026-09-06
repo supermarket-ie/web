@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 
-export type RefreshStore = 'dunnes' | 'supervalu' | 'aldi';
+export type RefreshStore = 'tesco' | 'dunnes' | 'supervalu' | 'aldi';
 
 export type StoreRefreshRow = {
   store_product_id: string;
