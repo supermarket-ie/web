@@ -7,6 +7,7 @@ import {
 
 const rows: CataloguePriceRow[] = [
   {
+    canonical_product_id: 'hellmanns-id',
     canonical_name: 'Hellmanns Real Mayonnaise 500ml',
     category: 'Condiments',
     store: 'SuperValu',
@@ -43,6 +44,7 @@ describe('shopping catalogue core', () => {
   it('groups retailer offers behind one resolved canonical product', () => {
     const [result] = resolveCatalogueRows("Hellmann's mayonnaise", rows, 5);
 
+    expect(result.canonical_product_id).toBe('hellmanns-id');
     expect(result.canonical_name).toBe('Hellmanns Real Mayonnaise 500ml');
     expect(result.best_store).toBe('Dunnes');
     expect(result.best_price).toBe(4.25);

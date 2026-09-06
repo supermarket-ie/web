@@ -6,6 +6,7 @@ import {
 } from '../../src/lib/shopping/catalogue-core';
 
 export interface CatalogueCandidate {
+  canonical_product_id: string | null;
   canonical_name: string;
   category: string | null;
   score: number;
@@ -23,6 +24,7 @@ export interface CatalogueCandidate {
 
 function toLegacyCandidate(candidate: ReturnType<typeof resolveCatalogueRows>[number]): CatalogueCandidate {
   return {
+    canonical_product_id: candidate.canonical_product_id ?? null,
     canonical_name: candidate.canonical_name,
     category: candidate.category,
     score: candidate.score,
@@ -45,7 +47,7 @@ export async function resolveCatalogueProduct(query: string, limit = 5): Promise
 
   const { data, error } = await agentSupabase
     .from('latest_prices')
-    .select('canonical_name, category, store, store_product_name, price, was_price, on_promotion')
+    .select('canonical_product_id, canonical_name, category, store, store_product_name, price, was_price, on_promotion')
     .or(`canonical_name.ilike.%${seed}%,store_product_name.ilike.%${seed}%`)
     // Broad staples such as milk, bread and butter also occur in hundreds of
     // unrelated or specialist product names. Fetch the complete practical
@@ -62,7 +64,7 @@ export async function resolveCatalogueProduct(query: string, limit = 5): Promise
 export async function getCurrentProductSnapshot(canonicalName: string) {
   const { data, error } = await agentSupabase
     .from('latest_prices')
-    .select('canonical_name, category, store, store_product_name, price, was_price, on_promotion')
+    .select('canonical_product_id, canonical_name, category, store, store_product_name, price, was_price, on_promotion')
     .eq('canonical_name', canonicalName);
 
   if (error) throw new Error(`Current price lookup failed: ${error.message}`);

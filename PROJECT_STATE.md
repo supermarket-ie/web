@@ -555,12 +555,11 @@ items, store coverage, retailer strategy, price provenance and a compact
 decision trace.
 
 Current migration boundary: this phase adds the contract and deterministic
-grounding only. Eve does not yet emit the structured presentation, and saved
-lists still use their existing JSON/Markdown compatibility paths. Phase 2
-should add Eve's native `present_household_shop` path without making new
-results depend on `parse-planner-markdown.ts`; Phase 3 should then make the
-validated v1 payload the authoritative saved-list input while preserving old
-lists and conversations.
+grounding. Phase 2 adds Eve's native `present_household_shop` path and homepage
+rendering without making new results depend on `parse-planner-markdown.ts`.
+Saved lists still use their existing JSON/Markdown compatibility paths. Phase
+3 should make the validated v1 payload the authoritative saved-list input while
+preserving old lists and conversations.
 
 Decision-log addition:
 
@@ -568,3 +567,41 @@ Decision-log addition:
   propose household needs; the Shared Shopping Capability Layer validates
   canonical identity and owns current offers, promotion truth, totals, store
   coverage and retailer recommendations.
+
+## 21. Native Eve household-shop presentation
+
+Phase 2 uses Eve's supported structured tool-result path rather than a custom
+event protocol. `present_household_shop` is available to guests and signed-in
+users. It accepts only the model-authored `household_shop.v1` proposal, looks up
+canonical identities and exact fresh offers server-side, and returns the
+validated contract as a durable Eve `dynamic-tool` result.
+
+The homepage reads completed `present_household_shop` tool parts from Eve's
+default message projection and renders a native mobile-responsive shopping
+card. The card shows household/planning assumptions, dietary requirements,
+sections, quantities, selected current prices, promotion evidence, unresolved
+gaps, deterministic totals, complete-versus-partial retailer coverage and the
+recommended retailer strategy. It explicitly labels the result as a proposed
+shop rather than a saved list, retailer trolley or completed order.
+
+This mechanism preserves the structured payload inside the Eve event log. The
+existing guest-to-account handover copies that event log to the signed-in
+storage key, so the rendered shop and assumptions survive signup without being
+reparsed from assistant prose. Invalid or incomplete tool outputs stored in the
+browser are ignored by the renderer.
+
+Catalogue resolution now carries `canonical_product_id` through its shared
+result so Eve can cite an exact identity in the presentation proposal. The
+model must leave uncertain needs unresolved rather than manufacture IDs.
+
+Compatibility boundary: `parse-planner-markdown.ts` remains untouched for the
+legacy saved-list flow and historical conversations. Phase 3 must persist the
+validated structured tool output directly, deterministically reprice it and
+retain unresolved gaps; it must not parse the accompanying prose.
+
+Decision-log addition:
+
+- **2026-09-06 — Native structured presentation uses durable Eve tool
+  results.** `present_household_shop` returns the server-grounded v1 contract;
+  homepage UI renders that payload directly while prose is limited to a short
+  introduction or qualification.

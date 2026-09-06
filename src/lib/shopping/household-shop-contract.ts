@@ -154,3 +154,20 @@ export type HouseholdShopContract = {
     }>;
   };
 };
+
+export const householdShopToolOutputSchema = z.object({
+  kind: z.literal('household_shop'),
+  shop: z.custom<HouseholdShopContract>(value => {
+    if (!value || typeof value !== 'object') return false;
+    const shop = value as Partial<HouseholdShopContract>;
+    return shop.schema_version === HOUSEHOLD_SHOP_SCHEMA_VERSION
+      && Array.isArray(shop.sections)
+      && Array.isArray(shop.items)
+      && Boolean(shop.totals && typeof shop.totals.selected_total === 'number')
+      && Array.isArray(shop.store_coverage)
+      && Boolean(shop.recommended_retailer_strategy)
+      && Boolean(shop.provenance?.price_boundary === 'latest_prices');
+  }),
+});
+
+export type HouseholdShopToolOutput = z.infer<typeof householdShopToolOutputSchema>;

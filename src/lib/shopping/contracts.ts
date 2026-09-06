@@ -21,6 +21,7 @@ export type RetailerOffer = {
 };
 
 export type ResolvedProduct = {
+  canonical_product_id?: string | null;
   canonical_name: string;
   category: string | null;
   score: number;
