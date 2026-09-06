@@ -3,7 +3,6 @@ import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
 
 const BASE = 'https://s.pepesto.com/api';
-export const PEPESTO_SEARCH_COST_CENTS = 32;
 export const PEPESTO_BATCH_SIZE = 10;
 
 type PricePromotion = { promo?: boolean; promo_percentage?: number };

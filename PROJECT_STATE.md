@@ -384,6 +384,10 @@ Retailer specifics:
   are enabled by an explicit owner-authorised manual dispatch, `CRON_SECRET`,
   the daily spending cap and a live balance check—not by a persistent Vercel
   enable/disable flag. There is no automatic paid submission schedule.
+  Do not estimate Pepesto spend from a hard-coded tariff. On 6 September a
+  100-product/ten-search run reduced the balance from €12.16 to €0.16 despite
+  the previous €0.32-per-search assumption. Record credits before and after
+  submission and report only the observed balance difference as actual cost.
 - **Dunnes:** direct storefront API; prefer exact stored SKU and validate name,
   product signals and pack identity. Scheduled Monday/Thursday 05:10 UTC,
   target 1,000.
@@ -440,9 +444,10 @@ Roll out coverage improvement in measured tranches:
 1. refresh resolved Dunnes and SuperValu overlap gaps first because their
    direct transports do not consume Pepesto credit;
 2. discover missing direct-retailer mappings, prioritising shopper demand;
-3. run Tesco only after explicit manual approval, with the current Pepesto
-   price, balance and expected cost checked for that specific run; Pepesto paid
-   submissions must never be scheduled or started automatically;
+3. run Tesco only after explicit manual approval, checking the live balance and
+   any authoritative Pepesto quote available for that specific run; never
+   invent or hard-code an expected cost, and never schedule or automatically
+   start a paid submission;
 4. protect high-demand staples from ageing out by keeping the same selector in
    scheduled Monday/Thursday direct-retailer refreshes;
 5. only broaden to low-demand one-store products after high-demand and overlap
@@ -469,7 +474,12 @@ Decision-log additions:
   missing target-store coverage, shopper demand, cross-retailer overlap,
   never-observed status and staleness. Use free direct-retailer requests first.
   Tesco/Pepesto paid submissions are manual-only: never schedule them, and
-  confirm balance, current pricing and expected cost for every approved run.
+  confirm the live balance and any authoritative Pepesto quote for every
+  approved run, then record the observed cost.
+- **2026-09-06 — Pepesto cost assumption invalidated.** A ten-search run cost
+  €12.00 rather than the hard-coded €3.20 estimate. Cost controls and reporting
+  must use observed before/after credit balances; no fixed Pepesto tariff may
+  be presented as authoritative.
 
 ## 19. Household-agent runtime and guest planning
 
