@@ -1183,7 +1183,10 @@ export async function createPlannerAgent(opts: {
     : '';
 
   return new ToolLoopAgent({
-    model: anthropic('claude-haiku-4-5-20251001'),
+    // Remaining saved-conversation callers have not yet been migrated onto
+    // Eve sessions. Keep their model quality aligned with the primary agent
+    // until that persistence migration is complete.
+    model: anthropic('claude-sonnet-5'),
     instructions: instructions + modificationSuffix,
     tools: makePlannerTools(opts.subscriberId),
     stopWhen: stepCountIs(10),
