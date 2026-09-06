@@ -858,9 +858,11 @@ were preserved and linked to a saved list; none had been updated in the prior
 seven days, while nine had activity within 30 days. Vercel showed no exact
 `/api/plan` log match in the available one-hour window; longer log retrieval was
 unavailable due the account log-query limit. Source inspection found no other
-runtime caller. Production retirement and error-free deployment must still be
-verified after this phase is merged; until then this section describes the PR
-state, not a live production claim.
+runtime caller. Production retirement was verified after merge on 6 September
+2026: Vercel deployment `dpl_Coq91LRKKx1GVLgtM9VJYF6W2xV4` built commit
+`e04e3e1`, reached `READY`, attached the `supermarket.ie` and
+`www.supermarket.ie` aliases, and had no runtime-error clusters after release.
+The public homepage returned the current Eve household-agent experience.
 
 Decision-log addition:
 
