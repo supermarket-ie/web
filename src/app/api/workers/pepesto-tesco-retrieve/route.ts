@@ -11,7 +11,6 @@ function responseState(payload: unknown) {
 }
 
 export async function GET(request:Request){
- if(process.env.PEPESTO_TESCO_ENABLED!=='true') return Response.json({error:'Pepesto Tesco adapter disabled'},{status:503});
  if(!authorized(request)) return Response.json({error:'Unauthorized'},{status:401});
  const {data:sessions,error}=await supabaseAdmin.from('pepesto_tesco_sessions').select('id,run_uuid,search_session_id,products,status,submitted_at').in('status',['submitted','in_progress']).order('submitted_at',{ascending:true}).limit(20);
  if(error) return Response.json({error:error.message},{status:500});

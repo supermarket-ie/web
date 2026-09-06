@@ -6,7 +6,6 @@ function authorized(r:Request){const s=process.env.CRON_SECRET;return Boolean(s&
 function int(v:string|null,f:number,m:number){const n=Number(v);return Number.isFinite(n)&&n>0?Math.min(Math.floor(n),m):f}
 
 export async function GET(request:Request){
- if(process.env.PEPESTO_TESCO_ENABLED!=='true') return Response.json({error:'Pepesto Tesco adapter disabled'},{status:503});
  if(!authorized(request)) return Response.json({error:'Unauthorized'},{status:401});
  const u=new URL(request.url), limit=int(u.searchParams.get('limit'),100,500), query=u.searchParams.get('q')?.trim()||undefined;
  const dailyCap=int(process.env.PEPESTO_TESCO_DAILY_CAP_CENTS??null,1000,10000);
