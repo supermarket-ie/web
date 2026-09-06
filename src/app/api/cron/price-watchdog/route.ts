@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { resend } from '@/lib/resend';
-import { queryPriceChanges } from '@/lib/planner-agent';
+import { queryPriceChanges } from '@/lib/shopping/price-history';
 import { type PriceChange } from '@/lib/weekly-email-templates';
 import {
   generateWatchdogEmail,

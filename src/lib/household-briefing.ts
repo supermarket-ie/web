@@ -1,6 +1,6 @@
 import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase';
-import { queryPriceChanges, queryUserHistory } from '@/lib/planner-agent';
+import { queryPriceChanges, queryUserHistory } from '@/lib/shopping/price-history';
 
 export type BriefingInsight = {
   kind: 'price_drop' | 'price_rise' | 'promotion' | 'replenishment';

@@ -15,7 +15,7 @@ const eslintConfig = defineConfig([
   ]),
   {
     // Standalone Node scraper/utility scripts — CommonJS by design.
-    files: ["scripts/**/*.js", "test-memory-system.js"],
+    files: ["scripts/**/*.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },

@@ -282,8 +282,8 @@ function QuickActions({ conversationId, token }: { conversationId: string | null
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' } as React.CSSProperties}>
         {QUICK_ACTIONS.map(({ label, prompt }) => {
           const dest = conversationId
-            ? `/dashboard/chat/${conversationId}?prefill=${encodeURIComponent(prompt)}`
-            : `/?prefill=${encodeURIComponent(prompt)}&token=${encodeURIComponent(token)}`;
+            ? `/?resume_conversation=${encodeURIComponent(conversationId)}&agent_prompt=${encodeURIComponent(prompt)}`
+            : `/?agent_prompt=${encodeURIComponent(prompt)}&token=${encodeURIComponent(token)}`;
           return (
             <Link key={label} href={dest}
               className="flex-shrink-0 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-80"
@@ -601,7 +601,7 @@ export function SavedListView({
   const currentItemNames = hasStructured ? structuredItems!.map(i => i.canonical_name) : [];
 
   function handleUpdateList() {
-    router.push(conversationId ? `/dashboard/chat/${conversationId}` : `/?token=${encodeURIComponent(token)}`);
+    router.push(conversationId ? `/?resume_conversation=${encodeURIComponent(conversationId)}` : `/?token=${encodeURIComponent(token)}`);
   }
 
   function handleShare() {

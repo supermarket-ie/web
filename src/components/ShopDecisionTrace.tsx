@@ -72,8 +72,8 @@ export function ShopDecisionTrace({
               const tone = actionTone(decision.action);
               const prefill = `Add ${decision.canonical_name} to my shop`;
               const href = conversationId
-                ? `/dashboard/chat/${conversationId}?prefill=${encodeURIComponent(prefill)}`
-                : `/?prefill=${encodeURIComponent(prefill)}`;
+                ? `/?resume_conversation=${encodeURIComponent(conversationId)}&agent_prompt=${encodeURIComponent(prefill)}`
+                : `/?agent_prompt=${encodeURIComponent(prefill)}`;
 
               return (
                 <div key={`${decision.canonical_name}-${decision.action}-${index}`} className="rounded-xl p-3" style={{ background: 'var(--surface-container-low)' }}>

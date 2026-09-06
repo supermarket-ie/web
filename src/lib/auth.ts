@@ -47,7 +47,7 @@ export function verifySessionToken(token: string | null | undefined): SessionPay
 /**
  * Safe variant: returns the subscriber id, or null for a missing, malformed,
  * expired, or forged token. Use when the route has a meaningful
- * unauthenticated path (e.g. /api/plan works for anonymous users).
+ * unauthenticated path (for example the public Eve preview).
  */
 export function getSubscriberId(token: string | null | undefined): string | null {
   return verifySessionToken(token)?.subscriberId ?? null;

@@ -825,3 +825,46 @@ Decision-log addition:
 - **2026-09-06 — Critical behavioural regressions block deployment.** CI replays
   stored domain fixtures without paid/live dependencies; deterministic truth
   and safety thresholds block, while subjective quality is reported for review.
+
+## 28. Legacy planner retirement
+
+Phase 9 removes the final application caller of the legacy Anthropic planner and
+deletes the exact `/api/plan` generation route, `src/lib/planner-agent.ts`, its
+separate watch-agent dispatcher and the obsolete manual memory test script. The
+deterministic `/api/plan/weekly`, `/api/plan/refresh` and `/api/plan/reprice`
+features remain: they are not model routes and continue to support the weekly
+dashboard and saved-list repricing.
+
+The only live caller found was the signed-in `/dashboard/chat/[id]` page for
+pre-Eve saved conversations. Those records are not deleted or rewritten. The
+page now renders a read-only archived transcript and offers **Continue with
+Eve**. Eve receives only the archive UUID, loads a subscriber-owned record with
+the new `get_archived_conversation` tool, and receives at most the last 12 valid
+user/assistant messages at 1,000 characters each. Historical text is explicitly
+untrusted, while the linked structured saved list remains authoritative.
+Quick actions and list-edit entry points now continue through Eve rather than
+posting to the legacy route.
+
+Price-history and price-change queries used by weekly planning, refresh,
+watchdog and household briefings moved to
+`src/lib/shopping/price-history.ts`. Current Eve tools preserve household
+profile updates, catalogue-grounded validation, repricing, shop modification,
+watch creation and saved structured-list behaviour. Markdown parsing remains
+only in the explicitly named legacy import endpoint for historical planner
+output; native Eve household-shop results do not depend on it.
+
+Production evidence checked before removal: all 35 saved legacy conversations
+were preserved and linked to a saved list; none had been updated in the prior
+seven days, while nine had activity within 30 days. Vercel showed no exact
+`/api/plan` log match in the available one-hour window; longer log retrieval was
+unavailable due the account log-query limit. Source inspection found no other
+runtime caller. Production retirement and error-free deployment must still be
+verified after this phase is merged; until then this section describes the PR
+state, not a live production claim.
+
+Decision-log addition:
+
+- **2026-09-06 — Eve becomes the sole interactive grocery-agent runtime.**
+  Legacy transcripts remain readable and resumable through a bounded,
+  subscriber-scoped adapter; the old prompt/model route has no application
+  caller and is removed without deleting saved history or structured shops.
