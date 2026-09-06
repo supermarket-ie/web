@@ -301,6 +301,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const [error, setError] = useState('');
   const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
   const [marketStarters, setMarketStarters] = useState<Starter[] | null>(null);
+  const [structuredSave, setStructuredSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const scrollRef = useRef<HTMLDivElement>(null);
   const landingPromptHandled = useRef(false);
 
@@ -325,6 +326,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
 
   const busy = agent.status === 'submitted' || agent.status === 'streaming';
   const messages = agent.data.messages;
+  const latestStructuredShop = [...messages].reverse().flatMap(householdShops)[0] ?? null;
   const guestTurns = messages.filter(message => message.role === 'user').length;
   const showGuestGate = isGuest && (guestTurns >= 2 || messages.some(message =>
     message.role === 'user' && isPersistentGuestRequest(messageText(message))
@@ -427,6 +429,33 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
       flow: 'inline_agent_continuation',
     });
   }, [firstRequestIntent, showGuestGate, showSignupPrompt]);
+
+  useEffect(() => {
+    if (isGuest || !latestStructuredShop) return;
+    const saveKey = `sm_saved_household_shop:${latestStructuredShop.provenance.generated_at}`;
+    if (localStorage.getItem(saveKey)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reflect the external persistence marker
+      setStructuredSave('saved');
+      return;
+    }
+    const controller = new AbortController();
+    setStructuredSave('saving');
+    fetch('/api/lists/save-from-planner', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ household_shop: latestStructuredShop }),
+      signal: controller.signal,
+    }).then(async response => {
+      if (!response.ok) throw new Error('Structured shop save failed');
+      const result = await response.json() as { list_id: string };
+      localStorage.setItem(saveKey, result.list_id);
+      setStructuredSave('saved');
+    }).catch(error => {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setStructuredSave('error');
+    });
+    return () => controller.abort();
+  }, [isGuest, latestStructuredShop]);
 
   async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
@@ -552,6 +581,14 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
         {showSignupPrompt && (
           <div className="ml-9 rounded-2xl border border-[#dbe9df] bg-[#f5faf6] px-4 py-4 sm:px-5">
             <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} />
+          </div>
+        )}
+
+        {!isGuest && latestStructuredShop && structuredSave !== 'idle' && (
+          <div className={`ml-9 rounded-xl px-3 py-2 text-xs ${structuredSave === 'error' ? 'bg-red-50 text-red-800' : 'bg-[#eef8f1] text-[#27643d]'}`}>
+            {structuredSave === 'saving' && 'Saving this validated household shop…'}
+            {structuredSave === 'saved' && 'Saved to your household lists with current validated prices.'}
+            {structuredSave === 'error' && 'This shop is still here, but it could not be saved. Please try again.'}
           </div>
         )}
 
