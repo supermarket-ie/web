@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOUSEHOLD_SHOP_SCHEMA_VERSION } from '../household-shop-contract';
+import { HOUSEHOLD_SHOP_SCHEMA_VERSION, householdShopToolOutputSchema } from '../household-shop-contract';
 import { groundHouseholdShop } from '../household-shop';
 
 const catalogue = [
@@ -208,5 +208,18 @@ describe('groundHouseholdShop', () => {
       catalogue_products: catalogue,
       latest_prices: [],
     })).toThrow('Unknown section_id');
+  });
+
+  it('accepts only validated household-shop tool output for native rendering', () => {
+    const shop = groundHouseholdShop({
+      proposal: { ...proposal, items: [proposal.items[0]] },
+      catalogue_products: catalogue,
+      latest_prices: [row('milk-id', 'dunnes', 2.5)],
+      comparison_retailers: ['dunnes'],
+    });
+
+    expect(householdShopToolOutputSchema.safeParse({ kind: 'household_shop', shop }).success).toBe(true);
+    expect(householdShopToolOutputSchema.safeParse({ kind: 'household_shop', shop: { items: [] } }).success).toBe(false);
+    expect(householdShopToolOutputSchema.safeParse({ kind: 'other', shop }).success).toBe(false);
   });
 });

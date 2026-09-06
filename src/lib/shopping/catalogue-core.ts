@@ -1,6 +1,7 @@
 import type { ResolvedProduct, RetailerOffer } from './contracts';
 
 export type CataloguePriceRow = {
+  canonical_product_id?: string | null;
   canonical_name: string;
   category: string | null;
   store: string;
@@ -134,6 +135,7 @@ export function resolveCatalogueRows(
     }));
 
     scored.push({
+      canonical_product_id: productRows[0]?.canonical_product_id ?? null,
       canonical_name: canonicalName,
       category: productRows[0]?.category ?? null,
       score,

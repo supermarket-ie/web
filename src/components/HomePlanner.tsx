@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ComponentType } from 'react';
-import { useEveAgent } from 'eve/react';
+import { useEveAgent, type EveMessage } from 'eve/react';
 import {
   ArrowUp,
   Bell,
@@ -27,6 +27,7 @@ import {
   type SignupPrompt,
 } from '@/lib/agent-suggestions';
 import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
+import { HouseholdShopCard, householdShopFromPart } from '@/components/HouseholdShopCard';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 const GUEST_EVE_CHAT_KEY = `${LEGACY_EVE_CHAT_KEY}:guest`;
@@ -120,6 +121,13 @@ function messageText(message: { parts?: readonly { type: string; text?: string }
     .filter(part => part.type === 'text' && typeof part.text === 'string')
     .map(part => part.text ?? '')
     .join('');
+}
+
+function householdShops(message: EveMessage) {
+  return message.parts.flatMap(part => {
+    const shop = householdShopFromPart(part);
+    return shop ? [shop] : [];
+  });
 }
 
 function FormattedAgentText({ text }: { text: string }) {
@@ -523,13 +531,19 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
         {messages.map(message => {
           const text = messageText(message);
-          if (!text) return null;
+          const shops = householdShops(message);
+          if (!text && shops.length === 0) return null;
           const isUser = message.role === 'user';
           return (
-            <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+            <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${shops.length > 0 ? 'items-start' : ''}`}>
               {!isUser && <div className="mr-2 mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-[#e5f7eb] text-[11px] font-bold text-[#0a773a]">S</div>}
-              <div className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm leading-6 ${isUser ? 'rounded-br-md bg-[#122018] text-white' : 'rounded-bl-md bg-[#f1f3f1] text-[#39443d]'}`}>
-                {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <FormattedAgentText text={text} />}
+              <div className={`${shops.length > 0 ? 'w-full max-w-[calc(100%_-_2.25rem)] space-y-3' : 'max-w-[86%]'} ${shops.length === 0 ? `rounded-2xl px-4 py-3 text-sm leading-6 ${isUser ? 'rounded-br-md bg-[#122018] text-white' : 'rounded-bl-md bg-[#f1f3f1] text-[#39443d]'}` : ''}`}>
+                {text && (
+                  <div className={shops.length > 0 ? 'rounded-2xl rounded-bl-md bg-[#f1f3f1] px-4 py-3 text-sm leading-6 text-[#39443d]' : ''}>
+                    {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <FormattedAgentText text={text} />}
+                  </div>
+                )}
+                {shops.map((shop, index) => <HouseholdShopCard key={`${message.id}:shop:${index}`} shop={shop} />)}
               </div>
             </div>
           );
