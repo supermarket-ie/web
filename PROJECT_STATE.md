@@ -393,13 +393,13 @@ Latest run health at this snapshot: Tesco 397/500 exact matches and 103
 rejections; Dunnes 738/1,000 extracted and degraded; SuperValu 828/1,000
 extracted and degraded.
 
-PR #62 (`Fix promotion trust and Tesco retrieval`) is awaiting merge:
-https://github.com/supermarket-ie/web/pull/62. It makes shopper-facing deals and
+PR #62 (`Fix promotion trust and Tesco retrieval`) was merged and deployed to
+production on 6 September 2026 at commit
+`dca0c9db46af1dfe65003b9838d2ce7b0047ec6e`. It makes shopper-facing deals and
 agent promotion tools require confirmed savings, fixes the SuperValu parser,
 enforces exact-SKU Tesco matching, repairs manual Tesco dispatch, and adds a
 ten-minute no-cost retrieval schedule. Paid Tesco submissions remain manual,
-balance-aware and capped. The application/scheduling changes are not production
-until explicitly approved, merged, deployed and verified.
+balance-aware and capped.
 
 ## 17. Active project monitoring
 
@@ -416,6 +416,42 @@ exhausting Pepesto credit. Begin by measuring the overlap deficit by canonical
 product and shopper usage, then prioritise work that adds the most two-retailer
 and three-retailer coverage per request/euro.
 
+### Coverage strategy and operating plan
+
+Refresh selection should use this priority order for exact, resolved mappings:
+
+1. the target retailer currently has no trusted live price;
+2. the product has appeared in `list_items`, ordered by usage occurrences and
+   quantity;
+3. the product already has trusted live prices at other main retailers, so the
+   refresh completes three-store and then two-store comparisons;
+4. the mapping has never produced an observation;
+5. the existing observation is stalest.
+
+Fresh target-retailer rows remain eligible as lower-priority maintenance. A
+missing/blank retailer SKU is not executable refresh work and must be sent to a
+mapping/discovery workflow instead of consuming a price request.
+
+Roll out coverage improvement in measured tranches:
+
+1. refresh resolved Dunnes and SuperValu overlap gaps first because their
+   direct transports do not consume Pepesto credit;
+2. discover missing direct-retailer mappings, prioritising shopper demand;
+3. run Tesco in demand-ranked batches of at most 100 products (€3.20 at the
+   currently observed €0.32 per ten-product search batch), checking balance,
+   exact-SKU yield and coverage gain before authorising another batch;
+4. protect high-demand staples from ageing out by keeping the same selector in
+   scheduled Monday/Thursday direct-retailer refreshes;
+5. only broaden to low-demand one-store products after high-demand and overlap
+   gaps are materially reduced.
+
+Baseline targets from the 6 September snapshot are: products with at least two
+live retailers from 503 to 750; all three from 48 to 150; demanded products
+with at least two retailers from 70/626 to 250; and, among the top 100 demanded
+products, at least 80 with two retailers and 40 with all three. Re-query these
+metrics after every tranche; do not treat the targets as evidence that coverage
+has already improved.
+
 Decision-log additions:
 
 - **2026-09-06 — Promotion truth tightened.** Retailer flags and confirmed
@@ -426,3 +462,7 @@ Decision-log additions:
 - **2026-09-06 — Tesco exact-SKU Pepesto rule confirmed.** Current prices are
   accepted only for the exact mapped Tesco SKU; no inferred Clubcard before
   price is approved.
+- **2026-09-06 — Coverage strategy approved.** Rank exact resolved refreshes by
+  missing target-store coverage, shopper demand, cross-retailer overlap,
+  never-observed status and staleness. Use free direct-retailer requests first;
+  cap Tesco tranches at 100 products/€3.20 and reassess after each tranche.
