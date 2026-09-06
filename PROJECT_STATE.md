@@ -714,3 +714,44 @@ Decision-log addition:
   compact stable system core is always present; application-owned routing adds
   only relevant capability rules from recent conversational intent, without
   changing or discovering the authenticated tool surface.
+
+## 25. Bounded signed-in session context
+
+Phase 6 adds a server-authored, turn-scoped household context block through
+Eve's dynamic instruction mechanism. The resolver runs only when the channel has
+authenticated a real `principalType: user`; guests receive no household query or
+context. Every database read is constrained by that authenticated subscriber ID,
+preventing context reuse across accounts or guest sessions.
+
+The context contract can contain the current date, explicit household facts, a
+compact current-shop summary, the active weekly meal plan, bounded recent
+shopping evidence and active watches. Phase 5's deterministic capability router
+selects which optional sections are included for the task. Current-shop data is
+limited to 80 lines, recent behaviour to 40 source rows/20 summaries and watches
+to 20. Raw conversation history and unrestricted purchase history are not
+injected.
+
+The entire block is capped at 4,000 characters with deterministic truncation and
+an explicit `context_truncated` marker. Runtime observability records only the
+character count, truncation flag, selected capabilities and included section
+names; it does not log the household values. The block is delivered with user
+role and is labelled application-supplied untrusted user data, so saved or
+external text cannot become system instructions. The current user delivery
+follows it and therefore overrides saved defaults naturally.
+
+Explicit facts and inferred behaviour are separate named sections. Behavioural
+summaries carry their `inferred_from_list_items` source, occurrence count, last
+seen date and usual quantity; they are supporting evidence rather than facts.
+Recommendation explanations should use this bounded evidence or the existing
+decision traces without exposing internal prompt mechanics.
+
+Current page/product context is not yet passed by the homepage Eve channel, so
+Phase 6 does not manufacture it. It can be added later as a separately validated
+channel attribute if a concrete use case warrants the extra context.
+
+Decision-log addition:
+
+- **2026-09-06 — Signed-in context is task-filtered, user-scoped and capped.**
+  Eve receives a maximum 4,000-character application-authored data block only
+  for authenticated subscribers; explicit facts remain separate from inferred
+  evidence and context telemetry excludes household values.
