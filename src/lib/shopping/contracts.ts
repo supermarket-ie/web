@@ -90,3 +90,5 @@ export type RetailerHandoffResult = {
   checkout_url?: string | null;
   message?: string | null;
 };
+
+export * from './household-shop-contract';

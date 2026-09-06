@@ -523,3 +523,48 @@ Decision-log additions:
 - **2026-09-06 — Planner convergence boundary recorded.** Homepage traffic is
   already on Eve; `/api/plan` remains only for live saved-conversation
   compatibility and is frozen pending a history-preserving migration.
+
+## 20. Typed household-shop contract
+
+Phase 1 of the household-agent improvement programme introduces the reusable
+`household_shop.v1` contract under `src/lib/shopping/**`. It is deliberately
+owned by the Shared Shopping Capability Layer rather than the homepage or Eve.
+
+The contract separates a model-authored shop proposal from authoritative
+application state. The proposal may supply household and planning assumptions,
+sections, needs, quantities, reasons and canonical-product candidates. It may
+not author authoritative prices, promotion savings, totals or retailer basket
+coverage. `groundHouseholdShop()` validates the proposal and joins it against:
+
+- authoritative canonical catalogue products; and
+- current exact retailer offers supplied from the fail-closed `latest_prices`
+  boundary.
+
+Unknown product IDs are downgraded to unresolved needs. Known products without
+a trusted current offer remain explicitly unavailable. Retailer-marked
+promotion evidence stays separate from a confirmed monetary saving, which
+requires `was_price > current_price`. Line totals, selected totals, retailer
+totals and complete-store basket totals are calculated in server code. A
+retailer basket has no basket total and cannot be described as complete if any
+shop line lacks a trusted offer at that retailer.
+
+The v1 contract supports food, drink, toiletries, cleaning and other
+supermarket household consumables. It carries household assumptions, item
+purpose, resolution state, candidate and selected offers, missing/uncertain
+items, store coverage, retailer strategy, price provenance and a compact
+decision trace.
+
+Current migration boundary: this phase adds the contract and deterministic
+grounding only. Eve does not yet emit the structured presentation, and saved
+lists still use their existing JSON/Markdown compatibility paths. Phase 2
+should add Eve's native `present_household_shop` path without making new
+results depend on `parse-planner-markdown.ts`; Phase 3 should then make the
+validated v1 payload the authoritative saved-list input while preserving old
+lists and conversations.
+
+Decision-log addition:
+
+- **2026-09-06 — `household_shop.v1` ownership boundary established.** Models
+  propose household needs; the Shared Shopping Capability Layer validates
+  canonical identity and owns current offers, promotion truth, totals, store
+  coverage and retailer recommendations.
