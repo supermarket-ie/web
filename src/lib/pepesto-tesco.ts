@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
+import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
 
 const BASE = 'https://s.pepesto.com/api';
@@ -10,21 +11,9 @@ type PricePerUnit = { price?: number; promotion?: PricePromotion };
 type PepestoCandidate = { product_name?: string; name?: string; price?: PricePerUnit | number; price_cents?: number; product_id?: string; url?: string };
 type PepestoProductWrapper = { product?: PepestoCandidate; session_token?: string; num_units_to_buy?: number };
 type PepestoItem = { item_name?: string; products?: PepestoProductWrapper[]; candidates?: PepestoCandidate[]; results?: PepestoCandidate[] };
-type TescoStoreProductRow = {
-  id: string;
-  store_product_name: string | null;
-  store_url: string | null;
-  store_sku: string | null;
-  url_status: string | null;
-  products: { canonical_name?: string | null } | { canonical_name?: string | null }[] | null;
-};
 type JsonRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is JsonRecord { return typeof value === 'object' && value !== null && !Array.isArray(value); }
-function relationCanonicalName(value: TescoStoreProductRow['products']): string | null {
-  const relation = Array.isArray(value) ? value[0] : value;
-  return relation?.canonical_name ?? null;
-}
 function candidateName(c:PepestoCandidate){ return c.product_name || c.name || ''; }
 function candidateUrl(c:PepestoCandidate){ return c.product_id || c.url || ''; }
 function skuFromUrl(v:string){ return v.match(/\/products\/(\d+)/)?.[1] || null; }
@@ -51,28 +40,11 @@ export async function submitPepestoSearch(products:TescoQueueProduct[]){ if(prod
 export async function retrievePepestoSearch(sessionId:string){ return post('/retrieve',{search_session_id:sessionId}); }
 
 export async function selectPepestoTescoProducts(limit:number,query?:string){
-  const rows: TescoStoreProductRow[]=[];
-  for(let from=0;;from+=1000){
-    const {data,error}=await supabaseAdmin.from('store_products').select('id,store_product_name,store_url,store_sku,url_status,products(canonical_name)').eq('store','tesco').range(from,from+999);
-    if(error) throw new Error(`Failed loading Tesco products: ${error.message}`);
-    const page=(data??[]) as TescoStoreProductRow[];
-    rows.push(...page);
-    if(page.length<1000) break;
-  }
-  const q=query?.trim().toLowerCase();
-  const filtered=q?rows.filter(r=>String(relationCanonicalName(r.products)||r.store_product_name||'').toLowerCase().includes(q)):rows;
-  const ids=filtered.map(r=>r.id);
-  const latest=new Map<string,{price:number;observedAt:string}>();
-  for(let i=0;i<ids.length;i+=200){
-    const {data,error}=await supabaseAdmin.from('price_observations').select('store_product_id,price,observed_at').in('store_product_id',ids.slice(i,i+200)).order('observed_at',{ascending:false});
-    if(error) throw new Error(`Failed loading Tesco observations: ${error.message}`);
-    for(const o of data??[]) if(!latest.has(o.store_product_id)) latest.set(o.store_product_id,{price:Number(o.price),observedAt:o.observed_at||'1970-01-01'});
-  }
-  filtered.sort((a,b)=>(latest.get(a.id)?.observedAt||'1970-01-01').localeCompare(latest.get(b.id)?.observedAt||'1970-01-01'));
-  return filtered.slice(0,limit).map((r):TescoQueueProduct=>{
-    const canonicalName=relationCanonicalName(r.products)||r.store_product_name||'';
+  const rows=await selectStoreProductsForRefresh('tesco',limit,{query});
+  return rows.map((r):TescoQueueProduct=>{
+    const canonicalName=r.canonical_name||r.store_product_name||'';
     const fallbackUrl=`https://www.tesco.ie/shop/en-IE/search?query=${encodeURIComponent(canonicalName)}`;
-    return {storeProductId:r.id,canonicalName,storeProductName:r.store_product_name||canonicalName,storeUrl:r.store_url||fallbackUrl,storeSku:r.store_sku||null,previousPrice:latest.get(r.id)?.price??null};
+    return {storeProductId:r.store_product_id,canonicalName,storeProductName:r.store_product_name||canonicalName,storeUrl:r.store_url||fallbackUrl,storeSku:r.store_sku||null,previousPrice:r.previous_price??null};
   });
 }
 
