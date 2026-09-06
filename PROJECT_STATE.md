@@ -605,3 +605,42 @@ Decision-log addition:
   results.** `present_household_shop` returns the server-grounded v1 contract;
   homepage UI renders that payload directly while prose is limited to a short
   introduction or qualification.
+
+## 22. Structured household-shop persistence
+
+Phase 3 makes a completed `household_shop.v1` Eve result the authoritative input
+to `/api/lists/save-from-planner`. After registration, the existing guest Eve
+event handover restores the same native shop on the homepage and the signed-in
+client saves that structured payload once. Existing signed-in structured shops
+use the same path. A browser marker keyed by the contract generation timestamp
+prevents duplicate saves, while a failed save leaves the proposed shop visible
+and reports that persistence did not complete.
+
+The save route authenticates with the HttpOnly session cookie (while retaining
+the explicit-token compatibility path), reconstructs the model proposal, and
+re-runs `groundHouseholdShop()` against current canonical products and the
+fail-closed `latest_prices` view immediately before persistence. Therefore
+stored product IDs, retailer identities, prices, promotion state, line totals
+and coverage are not copied blindly from browser state. Unknown IDs become
+unresolved needs and stale offers disappear through the same deterministic
+grounding rules used for presentation.
+
+`saved_lists.items` retains every line, including unresolved gaps, plus canonical
+product ID, quantity, pack expectation, selected retailer identity and coverage
+status. Only grounded, priced lines are written to `list_items` shopping history;
+an unresolved line is retained in the saved-list JSON and is never converted to
+an unrelated product. Store totals are derived from the newly grounded contract,
+and incomplete retailer baskets retain a null total. Household assumptions and
+the grounding decision trace are retained in `agent_decision_trace`.
+
+Compatibility boundary: Markdown input remains accepted for historical callers
+and continues through `parse-planner-markdown.ts`. New Eve household shops never
+use that parser. Existing lists and conversations remain readable without a
+data migration.
+
+Decision-log addition:
+
+- **2026-09-06 — Structured household shops are re-grounded on save.** The
+  durable Eve result supplies needs and canonical candidates, but trusted server
+  code revalidates identity and current pricing before writing `saved_lists` or
+  `list_items`; unresolved lines remain explicit in the saved payload.
