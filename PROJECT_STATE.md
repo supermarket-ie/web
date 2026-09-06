@@ -755,3 +755,38 @@ Decision-log addition:
   Eve receives a maximum 4,000-character application-authored data block only
   for authenticated subscribers; explicit facts remain separate from inferred
   evidence and context telemetry excludes household values.
+
+## 26. Governed durable household memory
+
+Phase 7 replaces the legacy whole-document shopping summary with a versioned
+`household_memory.v2` contract in the existing `households.memory` JSONB field.
+No production schema migration or backfill is required: legacy memory is
+adapted on read and upgraded on its next governed write.
+
+Durable memory has separate `explicit` and `inferred_products` maps. Explicit
+facts are restricted to stable household composition, dietary, budget, store,
+dislike and stopped-product keys; arbitrary temporary errands and values that
+look like credentials, payment data, contact details or Irish PPS identifiers
+are rejected. Each fact records source and timestamps. Inferred product facts
+record canonical product identity, usual quantity, likely replenishment
+interval, recency, confidence and supporting observation count, and expire after
+180 days without an observation.
+
+Corrections overwrite one stable key while preserving its creation time.
+Forgetting a product deletes its inference and writes a versioned tombstone. An
+inference run records its start time and cannot restore a product tombstoned
+after that time, closing the delayed-writer race. Explicit stopped products also
+suppress inferred product memory. The authenticated household API exposes an
+inspectable governed view and supports product-specific forgetting; Eve's
+preference tool supports explicit stopped products and forgetting.
+
+Household memory is deleted with its household row through the existing
+`households.subscriber_id` `ON DELETE CASCADE` relationship. The API and agent
+continue to scope all reads and writes to the authenticated subscriber ID.
+
+Decision-log addition:
+
+- **2026-09-06 — Durable memory is versioned, inspectable and forget-safe.**
+  Explicit facts and inferred evidence have distinct provenance; inference is
+  bounded by retention and cannot race a user deletion to restore forgotten
+  product memory.

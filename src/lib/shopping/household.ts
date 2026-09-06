@@ -1,4 +1,5 @@
 import type { HouseholdContext } from './contracts';
+import { normaliseHouseholdMemory, productMemoryKey } from '../household-memory';
 
 export type RawHouseholdContext = {
   subscriber_id: string;
@@ -26,16 +27,20 @@ export function householdHasStoppedBuying(
   canonicalName: string,
   context: HouseholdContext,
 ): boolean {
-  const normalise = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const memory = context.memory ?? {};
+  const governed = normaliseHouseholdMemory(memory);
+  const explicitStopped = Array.isArray(governed.explicit.stopped_products?.value)
+    ? governed.explicit.stopped_products.value
+    : [];
   const candidates = [
+    explicitStopped,
     memory.stoppedItems,
     memory.stopped_items,
     memory.droppedItems,
     memory.dropped_items,
   ].flatMap(value => (Array.isArray(value) ? value : []));
 
-  return candidates.some(value => normalise(String(value)) === normalise(canonicalName));
+  return candidates.some(value => productMemoryKey(String(value)) === productMemoryKey(canonicalName));
 }
 
 export function householdDislikesProduct(

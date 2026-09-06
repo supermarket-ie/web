@@ -10,6 +10,7 @@ import {
   type ValidatedListItem,
   type CataloguePriceRow,
 } from '@/lib/list-validation';
+import { mergeInferredProducts, normaliseHouseholdMemory } from '@/lib/household-memory';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -214,6 +215,7 @@ export async function queryPriceChanges(subscriberId: string) {
 // Household memory system
 // ---------------------------------------------------------------------------
 
+/** @deprecated Legacy dashboard/intake shape. New writes use household_memory.v2. */
 export interface HouseholdMemory {
   totalShops: number;
   avgWeeklySpend: number;
@@ -226,6 +228,7 @@ export interface HouseholdMemory {
 }
 
 export async function updateHouseholdMemory(subscriberId: string): Promise<void> {
+  const inferenceStartedAt = new Date().toISOString();
   try {
     // 1. Fetch shopping history (list_items)
     const { data: listItems } = await supabaseAdmin
@@ -322,17 +325,33 @@ export async function updateHouseholdMemory(subscriberId: string): Promise<void>
       }
     }
 
-    // Build memory object
-    const memory: HouseholdMemory = {
-      totalShops,
-      avgWeeklySpend,
-      usualStore,
-      frequentItems,
-      droppedItems,
-      notedPreferences: [], // Start empty, can be populated later based on patterns
-      lastShopSummary,
-      updatedAt: new Date().toISOString(),
-    };
+    const { data: household } = await supabaseAdmin
+      .from('households')
+      .select('memory')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+
+    const observations = new Map<string, Array<{ quantity: number; observed_at: string }>>();
+    for (const item of listItems) {
+      const rows = observations.get(item.canonical_name) ?? [];
+      rows.push({ quantity: Number(item.quantity) || 1, observed_at: item.observed_at });
+      observations.set(item.canonical_name, rows);
+    }
+    const inferred = frequentItems.map(canonical_name => {
+      const rows = observations.get(canonical_name) ?? [];
+      const timestamps = rows.map(row => Date.parse(row.observed_at)).filter(Number.isFinite).sort((a, b) => b - a);
+      const intervals = timestamps.slice(0, -1).map((stamp, index) => (stamp - timestamps[index + 1]) / 86_400_000).filter(days => days > 0);
+      return {
+        canonical_name,
+        usual_quantity: Number((rows.reduce((sum, row) => sum + row.quantity, 0) / Math.max(rows.length, 1)).toFixed(1)),
+        likely_replenishment_days: intervals.length ? Math.round(intervals.reduce((sum, days) => sum + days, 0) / intervals.length) : null,
+        confidence: Math.min(0.95, Number((0.35 + rows.length * 0.1).toFixed(2))),
+        supporting_observations: rows.length,
+        last_observed_at: rows[0]?.observed_at ?? inferenceStartedAt,
+      };
+    });
+    const now = new Date().toISOString();
+    const memory = mergeInferredProducts(normaliseHouseholdMemory(household?.memory, now), inferred, inferenceStartedAt, now);
 
     // Upsert memory to households table
     await supabaseAdmin
@@ -345,7 +364,9 @@ export async function updateHouseholdMemory(subscriberId: string): Promise<void>
         { onConflict: 'subscriber_id' }
       );
 
-    console.log(`[updateHouseholdMemory] Updated memory for subscriber ${subscriberId}`);
+    console.log(`[updateHouseholdMemory] Updated governed memory for subscriber ${subscriberId}`, {
+      totalShops, avgWeeklySpend, usualStore, droppedItems: droppedItems.length, lastShopSummary,
+    });
   } catch (error) {
     console.error(`[updateHouseholdMemory] Error updating memory for ${subscriberId}:`, error);
   }
