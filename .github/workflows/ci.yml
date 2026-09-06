@@ -35,6 +35,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Behavioural release gate
+        run: npm run test:behavioural
+
       - name: Build
         run: npm run build
         env:
