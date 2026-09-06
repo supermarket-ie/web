@@ -437,9 +437,9 @@ Roll out coverage improvement in measured tranches:
 1. refresh resolved Dunnes and SuperValu overlap gaps first because their
    direct transports do not consume Pepesto credit;
 2. discover missing direct-retailer mappings, prioritising shopper demand;
-3. run Tesco in demand-ranked batches of at most 100 products (€3.20 at the
-   currently observed €0.32 per ten-product search batch), checking balance,
-   exact-SKU yield and coverage gain before authorising another batch;
+3. run Tesco only after explicit manual approval, with the current Pepesto
+   price, balance and expected cost checked for that specific run; Pepesto paid
+   submissions must never be scheduled or started automatically;
 4. protect high-demand staples from ageing out by keeping the same selector in
    scheduled Monday/Thursday direct-retailer refreshes;
 5. only broaden to low-demand one-store products after high-demand and overlap
@@ -464,5 +464,6 @@ Decision-log additions:
   price is approved.
 - **2026-09-06 — Coverage strategy approved.** Rank exact resolved refreshes by
   missing target-store coverage, shopper demand, cross-retailer overlap,
-  never-observed status and staleness. Use free direct-retailer requests first;
-  cap Tesco tranches at 100 products/€3.20 and reassess after each tranche.
+  never-observed status and staleness. Use free direct-retailer requests first.
+  Tesco/Pepesto paid submissions are manual-only: never schedule them, and
+  confirm balance, current pricing and expected cost for every approved run.
