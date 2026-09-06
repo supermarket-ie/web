@@ -470,3 +470,46 @@ Decision-log additions:
   never-observed status and staleness. Use free direct-retailer requests first.
   Tesco/Pepesto paid submissions are manual-only: never schedule them, and
   confirm balance, current pricing and expected cost for every approved run.
+
+## 19. Household-agent runtime and guest planning
+
+The homepage agent uses the Eve runtime (`agent/**`) for both guests and signed-
+in users, with Claude Sonnet 5 and the instructions in
+`agent/instructions.md`. Guest versus signed-in status changes the tools and
+household data available; it should not change the agent identity.
+
+The homepage permits two guest user turns. After a complete first answer it
+may show a relevant inline signup invitation while leaving the second turn
+available. A persistent action such as watching or monitoring gates
+immediately. For an underspecified complete-household-shop request, Eve may use
+the first response for one consolidated clarification covering household
+composition, approximate budget and essential dietary requirements. The second
+turn must complete the shop using explicit reasonable assumptions for anything
+omitted; there must be no further clarification loop.
+
+Homepage continuation CTAs are selected from the requested outcome. Complete
+or weekly basket planning is a `shop` intent even when the prompt mentions
+offers, prices or a budget as supporting evidence. Its CTA is **Save this
+household shop** rather than a product-watch CTA. Generated starters should
+retain their declared task meaning, and freely typed requests use the shared
+deterministic intent classifier.
+
+The older `/api/plan` + `src/lib/planner-agent.ts` runtime remains a live
+compatibility path for database-backed saved conversations through
+`ConversationChat.tsx`; it must not be deleted until those conversations can be
+resumed in Eve without losing history. Its temporary model is aligned to Claude
+Sonnet 5, but its prompt/tool architecture is still legacy. Do not add new
+callers. The intended migration is to preserve/import existing conversation
+history into Eve, verify list/profile/validation parity, remove the final
+caller, and then delete the old planner prompt/model/tool path.
+
+Decision-log additions:
+
+- **2026-09-06 — Guest household-shop clarification aligned to the two-turn
+  preview.** One combined clarification is allowed only when household context
+  materially changes a complete-shop result; the following turn must finish.
+- **2026-09-06 — CTA intent follows requested outcome.** Household-shop plans
+  remain shop intent when offers or prices are used as evidence.
+- **2026-09-06 — Planner convergence boundary recorded.** Homepage traffic is
+  already on Eve; `/api/plan` remains only for live saved-conversation
+  compatibility and is frozen pending a history-preserving migration.
