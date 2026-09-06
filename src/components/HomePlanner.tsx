@@ -28,6 +28,7 @@ import {
 } from '@/lib/agent-suggestions';
 import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
 import { HouseholdShopCard, householdShopFromPart } from '@/components/HouseholdShopCard';
+import { archivedConversationResumePrompt } from '@/lib/conversation-migration';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 const GUEST_EVE_CHAT_KEY = `${LEGACY_EVE_CHAT_KEY}:guest`;
@@ -471,9 +472,13 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   }
 
   useEffect(() => {
-    if (landingPromptHandled.current || busy || messages.length > 0) return;
+    if (landingPromptHandled.current || busy) return;
     const params = new URLSearchParams(window.location.search);
-    const prompt = params.get('agent_prompt')?.trim();
+    const archivedConversationId = params.get('resume_conversation')?.trim();
+    const requestedPrompt = params.get('agent_prompt')?.trim();
+    const prompt = archivedConversationId
+      ? archivedConversationResumePrompt(archivedConversationId, requestedPrompt)
+      : requestedPrompt;
     if (!prompt) return;
 
     const landingPath = params.get('agent_landing');

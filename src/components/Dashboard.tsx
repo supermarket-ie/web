@@ -7,7 +7,7 @@ import { loadSession } from '@/lib/session';
 import { storeStyle, storeDisplayName } from '@/lib/store-utils';
 import { trackEvent } from '@/lib/analytics';
 import { type RefreshData } from '@/components/SmartRefreshCard';
-import { type HouseholdMemory } from '@/lib/planner-agent';
+import { type HouseholdMemoryV2 } from '@/lib/household-memory';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -155,20 +155,20 @@ interface HouseholdProfile {
   children?: number;
   weekly_budget?: number;
   dietary?: string[];
-  memory?: HouseholdMemory | null;
+  memory?: HouseholdMemoryV2 | null;
 }
 
 function HouseholdMemoryCard({ profile }: { profile: HouseholdProfile }) {
   const [expanded, setExpanded] = useState(false);
   const { memory, dietary, weekly_budget, adults, children } = profile;
 
-  const hasMemory = memory && memory.totalShops > 0;
+  const inferredProducts = memory ? Object.values(memory.inferred_products ?? {}) : [];
+  const stoppedProducts = Array.isArray(memory?.explicit?.stopped_products?.value)
+    ? memory.explicit.stopped_products.value.map(String)
+    : [];
+  const hasMemory = inferredProducts.length > 0 || stoppedProducts.length > 0;
   const hasProfile = (adults ?? 0) > 0 || (dietary ?? []).length > 0 || weekly_budget;
   if (!hasMemory && !hasProfile) return null;
-
-  const storeName = memory?.usualStore
-    ? memory.usualStore.charAt(0).toUpperCase() + memory.usualStore.slice(1)
-    : null;
 
   return (
     <div className="rounded-2xl overflow-hidden mb-4"
@@ -189,21 +189,19 @@ function HouseholdMemoryCard({ profile }: { profile: HouseholdProfile }) {
         <div className="px-4 py-3 space-y-1.5">
           {hasMemory && (
             <p className="text-xs" style={{ color: 'var(--on-surface)' }}>
-              <strong>{memory!.totalShops} shop{memory!.totalShops !== 1 ? 's' : ''}</strong>
-              {memory!.avgWeeklySpend > 0 && <> · avg <strong>€{memory!.avgWeeklySpend.toFixed(2)}/week</strong></>}
-              {storeName && <> · usually <strong>{storeName}</strong></>}
+              <strong>{inferredProducts.length} usual product{inferredProducts.length !== 1 ? 's' : ''}</strong> inferred from shopping history
             </p>
           )}
-          {(memory?.frequentItems ?? []).length > 0 && (
+          {inferredProducts.length > 0 && (
             <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
               <span className="font-medium" style={{ color: 'var(--on-surface)' }}>Always buys:</span>{' '}
-              {memory!.frequentItems.slice(0, 6).join(', ')}
+              {inferredProducts.slice(0, 6).map(item => item.canonical_name).join(', ')}
             </p>
           )}
-          {(memory?.droppedItems ?? []).length > 0 && (
+          {stoppedProducts.length > 0 && (
             <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
               <span className="font-medium" style={{ color: 'var(--on-surface)' }}>Avoids:</span>{' '}
-              {memory!.droppedItems.join(', ')}
+              {stoppedProducts.join(', ')}
             </p>
           )}
           {(dietary ?? []).length > 0 && (
@@ -422,7 +420,7 @@ export function Dashboard() {
                       <Link href={`/dashboard/chat/${list.conversation_id}`}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-80"
                         style={{ background: '#006A35' }}>
-                        Chat
+                        History
                       </Link>
                     )}
                   </div>

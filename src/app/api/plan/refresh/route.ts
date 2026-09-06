@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { queryPriceChanges } from '@/lib/planner-agent';
+import { queryPriceChanges } from '@/lib/shopping/price-history';
 import { getSubscriberId } from '@/lib/auth';
 
 const CACHE_TTL_MS = 60 * 60 * 1000;

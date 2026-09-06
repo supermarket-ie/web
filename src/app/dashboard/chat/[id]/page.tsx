@@ -6,13 +6,14 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ChatPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ prefill?: string }> }) {
   const { id } = await params;
+  const { prefill } = await searchParams;
   return (
     <>
       <SiteHeader />
       <main className="min-h-screen" style={{ background: 'var(--surface-container-lowest)' }}>
-        <ConversationChat conversationId={id} />
+        <ConversationChat conversationId={id} prefill={prefill} />
       </main>
     </>
   );
