@@ -2,27 +2,8 @@ import { defineDynamic, defineTool } from 'eve/tools';
 import { z } from 'zod';
 import { requireSubscriber } from '../lib/subscriber';
 import { agentSupabase } from '../lib/supabase';
-
-type ListItem = {
-  canonical_name: string;
-  category?: string;
-  store?: string;
-  price?: number;
-  quantity?: number;
-  on_promotion?: boolean;
-};
-
-function storeTotals(items: ListItem[]) {
-  const grouped = new Map<string, { store: string; total: number; item_count: number }>();
-  for (const item of items) {
-    if (!item.store || typeof item.price !== 'number') continue;
-    const row = grouped.get(item.store) ?? { store: item.store, total: 0, item_count: 0 };
-    row.total += item.price * (item.quantity ?? 1);
-    row.item_count += 1;
-    grouped.set(item.store, row);
-  }
-  return [...grouped.values()].map(row => ({ ...row, total: Number(row.total.toFixed(2)) }));
-}
+import { computeStoreTotals, getTrustedCurrentOffer, loadCurrentShop, persistCurrentShop, type AgentListItem } from '../lib/shop';
+import { requireLineCapacity } from '../../src/lib/shopping/action-gates';
 
 export default defineDynamic({
   events: {
@@ -32,31 +13,16 @@ export default defineDynamic({
             description: 'Add an exact canonical catalogue product to the signed-in household’s latest draft shop using its current best available price. Resolve ambiguous product wording first. If no saved shop exists, create a new agent draft.',
             inputSchema: z.object({
               canonical_name: z.string().min(2).describe('Exact canonical product name from the Supermarket.ie catalogue.'),
+              canonical_product_id: z.string().min(1).describe('Exact canonical product ID returned by catalogue resolution.'),
               quantity: z.number().int().min(1).max(20).default(1),
             }),
             async execute(input, toolCtx) {
               const subscriberId = requireSubscriber(toolCtx);
-              const { data: prices, error: pricesError } = await agentSupabase
-                .from('latest_prices')
-                .select('canonical_name, category, store, price, on_promotion')
-                .eq('canonical_name', input.canonical_name)
-                .order('price', { ascending: true })
-                .limit(1);
-              if (pricesError) throw new Error(`Unable to fetch current product price: ${pricesError.message}`);
-              const current = prices?.[0];
+              const current = await getTrustedCurrentOffer(input.canonical_product_id);
               if (!current) return { ok: false, reason: 'product_unavailable', message: 'I could not find a current available price for that exact product.' };
-
-              const { data: latest, error: latestError } = await agentSupabase
-                .from('saved_lists')
-                .select('id, name, family_size, items')
-                .eq('subscriber_id', subscriberId)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-              if (latestError) throw new Error(`Unable to load the current shop: ${latestError.message}`);
-
-              const items = ((latest?.items ?? []) as ListItem[]).map(item => ({ ...item }));
-              const existing = items.find(item => item.canonical_name === input.canonical_name);
+              const latest = await loadCurrentShop(subscriberId);
+              const items: AgentListItem[] = latest?.items ?? [];
+              const existing = items.find(item => item.canonical_product_id === current.canonical_product_id);
               if (existing) {
                 existing.quantity = (existing.quantity ?? 1) + input.quantity;
                 existing.store = current.store;
@@ -64,27 +30,21 @@ export default defineDynamic({
                 existing.on_promotion = Boolean(current.on_promotion);
                 existing.category = current.category ?? existing.category;
               } else {
-                items.push({ canonical_name: input.canonical_name, category: current.category ?? 'Other', store: current.store, price: Number(current.price), quantity: input.quantity, on_promotion: Boolean(current.on_promotion) });
+                requireLineCapacity(items.length, 1);
+                items.push({ canonical_product_id: current.canonical_product_id, canonical_name: current.canonical_name, category: current.category ?? 'Other', store: current.store, price: current.price, quantity: input.quantity, on_promotion: Boolean(current.on_promotion), store_product_name: current.store_product_name ?? undefined });
               }
-
-              const totals = storeTotals(items);
               if (latest) {
-                const { error: updateError } = await agentSupabase
-                  .from('saved_lists')
-                  .update({ items, store_totals: totals, generated_at: new Date().toISOString() })
-                  .eq('id', latest.id)
-                  .eq('subscriber_id', subscriberId);
-                if (updateError) throw new Error(`Unable to update the current shop: ${updateError.message}`);
-                return { ok: true, list_id: latest.id, list_name: latest.name, canonical_name: input.canonical_name, quantity: existing?.quantity ?? input.quantity, store: current.store, price: Number(current.price), on_promotion: Boolean(current.on_promotion) };
+                await persistCurrentShop(subscriberId, latest.id, items, latest.generated_at);
+                return { ok: true, list_id: latest.id, list_name: latest.name, canonical_product_id: current.canonical_product_id, canonical_name: current.canonical_name, quantity: existing?.quantity ?? input.quantity, store: current.store, price: current.price, on_promotion: Boolean(current.on_promotion) };
               }
-
+              const totals = computeStoreTotals(items);
               const { data: created, error: createError } = await agentSupabase
                 .from('saved_lists')
                 .insert({ subscriber_id: subscriberId, name: 'My agent shop', family_size: '2', meals_prompt: 'Created by the Supermarket.ie shopping agent', items, store_totals: totals, is_default: false, generated_at: new Date().toISOString() })
                 .select('id, name')
                 .single();
               if (createError) throw new Error(`Unable to create a shopping draft: ${createError.message}`);
-              return { ok: true, list_id: created.id, list_name: created.name, canonical_name: input.canonical_name, quantity: input.quantity, store: current.store, price: Number(current.price), on_promotion: Boolean(current.on_promotion) };
+              return { ok: true, list_id: created.id, list_name: created.name, canonical_product_id: current.canonical_product_id, canonical_name: current.canonical_name, quantity: input.quantity, store: current.store, price: current.price, on_promotion: Boolean(current.on_promotion) };
             },
           })
         : null,
