@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:behavioural": "vitest run src/lib/evaluations/__tests__/behavioural-gate.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

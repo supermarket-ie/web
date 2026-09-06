@@ -790,3 +790,38 @@ Decision-log addition:
   Explicit facts and inferred evidence have distinct provenance; inference is
   bounded by retention and cannot race a user deletion to restore forgotten
   product memory.
+
+## 27. Behavioural evaluation release gate
+
+Phase 8 adds a repeatable, fixture-backed domain-quality suite under
+`src/lib/evaluations/**`. It covers 13 representative journeys: offer-led and
+ordinary complete shops, a two-adult/two-child €120 shop, four dinners and
+ingredients, a usual shop, reduction below €100 without removing essentials,
+cheapest butter, contextual add, cereal replacement, a genuine Persil offer
+watch, gluten-free and low-protein shops, and ambiguous staple-family search.
+
+Every run scores the agreed 16 dimensions: intent, clarification, guest turns,
+household and planning-period coherence, essential categories, quantities,
+dietary compliance, product resolution, price and promotion truth, store
+coverage, totals, retailer split, persistence/CTA and retailer-handoff truth.
+Fixtures contain no account data and make no live retailer, Supabase, model or
+Pepesto calls.
+
+Critical deterministic failures block CI through the explicit
+`npm run test:behavioural` step. The initial release threshold is zero critical
+failures across every fixture and non-zero coverage for all 16 dimensions.
+Household coherence, practical quantities and reasonable retailer split remain
+visible as `review` scores and are not initially blocking because they require
+qualitative judgment. Model scoring may later assist only those qualitative
+dimensions; it must not replace deterministic truth or safety checks.
+
+Baseline on 6 September 2026: 13/13 scenarios passed with zero critical
+failures; all 16 scoring dimensions had fixture coverage. The first baseline run
+caught and led to fixes for plural `dinners`, direct cereal replacement and
+`low-protein` capability routing, plus an incorrect captured total.
+
+Decision-log addition:
+
+- **2026-09-06 — Critical behavioural regressions block deployment.** CI replays
+  stored domain fixtures without paid/live dependencies; deterministic truth
+  and safety thresholds block, while subjective quality is reported for review.
