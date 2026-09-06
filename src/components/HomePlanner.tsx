@@ -19,7 +19,12 @@ import { getAnalyticsSessionId, trackEvent, trackEventOnce } from '@/lib/analyti
 import {
   buildPredictiveSuggestions,
   inferSuggestionIntent,
+  isGuestClarification,
+  isPersistentGuestRequest,
+  signupPromptFor,
+  visibleAgentText,
   type CatalogueSuggestionProduct,
+  type SignupPrompt,
 } from '@/lib/agent-suggestions';
 import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
 
@@ -117,12 +122,8 @@ function messageText(message: { parts?: readonly { type: string; text?: string }
     .join('');
 }
 
-function isPersistentGuestRequest(text: string): boolean {
-  return /\b(watch|monitor|remind|notify|alert|track|tell me when|let me know when)\b/i.test(text);
-}
-
 function FormattedAgentText({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  const parts = visibleAgentText(text).split(/(\*\*[^*]+\*\*)/g);
   return (
     <p className="whitespace-pre-wrap">
       {parts.map((part, index) => part.startsWith('**') && part.endsWith('**')
@@ -144,55 +145,6 @@ type ComposerProps = {
 
 type AgentStartSource = 'typed' | 'starter' | 'predictive' | 'landing_page';
 type SignupPlacement = 'first_answer' | 'guest_gate';
-
-type SignupPrompt = {
-  title: string;
-  description: string;
-};
-
-function signupPromptFor(request: string): SignupPrompt {
-  const intent = inferSuggestionIntent(request);
-
-  if (isPersistentGuestRequest(request)) {
-    return {
-      title: 'Keep this active with your agent',
-      description: 'Add your email so Supermarket.ie can remember this request, keep watching it and pick it up again without starting over.',
-    };
-  }
-
-  if (intent === 'meal') {
-    return {
-      title: 'Keep this meal plan',
-      description: 'Save it, build the rest of your weekly shop and return without starting again.',
-    };
-  }
-
-  if (intent === 'budget') {
-    return {
-      title: 'Remember your household budget',
-      description: 'Keep this result and let your agent use the same budget when planning and reviewing future shops.',
-    };
-  }
-
-  if (intent === 'dietary') {
-    return {
-      title: 'Remember this household requirement',
-      description: 'Save it so your agent can apply it automatically when finding products and planning future shops.',
-    };
-  }
-
-  if (intent === 'find' || intent === 'price' || intent === 'offer' || intent === 'compare') {
-    return {
-      title: 'Keep this product with your agent',
-      description: 'Save this result, compare the rest of your shop and keep watch for useful price or product changes.',
-    };
-  }
-
-  return {
-    title: 'Make this your household agent',
-    description: 'Save this result and let Supermarket.ie remember what matters, prepare future shops and keep useful changes on your radar.',
-  };
-}
 
 function InlineEmailSignup({
   prompt,
@@ -376,9 +328,16 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const firstRequestIntent = inferSuggestionIntent(firstRequestText);
   const signupPrompt = signupPromptFor(firstRequestText);
   const hasVisibleAnswer = messages.some(message =>
-    message.role === 'assistant' && Boolean(messageText(message).trim())
+    message.role === 'assistant' && Boolean(visibleAgentText(messageText(message)))
   );
-  const showSignupPrompt = isGuest && guestTurns === 1 && hasVisibleAnswer && !showGuestGate;
+  const lastAssistantMessage = [...messages].reverse().find(message => message.role === 'assistant');
+  const awaitingGuestClarification = Boolean(
+    isGuest
+    && guestTurns === 1
+    && lastAssistantMessage
+    && isGuestClarification(messageText(lastAssistantMessage))
+  );
+  const showSignupPrompt = isGuest && guestTurns === 1 && hasVisibleAnswer && !awaitingGuestClarification && !showGuestGate;
   const liveSuggestions = input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
@@ -463,7 +422,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
 
   async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
-    if (!message || busy || showSignupPrompt || showGuestGate) return;
+    if (!message || busy || showGuestGate) return;
     trackEventOnce('agent_started', {
       auth_state: isGuest ? 'guest' : 'signed_in',
       entry_path: window.location.pathname,
@@ -611,7 +570,7 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
       </div>
 
       <div className="border-t border-[#edf0ed] bg-white p-3 sm:p-4">
-        <AgentComposer input={input} setInput={setInput} send={send} busy={busy} gated={showGuestGate || showSignupPrompt} />
+        <AgentComposer input={input} setInput={setInput} send={send} busy={busy} gated={showGuestGate} />
       </div>
     </div>
   );
