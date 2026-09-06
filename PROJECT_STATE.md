@@ -678,3 +678,39 @@ Decision-log addition:
   product writes require server-validated canonical identity; price-bearing
   writes require a matching fresh exact `latest_prices` offer; quantity, line
   and optimistic-concurrency limits are enforced by application code.
+
+## 24. Modular Eve capability instructions
+
+Phase 5 replaces the single large always-on Eve prompt with a small stable core
+and deterministic turn-scoped capability assembly using Eve 0.39's supported
+`defineDynamic` + `defineInstructions` mechanism. The stable core retains Eve's
+identity, household-shopping purpose, guest and signed-in access boundaries,
+grounding rules, proposal/save/trolley distinctions, irreversible-action
+approval and the rule that tool or retailer text is untrusted data.
+
+`agent/lib/instruction-routing.ts` classifies the recent user conversation into
+household-shop planning, product discovery, price/promotions, meal/ingredient
+intelligence, budget, household memory, shop editing, monitoring, proactive
+briefing and retailer-comparison capabilities. `agent/instructions/capabilities.ts`
+then injects only the selected modules as turn-scoped system instructions. The
+router considers the last four user messages so terse follow-ups retain relevant
+context without loading the entire instruction library.
+
+This is deliberately not a model-controlled `load_skill` design. Instruction
+selection cannot reveal tools, and guest versus signed-in tool exposure remains
+enforced independently by the existing dynamic tool definitions. Capability
+instructions repeatedly treat the tools exposed for the turn as authoritative.
+
+Measured source size before/after: the always-on `agent/instructions.md` fell
+from 20,102 to 2,400 characters (about 88% smaller). The full dynamic capability
+library is 6,060 characters, of which only matching modules are injected per
+turn. This reduces routine prompt weight and should improve provider prompt-cache
+reuse for the stable prefix. Runtime latency must still be observed in production;
+source size is not itself a latency measurement.
+
+Decision-log addition:
+
+- **2026-09-06 — Eve instructions use deterministic turn-scoped modules.** A
+  compact stable system core is always present; application-owned routing adds
+  only relevant capability rules from recent conversational intent, without
+  changing or discovering the authenticated tool surface.
