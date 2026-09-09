@@ -15,9 +15,10 @@ export default function RequestLinkPage({ expired = false }: { expired?: boolean
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("submitting");
-    trackEvent('signup_started', {
+    trackEvent('sign_in_started', {
       method: 'email',
-      flow: 'verified_email_continuation',
+      flow: 'email_link_request',
+      entry_path: '/list/request',
     });
 
     try {
@@ -30,6 +31,7 @@ export default function RequestLinkPage({ expired = false }: { expired?: boolean
           email: normalizedEmail,
           familySize: "2",
           sessionId: getAnalyticsSessionId(),
+          source: 'sign_in',
         }),
       });
 
@@ -84,7 +86,7 @@ export default function RequestLinkPage({ expired = false }: { expired?: boolean
 
             {status === "error" && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl">
-                We couldn&rsquo;t continue your account. Please try again.
+                We couldn&rsquo;t continue your account. Please check the email address and try again.
               </p>
             )}
 
