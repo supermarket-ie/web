@@ -11,6 +11,7 @@ const WINDOW_MS = 15 * 60 * 1000;
 const MAX_REQUESTS_PER_IP = 5;
 const MAX_REQUESTS_PER_EMAIL = 3;
 const MAX_SESSION_ID_LENGTH = 128;
+const MAX_EMAIL_LENGTH = 254;
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
 function clientIp(request: NextRequest) {
@@ -32,6 +33,27 @@ function consumeLimit(key: string, maximum: number) {
   }
   bucket.count += 1;
   return bucket.count > maximum;
+}
+
+function isValidEmail(value: string) {
+  if (!value || value.length > MAX_EMAIL_LENGTH || /\s/.test(value)) return false;
+  const at = value.lastIndexOf('@');
+  if (at <= 0 || at === value.length - 1) return false;
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1);
+  if (local.length > 64 || domain.length > 253 || !domain.includes('.')) return false;
+  if (local.startsWith('.') || local.endsWith('.') || local.includes('..')) return false;
+  return /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(local)
+    && /^[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$/i.test(domain);
+}
+
+async function recordEmailFailure(sessionId: string | null, source: 'signup' | 'sign_in', reason: string) {
+  const { error } = await supabaseAdmin.from('agent_events').insert({
+    event_type: 'verification_email_failed',
+    session_id: sessionId,
+    metadata: { method: 'email', flow: 'verified_email_continuation', source, reason },
+  });
+  if (error) console.error('[subscribe] failure analytics insert failed:', error);
 }
 
 function verificationEmail(verificationUrl: string) {
@@ -68,21 +90,31 @@ export async function POST(request: NextRequest) {
       email?: unknown;
       familySize?: unknown;
       sessionId?: unknown;
+      source?: unknown;
     } | null;
 
+    const sessionId = typeof body?.sessionId === 'string' && body.sessionId.length <= MAX_SESSION_ID_LENGTH
+      ? body.sessionId
+      : null;
+    const source = body?.source === 'sign_in' ? 'sign_in' : 'signup';
+
     if (typeof body?.email !== 'string' || !body.email.trim()) {
+      await recordEmailFailure(sessionId, source, 'missing_email');
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
     const normalizedEmail = body.email.toLowerCase().trim();
+    if (!isValidEmail(normalizedEmail)) {
+      await recordEmailFailure(sessionId, source, 'invalid_email');
+      return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
+    }
+
     const familySize = typeof body.familySize === 'string' ? body.familySize : '2';
-    const sessionId = typeof body.sessionId === 'string' && body.sessionId.length <= MAX_SESSION_ID_LENGTH
-      ? body.sessionId
-      : null;
 
     const ipLimited = consumeLimit(bucketKey(`ip:${clientIp(request)}`), MAX_REQUESTS_PER_IP);
     const emailLimited = consumeLimit(bucketKey(`email:${normalizedEmail}`), MAX_REQUESTS_PER_EMAIL);
     if (ipLimited || emailLimited) {
+      await recordEmailFailure(sessionId, source, 'rate_limited');
       return NextResponse.json({ error: 'Too many requests. Please wait before trying again.' }, { status: 429 });
     }
 
@@ -110,13 +142,14 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[subscribe] verification email failed:', error);
+      await recordEmailFailure(sessionId, source, 'provider_rejected');
       return NextResponse.json({ error: 'We could not send the verification email.' }, { status: 502 });
     }
 
     const { error: analyticsError } = await supabaseAdmin.from('agent_events').insert({
       event_type: 'verification_email_sent',
       session_id: sessionId,
-      metadata: { method: 'email', flow: 'verified_email_continuation' },
+      metadata: { method: 'email', flow: 'verified_email_continuation', source },
     });
     if (analyticsError) console.error('[subscribe] analytics insert failed:', analyticsError);
 
