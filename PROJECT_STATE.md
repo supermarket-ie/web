@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 6 September 2026
+**Last updated:** 10 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -870,3 +870,48 @@ Decision-log addition:
   Legacy transcripts remain readable and resumable through a bounded,
   subscriber-scoped adapter; the old prompt/model route has no application
   caller and is removed without deleting saved history or structured shops.
+
+## 29. SuperValu refresh recovery — 10 September 2026
+
+The scheduled SuperValu refresh completed at 05:31:58 UTC with 550/1,000
+successful validations (55.0% coverage): 69 changed prices, 481 unchanged, 263
+`direct_name_mismatch` failures and 187 `no_product_data` failures. All 1,000
+requests fetched successfully, so the dominant fault was extraction/identity
+handling rather than retailer transport. The preceding 7 September run had the
+same shape (56.4%, 260 mismatches, 176 no-data), and 411 failed mappings were
+repeated across those two runs.
+
+Production evidence showed that the fallback metadata parser treated both
+quote styles as terminators regardless of the attribute delimiter. This
+truncated retailer titles such as `Ben's Original...`, `Flahavan's...` and
+`10" Stonebaked...`, creating false identity failures. The Vercel-native direct
+worker also omitted the older browser scraper's `__PRELOADED_STATE__` product
+extraction, causing valid hydrated product records to fall through to weak
+HTML price/name heuristics or `no_product_data`.
+
+The repair keeps the trusted-price boundary fail closed and adds:
+
+- delimiter-aware metadata attribute parsing;
+- direct parsing of balanced JSON in SuperValu `__PRELOADED_STATE__` product
+  and product-card records before weak HTML fallbacks;
+- retailer SKU extraction and rejection when a fetched SKU conflicts with the
+  resolved mapping;
+- regression fixtures for apostrophes, inch marks, hydrated state and SKU
+  mismatch;
+- real failure-streak tracking from the most recent successful observation;
+- refresh selection that keeps missing coverage first but places SuperValu
+  mappings with two or more failures since their last success behind healthier
+  gaps, so the same repair set does not consume every 1,000-product tranche.
+
+Rows with a canonical size conflict remain rejected even when the stored
+retailer title matches the fetched page. A stable retailer SKU proves which
+retailer page was fetched; it does not prove that the page is an exact match for
+the canonical product. Those rows require mapping repair rather than relaxed
+acceptance.
+
+Decision-log addition:
+
+- **2026-09-10 — SuperValu failures are split into extraction defects and
+  mapping repair.** Fix deterministic punctuation/hydration extraction, verify
+  retailer SKU identity, and back off repeated repair failures without
+  weakening exact-product or seven-day freshness rules.

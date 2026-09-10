@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase', () => ({ supabaseAdmin: {} }));
 import type { ProductPrice } from '@/lib/price-data';
 import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
-import { parseSupervaluProductPage } from '@/lib/supervalu-direct-worker';
+import { isDirectMappingCompatible, parseSupervaluProductPage } from '@/lib/supervalu-direct-worker';
 import { choosePepestoCandidate } from '@/lib/pepesto-tesco';
 
 function price(overrides: Partial<ProductPrice> = {}): ProductPrice {
@@ -84,6 +84,64 @@ describe('SuperValu promotion parsing', () => {
     `);
 
     expect(candidate).toMatchObject({ price: 2.25, wasPrice: null, onPromotion: false });
+  });
+
+  it('does not truncate double-quoted metadata at apostrophes', () => {
+    const candidate = parseSupervaluProductPage(`
+      <meta property="og:title" content="Ben's Original Pilau Rice Ready to Heat 220g">
+      <meta property="product:price:amount" content="2.49">
+    `);
+
+    expect(candidate).toMatchObject({
+      name: "Ben's Original Pilau Rice Ready to Heat 220g",
+      price: 2.49,
+    });
+  });
+
+  it('does not truncate single-quoted metadata at inch marks', () => {
+    const candidate = parseSupervaluProductPage(`
+      <meta content='SuperValu 10" Stonebaked Margherita Pizza 290g' property='og:title'>
+      <meta content='4.00' property='product:price:amount'>
+    `);
+
+    expect(candidate).toMatchObject({
+      name: 'SuperValu 10" Stonebaked Margherita Pizza 290g',
+      price: 4,
+    });
+  });
+
+  it('extracts the hydrated SuperValu product state before weak page fallbacks', () => {
+    const candidate = parseSupervaluProductPage(`
+      <script>
+        window.__PRELOADED_STATE__ = {"product":{"name":"Flahavan's Quick Oats 500g","sku":"1000228000","price":"€3.25","wasPrice":"€4.00","isDiscounted":true,"promotions":[]}};
+      </script>
+      <title>Groceries - SuperValu</title>
+    `);
+
+    expect(candidate).toEqual({
+      name: "Flahavan's Quick Oats 500g",
+      sku: '1000228000',
+      price: 3.25,
+      wasPrice: 4,
+      onPromotion: true,
+    });
+  });
+
+  it('rejects a fetched product carrying a different retailer SKU', () => {
+    expect(isDirectMappingCompatible({
+      storeProductId: 'mapping-1',
+      canonicalName: 'Pilau Rice 220g',
+      storeProductName: "Ben's Original Pilau Rice 220g",
+      storeUrl: 'https://shop.supervalu.ie/product/example',
+      storeSku: 'expected-sku',
+      previousPrice: 2.5,
+    }, {
+      name: "Ben's Original Pilau Rice 220g",
+      sku: 'different-sku',
+      price: 2.49,
+      wasPrice: null,
+      onPromotion: false,
+    })).toBe(false);
   });
 });
 
