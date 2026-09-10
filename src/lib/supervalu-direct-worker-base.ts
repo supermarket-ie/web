@@ -2,8 +2,9 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 const STORE = 'supervalu';
 
-type Candidate = {
+export type Candidate = {
   name: string;
+  sku: string | null;
   price: number;
   wasPrice: number | null;
   onPromotion: boolean;
@@ -110,7 +111,8 @@ function isNameCompatible(expected: string, candidate: string) {
   return aCoverage >= 0.65 && bCoverage >= 0.5;
 }
 
-function isDirectMappingCompatible(product: SupervaluQueueProduct, candidate: Candidate) {
+export function isDirectMappingCompatible(product: SupervaluQueueProduct, candidate: Candidate) {
+  if (product.storeSku && candidate.sku && product.storeSku !== candidate.sku) return false;
   if (!isSizeCompatible(product.canonicalName, candidate.name)) return false;
   // Existing resolved product URLs should primarily agree with the retailer name.
   // Canonical names can intentionally be generic (e.g. "White Pan Bread Standard")
@@ -138,6 +140,96 @@ function findProductJsonLd(value: unknown): Record<string, unknown> | null {
 function numericPrice(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^0-9.]/g, ''));
   return Number.isFinite(parsed) && parsed > 0 && parsed < 1000 ? parsed : null;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function candidateFromRetailerProduct(value: unknown, html: string): Candidate | null {
+  const product = record(value);
+  if (!product) return null;
+  const name = typeof product.name === 'string' ? product.name.trim() : '';
+  const priceRecord = record(product.price);
+  const price = numericPrice(priceRecord?.amount ?? priceRecord?.value ?? product.price);
+  if (!name || !price) return null;
+
+  const wasPrice = numericPrice(product.wasPrice);
+  const promotions = Array.isArray(product.promotions) ? product.promotions : [];
+  const promotion = extractPromotion(html, price);
+  const verifiedWasPrice = wasPrice && wasPrice > price ? wasPrice : promotion.wasPrice;
+  return {
+    name,
+    sku: typeof product.sku === 'string' ? product.sku : null,
+    price,
+    wasPrice: verifiedWasPrice,
+    onPromotion: Boolean(verifiedWasPrice || product.isDiscounted === true || promotions.length > 0 || promotion.onPromotion),
+  };
+}
+
+function extractAssignedJson(html: string, variableName: string): unknown | null {
+  const marker = new RegExp(`(?:window\\.)?${variableName}\\s*=`, 'g').exec(html);
+  if (!marker) return null;
+  const start = html.indexOf('{', marker.index + marker[0].length);
+  if (start < 0) return null;
+
+  let depth = 0;
+  let quote = '';
+  let escaped = false;
+  for (let index = start; index < html.length; index += 1) {
+    const char = html[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '{') depth += 1;
+    if (char === '}') depth -= 1;
+    if (depth === 0) {
+      try {
+        return JSON.parse(html.slice(start, index + 1));
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+function extractPreloadedCandidate(html: string): Candidate | null {
+  const state = record(extractAssignedJson(html, '__PRELOADED_STATE__'));
+  if (!state) return null;
+  const direct = candidateFromRetailerProduct(state.product, html);
+  if (direct) return direct;
+
+  const dictionary = record(record(state.search)?.productCardDictionary);
+  if (!dictionary) return null;
+  for (const product of Object.values(dictionary)) {
+    const candidate = candidateFromRetailerProduct(product, html);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function attributeValue(tag: string, attribute: string): string | null {
+  const match = new RegExp(`\\b${attribute}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag);
+  return match ? decodeHtml(match[1] ?? match[2] ?? match[3] ?? '') : null;
+}
+
+function metaContent(html: string, keys: string[]): string | null {
+  for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
+    const tag = match[0];
+    const key = attributeValue(tag, 'property') ?? attributeValue(tag, 'itemprop') ?? attributeValue(tag, 'name');
+    if (key && keys.includes(key.toLowerCase())) return attributeValue(tag, 'content');
+  }
+  return null;
 }
 
 function firstPositiveEuroPrice(html: string): number | null {
@@ -183,25 +275,32 @@ export function parseSupervaluProductPage(html: string): Candidate | null {
         const wasPrice = structuredWasPrice && structuredWasPrice > price
           ? structuredWasPrice
           : promotion.wasPrice;
-        return { name, price, wasPrice, onPromotion: Boolean(wasPrice || promotion.onPromotion) };
+        return {
+          name,
+          sku: typeof product.sku === 'string' ? product.sku : null,
+          price,
+          wasPrice,
+          onPromotion: Boolean(wasPrice || promotion.onPromotion),
+        };
       }
     } catch {
       // Continue to the retailer HTML fallbacks.
     }
   }
 
-  const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1]
-    ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)?.[1];
+  const preloaded = extractPreloadedCandidate(html);
+  if (preloaded) return preloaded;
+
+  const ogTitle = metaContent(html, ['og:title']);
   const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
   const documentTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
   const name = ogTitle ? stripTags(ogTitle) : h1 ? stripTags(h1) : documentTitle ? stripTags(documentTitle) : '';
 
-  const metaPrice = html.match(/<meta[^>]+(?:property|itemprop)=["'](?:product:price:amount|price)["'][^>]+content=["'](\d+(?:\.\d{1,2})?)["']/i)?.[1]
-    ?? html.match(/<meta[^>]+content=["'](\d+(?:\.\d{1,2})?)["'][^>]+(?:property|itemprop)=["'](?:product:price:amount|price)["']/i)?.[1];
+  const metaPrice = metaContent(html, ['product:price:amount', 'price']);
   const price = numericPrice(metaPrice) ?? firstPositiveEuroPrice(html);
   if (!name || !price) return null;
   const promotion = extractPromotion(html, price);
-  return { name, price, wasPrice: promotion.wasPrice, onPromotion: promotion.onPromotion };
+  return { name, sku: null, price, wasPrice: promotion.wasPrice, onPromotion: promotion.onPromotion };
 }
 
 export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Promise<Candidate | null> {

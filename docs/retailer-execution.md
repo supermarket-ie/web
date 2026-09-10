@@ -1,6 +1,6 @@
 # Retailer Execution — Supermarket.ie
 
-**Last updated:** 29 August 2026
+**Last updated:** 10 September 2026
 
 This document records retailer-specific execution/handoff findings. Read `PROJECT_STATE.md` first for overall architecture and strategy.
 
@@ -24,6 +24,22 @@ Supermarket.ie remains outside retailer payment and does not capture retailer pa
 | Aldi | Retailer catalogue pipeline | Existing catalogue mapping | No established online grocery checkout | — | No execution adapter target currently |
 
 ## SuperValu
+
+### Price-refresh recovery — 10 September 2026
+
+The Vercel-native product-page refresh was transport-healthy but degraded at
+55.0% on 10 September: every page fetch completed, while 263 products failed
+identity validation and 187 yielded no parsed product data. The main false
+failure was fallback metadata parsing that truncated apostrophes and inch marks.
+The direct worker also did not read the `__PRELOADED_STATE__` product data used
+by the historical Playwright implementation.
+
+The recovery path parses delimiter-aware metadata and embedded retailer state,
+captures/validates retailer SKU when exposed, and keeps canonical size checks
+fail closed. Repeated failures are deprioritised behind healthier missing-price
+gaps after two unsuccessful attempts since the last success, while remaining
+eligible for later repair work. This is pricing-pipeline logic only and does not
+change the authenticated-cart status described below.
 
 ### Data available
 
