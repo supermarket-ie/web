@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { generateList } from '@/lib/list-generator';
 import { NUTRITION } from '@/lib/nutrition-data';
+import { DependencyUnavailableError } from '@/lib/supabase-resilience';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600; // cache for 1 hour
@@ -43,7 +44,6 @@ export async function GET(request: Request) {
     );
 
     if (format === 'summary') {
-      // Minimal format: just names and best price
       const data = {
         description: 'Current grocery prices across Irish supermarkets (Tesco, Dunnes Stores, SuperValu)',
         country: 'Ireland',
@@ -65,7 +65,6 @@ export async function GET(request: Request) {
     }
 
     if (format === 'prices_only') {
-      // Flat list of all price observations — useful for price comparison queries
       const rows: object[] = [];
       for (const item of items) {
         for (const sp of item.all_prices) {
@@ -85,7 +84,6 @@ export async function GET(request: Request) {
       );
     }
 
-    // Full format (default) — richest structured output for AI consumption
     const data = {
       '@context': 'https://schema.org',
       '@type': 'DataFeed',
@@ -136,7 +134,6 @@ export async function GET(request: Request) {
           } : {}),
         },
       })),
-      // Plain-text summary for LLMs that read JSON but process text
       _summary: buildTextSummary(items, list),
     };
 
@@ -144,19 +141,30 @@ export async function GET(request: Request) {
 
   } catch (err) {
     console.error('[/api/products]', err);
+    if (err instanceof DependencyUnavailableError) {
+      return NextResponse.json(
+        { error: 'Current price data is temporarily unavailable. Try again shortly.', code: err.code },
+        { status: 503, headers: noStoreCorsHeaders() },
+      );
+    }
     return NextResponse.json(
       { error: 'Unable to fetch product data. Try again shortly.' },
-      { status: 500, headers: corsHeaders() }
+      { status: 500, headers: noStoreCorsHeaders() }
     );
   }
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
     'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+  };
+}
+
+function noStoreCorsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 'no-store',
   };
 }
 
