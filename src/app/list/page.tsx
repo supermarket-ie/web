@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 import { verifySessionToken } from '@/lib/auth';
+import { sanitizeStoreTotals, sanitizeStructuredItems } from '@/lib/saved-list-sanitize';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { TokenPersist } from '@/components/TokenPersist';
@@ -162,12 +163,8 @@ export default async function ListPage({
     listContent = extractListContent(messages);
   }
 
-  const structuredItems = (activeList.items && Array.isArray(activeList.items) && activeList.items.length > 0 &&
-    typeof activeList.items[0] === 'object' && 'canonical_name' in activeList.items[0])
-    ? activeList.items as Array<{ canonical_name: string; store: string; price: number; quantity?: number; category?: string; store_product_name?: string; on_promotion?: boolean }>
-    : null;
-
-  const storeTotals = (activeList.store_totals ?? []) as Array<{ store: string; total: number; item_count?: number }>;
+  const structuredItems = sanitizeStructuredItems(activeList.items);
+  const storeTotals = sanitizeStoreTotals(activeList.store_totals);
   const decisionTrace = (activeList.agent_decision_trace ?? null) as DecisionTrace | null;
 
   return (
@@ -186,7 +183,7 @@ export default async function ListPage({
         allLists={lists.map(l => ({
           id: l.id,
           name: l.name,
-          store_totals: (l.store_totals ?? []) as Array<{ store: string; total: number; item_count?: number }>,
+          store_totals: sanitizeStoreTotals(l.store_totals),
           created_at: l.created_at,
         }))}
         activeListId={activeList.id}
