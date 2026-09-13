@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabase';
+import { withSupabaseRetry } from './supabase-resilience';
 import { NUTRITION, type NutritionData } from './nutrition-data';
 
 export type FamilySize = '1' | '2' | '3-4' | '5+';
@@ -22,7 +23,7 @@ export interface ListItem {
   best_store_url: string | null;
   all_prices: StorePrice[];
   nutrition: NutritionData | null;
-  store_overridden?: boolean; // true if user picked a non-cheapest store
+  store_overridden?: boolean;
 }
 
 export interface SmartList {
@@ -33,19 +34,18 @@ export interface SmartList {
   generated_at: string;
 }
 
-// User customisations applied on top of the generated list
 export interface ListCustomisations {
-  removedItems?: string[];        // product_ids to hide
-  addedItems?: string[];          // product_ids to include (even if single-store)
-  storeOverrides?: Record<string, string>; // product_id → store
+  removedItems?: string[];
+  addedItems?: string[];
+  storeOverrides?: Record<string, string>;
 }
 
 function getMultiplier(familySize: FamilySize): number {
   switch (familySize) {
-    case '1':   return 1;
-    case '2':   return 1;
+    case '1': return 1;
+    case '2': return 1;
     case '3-4': return 1.5;
-    case '5+':  return 2;
+    case '5+': return 2;
   }
 }
 
@@ -56,16 +56,19 @@ export async function generateList(
   const multiplier = getMultiplier(familySize);
   const quantity = Math.ceil(multiplier);
 
-  const removedSet  = new Set(customisations?.removedItems ?? []);
-  const addedSet    = new Set(customisations?.addedItems ?? []);
-  const overrides   = customisations?.storeOverrides ?? {};
+  const removedSet = new Set(customisations?.removedItems ?? []);
+  const addedSet = new Set(customisations?.addedItems ?? []);
+  const overrides = customisations?.storeOverrides ?? {};
 
   // `latest_prices` is the fail-closed trusted-offer boundary. Never rebuild
   // current offers from raw observations here: that would admit stale prices,
   // unresolved identity and observations without trusted provenance.
-  const { data: trustedOffers, error: offerError } = await supabaseAdmin
-    .from('latest_prices')
-    .select('canonical_product_id, canonical_name, category, store, store_product_name, store_url, price');
+  const { data: trustedOffers, error: offerError } = await withSupabaseRetry(
+    'latest_prices.generate_list',
+    () => supabaseAdmin
+      .from('latest_prices')
+      .select('canonical_product_id, canonical_name, category, store, store_product_name, store_url, price'),
+  );
 
   if (offerError) throw offerError;
 
@@ -98,12 +101,9 @@ export async function generateList(
   const storeTotals = new Map<string, number>();
 
   for (const [productId, { canonical_name, category, stores }] of byProduct) {
-    // Include if: has ≥2 stores OR is explicitly added by user
     if (stores.size < 2 && !addedSet.has(productId)) continue;
-    // Skip if removed
     if (removedSet.has(productId)) continue;
 
-    // Determine best store: user override → cheapest
     const overrideStore = overrides[productId];
     let bestStore = '';
     let bestPrice = Infinity;
@@ -167,7 +167,6 @@ export async function generateList(
   };
 }
 
-// Return all products (for the add-items picker)
 export async function getAllProducts(): Promise<{ product_id: string; canonical_name: string; category: string | null }[]> {
   const { data, error } = await supabaseAdmin
     .from('store_products')
@@ -186,4 +185,3 @@ export async function getAllProducts(): Promise<{ product_id: string; canonical_
   }
   return result.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
 }
-
