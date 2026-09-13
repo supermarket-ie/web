@@ -2,8 +2,34 @@ import { defineDynamic, defineTool } from 'eve/tools';
 import { z } from 'zod';
 import { requireSubscriber } from '../lib/subscriber';
 import { agentSupabase } from '../lib/supabase';
-import { computeStoreTotals, getTrustedCurrentOffer, loadCurrentShop, persistCurrentShop, type AgentListItem } from '../lib/shop';
+import { retryOptimisticMutation } from '../lib/optimistic-retry';
+import { computeStoreTotals, getTrustedCurrentOffer, loadCurrentShop, persistCurrentShop, type AgentListItem, type CurrentPrice } from '../lib/shop';
 import { requireLineCapacity } from '../../src/lib/shopping/action-gates';
+
+function applyAdd(items: AgentListItem[], current: CurrentPrice, quantity: number) {
+  const existing = items.find(item => item.canonical_product_id === current.canonical_product_id);
+  if (existing) {
+    existing.quantity = (existing.quantity ?? 1) + quantity;
+    existing.store = current.store;
+    existing.price = Number(current.price);
+    existing.on_promotion = Boolean(current.on_promotion);
+    existing.category = current.category ?? existing.category;
+    existing.store_product_name = current.store_product_name ?? existing.store_product_name;
+  } else {
+    requireLineCapacity(items.length, 1);
+    items.push({
+      canonical_product_id: current.canonical_product_id,
+      canonical_name: current.canonical_name,
+      category: current.category ?? 'Other',
+      store: current.store,
+      price: current.price,
+      quantity,
+      on_promotion: Boolean(current.on_promotion),
+      store_product_name: current.store_product_name ?? undefined,
+    });
+  }
+  return existing?.quantity ?? quantity;
+}
 
 export default defineDynamic({
   events: {
@@ -20,23 +46,37 @@ export default defineDynamic({
               const subscriberId = requireSubscriber(toolCtx);
               const current = await getTrustedCurrentOffer(input.canonical_product_id);
               if (!current) return { ok: false, reason: 'product_unavailable', message: 'I could not find a current available price for that exact product.' };
-              const latest = await loadCurrentShop(subscriberId);
-              const items: AgentListItem[] = latest?.items ?? [];
-              const existing = items.find(item => item.canonical_product_id === current.canonical_product_id);
-              if (existing) {
-                existing.quantity = (existing.quantity ?? 1) + input.quantity;
-                existing.store = current.store;
-                existing.price = Number(current.price);
-                existing.on_promotion = Boolean(current.on_promotion);
-                existing.category = current.category ?? existing.category;
-              } else {
-                requireLineCapacity(items.length, 1);
-                items.push({ canonical_product_id: current.canonical_product_id, canonical_name: current.canonical_name, category: current.category ?? 'Other', store: current.store, price: current.price, quantity: input.quantity, on_promotion: Boolean(current.on_promotion), store_product_name: current.store_product_name ?? undefined });
-              }
-              if (latest) {
+
+              const saved = await retryOptimisticMutation(async () => {
+                const latest = await loadCurrentShop(subscriberId);
+                if (!latest) return null;
+
+                // Reload and reapply on each retry. Retrying a stale item array would
+                // overwrite whichever concurrent mutation won the compare-and-swap.
+                const items: AgentListItem[] = latest.items.map(item => ({ ...item }));
+                const finalQuantity = applyAdd(items, current, input.quantity);
                 await persistCurrentShop(subscriberId, latest.id, items, latest.generated_at);
-                return { ok: true, list_id: latest.id, list_name: latest.name, canonical_product_id: current.canonical_product_id, canonical_name: current.canonical_name, quantity: existing?.quantity ?? input.quantity, store: current.store, price: current.price, on_promotion: Boolean(current.on_promotion) };
+                return { latest, finalQuantity };
+              });
+
+              if (saved) {
+                return {
+                  ok: true,
+                  list_id: saved.latest.id,
+                  list_name: saved.latest.name,
+                  canonical_product_id: current.canonical_product_id,
+                  canonical_name: current.canonical_name,
+                  quantity: saved.finalQuantity,
+                  store: current.store,
+                  price: current.price,
+                  on_promotion: Boolean(current.on_promotion),
+                };
               }
+
+              // No existing shop: create the first draft. Subsequent mutations in
+              // the same turn will observe this draft and use optimistic retries.
+              const items: AgentListItem[] = [];
+              const finalQuantity = applyAdd(items, current, input.quantity);
               const totals = computeStoreTotals(items);
               const { data: created, error: createError } = await agentSupabase
                 .from('saved_lists')
@@ -44,7 +84,7 @@ export default defineDynamic({
                 .select('id, name')
                 .single();
               if (createError) throw new Error(`Unable to create a shopping draft: ${createError.message}`);
-              return { ok: true, list_id: created.id, list_name: created.name, canonical_product_id: current.canonical_product_id, canonical_name: current.canonical_name, quantity: input.quantity, store: current.store, price: current.price, on_promotion: Boolean(current.on_promotion) };
+              return { ok: true, list_id: created.id, list_name: created.name, canonical_product_id: current.canonical_product_id, canonical_name: current.canonical_name, quantity: finalQuantity, store: current.store, price: current.price, on_promotion: Boolean(current.on_promotion) };
             },
           })
         : null,
