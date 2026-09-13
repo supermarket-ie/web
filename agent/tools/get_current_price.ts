@@ -1,6 +1,7 @@
 import { defineTool } from 'eve/tools';
 import { z } from 'zod';
-import { getCurrentProductSnapshot, resolveCatalogueProduct } from '../lib/catalogue';
+import { resolveCatalogueProduct } from '../lib/catalogue';
+import { consumeExpensiveTool } from '../lib/turn-budget';
 
 function normalise(value: string): string {
   return value
@@ -11,16 +12,19 @@ function normalise(value: string): string {
 }
 
 export default defineTool({
-  description: 'Resolve a natural-language product request against the current Supermarket.ie catalogue. Returns several strong candidate products with current retailer prices so the agent can infer ordinary shopper intent instead of blindly treating the first catalogue match as the requested SKU. For broad brand, product-family or staple requests, reason across the returned matches and answer with the most useful ordinary options; only treat one SKU as definitive when resolution is clear.',
+  description: 'Resolve a natural-language product request against the current Supermarket.ie catalogue. Returns several strong candidate products with current retailer prices so the agent can infer ordinary shopper intent instead of blindly treating the first catalogue match as the requested SKU. Do not repeat this lookup for the same product wording in one turn; use the returned alternatives.',
   inputSchema: z.object({
     productQuery: z.string().min(2),
   }),
   async execute({ productQuery }) {
-    // Keep enough plausible products for the language model to distinguish
-    // ordinary variants, pack sizes and specialist products. Catalogue ranking
-    // is evidence for inference, not permission to silently collapse a broad
-    // shopper request onto candidate #1.
-    const candidates = await resolveCatalogueProduct(productQuery, 8);
+    const budget = consumeExpensiveTool('get_current_price');
+    if (!budget.allowed) return { found: false, query: productQuery, resolution: 'budget_exhausted' as const, matches: [], guidance: budget.message };
+
+    // The catalogue resolver already returns current retailer offers for every
+    // candidate. The previous implementation issued another latest_prices query
+    // per candidate (up to 8 extra queries) and duplicated those offers in the
+    // model context. Keep one bounded catalogue query per product request.
+    const candidates = await resolveCatalogueProduct(productQuery, 6);
     if (candidates.length === 0) {
       return {
         found: false,
@@ -30,19 +34,16 @@ export default defineTool({
       };
     }
 
-    const snapshots = await Promise.all(
-      candidates.map(candidate => getCurrentProductSnapshot(candidate.canonical_name)),
-    );
-
     const matches = candidates.map((candidate, index) => ({
       rank: index + 1,
+      canonical_product_id: candidate.canonical_product_id,
       canonical_name: candidate.canonical_name,
       category: candidate.category,
       relevance_score: candidate.score,
       best_price: candidate.best_price,
       best_store: candidate.best_store,
       on_promotion: candidate.on_promotion,
-      snapshot: snapshots[index],
+      stores: candidate.stores,
     }));
 
     const queryNorm = normalise(productQuery);
@@ -50,10 +51,6 @@ export default defineTool({
     const second = candidates[1];
     const exactCanonicalMatch = normalise(top.canonical_name) === queryNorm;
     const scoreGap = second ? top.score - second.score : Number.POSITIVE_INFINITY;
-
-    // A clear exact match or a materially separated top candidate can safely be
-    // treated as one product. Otherwise expose the request as a product-family
-    // resolution and let the agent use Sonnet's judgement over the alternatives.
     const clearSingleMatch = exactCanonicalMatch || !second || scoreGap >= 8;
 
     return {
@@ -64,13 +61,35 @@ export default defineTool({
       top_score_gap: Number.isFinite(scoreGap) ? scoreGap : null,
       guidance: clearSingleMatch
         ? 'The leading catalogue product is sufficiently distinct to answer as a single product.'
-        : 'The wording plausibly refers to a product family or several variants. Do not silently equate the request with rank 1. Use the matches to infer the ordinary shopper intent, compare useful mainstream variants, and ask one concise clarification only if a materially different choice cannot be inferred.',
+        : 'The wording plausibly refers to several variants. Use these matches; do not repeat the lookup unless the shopper materially changes the request.',
       matches,
-      // Preserve the legacy single-product fields only when resolution is clear.
-      // This prevents downstream prompting from receiving a false sense of
-      // certainty while remaining compatible with exact product requests.
+      canonical_product_id: clearSingleMatch ? top.canonical_product_id : null,
       canonical_name: clearSingleMatch ? top.canonical_name : null,
-      snapshot: clearSingleMatch ? snapshots[0] : null,
+    };
+  },
+  toModelOutput(output) {
+    if (!output.found) return { type: 'json', value: output };
+    return {
+      type: 'json',
+      value: {
+        found: true,
+        query: output.query,
+        resolution: output.resolution,
+        exact_canonical_match: output.exact_canonical_match,
+        guidance: output.guidance,
+        canonical_product_id: output.canonical_product_id,
+        canonical_name: output.canonical_name,
+        matches: output.matches.slice(0, 5).map(match => ({
+          rank: match.rank,
+          canonical_product_id: match.canonical_product_id,
+          canonical_name: match.canonical_name,
+          category: match.category,
+          best_price: match.best_price,
+          best_store: match.best_store,
+          on_promotion: match.on_promotion,
+          stores: match.stores.slice(0, 3).map(store => ({ store: store.store, price: store.price, on_promotion: store.on_promotion })),
+        })),
+      },
     };
   },
 });
