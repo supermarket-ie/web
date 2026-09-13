@@ -11,6 +11,7 @@ type VerificationPayload = {
   email?: string;
   familySize?: string;
   analyticsSessionId?: string | null;
+  source?: 'signup' | 'sign_in';
 };
 
 async function notifyTelegram(text: string) {
@@ -53,12 +54,14 @@ export async function GET(request: NextRequest) {
 
   const email = verification.email.toLowerCase().trim();
   const familySize = verification.familySize || '2';
+  const source = verification.source === 'sign_in' ? 'sign_in' : 'signup';
+  const acquisitionSource = source === 'sign_in' ? 'direct_account' : 'inline_agent_continuation';
   const unsubscribeToken = crypto.randomBytes(32).toString('hex');
 
   const { error: openedEventError } = await supabaseAdmin.from('agent_events').insert({
     event_type: 'verification_link_opened',
     session_id: verification.analyticsSessionId ?? null,
-    metadata: { method: 'email', flow: 'verified_email_continuation' },
+    metadata: { method: 'email', flow: 'verified_email_continuation', source, acquisition_source: acquisitionSource },
   });
   if (openedEventError) console.error('[complete-registration] verification-open analytics insert failed:', openedEventError);
 
@@ -113,7 +116,13 @@ export async function GET(request: NextRequest) {
       event_type: 'signup_completed',
       session_id: verification.analyticsSessionId ?? null,
       subscriber_id: subscriberId,
-      metadata: { method: 'email', flow: 'verified_email_continuation', verified: true },
+      metadata: {
+        method: 'email',
+        flow: 'verified_email_continuation',
+        verified: true,
+        source,
+        acquisition_source: acquisitionSource,
+      },
     });
     if (error) console.error('[complete-registration] analytics insert failed:', error);
 
