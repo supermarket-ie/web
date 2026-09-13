@@ -12,6 +12,13 @@ describe('saved list monetary sanitization', () => {
     ]);
   });
 
+  it('preserves valid numeric-string monetary values from database JSON', () => {
+    expect(sanitizeStructuredItems([
+      { canonical_name: 'Bread 800g', store: 'dunnes', price: '2.49' },
+    ])?.[0].price).toBe(2.49);
+    expect(sanitizeStoreTotals([{ store: 'dunnes', total: '41.20' }])?.[0].total).toBe(41.2);
+  });
+
   it('drops incomplete/null store totals rather than coercing them to zero', () => {
     expect(sanitizeStoreTotals([
       { store: 'tesco', total: null, item_count: 4 },
