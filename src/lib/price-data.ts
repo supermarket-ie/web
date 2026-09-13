@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
+import { withSupabaseRetry } from '@/lib/supabase-resilience';
 
 export type StoreKey = 'tesco' | 'dunnes' | 'supervalu' | 'aldi';
 
@@ -32,45 +33,43 @@ export type ProductPrice = {
   freshness_state: 'fresh';
 };
 
-// ── Module-level cache (survives across requests in the same warm Lambda) ─────
 let _priceCache: ProductPrice[] | null = null;
 let _priceCacheAt = 0;
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_TTL_MS = 10 * 60 * 1000;
 
 /**
  * Fetch the validated current-price set across active stores.
  *
- * `latest_prices` is the production boundary for price quality. Its database
- * definition is responsible for selecting the latest observation and excluding
- * mappings/stores that are not safe to present as live.
- *
- * IMPORTANT: fail closed if the view is unavailable. Falling back to raw
- * `price_observations` would bypass mapping/freshness guards and can publish
- * known-contaminated data. supermarket.ie deliberately prefers a missing price
- * to a false price.
+ * `latest_prices` is the production boundary for price quality. Fail closed if
+ * it is unavailable: a dependency outage must never masquerade as a successful
+ * empty catalogue, and raw price observations remain forbidden as a fallback.
  */
 export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}): Promise<ProductPrice[]> {
   if (!options.bypassCache && _priceCache && Date.now() - _priceCacheAt < CACHE_TTL_MS) {
     return _priceCache;
   }
 
-  const { data: viewRows, error: viewError } = await supabaseAdmin
-    .from('latest_prices')
-    .select('canonical_product_id, canonical_name, category, store, price, was_price, on_promotion, store_product_name, store_sku, store_url, observed_at, source, relationship_type, freshness_state');
+  const { data: viewRows, error: viewError } = await withSupabaseRetry(
+    'latest_prices.all_current_prices',
+    () => supabaseAdmin
+      .from('latest_prices')
+      .select('canonical_product_id, canonical_name, category, store, price, was_price, on_promotion, store_product_name, store_sku, store_url, observed_at, source, relationship_type, freshness_state'),
+  );
 
+  // Non-transient database errors are still failures, not valid empty data.
   if (viewError) {
-    console.error('[price-data] latest_prices unavailable; refusing raw-price fallback:', viewError.message);
-    return [];
+    console.error('[price-data] latest_prices query failed; refusing empty/raw fallback:', {
+      code: viewError.code ?? null,
+      message: viewError.message ?? null,
+    });
+    throw new Error(`latest_prices query failed: ${viewError.message ?? 'unknown database error'}`);
   }
 
   if (!viewRows || viewRows.length === 0) {
-    console.warn('[price-data] latest_prices returned no rows');
+    console.warn('[price-data] latest_prices returned zero rows');
     return [];
   }
 
-  // Deduplicate by canonical_name + store. The validated view may contain more
-  // than one store_product mapping for a canonical product, but consumers need
-  // at most one current store price for that canonical item.
   const seen = new Set<string>();
   const results: ProductPrice[] = [];
   for (const r of viewRows as unknown as ProductPrice[]) {
@@ -87,9 +86,6 @@ export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}
   return results;
 }
 
-/**
- * Group prices by product, returning a map of canonical_name → store prices.
- */
 export function groupByProduct(prices: ProductPrice[]) {
   const map = new Map<string, { category: string; stores: Map<string, { price: number; on_promotion: boolean; was_price: number | null }> }>();
   for (const p of prices) {
@@ -101,9 +97,6 @@ export function groupByProduct(prices: ProductPrice[]) {
   return map;
 }
 
-/**
- * Filter grouped products to only those available in ALL 3 main stores (Tesco, Dunnes, SuperValu).
- */
 export function filterToMain3(grouped: ReturnType<typeof groupByProduct>) {
   const filtered = new Map<string, { category: string; stores: Map<string, { price: number; on_promotion: boolean; was_price: number | null }> }>();
   for (const [name, data] of grouped) {
