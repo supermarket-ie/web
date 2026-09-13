@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
         email: normalizedEmail,
         familySize,
         analyticsSessionId: sessionId,
+        source,
       },
       SECRET!,
       { expiresIn: '15m' },

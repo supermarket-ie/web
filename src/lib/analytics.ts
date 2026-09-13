@@ -77,7 +77,10 @@ export function trackEventOnce(
 ) {
   if (typeof window === 'undefined') return;
 
-  const key = `smi_event_once:${eventType}`;
+  const placementSuffix = eventType === 'signup_prompt_viewed' && typeof metadata?.placement === 'string'
+    ? `:${metadata.placement}`
+    : '';
+  const key = `smi_event_once:${eventType}${placementSuffix}`;
   try {
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, '1');
