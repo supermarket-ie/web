@@ -1,4 +1,5 @@
 import { agentSupabase } from './supabase';
+import { withSupabaseRetry } from '../../src/lib/supabase-resilience';
 import {
   getCatalogueSeed,
   resolveCatalogueRows,
@@ -45,15 +46,18 @@ export async function resolveCatalogueProduct(query: string, limit = 5): Promise
   const seed = getCatalogueSeed(query);
   if (!seed) return [];
 
-  const { data, error } = await agentSupabase
-    .from('latest_prices')
-    .select('canonical_product_id, canonical_name, category, store, store_product_name, price, was_price, on_promotion')
-    .or(`canonical_name.ilike.%${seed}%,store_product_name.ilike.%${seed}%`)
-    // Broad staples such as milk, bread and butter also occur in hundreds of
-    // unrelated or specialist product names. Fetch the complete practical
-    // result set so the shared resolver ranks the catalogue rather than an
-    // arbitrary first PostgREST page.
-    .limit(1000);
+  const { data, error } = await withSupabaseRetry(
+    'latest_prices.catalogue_resolve',
+    () => agentSupabase
+      .from('latest_prices')
+      .select('canonical_product_id, canonical_name, category, store, store_product_name, price, was_price, on_promotion')
+      .or(`canonical_name.ilike.%${seed}%,store_product_name.ilike.%${seed}%`)
+      // Broad staples such as milk, bread and butter also occur in hundreds of
+      // unrelated or specialist product names. Fetch the complete practical
+      // result set so the shared resolver ranks the catalogue rather than an
+      // arbitrary first PostgREST page.
+      .limit(1000),
+  );
 
   if (error) throw new Error(`Catalogue lookup failed: ${error.message}`);
 
@@ -62,10 +66,13 @@ export async function resolveCatalogueProduct(query: string, limit = 5): Promise
 }
 
 export async function getCurrentProductSnapshot(canonicalName: string) {
-  const { data, error } = await agentSupabase
-    .from('latest_prices')
-    .select('canonical_product_id, canonical_name, category, store, store_product_name, price, was_price, on_promotion')
-    .eq('canonical_name', canonicalName);
+  const { data, error } = await withSupabaseRetry(
+    'latest_prices.product_snapshot',
+    () => agentSupabase
+      .from('latest_prices')
+      .select('canonical_product_id, canonical_name, category, store, store_product_name, price, was_price, on_promotion')
+      .eq('canonical_name', canonicalName),
+  );
 
   if (error) throw new Error(`Current price lookup failed: ${error.message}`);
 
