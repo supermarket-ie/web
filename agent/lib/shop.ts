@@ -1,6 +1,8 @@
 import { agentSupabase } from './supabase';
+import { OptimisticConcurrencyError } from './optimistic-retry';
 import { computeBasketStoreTotals } from '../../src/lib/shopping/basket';
 import { requireCanonicalProductId, requireMatchingTrustedOffer, requireSensibleQuantity } from '../../src/lib/shopping/action-gates';
+import { withSupabaseRetry } from '../../src/lib/supabase-resilience';
 
 export type AgentListItem = {
   canonical_product_id?: string | null;
@@ -67,12 +69,15 @@ export async function loadCurrentShop(subscriberId: string) {
 }
 
 export async function getBestCurrentPrice(canonicalName: string): Promise<CurrentPrice | null> {
-  const { data, error } = await agentSupabase
-    .from('latest_prices')
-    .select('canonical_product_id, canonical_name, category, store, price, on_promotion, store_product_name, relationship_type, freshness_state')
-    .eq('canonical_name', canonicalName)
-    .order('price', { ascending: true })
-    .limit(1);
+  const { data, error } = await withSupabaseRetry(
+    'latest_prices.best_current_price',
+    () => agentSupabase
+      .from('latest_prices')
+      .select('canonical_product_id, canonical_name, category, store, price, on_promotion, store_product_name, relationship_type, freshness_state')
+      .eq('canonical_name', canonicalName)
+      .order('price', { ascending: true })
+      .limit(1),
+  );
 
   if (error) throw new Error(`Unable to fetch current product price: ${error.message}`);
   const row = data?.[0];
@@ -90,9 +95,14 @@ export async function getBestCurrentPrice(canonicalName: string): Promise<Curren
 
 export async function getTrustedCurrentOffer(canonicalProductId: string): Promise<CurrentPrice | null> {
   const id = requireCanonicalProductId(canonicalProductId);
-  const { data, error } = await agentSupabase.from('latest_prices')
-    .select('canonical_product_id, canonical_name, category, store, price, on_promotion, store_product_name, relationship_type, freshness_state')
-    .eq('canonical_product_id', id).order('price', { ascending: true }).limit(1);
+  const { data, error } = await withSupabaseRetry(
+    'latest_prices.trusted_current_offer',
+    () => agentSupabase.from('latest_prices')
+      .select('canonical_product_id, canonical_name, category, store, price, on_promotion, store_product_name, relationship_type, freshness_state')
+      .eq('canonical_product_id', id)
+      .order('price', { ascending: true })
+      .limit(1),
+  );
   if (error) throw new Error(`Unable to fetch current product price: ${error.message}`);
   const row = data?.[0];
   if (!row) return null;
@@ -121,7 +131,7 @@ export async function persistCurrentShop(
   const { data, error } = await query.select('id');
 
   if (error) throw new Error(`Unable to update the current shop: ${error.message}`);
-  if (!data?.length) throw new Error('The shop changed while this action was running. Reload it and try again.');
+  if (!data?.length) throw new OptimisticConcurrencyError();
 
   return storeTotals;
 }
