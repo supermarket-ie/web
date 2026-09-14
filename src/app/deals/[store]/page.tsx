@@ -8,9 +8,10 @@ import { getAllLatestPrices, STORE_INFO, fmt, pct, type StoreKey } from '@/lib/p
 import { isCurrentDeal, isRetailerMarkedOffer, latestObservationAt } from '@/lib/deal-utils';
 import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 
-// Always read the validated catalogue on the next request after a refresh.
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// Retailer prices refresh periodically, not per page view. ISR serves the last
+// successfully generated page while background regeneration checks for fresher
+// validated data, so a transient Supabase timeout does not become a public 500.
+export const revalidate = 1800;
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
@@ -43,7 +44,7 @@ export default async function StoreDealsPage({ params }: { params: Promise<{ sto
   const storeKey = store as StoreKey;
   const info = STORE_INFO[storeKey];
 
-  const allPrices = await getAllLatestPrices({ bypassCache: true });
+  const allPrices = await getAllLatestPrices();
   const storePrices = allPrices.filter(p => p.store === storeKey);
   const storeDeals = storePrices.filter(isCurrentDeal);
   const retailerMarkedWithoutSaving = storePrices.filter(price =>
