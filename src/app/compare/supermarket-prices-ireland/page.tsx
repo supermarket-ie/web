@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { supabaseAdmin } from '@/lib/supabase';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { AgentLandingCTA } from '@/components/AgentLandingCTA';
+import { getAllLatestPrices } from '@/lib/price-data';
 
 export const revalidate = 43200; // Revalidate every 12 hours
 
@@ -45,53 +45,27 @@ type EvidenceProduct = {
 };
 
 async function getComparisonData() {
-  // Paginate price observations to get all data
-  let priceRows: { price: number; observed_at: string; store_products: unknown }[] = [];
-  let offset = 0;
-  const PAGE = 1000;
-  while (true) {
-    const { data } = await supabaseAdmin
-      .from('price_observations')
-      .select('price, observed_at, store_products(store, products(canonical_name, category))')
-      .order('observed_at', { ascending: false })
-      .range(offset, offset + PAGE - 1);
-    if (!data || data.length === 0) break;
-    priceRows = priceRows.concat(data);
-    if (data.length < PAGE) break;
-    offset += PAGE;
-  }
-
+  // This page only needs the current trusted retailer price for each mapped
+  // product/store. Reading the historical observations table here previously
+  // paginated the full observation history during static generation and could
+  // push Vercel builds over the 60-second page timeout.
+  const priceRows = await getAllLatestPrices();
   if (!priceRows.length) return null;
 
-  // latest price per product per store
-  const latest = new Map<string, number>();
   const byProduct = new Map<string, { category: string; stores: Map<string, number> }>();
-
   for (const row of priceRows) {
-    const sp = row.store_products as unknown as { store: string; products: { canonical_name: string; category: string } | null } | null;
-    const name = sp?.products?.canonical_name;
-    const store = sp?.store;
-    const category = sp?.products?.category;
-    if (!name || !store || !row.price) continue;
-    const key = `${name}:${store}`;
-    if (latest.has(key)) continue;
-    latest.set(key, row.price);
-    if (!byProduct.has(name)) byProduct.set(name, { category: category ?? 'Other', stores: new Map() });
-    byProduct.get(name)!.stores.set(store, row.price);
+    if (!byProduct.has(row.canonical_name)) {
+      byProduct.set(row.canonical_name, { category: row.category ?? 'Other', stores: new Map() });
+    }
+    byProduct.get(row.canonical_name)!.stores.set(row.store, Number(row.price));
   }
 
   const MAIN_3: StoreKey[] = ['tesco', 'dunnes', 'supervalu'];
-  
-  // Filter to products available in all 3 main stores
+
   for (const [name, { stores }] of byProduct) {
-    if (!MAIN_3.every(s => stores.has(s))) {
-      byProduct.delete(name);
-    }
+    if (!MAIN_3.every(s => stores.has(s))) byProduct.delete(name);
   }
 
-  // Only compare stores across the same matched product set. Aldi currently has
-  // useful live evidence, but not equivalent catalogue coverage on this page;
-  // including its partial totals would produce a misleading "cheapest" claim.
   const activeStores = MAIN_3;
   const products: EvidenceProduct[] = [];
   for (const [name, { category, stores }] of byProduct) {
@@ -99,9 +73,6 @@ async function getComparisonData() {
     products.push({ name, category, prices: Object.fromEntries(stores) });
   }
 
-  // Put familiar household staples first, while keeping the visible examples
-  // varied. Prefer mappings that identify a pack size so the visible evidence
-  // is more useful than a broad product-family comparison.
   const staplePattern = /milk|bread|butter|egg|chicken|beef|banana|apple|potato|pasta|rice|coffee|tea/i;
   const packSizePattern = /\b\d+(?:\.\d+)?\s?(?:g|kg|ml|l|pack|pk)\b/i;
   products.sort((a, b) => {
@@ -112,9 +83,6 @@ async function getComparisonData() {
     return a.name.length - b.name.length || a.name.localeCompare(b.name);
   });
 
-  // Do not showcase mappings with a price spread large enough to suggest a
-  // pack-size or product-resolution mismatch. The broader catalogue remains
-  // available to the agent, but public evidence should be conservative.
   const displayProducts = products.filter(product => {
     const prices = activeStores.map(store => product.prices[store]).filter(Boolean);
     const lowest = Math.min(...prices);
@@ -134,14 +102,13 @@ async function getComparisonData() {
   }
 
   const moreEvidence = displayProducts.filter(product => !featured.includes(product)).slice(0, 18);
-  const latestObservation = priceRows[0]?.observed_at ?? null;
+  const latestObservation = priceRows.reduce<string | null>((latest, row) => {
+    if (!row.observed_at) return latest;
+    if (!latest || Date.parse(row.observed_at) > Date.parse(latest)) return row.observed_at;
+    return latest;
+  }, null);
 
-  return {
-    featured,
-    moreEvidence,
-    activeStores,
-    latestObservation,
-  };
+  return { featured, moreEvidence, activeStores, latestObservation };
 }
 
 export default async function ComparePage() {
@@ -161,7 +128,6 @@ export default async function ComparePage() {
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
-        {/* Hero */}
         <div className="pt-12 pb-9 sm:pt-16">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#e5f7eb] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#397250]">Live Irish supermarket intelligence</div>
           <h1 className="mb-5 max-w-4xl text-balance text-[clamp(2.4rem,5vw,4.25rem)] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#152219]">
@@ -182,7 +148,6 @@ export default async function ComparePage() {
           />
         </div>
 
-        {/* Compact, indexable evidence of the data available to the agent. */}
         <section className="mb-10 border-t border-[#e3e8e4] pt-9" aria-label="Current supermarket price evidence">
         <p className="mb-5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -229,7 +194,6 @@ export default async function ComparePage() {
         <p className="mt-3 text-xs text-[#8b958e]">Latest catalogue observation: {updatedLabel}. Prices can change; the agent checks current evidence when helping with a shop.</p>
         </section>
 
-        {/* CTA */}
         <div className="rounded-[1.75rem] bg-[#0e0e0e] p-8 text-center text-white">
           <div className="text-3xl mb-3">🛒</div>
           <h2 className="mb-2 text-xl font-bold">Make Supermarket.ie your household agent</h2>
