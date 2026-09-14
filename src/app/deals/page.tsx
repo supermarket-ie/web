@@ -6,9 +6,10 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { getAllLatestPrices, type ProductPrice } from '@/lib/price-data';
 import { isCurrentDeal, isRetailerMarkedOffer, latestObservationAt } from '@/lib/deal-utils';
 
-// Always read the validated catalogue on the next request after a refresh.
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// Retailer prices refresh periodically, not per page view. ISR keeps a known-good
+// public deals page available while a background regeneration checks for fresher
+// validated data; a transient Supabase failure therefore does not become a 500.
+export const revalidate = 30 * 60;
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
@@ -58,7 +59,7 @@ function getDeals(prices: ProductPrice[]): Deal[] {
 }
 
 export default async function DealsPage() {
-  const allPrices = await getAllLatestPrices({ bypassCache: true });
+  const allPrices = await getAllLatestPrices();
   const deals = getDeals(allPrices);
   const retailerMarkedWithoutSaving = allPrices.filter(price =>
     isRetailerMarkedOffer(price) && !isCurrentDeal(price));
