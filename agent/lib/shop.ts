@@ -25,6 +25,14 @@ export type CurrentPrice = {
   store_product_name: string | null;
 };
 
+type TrustedOfferRow = CurrentPrice & {
+  was_price: number | null;
+  observed_at: string;
+  source: string;
+  relationship_type: string;
+  freshness_state: string;
+};
+
 export async function resolveCanonicalProduct(canonicalProductId: string) {
   const id = requireCanonicalProductId(canonicalProductId);
   const { data, error } = await agentSupabase.from('products').select('id, canonical_name').eq('id', id).maybeSingle();
@@ -68,19 +76,31 @@ export async function loadCurrentShop(subscriberId: string) {
   };
 }
 
-export async function getBestCurrentPrice(canonicalName: string): Promise<CurrentPrice | null> {
+async function getTrustedOffersForProduct(canonicalProductId: string): Promise<TrustedOfferRow[]> {
+  const id = requireCanonicalProductId(canonicalProductId);
   const { data, error } = await withSupabaseRetry(
-    'latest_prices.best_current_price',
-    () => agentSupabase
-      .from('latest_prices')
-      .select('canonical_product_id, canonical_name, category, store, price, on_promotion, store_product_name, relationship_type, freshness_state')
-      .eq('canonical_name', canonicalName)
-      .order('price', { ascending: true })
-      .limit(1),
+    'trusted_offers_for_products.exact_product',
+    () => agentSupabase.rpc('trusted_offers_for_products', { product_ids: [id] }),
   );
-
   if (error) throw new Error(`Unable to fetch current product price: ${error.message}`);
-  const row = data?.[0];
+  return ((data ?? []) as TrustedOfferRow[])
+    .sort((a, b) => Number(a.price) - Number(b.price));
+}
+
+export async function getBestCurrentPrice(canonicalName: string): Promise<CurrentPrice | null> {
+  // Resolve the cheap canonical products table first instead of filtering the
+  // latest_prices view by name. The view otherwise constructs the full trusted
+  // offer set before applying the canonical-name filter.
+  const { data: product, error: productError } = await agentSupabase
+    .from('products')
+    .select('id')
+    .eq('canonical_name', canonicalName)
+    .maybeSingle();
+  if (productError) throw new Error(`Unable to resolve current product: ${productError.message}`);
+  if (!product?.id) return null;
+
+  const rows = await getTrustedOffersForProduct(String(product.id));
+  const row = rows[0];
   if (!row) return null;
   return {
     canonical_product_id: String(row.canonical_product_id),
@@ -95,19 +115,25 @@ export async function getBestCurrentPrice(canonicalName: string): Promise<Curren
 
 export async function getTrustedCurrentOffer(canonicalProductId: string): Promise<CurrentPrice | null> {
   const id = requireCanonicalProductId(canonicalProductId);
-  const { data, error } = await withSupabaseRetry(
-    'latest_prices.trusted_current_offer',
-    () => agentSupabase.from('latest_prices')
-      .select('canonical_product_id, canonical_name, category, store, price, on_promotion, store_product_name, relationship_type, freshness_state')
-      .eq('canonical_product_id', id)
-      .order('price', { ascending: true })
-      .limit(1),
-  );
-  if (error) throw new Error(`Unable to fetch current product price: ${error.message}`);
-  const row = data?.[0];
+  const rows = await getTrustedOffersForProduct(id);
+  const row = rows[0];
   if (!row) return null;
-  const price = requireMatchingTrustedOffer({ requestedCanonicalProductId: id, offerCanonicalProductId: row.canonical_product_id, relationshipType: row.relationship_type, freshnessState: row.freshness_state, price: row.price });
-  return { canonical_product_id: id, canonical_name: row.canonical_name, category: row.category ?? null, store: row.store, price, on_promotion: row.on_promotion ?? null, store_product_name: row.store_product_name ?? null };
+  const price = requireMatchingTrustedOffer({
+    requestedCanonicalProductId: id,
+    offerCanonicalProductId: row.canonical_product_id,
+    relationshipType: row.relationship_type,
+    freshnessState: row.freshness_state,
+    price: row.price,
+  });
+  return {
+    canonical_product_id: id,
+    canonical_name: row.canonical_name,
+    category: row.category ?? null,
+    store: row.store,
+    price,
+    on_promotion: row.on_promotion ?? null,
+    store_product_name: row.store_product_name ?? null,
+  };
 }
 
 export async function persistCurrentShop(
