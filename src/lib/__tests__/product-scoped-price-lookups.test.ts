@@ -23,4 +23,10 @@ describe('product-scoped trusted price lookups', () => {
     expect(text).toContain("'exact'::text as relationship_type");
     expect(text).toContain("'fresh'::text as freshness_state");
   });
+
+  it('does not rebuild comparison evidence from raw observation history', () => {
+    const text = source('src/app/compare/supermarket-prices-ireland/page.tsx');
+    expect(text).toContain('getAllLatestPrices()');
+    expect(text).not.toContain(".from('price_observations')");
+  });
 });
