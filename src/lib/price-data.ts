@@ -36,17 +36,31 @@ export type ProductPrice = {
 let _priceCache: ProductPrice[] | null = null;
 let _priceCacheAt = 0;
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const LAST_KNOWN_GOOD_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 function isKnownCiSupabasePlaceholder(): boolean {
   return process.env.CI === 'true' && process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://example.supabase.co';
+}
+
+function getLastKnownGoodPrices(): ProductPrice[] | null {
+  if (!_priceCache || _priceCacheAt <= 0) return null;
+  const ageMs = Date.now() - _priceCacheAt;
+  if (ageMs > LAST_KNOWN_GOOD_MAX_AGE_MS) return null;
+  console.warn('[price-data] serving bounded last-known-good trusted-price cache', {
+    age_ms: ageMs,
+    max_age_ms: LAST_KNOWN_GOOD_MAX_AGE_MS,
+    rows: _priceCache.length,
+  });
+  return _priceCache;
 }
 
 /**
  * Fetch the validated current-price set across active stores.
  *
  * `latest_prices` is the production boundary for price quality. Fail closed if
- * it is unavailable: a dependency outage must never masquerade as a successful
- * empty catalogue, and raw price observations remain forbidden as a fallback.
+ * it is unavailable unless this process has a recent, previously validated
+ * last-known-good snapshot. Raw price observations remain forbidden as a
+ * fallback and stale trusted data is bounded to two hours.
  *
  * GitHub CI intentionally builds with example.supabase.co. That single known
  * placeholder remains allowed to yield no rows so static route compilation can
@@ -69,6 +83,10 @@ export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}
     if (error instanceof DependencyUnavailableError && isKnownCiSupabasePlaceholder()) {
       console.warn('[price-data] CI Supabase placeholder unavailable; allowing empty static-build data');
       return [];
+    }
+    if (error instanceof DependencyUnavailableError) {
+      const fallback = getLastKnownGoodPrices();
+      if (fallback) return fallback;
     }
     throw error;
   }
@@ -101,10 +119,11 @@ export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}
     results.push(r);
   }
 
-  if (!options.bypassCache) {
-    _priceCache = results;
-    _priceCacheAt = Date.now();
-  }
+  // A successful trusted-price read becomes the process-local last-known-good
+  // snapshot even when the caller requested a fresh read. `bypassCache` skips
+  // a cache read; it must not prevent successful data becoming a safe fallback.
+  _priceCache = results;
+  _priceCacheAt = Date.now();
   return results;
 }
 
