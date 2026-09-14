@@ -11,7 +11,7 @@ import { AgentLandingCTA } from '@/components/AgentLandingCTA';
 // Retailer prices refresh periodically, not per page view. ISR serves the last
 // successfully generated page while background regeneration checks for fresher
 // validated data, so a transient Supabase timeout does not become a public 500.
-export const revalidate = 30 * 60;
+export const revalidate = 1800;
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
