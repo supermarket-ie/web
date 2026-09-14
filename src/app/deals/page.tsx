@@ -9,7 +9,7 @@ import { isCurrentDeal, isRetailerMarkedOffer, latestObservationAt } from '@/lib
 // Retailer prices refresh periodically, not per page view. ISR keeps a known-good
 // public deals page available while a background regeneration checks for fresher
 // validated data; a transient Supabase failure therefore does not become a 500.
-export const revalidate = 30 * 60;
+export const revalidate = 1800;
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
