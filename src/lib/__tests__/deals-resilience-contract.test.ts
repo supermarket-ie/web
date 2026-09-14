@@ -12,7 +12,7 @@ describe('public deals dependency resilience', () => {
     'src/app/deals/[store]/page.tsx',
   ])('%s uses ISR instead of forcing a live Supabase read per request', file => {
     const text = source(file);
-    expect(text).toContain('export const revalidate = 30 * 60');
+    expect(text).toContain('export const revalidate = 1800');
     expect(text).not.toContain("dynamic = 'force-dynamic'");
     expect(text).not.toContain('getAllLatestPrices({ bypassCache: true })');
   });
