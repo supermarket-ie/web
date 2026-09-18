@@ -186,6 +186,16 @@ export function WeeklyCommandCentre({ visualPreviewState }: { visualPreviewState
     return 'new';
   }, [journeyState, plan]);
 
+  const emptyStateCopy = homeState === 'ready' ? {
+    eyebrow: 'Your shop is ready to review',
+    title: 'A complete week, ready when you are.',
+    description: 'Review the shop, ask for a change or add anything the household still needs.',
+  } : homeState === 'progress' ? {
+    eyebrow: 'Picking up this week\'s shop',
+    title: 'Your shop is taking shape.',
+    description: 'Continue where you left off, resolve a choice or ask your agent to change the plan.',
+  } : undefined;
+
   useEffect(() => {
     if (loading || !token) return;
     trackEventOnce('signed_in_home_state_viewed', { home_state: homeState, has_current_shop: Boolean(plan?.currentShop), has_agent_continuity: journeyState.hasConversation }, token);
@@ -203,7 +213,7 @@ export function WeeklyCommandCentre({ visualPreviewState }: { visualPreviewState
             <span className="hidden text-xs font-semibold text-[#4e5b52] sm:block">{homeState === 'ready' ? 'Ready to review' : 'Taking shape'}</span>
           </div>
         )}
-        <HomePlanner primaryHeading onJourneyStateChange={setJourneyState} />
+        <HomePlanner primaryHeading signedInEmptyState={emptyStateCopy} onJourneyStateChange={setJourneyState} />
         {journeyState.hasConversation && <p className="border-t border-[#edf0ed] px-5 py-2.5 text-center text-[10px] text-[#8c958f]">This conversation continues on this device. Validated shops are saved to your account.</p>}
       </section>
       <LivingReceipt plan={plan} state={homeState} token={token} />
