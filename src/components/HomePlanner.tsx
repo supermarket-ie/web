@@ -302,12 +302,14 @@ function ShoppingAgentInner({
   saved,
   storageKey,
   isGuest,
+  continuityMode,
   primaryHeading,
   onJourneyStateChange,
 }: {
   saved: SavedEveChat;
   storageKey: string | null;
   isGuest: boolean;
+  continuityMode: boolean;
   primaryHeading: boolean;
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
 }) {
@@ -345,7 +347,8 @@ function ShoppingAgentInner({
   const showGuestGate = isGuest && (guestTurns >= 2 || messages.some(message =>
     message.role === 'user' && isPersistentGuestRequest(messageText(message))
   ));
-  const starters = isGuest ? (marketStarters ?? GUEST_STARTERS) : HOUSEHOLD_STARTERS;
+  const useOpenStarterExperience = isGuest || !continuityMode;
+  const starters = useOpenStarterExperience ? (marketStarters ?? GUEST_STARTERS) : HOUSEHOLD_STARTERS;
   const isEmpty = messages.length === 0;
   const firstUserRequest = messages.find(message => message.role === 'user');
   const firstRequestText = firstUserRequest ? messageText(firstUserRequest) : '';
@@ -376,7 +379,7 @@ function ShoppingAgentInner({
   }, [hasConversation, hasProposedShop, onJourneyStateChange]);
 
   useEffect(() => {
-    if (!isGuest) return;
+    if (!useOpenStarterExperience) return;
     let controller = new AbortController();
 
     function loadMarketStarters() {
@@ -403,7 +406,7 @@ function ShoppingAgentInner({
       window.clearInterval(refreshTimer);
       controller.abort();
     };
-  }, [isGuest]);
+  }, [useOpenStarterExperience]);
 
   useEffect(() => {
     const intent = inferSuggestionIntent(input);
@@ -523,17 +526,19 @@ function ShoppingAgentInner({
           <div className="mb-6">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#397250]">
               <span className="flex size-7 items-center justify-center rounded-full bg-[#daf2e2]"><Sparkles className="size-4" /></span>
-              {isGuest ? 'Ready when you are' : 'Your agent is ready'}
+              {useOpenStarterExperience ? 'Ready when you are' : 'Your agent is ready'}
             </div>
             {primaryHeading ? (
-              <h1 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h1>
+              <h1 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">
+                {useOpenStarterExperience ? 'Meet your supermarket agent' : 'What should we sort out for the household?'}
+              </h1>
             ) : (
               <h2 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">
-                {isGuest ? 'Meet your supermarket agent' : 'What should we sort out for the household?'}
+                {useOpenStarterExperience ? 'Meet your supermarket agent' : 'What should we sort out for the household?'}
               </h2>
             )}
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">
-              {isGuest
+              {useOpenStarterExperience
                 ? 'Thousands of tracked Irish supermarket prices and ingredient mappings.'
                 : 'Ask your agent to prepare, review or update the shop around your household.'}
             </p>
@@ -545,7 +550,7 @@ function ShoppingAgentInner({
             send={send}
             busy={busy}
             gated={showGuestGate}
-            placeholder={isGuest
+            placeholder={useOpenStarterExperience
               ? 'Ask about products, prices, meals, dietary needs or your household shop.'
               : 'Ask Supermarket.ie what your household needs…'}
             prominent
@@ -570,7 +575,7 @@ function ShoppingAgentInner({
             </div>
           ) : (
             <div className="mt-4">
-              {isGuest && marketStarters && (
+              {useOpenStarterExperience && marketStarters && (
                 <p className="mb-1.5 px-3.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#6e7d73]">
                   Shaped by today&apos;s verified prices and offers
                 </p>
@@ -688,9 +693,11 @@ export type HomePlannerJourneyState = {
 export function HomePlanner({
   onJourneyStateChange,
   primaryHeading = false,
+  continuityMode = false,
 }: {
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
   primaryHeading?: boolean;
+  continuityMode?: boolean;
 } = {}) {
   const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
   const [isGuest, setIsGuest] = useState(true);
@@ -712,6 +719,7 @@ export function HomePlanner({
       saved={loaded.saved}
       storageKey={loaded.storageKey}
       isGuest={isGuest}
+      continuityMode={continuityMode}
       primaryHeading={primaryHeading}
       onJourneyStateChange={onJourneyStateChange}
     />

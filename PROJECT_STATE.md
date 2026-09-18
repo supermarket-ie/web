@@ -961,13 +961,20 @@ route for direct product discovery and manual research; it supports rather than
 competes with the active household-shop journey. Recent-shop links now use the
 saved-list route's actual `list` query parameter.
 
-Public and authenticated Home copy are intentionally separate. The public
-guest agent retains **Ready when you are**, **Meet your supermarket agent** and
-its broad discovery placeholder. The authenticated empty state uses **Your
-agent is ready** and the household-oriented question. These variants are now
-rendered directly from authenticated state rather than rewritten after render
-by a DOM observer, preventing signed-in copy changes from leaking into the
-public homepage.
+The public and authenticated empty agent states now deliberately share **Ready
+when you are**, **Meet your supermarket agent**, the broad discovery placeholder
+and current market-led starter prompts. Authentication alone must not switch the
+user into a household-only starting experience. Household continuation framing
+and starters are reserved for an active weekly shop; an already-persisted agent
+conversation resumes directly. Both variants are rendered explicitly rather
+than rewritten after render by a DOM observer.
+
+The signed-in agent panel also shares the public Home panel's white surface,
+border, shadow and centred placement. A mint radial wash now belongs to the
+signed-in page canvas, the left navigation sits directly over a related mint
+gradient, and the grocery doodle is confined to a subtle right-side background
+field that can pass behind the panel edge. The working surface itself remains
+clean white.
 
 Current persistence boundary: Eve's active event stream is transferred from
 guest to account after sign-in and then stored per account on the current
@@ -982,7 +989,7 @@ Decision-log addition:
   fresh, while Browse remains directly available in primary navigation. The
   runtime remains Eve internally, but signed-in customer copy calls it **your
   agent** rather than exposing that implementation name.
-- **2026-09-18 — Public and signed-in agent copy are isolated.** Guest messaging
-  remains **Meet your supermarket agent** while authenticated Home can use more
-  household-specific wording; both are rendered explicitly without DOM text
-  replacement.
+- **2026-09-18 — Empty Home starts consistently before and after sign-in.** The
+  public and signed-in empty states share the same framing and prompts. Active
+  weekly-shop or persisted-conversation state, not authentication alone, moves
+  Home into continuity mode.

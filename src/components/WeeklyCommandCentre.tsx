@@ -104,6 +104,13 @@ export function WeeklyCommandCentre() {
   const weekLabel = plan?.weekStart ? formatWeekRange(plan.weekStart) : '—';
   const dinnersTotal = plannedDinners.reduce((s, m) => s + (m.estimatedCost ?? 0), 0);
   const lunchesTotal = plannedLunches.reduce((s, m) => s + (m.estimatedCost ?? 0), 0);
+  const hasActiveShop = Boolean(
+    plan && (
+      plan.status !== 'empty'
+      || plan.shoppingList.length > 0
+      || plan.storeAssignment
+    )
+  );
 
   if (loading) {
     return (
@@ -117,10 +124,14 @@ export function WeeklyCommandCentre() {
   }
 
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(290px,0.75fr)]">
-      <section className="min-w-0">
-        <div className="eve-workspace overflow-hidden rounded-[1.75rem] border border-[#d4e4d9] shadow-[0_24px_70px_rgba(38,58,44,0.09)]">
-          <HomePlanner primaryHeading onJourneyStateChange={setJourneyState} />
+    <div className="space-y-5">
+      <section className="relative min-w-0 py-3 sm:px-5 sm:py-5">
+        <div className="relative mx-auto max-w-5xl overflow-hidden rounded-[1.8rem] border border-[#dfe6e0] bg-white shadow-[0_28px_90px_rgba(25,57,38,0.12)]">
+          <HomePlanner
+            primaryHeading
+            continuityMode={hasActiveShop}
+            onJourneyStateChange={setJourneyState}
+          />
         </div>
         {journeyState.hasConversation && (
           <p className="mt-2 text-xs" style={{ color: 'var(--on-surface-variant)' }}>
@@ -141,7 +152,7 @@ export function WeeklyCommandCentre() {
           </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
           <StatusCard label="Dinners" value={`${plannedDinners.length}/7`} sub={plannedDinners.length ? `€${dinnersTotal.toFixed(2)} est.` : 'Ask your agent to plan'} dot={plannedDinners.length ? 'green' : 'none'} />
           <StatusCard label="Lunches" value={`${plannedLunches.length}/5`} sub={plannedLunches.length ? `€${lunchesTotal.toFixed(2)} est.` : 'Ask your agent to plan'} dot={plannedLunches.length ? 'green' : 'none'} />
           <StatusCard label="Shopping" value={shoppingItems > 0 ? `${shoppingItems} items` : '—'} sub={shoppingTotal > 0 ? `€${shoppingTotal.toFixed(2)}` : 'No shop yet'} dot="none" />

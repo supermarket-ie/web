@@ -169,7 +169,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex flex-1">
         {showNav && (
           <aside className="hidden md:flex flex-col flex-shrink-0 sticky top-[57px] self-start h-[calc(100vh-57px)]"
-            style={{ width: 220, background: 'rgba(255,255,255,0.86)', borderRight: '1px solid rgba(0,106,53,0.08)', backdropFilter: 'blur(18px)' }}>
+            style={{
+              width: 220,
+              background: 'linear-gradient(180deg, rgba(224,247,233,0.96) 0%, rgba(241,249,244,0.92) 48%, rgba(248,250,248,0.96) 100%)',
+              borderRight: '1px solid rgba(0,106,53,0.08)',
+              backdropFilter: 'blur(18px)',
+            }}>
             <nav className="flex flex-col pt-2 pb-2 flex-1 overflow-y-auto">
               {NAV_ITEMS.map(item => {
                 const active = item.match(pathname);
