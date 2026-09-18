@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { loadSession, clearSession } from '@/lib/session';
 import { AgentMark } from '@/components/homepage/AgentMark';
+import { isSignedInVisualPreview } from '@/lib/visual-preview';
 
 const NAV_ITEMS = [
   {
@@ -64,7 +65,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const session = loadSession();
-    const token = session?.token ?? null;
+    const token = session?.token ?? (isSignedInVisualPreview() ? '__visual_preview__' : null);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate client-only state after mount
     setListToken(token);
     setReady(true);

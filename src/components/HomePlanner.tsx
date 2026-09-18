@@ -29,6 +29,7 @@ import {
 import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
 import { HouseholdShopCard, householdShopFromPart } from '@/components/HouseholdShopCard';
 import { archivedConversationResumePrompt } from '@/lib/conversation-migration';
+import { isSignedInVisualPreview } from '@/lib/visual-preview';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 const GUEST_EVE_CHAT_KEY = `${LEGACY_EVE_CHAT_KEY}:guest`;
@@ -704,7 +705,7 @@ export function HomePlanner({
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setIsGuest(!loadSession()?.token);
+      setIsGuest(!loadSession()?.token && !isSignedInVisualPreview());
       setLoaded(loadSavedEveChat());
     });
     return () => cancelAnimationFrame(frame);

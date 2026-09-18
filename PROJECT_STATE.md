@@ -983,6 +983,12 @@ Production magic links continue to use the configured public site URL. This
 allows authenticated visual review without depending on Vercel system variables
 or accepting an arbitrary request host as an authentication destination.
 
+For design review only, preview deployments accept
+`?ui_preview=signed-in`. This renders the signed-in shell and empty Home state
+without creating an authenticated session or exposing account data. The mode is
+strictly hostname-gated to this project's Vercel preview pattern and has no
+effect on production.
+
 Current persistence boundary: Eve's active event stream is transferred from
 guest to account after sign-in and then stored per account on the current
 device. Structured household shops continue to persist server-side through the
