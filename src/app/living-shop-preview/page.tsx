@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Isolated visual prototype; this route is not linked from the product.
 export default function LivingShopPreviewPage() {
   return <LivingShopPrototype />;
 }
