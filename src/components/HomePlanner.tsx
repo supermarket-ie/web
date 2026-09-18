@@ -304,12 +304,14 @@ function ShoppingAgentInner({
   storageKey,
   isGuest,
   primaryHeading,
+  signedInEmptyState,
   onJourneyStateChange,
 }: {
   saved: SavedEveChat;
   storageKey: string | null;
   isGuest: boolean;
   primaryHeading: boolean;
+  signedInEmptyState?: { eyebrow: string; title: string; description: string };
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
 }) {
   const [input, setInput] = useState('');
@@ -524,10 +526,10 @@ function ShoppingAgentInner({
           <div className="mb-6">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#397250]">
               <span className="flex size-7 items-center justify-center rounded-full bg-[#daf2e2]"><Sparkles className="size-4" /></span>
-              {isGuest ? 'Ready when you are' : 'Your agent is ready'}
+              {isGuest ? 'Ready when you are' : signedInEmptyState?.eyebrow ?? 'Your agent is ready'}
             </div>
             {primaryHeading ? (
-              <h1 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h1>
+              <h1 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">{isGuest ? 'Meet your supermarket agent' : signedInEmptyState?.title ?? 'What should we sort out for the household?'}</h1>
             ) : (
               <h2 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">
                 {isGuest ? 'Meet your supermarket agent' : 'What should we sort out for the household?'}
@@ -536,7 +538,7 @@ function ShoppingAgentInner({
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">
               {isGuest
                 ? 'Thousands of tracked Irish supermarket prices and ingredient mappings.'
-                : 'Ask your agent to prepare, review or update the shop around your household.'}
+                : signedInEmptyState?.description ?? 'Ask your agent to prepare, review or update the shop around your household.'}
             </p>
           </div>
 
@@ -689,9 +691,11 @@ export type HomePlannerJourneyState = {
 export function HomePlanner({
   onJourneyStateChange,
   primaryHeading = false,
+  signedInEmptyState,
 }: {
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
   primaryHeading?: boolean;
+  signedInEmptyState?: { eyebrow: string; title: string; description: string };
 } = {}) {
   const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
   const [isGuest, setIsGuest] = useState(true);
@@ -714,6 +718,7 @@ export function HomePlanner({
       storageKey={loaded.storageKey}
       isGuest={isGuest}
       primaryHeading={primaryHeading}
+      signedInEmptyState={signedInEmptyState}
       onJourneyStateChange={onJourneyStateChange}
     />
   );
