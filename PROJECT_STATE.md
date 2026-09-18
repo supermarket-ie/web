@@ -330,7 +330,7 @@ For every material Supermarket.ie development session:
 - **2026-08-29 — Dunnes confirmed as Instacart Storefront execution.** Production gateway/search works at store 258; cart resource allows GET/POST and returns 401 without authentication. Consequence: design toward a shared Storefront execution engine for Dunnes/SuperValu rather than duplicate retailer-specific cart plumbing.
 - **2026-08-29 — Pepesto public runtime boundary clarified.** Free MCP/list handoff still finishes through Pepesto's mobile app/WebView; no browser-only cross-origin shortcut has been identified.
 - **2026-08-29 — Repository documentation is canonical project memory.** Future sessions must read and maintain these docs.
-- **2026-09-18 — Signed-in Home visual direction modernised.** The forest-green Home banner and narrow dashboard stack were replaced with a wider consumer shopping workspace. Eve is the dominant pale-mint patterned surface on a neutral-stone page, while the current shop is a crisp-white live companion and household insights use lighter, purpose-specific cards. Green is reserved for actions and positive state rather than large decorative banners; conversation persistence and fresh-start behaviour remain unchanged.
+- **2026-09-18 — Signed-in Home visual direction modernised.** The forest-green Home banner and narrow dashboard stack were replaced with a wider consumer shopping workspace. The agent is the dominant pale-mint patterned surface on a neutral-stone page, while the current shop is a crisp-white live companion and household insights use lighter, purpose-specific cards. Green is reserved for actions and positive state rather than large decorative banners; conversation persistence and fresh-start behaviour remain unchanged.
 
 ## 16. Trusted pricing architecture and current state
 
@@ -948,11 +948,12 @@ Decision-log addition:
 
 ## 31. State-aware signed-in Home — 18 September 2026
 
-The authenticated Home now treats the persisted Eve journey as the primary
-workspace. When account-scoped Eve events contain a user turn, Home leads with
-**Continue with Eve** and identifies whether the journey is still in progress or
-already contains a proposed structured shop. With no prior Eve interaction, it
-leads with **Start with Eve** and the existing fresh-shop starters.
+The authenticated Home now treats the persisted agent journey as the primary
+workspace. When account-scoped Eve events contain a user turn, Home restores the
+conversation directly. With no prior interaction, it opens with **Your agent is
+ready**, the primary question and the existing fresh-shop starters. Redundant
+page-level and section-level introductions are deliberately omitted so the
+working surface begins at the top of Home.
 
 The current-week summary remains available immediately below Eve as supporting
 deterministic shopping state. Browse remains a primary signed-in navigation
@@ -968,6 +969,8 @@ cross-device account storage until server-backed Eve event persistence exists.
 
 Decision-log addition:
 
-- **2026-09-18 — Persisted Eve state leads signed-in Home.** A returning active
+- **2026-09-18 — Persisted agent state leads signed-in Home.** A returning active
   journey resumes ahead of weekly status; an account with no interaction starts
-  fresh, while Browse remains directly available in primary navigation.
+  fresh, while Browse remains directly available in primary navigation. The
+  runtime remains Eve internally, but signed-in customer copy calls it **your
+  agent** rather than exposing that implementation name.
