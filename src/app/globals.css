@@ -168,6 +168,15 @@ body {
   font-family: var(--font-plus-jakarta), 'Plus Jakarta Sans', Arial, Helvetica, sans-serif;
 }
 
+.eve-workspace {
+  background-color: #f7f1e7;
+  background-image:
+    linear-gradient(rgba(249, 246, 239, 0.76), rgba(249, 246, 239, 0.76)),
+    url('/grocery-doodle-pattern.png');
+  background-position: center;
+  background-size: auto, 560px 560px;
+}
+
 /* ── Utility classes ─────────────────────────────────────────────────── */
 
 /* Primary CTA — signature gradient button */

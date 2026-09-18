@@ -21,7 +21,7 @@ function StatusCard({ label, value, sub, accent, dot }: {
   dot?: 'green' | 'amber' | 'none';
 }) {
   return (
-    <div className="rounded-2xl px-3 py-3 flex flex-col gap-0.5" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+    <div className="flex flex-col gap-1 rounded-[1.15rem] border border-black/[0.055] bg-white/80 px-3.5 py-3.5 shadow-[0_8px_24px_rgba(35,55,42,0.035)]">
       <div className="flex items-center gap-1.5">
         {dot && dot !== 'none' && <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: dot === 'green' ? '#00944A' : '#F59E0B' }} />}
         <span className="text-xs font-medium" style={{ color: 'var(--on-surface-variant)' }}>{label}</span>
@@ -117,8 +117,8 @@ export function WeeklyCommandCentre() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <section>
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(290px,0.75fr)]">
+      <section className="min-w-0">
         <div className="mb-3 flex items-end justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#00944A' }}>
@@ -134,7 +134,7 @@ export function WeeklyCommandCentre() {
             </span>
           )}
         </div>
-        <div className="overflow-hidden rounded-2xl" style={{ border: '1px solid var(--surface-container)' }}>
+        <div className="eve-workspace overflow-hidden rounded-[1.75rem] border border-[#dfd9cc] shadow-[0_24px_70px_rgba(38,58,44,0.10)]">
           <HomePlanner onJourneyStateChange={setJourneyState} />
         </div>
         {journeyState.hasConversation && (
@@ -144,32 +144,34 @@ export function WeeklyCommandCentre() {
         )}
       </section>
 
-      <div className="flex items-center justify-between pt-1">
-        <div>
-          <h2 className="text-base font-bold" style={{ color: 'var(--on-surface)' }}>Current shop</h2>
-          <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{weekLabel}</p>
+      <aside className="rounded-[1.5rem] border border-black/[0.06] bg-[#fffdf8] p-4 shadow-[0_18px_55px_rgba(38,58,44,0.07)] sm:p-5 lg:mt-9">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#9c654c]">This week</p>
+            <h2 className="mt-1 text-lg font-bold tracking-tight text-[#243128]">Current shop</h2>
+            <p className="text-xs text-[#7c857f]">{weekLabel}</p>
+          </div>
+          <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: plan?.status === 'complete' ? '#dff4e6' : plan?.status === 'partial' ? '#fff0b8' : '#f0ede6', color: plan?.status === 'complete' ? '#176b3a' : plan?.status === 'partial' ? '#755900' : '#747b76' }}>
+            {plan?.status === 'complete' ? 'Ready' : plan?.status === 'partial' ? 'In progress' : 'Not started'}
+          </span>
         </div>
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: plan?.status === 'complete' ? '#00944A' : plan?.status === 'partial' ? 'var(--primary-container)' : 'var(--surface-container)', color: plan?.status === 'complete' ? '#fff' : plan?.status === 'partial' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)' }}>
-          {plan?.status === 'complete' ? 'Ready' : plan?.status === 'partial' ? 'In progress' : 'Not started'}
-        </span>
-      </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <StatusCard label="Dinners" value={`${plannedDinners.length}/7`} sub={plannedDinners.length ? `€${dinnersTotal.toFixed(2)} est.` : 'Ask us to plan'} dot={plannedDinners.length ? 'green' : 'none'} />
-        <StatusCard label="Lunches" value={`${plannedLunches.length}/5`} sub={plannedLunches.length ? `€${lunchesTotal.toFixed(2)} est.` : 'Ask us to plan'} dot={plannedLunches.length ? 'green' : 'none'} />
-        <StatusCard label="Shopping" value={shoppingItems > 0 ? `${shoppingItems} items` : '—'} sub={shoppingTotal > 0 ? `€${shoppingTotal.toFixed(2)}` : 'No shop yet'} dot="none" />
-        <StatusCard label="Budget" value={budget?.target ? `€${budget.current.toFixed(2)}` : '—'} sub={budget?.target ? `of €${budget.target} target` : 'No target set'} accent={!budget?.onTrack} dot={budget?.target ? (budget.onTrack ? 'green' : 'amber') : 'none'} />
-      </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <StatusCard label="Dinners" value={`${plannedDinners.length}/7`} sub={plannedDinners.length ? `€${dinnersTotal.toFixed(2)} est.` : 'Ask Eve to plan'} dot={plannedDinners.length ? 'green' : 'none'} />
+          <StatusCard label="Lunches" value={`${plannedLunches.length}/5`} sub={plannedLunches.length ? `€${lunchesTotal.toFixed(2)} est.` : 'Ask Eve to plan'} dot={plannedLunches.length ? 'green' : 'none'} />
+          <StatusCard label="Shopping" value={shoppingItems > 0 ? `${shoppingItems} items` : '—'} sub={shoppingTotal > 0 ? `€${shoppingTotal.toFixed(2)}` : 'No shop yet'} dot="none" />
+          <StatusCard label="Budget" value={budget?.target ? `€${budget.current.toFixed(2)}` : '—'} sub={budget?.target ? `of €${budget.target} target` : 'No target set'} accent={!budget?.onTrack} dot={budget?.target ? (budget.onTrack ? 'green' : 'amber') : 'none'} />
+        </div>
 
       {plan?.agentNotices && plan.agentNotices.length > 0 && (
-        <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#00944A' }}>Worth knowing</p>
+        <div className="mt-3 rounded-[1.15rem] bg-[#eef8f1] px-4 py-3.5">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#168049]">Worth knowing</p>
           <ul className="space-y-1.5">{plan.agentNotices.map((n, i) => <NoticeRow key={i} notice={n} />)}</ul>
         </div>
       )}
 
       {plannedDinners.length > 0 && (
-        <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
+        <div className="mt-3 overflow-hidden rounded-[1.15rem] border border-black/[0.06]">
           <button className="w-full flex items-center justify-between px-4 py-3" style={{ background: 'var(--surface-container-lowest)' }} onClick={() => setShowDinners(v => !v)}>
             <span className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>Dinners</span>
             <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{showDinners ? 'Hide' : `Show ${plannedDinners.length} meals`}</span>
@@ -179,7 +181,7 @@ export function WeeklyCommandCentre() {
       )}
 
       {plannedLunches.length > 0 && (
-        <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
+        <div className="mt-3 overflow-hidden rounded-[1.15rem] border border-black/[0.06]">
           <button className="w-full flex items-center justify-between px-4 py-3" style={{ background: 'var(--surface-container-lowest)' }} onClick={() => setShowLunches(v => !v)}>
             <span className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>Lunches</span>
             <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{showLunches ? 'Hide' : `Show ${plannedLunches.length} meals`}</span>
@@ -187,7 +189,7 @@ export function WeeklyCommandCentre() {
           {showLunches && <div className="px-4 pb-3" style={{ background: 'var(--surface-container-lowest)' }}>{plannedLunches.map((slot, i) => <MealRow key={i} slot={slot} />)}</div>}
         </div>
       )}
-
+      </aside>
     </div>
   );
 }

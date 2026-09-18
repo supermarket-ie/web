@@ -30,28 +30,29 @@ export function HomeActivity() {
   if (!watches.length && !lists.length && !(briefing?.insights?.length)) return null;
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-4 border-t border-black/[0.06] pt-7">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold" style={{ color: 'var(--on-surface)' }}>Household activity</h2>
-        <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Previous shops and useful watches</span>
+        <h2 className="text-xl font-bold tracking-[-0.025em] text-[#243128]">Around your household</h2>
+        <span className="text-sm text-[#7b847e]">Useful changes and previous shops</span>
       </div>
 
-      {briefing?.insights?.length ? (
-        <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#00944A' }}>Worth knowing</p>
-          <div className="space-y-2">
-            {briefing.insights.slice(0, 3).map((insight, i) => (
-              <div key={i}>
-                <p className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>{insight.title}</p>
-                <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{insight.body}</p>
-              </div>
-            ))}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
+        {briefing?.insights?.length ? (
+          <div className="rounded-[1.4rem] border border-[#d9e9dd] bg-[#edf7f0] px-5 py-4">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#168049]">Worth knowing</p>
+            <div className="space-y-2">
+              {briefing.insights.slice(0, 3).map((insight, i) => (
+                <div key={i}>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>{insight.title}</p>
+                  <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{insight.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      {watches.length ? (
-        <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+        {watches.length ? (
+        <div className="rounded-[1.4rem] border border-[#f0dfb9] bg-[#fff7df] px-5 py-4">
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>Watching for you</p>
             <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{watches.length} active</span>
@@ -68,8 +69,8 @@ export function HomeActivity() {
         </div>
       ) : null}
 
-      {lists.length ? (
-        <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
+        {lists.length ? (
+        <div className="rounded-[1.4rem] border border-[#e5dcd4] bg-[#fffaf5] px-5 py-4">
           <p className="text-sm font-semibold mb-2" style={{ color: 'var(--on-surface)' }}>Recent shops</p>
           <div className="space-y-2">
             {lists.map(list => {
@@ -84,6 +85,7 @@ export function HomeActivity() {
           </div>
         </div>
       ) : null}
+      </div>
     </section>
   );
 }

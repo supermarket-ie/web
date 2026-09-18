@@ -515,14 +515,14 @@ function ShoppingAgentInner({
 
   if (isEmpty) {
     return (
-      <div className="flex min-h-[470px] flex-col bg-white px-5 py-6 sm:px-8 sm:py-8">
+      <div className="flex min-h-[440px] flex-col bg-transparent px-5 py-6 sm:px-8 sm:py-8">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
           <div className="mb-6">
-            <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#397250]">
-              <span className="flex size-6 items-center justify-center rounded-full bg-[#e5f7eb]"><Sparkles className="size-3.5" /></span>
-              Ready when you are
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#397250]">
+              <span className="flex size-7 items-center justify-center rounded-full bg-[#daf2e2]"><Sparkles className="size-4" /></span>
+              Eve is ready
             </div>
-            <h2 className="text-balance text-2xl font-semibold tracking-[-0.035em] text-[#152219] sm:text-[2rem]">What do you need for the household?</h2>
+            <h2 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">
               {isGuest
                 ? 'Thousands of tracked Irish supermarket prices and ingredient mappings.'
@@ -580,7 +580,7 @@ function ShoppingAgentInner({
   }
 
   return (
-    <div className="flex min-h-[470px] max-h-[68vh] flex-col bg-white">
+    <div className="flex min-h-[470px] max-h-[68vh] flex-col bg-white/88 backdrop-blur-[2px]">
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
         {messages.map(message => {
           const text = messageText(message);
