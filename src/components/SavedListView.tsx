@@ -108,7 +108,7 @@ function Section({ title, children, action }: { title: string; children: React.R
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#00DCFF', textShadow: '0 0 12px rgba(0,220,255,0.3)' }}>{title}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--primary)' }}>{title}</h3>
         {action}
       </div>
       {children}
@@ -131,7 +131,7 @@ function SameAgainBanner({ listName, token, onDismiss }: { listName: string; tok
         {/* Subtle cyan glow blob */}
         <div className="absolute pointer-events-none" style={{
           width: 150, height: 150, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(0,220,255,0.15) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(107,254,156,0.13) 0%, transparent 70%)',
           top: -30, right: -30,
         }} />
         <div className="relative flex items-center justify-between">
@@ -188,7 +188,7 @@ function HeroCard({
         {/* Subtle cyan glow blob */}
         <div className="absolute pointer-events-none" style={{
           width: 200, height: 200, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(0,220,255,0.12) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(107,254,156,0.12) 0%, transparent 70%)',
           top: -60, right: -40,
         }} />
         <div className="relative flex items-start justify-between">
@@ -287,7 +287,7 @@ function QuickActions({ conversationId, token }: { conversationId: string | null
           return (
             <Link key={label} href={dest}
               className="flex-shrink-0 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-80"
-              style={{ background: 'rgba(0,220,255,0.07)', color: 'var(--on-surface)', border: '1px solid rgba(0,220,255,0.28)' }}>
+              style={{ background: 'rgba(0,106,53,0.06)', color: 'var(--on-surface)', border: '1px solid rgba(0,106,53,0.18)' }}>
               {label}
             </Link>
           );
@@ -508,15 +508,15 @@ function CheckoutCard({ structuredItems, storeTotals, listName }: { structuredIt
   }
 
   return (
-    <Section title="Checkout">
+    <Section title="Use your shop">
       <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
         {/* SuperValu integration */}
         <div className="flex items-center justify-between px-4"
           style={{ background: 'var(--surface-container-lowest)', borderBottom: '1px solid var(--surface-container)', minHeight: '56px' }}>
           <div className="flex items-center gap-3">
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>Send to checkout</p>
-              <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Coming soon</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--on-background)' }}>Retailer handoff</p>
+              <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Not available for this saved shop yet</p>
             </div>
           </div>
         </div>
@@ -624,7 +624,7 @@ export function SavedListView({
         }} />
         <div className="gradient-blob" style={{
           width: 400, height: 400,
-          background: 'linear-gradient(135deg, rgba(0,220,255,0.06), rgba(107,254,156,0.04))',
+          background: 'linear-gradient(135deg, rgba(0,106,53,0.045), rgba(107,254,156,0.04))',
           top: '40%', right: -150,
         }} />
         <div className="absolute inset-0 dot-grid opacity-40" />
