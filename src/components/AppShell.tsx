@@ -169,8 +169,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex flex-1">
         {showNav && (
           <aside className="hidden md:flex flex-col flex-shrink-0 sticky top-[57px] self-start h-[calc(100vh-57px)]"
-            style={{ width: 220, background: 'rgba(255,255,255,0.86)', borderRight: '1px solid rgba(0,106,53,0.08)', backdropFilter: 'blur(18px)' }}>
-            <nav className="flex flex-col pt-2 pb-2 flex-1 overflow-y-auto">
+            style={{ width: 220, background: 'linear-gradient(180deg, rgba(229,247,235,0.92), rgba(246,250,247,0.82))', borderRight: '1px solid rgba(0,106,53,0.07)', backdropFilter: 'blur(18px)' }}>
+            <nav className="flex flex-col gap-1 px-3 pt-5 pb-2 flex-1 overflow-y-auto">
               {NAV_ITEMS.map(item => {
                 const active = item.match(pathname);
                 return (
@@ -183,7 +183,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 );
               })}
             </nav>
-            <div style={{ borderTop: '1px solid rgba(0,106,53,0.08)', padding: '8px 0' }}>
+            <div style={{ borderTop: '1px solid rgba(0,106,53,0.08)', padding: '8px 12px' }}>
               <button onClick={signOut} className="sidebar-nav-item"
                 style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
                 <span className="sidebar-nav-icon">
@@ -256,12 +256,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <style>{`
         .sidebar-nav-item {
           display: flex; align-items: center; gap: 8px;
-          margin: 0 6px; padding: 5px 8px; border-radius: 6px;
-          font-size: 14px; font-weight: 400; color: var(--on-background);
+          margin: 0; padding: 10px 12px; border-radius: 12px;
+          font-size: 14px; font-weight: 500; color: var(--on-background);
           letter-spacing: -0.01em; transition: background 0.1s; line-height: 1.4;
         }
-        .sidebar-nav-item:hover { background: rgba(0,106,53,0.06); color: var(--primary); }
-        .sidebar-nav-item[data-active="true"] { background: rgba(0,106,53,0.09); color: var(--primary); font-weight: 700; }
+        .sidebar-nav-item:hover { background: rgba(255,255,255,0.58); color: var(--primary); }
+        .sidebar-nav-item[data-active="true"] { background: rgba(255,255,255,0.9); color: var(--primary); font-weight: 700; box-shadow: 0 8px 22px rgba(29,73,45,0.08); }
         .sidebar-nav-icon {
           display: flex; align-items: center; justify-content: center;
           width: 18px; height: 18px; flex-shrink: 0; opacity: 0.72; color: currentColor;
