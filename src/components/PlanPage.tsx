@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { loadSession } from '@/lib/session';
 import { WeeklyCommandCentre } from '@/components/WeeklyCommandCentre';
 import { HomeActivity } from '@/components/HomeActivity';
+import { isSignedInVisualPreview } from '@/lib/visual-preview';
 
 export function PlanPage() {
   const [isSignedIn, setIsSignedIn] = useState(false);
@@ -12,7 +13,7 @@ export function PlanPage() {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const session = loadSession();
-      const signedIn = !!session?.token;
+      const signedIn = !!session?.token || isSignedInVisualPreview();
       setIsSignedIn(signedIn);
       setReady(true);
       if (signedIn) {
