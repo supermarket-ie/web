@@ -119,23 +119,8 @@ export function WeeklyCommandCentre() {
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(290px,0.75fr)]">
       <section className="min-w-0">
-        <div className="mb-3 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#00944A' }}>
-              {journeyState.hasConversation ? 'Pick up where you left off' : 'Plan your next shop'}
-            </p>
-            <h2 className="mt-1 text-xl font-bold tracking-tight" style={{ color: 'var(--on-surface)' }}>
-              {journeyState.hasConversation ? 'Continue with Eve' : 'Start with Eve'}
-            </h2>
-          </div>
-          {journeyState.hasConversation && (
-            <span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: '#e5f7eb', color: '#176b3a' }}>
-              {journeyState.hasProposedShop ? 'Shop prepared' : 'In progress'}
-            </span>
-          )}
-        </div>
         <div className="eve-workspace overflow-hidden rounded-[1.75rem] border border-[#d4e4d9] shadow-[0_24px_70px_rgba(38,58,44,0.09)]">
-          <HomePlanner onJourneyStateChange={setJourneyState} />
+          <HomePlanner primaryHeading onJourneyStateChange={setJourneyState} />
         </div>
         {journeyState.hasConversation && (
           <p className="mt-2 text-xs" style={{ color: 'var(--on-surface-variant)' }}>
@@ -144,7 +129,7 @@ export function WeeklyCommandCentre() {
         )}
       </section>
 
-      <aside className="rounded-[1.5rem] border border-black/[0.065] bg-white p-4 shadow-[0_18px_55px_rgba(38,58,44,0.07)] sm:p-5 lg:mt-9">
+      <aside className="rounded-[1.5rem] border border-black/[0.065] bg-white p-4 shadow-[0_18px_55px_rgba(38,58,44,0.07)] sm:p-5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#168049]">This week</p>
@@ -157,8 +142,8 @@ export function WeeklyCommandCentre() {
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <StatusCard label="Dinners" value={`${plannedDinners.length}/7`} sub={plannedDinners.length ? `€${dinnersTotal.toFixed(2)} est.` : 'Ask Eve to plan'} dot={plannedDinners.length ? 'green' : 'none'} />
-          <StatusCard label="Lunches" value={`${plannedLunches.length}/5`} sub={plannedLunches.length ? `€${lunchesTotal.toFixed(2)} est.` : 'Ask Eve to plan'} dot={plannedLunches.length ? 'green' : 'none'} />
+          <StatusCard label="Dinners" value={`${plannedDinners.length}/7`} sub={plannedDinners.length ? `€${dinnersTotal.toFixed(2)} est.` : 'Ask your agent to plan'} dot={plannedDinners.length ? 'green' : 'none'} />
+          <StatusCard label="Lunches" value={`${plannedLunches.length}/5`} sub={plannedLunches.length ? `€${lunchesTotal.toFixed(2)} est.` : 'Ask your agent to plan'} dot={plannedLunches.length ? 'green' : 'none'} />
           <StatusCard label="Shopping" value={shoppingItems > 0 ? `${shoppingItems} items` : '—'} sub={shoppingTotal > 0 ? `€${shoppingTotal.toFixed(2)}` : 'No shop yet'} dot="none" />
           <StatusCard label="Budget" value={budget?.target ? `€${budget.current.toFixed(2)}` : '—'} sub={budget?.target ? `of €${budget.target} target` : 'No target set'} accent={!budget?.onTrack} dot={budget?.target ? (budget.onTrack ? 'green' : 'amber') : 'none'} />
         </div>

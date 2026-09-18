@@ -301,11 +301,13 @@ function ShoppingAgentInner({
   saved,
   storageKey,
   isGuest,
+  primaryHeading,
   onJourneyStateChange,
 }: {
   saved: SavedEveChat;
   storageKey: string | null;
   isGuest: boolean;
+  primaryHeading: boolean;
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
 }) {
   const [input, setInput] = useState('');
@@ -520,9 +522,13 @@ function ShoppingAgentInner({
           <div className="mb-6">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#397250]">
               <span className="flex size-7 items-center justify-center rounded-full bg-[#daf2e2]"><Sparkles className="size-4" /></span>
-              Eve is ready
+              Your agent is ready
             </div>
-            <h2 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h2>
+            {primaryHeading ? (
+              <h1 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h1>
+            ) : (
+              <h2 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h2>
+            )}
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">
               {isGuest
                 ? 'Thousands of tracked Irish supermarket prices and ingredient mappings.'
@@ -581,6 +587,7 @@ function ShoppingAgentInner({
 
   return (
     <div className="flex min-h-[470px] max-h-[68vh] flex-col bg-white/88 backdrop-blur-[2px]">
+      {primaryHeading && <h1 className="sr-only">Your agent</h1>}
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
         {messages.map(message => {
           const text = messageText(message);
@@ -658,8 +665,10 @@ export type HomePlannerJourneyState = {
 
 export function HomePlanner({
   onJourneyStateChange,
+  primaryHeading = false,
 }: {
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
+  primaryHeading?: boolean;
 } = {}) {
   const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
   const [isGuest, setIsGuest] = useState(true);
@@ -681,6 +690,7 @@ export function HomePlanner({
       saved={loaded.saved}
       storageKey={loaded.storageKey}
       isGuest={isGuest}
+      primaryHeading={primaryHeading}
       onJourneyStateChange={onJourneyStateChange}
     />
   );
