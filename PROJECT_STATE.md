@@ -976,6 +976,12 @@ gradient, and the grocery doodle is confined to a subtle right-side background
 field that can pass behind the panel edge. The working surface itself remains
 clean white.
 
+Preview deployments generate sign-in session links against their own trusted
+`VERCEL_URL` and return to preview Home. Production magic links continue to use
+the configured public site URL. This allows authenticated visual review without
+redirecting a reviewer out of the preview or accepting an arbitrary request
+host as an authentication destination.
+
 Current persistence boundary: Eve's active event stream is transferred from
 guest to account after sign-in and then stored per account on the current
 device. Structured household shops continue to persist server-side through the

@@ -10,6 +10,13 @@ const WINDOW_MS = 15 * 60 * 1000;
 const MAX_REQUESTS = 5;
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
+function sessionBaseUrl() {
+  if (process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  return process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.supermarket.ie';
+}
+
 function clientKey(request: NextRequest) {
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     ?? request.headers.get('x-real-ip')
@@ -65,7 +72,8 @@ export async function POST(request: NextRequest) {
 
     // The bearer token exists only on the one-time exchange URL. The exchange
     // validates it, sets an HttpOnly cookie and redirects to a clean /list URL.
-    const magicLink = `${process.env.NEXT_PUBLIC_SITE_URL}/api/session?token=${encodeURIComponent(token)}`;
+    const previewSession = process.env.VERCEL_ENV === 'preview';
+    const magicLink = `${sessionBaseUrl()}/api/session?token=${encodeURIComponent(token)}${previewSession ? '&next=home' : ''}`;
 
     await resend.emails.send({
       from: 'supermarket.ie <hello@mail.supermarket.ie>',
