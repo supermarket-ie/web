@@ -48,7 +48,7 @@ function FieldSection({ title, subtitle, children }: { title: string; subtitle?:
   return (
     <div className="mb-6">
       <div className="mb-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#00DCFF', textShadow: '0 0 10px rgba(0,220,255,0.3)' }}>
+        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--primary)' }}>
           {title}
         </h3>
         {subtitle && <p className="text-xs mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>{subtitle}</p>}
