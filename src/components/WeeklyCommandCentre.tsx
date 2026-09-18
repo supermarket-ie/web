@@ -11,6 +11,35 @@ import type { CurrentShopLine } from '@/lib/shopping/current-shop-summary';
 
 type HomeState = 'new' | 'progress' | 'ready';
 
+function previewPlan(state: HomeState): WeeklyPlanState {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));
+  const weekStart = monday.toISOString().slice(0, 10);
+  const ready = state === 'ready';
+  const inProgress = state === 'progress';
+  const lines: CurrentShopLine[] = ready ? [
+    { label: 'Five planned dinners', category: 'Meals this week', quantity: 1, price: 39.62, unresolved: false },
+    { label: 'Lunches and breakfasts', category: 'Meals this week', quantity: 1, price: 18.31, unresolved: false },
+    { label: 'Milk, bread, eggs and fruit', category: 'Household essentials', quantity: 1, price: 15.18, unresolved: false },
+    { label: 'Cleaning and toiletries', category: 'Household essentials', quantity: 1, price: 13.29, unresolved: false },
+  ] : inProgress ? [
+    { label: 'Chicken fajitas', category: 'Meals this week', quantity: 1, price: 12.4, unresolved: false },
+    { label: 'Tomato and lentil pasta', category: 'Meals this week', quantity: 1, price: 7.85, unresolved: false },
+    { label: 'One dinner still undecided', category: 'Meals this week', quantity: 1, price: null, unresolved: true },
+    { label: 'Milk, bread and eggs', category: 'Everyday essentials', quantity: 1, price: 8.17, unresolved: false },
+  ] : [];
+  return {
+    weekStart,
+    meals: { dinners: Array.from({ length: ready ? 5 : inProgress ? 4 : 0 }, (_, index) => ({ day: `Day ${index + 1}`, name: 'Planned dinner', ingredients: [], estimatedCost: null, status: 'planned' as const })), lunches: [] },
+    shoppingList: [], storeAssignment: null,
+    budget: { target: 100, current: ready ? 86.4 : inProgress ? 28.42 : 0, onTrack: true },
+    agentNotices: [], status: ready ? 'complete' : inProgress ? 'partial' : 'empty',
+    currentShop: lines.length ? { id: 'preview-shop', name: 'This week\'s household shop', generatedAt: now.toISOString(), itemCount: ready ? 24 : 18, estimatedTotal: ready ? 86.4 : 28.42, unresolvedCount: ready ? 0 : 1, lines } : null,
+  };
+}
+
 function formatWeekRange(weekStart: string): string {
   const start = new Date(`${weekStart}T00:00:00`);
   const end = new Date(start);
@@ -116,10 +145,10 @@ function LivingReceipt({ plan, state, token }: { plan: WeeklyPlanState | null; s
   );
 }
 
-export function WeeklyCommandCentre() {
-  const [plan, setPlan] = useState<WeeklyPlanState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState<string | null>(null);
+export function WeeklyCommandCentre({ visualPreviewState }: { visualPreviewState?: HomeState }) {
+  const [plan, setPlan] = useState<WeeklyPlanState | null>(() => visualPreviewState ? previewPlan(visualPreviewState) : null);
+  const [loading, setLoading] = useState(!visualPreviewState);
+  const [token, setToken] = useState<string | null>(visualPreviewState ? '__cookie__' : null);
   const [journeyState, setJourneyState] = useState<HomePlannerJourneyState>({ hasConversation: false, hasProposedShop: false });
 
   const fetchPlan = useCallback(async (sessionToken: string) => {
@@ -132,6 +161,7 @@ export function WeeklyCommandCentre() {
   }, []);
 
   useEffect(() => {
+    if (visualPreviewState) return;
     const frame = requestAnimationFrame(() => {
       const sessionToken = loadSession()?.token ?? null;
       setToken(sessionToken);
@@ -139,14 +169,14 @@ export function WeeklyCommandCentre() {
       else setLoading(false);
     });
     return () => cancelAnimationFrame(frame);
-  }, [fetchPlan]);
+  }, [fetchPlan, visualPreviewState]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || visualPreviewState) return;
     const refreshAfterAgentTurn = () => fetchPlan(token).catch(() => {});
     window.addEventListener('sm:eve-turn-finished', refreshAfterAgentTurn);
     return () => window.removeEventListener('sm:eve-turn-finished', refreshAfterAgentTurn);
-  }, [token, fetchPlan]);
+  }, [token, fetchPlan, visualPreviewState]);
 
   const homeState = useMemo<HomeState>(() => {
     const shop = plan?.currentShop;
