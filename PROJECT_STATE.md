@@ -944,3 +944,29 @@ Decision-log addition:
   My Shop, Browse and Household share the green-led palette, tonal surfaces and
   agent vocabulary; legacy cyan planner styling and premature checkout language
   are removed from the principal authenticated journey.
+
+## 31. State-aware signed-in Home — 18 September 2026
+
+The authenticated Home now treats the persisted Eve journey as the primary
+workspace. When account-scoped Eve events contain a user turn, Home leads with
+**Continue with Eve** and identifies whether the journey is still in progress or
+already contains a proposed structured shop. With no prior Eve interaction, it
+leads with **Start with Eve** and the existing fresh-shop starters.
+
+The current-week summary remains available immediately below Eve as supporting
+deterministic shopping state. Browse remains a primary signed-in navigation
+route for direct product discovery and manual research; it supports rather than
+competes with the active household-shop journey. Recent-shop links now use the
+saved-list route's actual `list` query parameter.
+
+Current persistence boundary: Eve's active event stream is transferred from
+guest to account after sign-in and then stored per account on the current
+device. Structured household shops continue to persist server-side through the
+validated saved-list path. Do not describe the complete Eve transcript as
+cross-device account storage until server-backed Eve event persistence exists.
+
+Decision-log addition:
+
+- **2026-09-18 — Persisted Eve state leads signed-in Home.** A returning active
+  journey resumes ahead of weekly status; an account with no interaction starts
+  fresh, while Browse remains directly available in primary navigation.
