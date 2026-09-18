@@ -40,7 +40,7 @@ export function PlanPage() {
             <div className="relative">
               <h1 className="font-bold text-xl leading-tight" style={{ background: 'linear-gradient(135deg, #ffffff, #6BFE9C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Home</h1>
               <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.78)' }}>
-                Tell Supermarket.ie what you need — we’ll remember, prepare, watch and help manage the household shop.
+                Continue your shop with Eve, or start fresh when there is nothing in progress.
               </p>
             </div>
           </div>
