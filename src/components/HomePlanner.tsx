@@ -273,6 +273,7 @@ function AgentComposer({ input, setInput, send, busy, gated, placeholder, promin
       style={{ borderColor: 'rgba(20, 46, 31, 0.12)' }}
     >
       <textarea
+        aria-label="Tell your agent what to change"
         value={input}
         onChange={event => setInput(event.target.value)}
         onKeyDown={event => {
@@ -518,7 +519,7 @@ function ShoppingAgentInner({
 
   if (isEmpty) {
     return (
-      <div className="flex min-h-[440px] flex-col bg-transparent px-5 py-6 sm:px-8 sm:py-8">
+      <div className={`flex flex-col bg-transparent px-5 py-6 sm:px-8 sm:py-8 ${primaryHeading ? 'min-h-[590px]' : 'min-h-[440px]'}`}>
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
           <div className="mb-6">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#397250]">
@@ -599,7 +600,7 @@ function ShoppingAgentInner({
   }
 
   return (
-    <div className="flex min-h-[470px] max-h-[68vh] flex-col bg-white/88 backdrop-blur-[2px]">
+    <div className={`flex max-h-[68vh] flex-col bg-white/88 backdrop-blur-[2px] ${primaryHeading ? 'min-h-[590px]' : 'min-h-[470px]'}`}>
       {primaryHeading && <h1 className="sr-only">Your agent</h1>}
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
         {messages.map(message => {
