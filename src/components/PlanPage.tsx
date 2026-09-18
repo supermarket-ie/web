@@ -26,26 +26,17 @@ export function PlanPage() {
   if (!ready || !isSignedIn) return null;
 
   return (
-    <div className="min-h-screen relative overflow-hidden noise-bg" style={{ background: 'var(--surface)' }}>
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="gradient-blob" style={{ width: 500, height: 500, background: 'linear-gradient(135deg, rgba(0,106,53,0.10), rgba(107,254,156,0.07))', top: -200, left: -100 }} />
-        <div className="gradient-blob" style={{ width: 400, height: 400, background: 'linear-gradient(135deg, rgba(0,220,255,0.07), rgba(107,254,156,0.04))', top: '40%', right: -150 }} />
-        <div className="absolute inset-0 dot-grid opacity-40" />
-      </div>
-
-      <div className="relative z-10 max-w-2xl mx-auto px-4 pt-6 pb-24 space-y-6">
-        <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-          <div className="px-5 py-4 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #006A35 0%, #00944A 60%, #00a854 100%)' }}>
-            <div className="absolute pointer-events-none" style={{ width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,220,255,0.12) 0%, transparent 70%)', top: -60, right: -40 }} />
-            <div className="relative">
-              <h1 className="font-bold text-xl leading-tight" style={{ background: 'linear-gradient(135deg, #ffffff, #6BFE9C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Home</h1>
-              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.78)' }}>
-                Continue your shop with Eve, or start fresh when there is nothing in progress.
-              </p>
-            </div>
+    <div className="min-h-screen bg-[#f7f5ef]">
+      <div className="mx-auto max-w-[1180px] space-y-8 px-4 pb-24 pt-7 sm:px-6 sm:pt-10 lg:px-8">
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <p className="text-sm font-semibold text-[#168049]">Your household shop</p>
+            <h1 className="mt-1 text-[clamp(1.75rem,4vw,2.55rem)] font-extrabold tracking-[-0.045em] text-[#17251c]">Ready for the week?</h1>
           </div>
+          <p className="hidden max-w-sm text-right text-sm leading-6 text-[#68746c] sm:block">
+            Plan with Eve, keep an eye on the week and pick up any shop without starting over.
+          </p>
         </div>
-
         <WeeklyCommandCentre />
         <HomeActivity />
       </div>
