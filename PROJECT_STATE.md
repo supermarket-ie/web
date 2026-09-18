@@ -961,6 +961,14 @@ route for direct product discovery and manual research; it supports rather than
 competes with the active household-shop journey. Recent-shop links now use the
 saved-list route's actual `list` query parameter.
 
+Public and authenticated Home copy are intentionally separate. The public
+guest agent retains **Ready when you are**, **Meet your supermarket agent** and
+its broad discovery placeholder. The authenticated empty state uses **Your
+agent is ready** and the household-oriented question. These variants are now
+rendered directly from authenticated state rather than rewritten after render
+by a DOM observer, preventing signed-in copy changes from leaking into the
+public homepage.
+
 Current persistence boundary: Eve's active event stream is transferred from
 guest to account after sign-in and then stored per account on the current
 device. Structured household shops continue to persist server-side through the
@@ -974,3 +982,7 @@ Decision-log addition:
   fresh, while Browse remains directly available in primary navigation. The
   runtime remains Eve internally, but signed-in customer copy calls it **your
   agent** rather than exposing that implementation name.
+- **2026-09-18 — Public and signed-in agent copy are isolated.** Guest messaging
+  remains **Meet your supermarket agent** while authenticated Home can use more
+  household-specific wording; both are rendered explicitly without DOM text
+  replacement.

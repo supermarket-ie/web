@@ -149,6 +149,7 @@ type ComposerProps = {
   send: (value: string, source: AgentStartSource) => Promise<void>;
   busy: boolean;
   gated: boolean;
+  placeholder: string;
   prominent?: boolean;
 };
 
@@ -264,7 +265,7 @@ function InlineEmailSignup({
   );
 }
 
-function AgentComposer({ input, setInput, send, busy, gated, prominent = false }: ComposerProps) {
+function AgentComposer({ input, setInput, send, busy, gated, placeholder, prominent = false }: ComposerProps) {
   return (
     <form
       onSubmit={event => { event.preventDefault(); void send(input, 'typed'); }}
@@ -282,7 +283,7 @@ function AgentComposer({ input, setInput, send, busy, gated, prominent = false }
         }}
         rows={prominent ? 2 : 1}
         disabled={busy || gated}
-        placeholder={gated ? 'Sign in to keep working with your agent…' : 'Ask Supermarket.ie what your household needs…'}
+        placeholder={gated ? 'Sign in to keep working with your agent…' : placeholder}
         className={`w-full resize-none bg-transparent pl-5 pr-16 text-[15px] text-on-background outline-none placeholder:text-[#8d948f] disabled:opacity-60 ${prominent ? 'py-5' : 'py-4'}`}
       />
       <button
@@ -522,12 +523,14 @@ function ShoppingAgentInner({
           <div className="mb-6">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#397250]">
               <span className="flex size-7 items-center justify-center rounded-full bg-[#daf2e2]"><Sparkles className="size-4" /></span>
-              Your agent is ready
+              {isGuest ? 'Ready when you are' : 'Your agent is ready'}
             </div>
             {primaryHeading ? (
               <h1 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h1>
             ) : (
-              <h2 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h2>
+              <h2 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">
+                {isGuest ? 'Meet your supermarket agent' : 'What should we sort out for the household?'}
+              </h2>
             )}
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">
               {isGuest
@@ -536,7 +539,17 @@ function ShoppingAgentInner({
             </p>
           </div>
 
-          <AgentComposer input={input} setInput={setInput} send={send} busy={busy} gated={showGuestGate} prominent />
+          <AgentComposer
+            input={input}
+            setInput={setInput}
+            send={send}
+            busy={busy}
+            gated={showGuestGate}
+            placeholder={isGuest
+              ? 'Ask about products, prices, meals, dietary needs or your household shop.'
+              : 'Ask Supermarket.ie what your household needs…'}
+            prominent
+          />
 
           {liveSuggestions.length > 0 ? (
             <div className="mt-2 overflow-hidden rounded-2xl border border-[#e3e8e4] bg-white py-1 shadow-[0_18px_45px_rgba(25,57,38,0.1)]">
@@ -652,7 +665,16 @@ function ShoppingAgentInner({
       </div>
 
       <div className="border-t border-[#edf0ed] bg-white p-3 sm:p-4">
-        <AgentComposer input={input} setInput={setInput} send={send} busy={busy} gated={showGuestGate} />
+        <AgentComposer
+          input={input}
+          setInput={setInput}
+          send={send}
+          busy={busy}
+          gated={showGuestGate}
+          placeholder={isGuest
+            ? 'Ask about products, prices, meals, dietary needs or your household shop.'
+            : 'Ask Supermarket.ie what your household needs…'}
+        />
       </div>
     </div>
   );
