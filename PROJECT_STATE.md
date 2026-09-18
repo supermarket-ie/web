@@ -986,3 +986,40 @@ Decision-log addition:
   remains **Meet your supermarket agent** while authenticated Home can use more
   household-specific wording; both are rendered explicitly without DOM text
   replacement.
+
+## 32. Living Shop signed-in Home model — 18 September 2026
+
+The next signed-in Home iteration makes the household shop a visible, evolving
+product object beside the agent. The agent remains the primary place to express
+intent; a **Living Receipt** shows only deterministic application state from the
+current weekly plan and the latest validated saved shop.
+
+Home derives three presentation states without asking the model to classify
+them:
+
+- **New:** no current-week validated shop, no current agent journey and no
+  partial weekly plan;
+- **In progress:** the agent journey or weekly plan has started, or the current
+  saved shop still contains unresolved, unavailable or partially covered lines;
+- **Ready:** a shop saved during the current week contains at least one item and
+  every line is resolved.
+
+The current-shop summary is built server-side from subscriber-owned
+`saved_lists.items`. It exposes item count, selected-price estimate, unresolved
+count and bounded line detail. It does not use hypothetical complete-retailer
+totals as the household estimate, and it treats missing prices, unavailable
+lines and partial coverage as attention states. Older saved lists remain
+available under My Shop and recent activity but are not presented as this
+week's active shop.
+
+The receipt's action is **Review my shop** for a current saved shop. It does not
+claim retailer selection, trolley population or checkout. Without a current
+saved shop, its action returns focus to the agent. Home-state views and receipt
+actions are instrumented without logging household contents.
+
+Decision-log addition:
+
+- **2026-09-18 — Signed-in Home uses a deterministic Living Shop state.** The
+  visual shell may respond to agent continuity, but Ready status and receipt
+  facts come only from subscriber-scoped weekly-plan and validated saved-list
+  data; retailer execution remains outside this UI boundary.
