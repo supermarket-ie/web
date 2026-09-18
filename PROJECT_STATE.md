@@ -330,7 +330,7 @@ For every material Supermarket.ie development session:
 - **2026-08-29 — Dunnes confirmed as Instacart Storefront execution.** Production gateway/search works at store 258; cart resource allows GET/POST and returns 401 without authentication. Consequence: design toward a shared Storefront execution engine for Dunnes/SuperValu rather than duplicate retailer-specific cart plumbing.
 - **2026-08-29 — Pepesto public runtime boundary clarified.** Free MCP/list handoff still finishes through Pepesto's mobile app/WebView; no browser-only cross-origin shortcut has been identified.
 - **2026-08-29 — Repository documentation is canonical project memory.** Future sessions must read and maintain these docs.
-- **2026-09-18 — Signed-in Home visual direction modernised.** The forest-green Home banner and narrow dashboard stack were replaced with a wider consumer shopping workspace. Eve is the dominant patterned surface, while the current shop is a compact live companion and household insights use lighter, purpose-specific cards. Green is reserved for actions and positive state rather than large decorative banners; conversation persistence and fresh-start behaviour remain unchanged.
+- **2026-09-18 — Signed-in Home visual direction modernised.** The forest-green Home banner and narrow dashboard stack were replaced with a wider consumer shopping workspace. Eve is the dominant pale-mint patterned surface on a neutral-stone page, while the current shop is a crisp-white live companion and household insights use lighter, purpose-specific cards. Green is reserved for actions and positive state rather than large decorative banners; conversation persistence and fresh-start behaviour remain unchanged.
 
 ## 16. Trusted pricing architecture and current state
 

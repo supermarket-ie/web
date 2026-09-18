@@ -134,7 +134,7 @@ export function WeeklyCommandCentre() {
             </span>
           )}
         </div>
-        <div className="eve-workspace overflow-hidden rounded-[1.75rem] border border-[#dfd9cc] shadow-[0_24px_70px_rgba(38,58,44,0.10)]">
+        <div className="eve-workspace overflow-hidden rounded-[1.75rem] border border-[#d4e4d9] shadow-[0_24px_70px_rgba(38,58,44,0.09)]">
           <HomePlanner onJourneyStateChange={setJourneyState} />
         </div>
         {journeyState.hasConversation && (
@@ -144,10 +144,10 @@ export function WeeklyCommandCentre() {
         )}
       </section>
 
-      <aside className="rounded-[1.5rem] border border-black/[0.06] bg-[#fffdf8] p-4 shadow-[0_18px_55px_rgba(38,58,44,0.07)] sm:p-5 lg:mt-9">
+      <aside className="rounded-[1.5rem] border border-black/[0.065] bg-white p-4 shadow-[0_18px_55px_rgba(38,58,44,0.07)] sm:p-5 lg:mt-9">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#9c654c]">This week</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#168049]">This week</p>
             <h2 className="mt-1 text-lg font-bold tracking-tight text-[#243128]">Current shop</h2>
             <p className="text-xs text-[#7c857f]">{weekLabel}</p>
           </div>

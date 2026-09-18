@@ -26,7 +26,7 @@ export function PlanPage() {
   if (!ready || !isSignedIn) return null;
 
   return (
-    <div className="min-h-screen bg-[#f7f5ef]">
+    <div className="min-h-screen bg-[#f5f6f3]">
       <div className="mx-auto max-w-[1180px] space-y-8 px-4 pb-24 pt-7 sm:px-6 sm:pt-10 lg:px-8">
         <div className="flex items-end justify-between gap-6">
           <div>

@@ -70,7 +70,7 @@ export function HomeActivity() {
       ) : null}
 
         {lists.length ? (
-        <div className="rounded-[1.4rem] border border-[#e5dcd4] bg-[#fffaf5] px-5 py-4">
+        <div className="rounded-[1.4rem] border border-[#f0d8d0] bg-[#fff1ec] px-5 py-4">
           <p className="text-sm font-semibold mb-2" style={{ color: 'var(--on-surface)' }}>Recent shops</p>
           <div className="space-y-2">
             {lists.map(list => {
