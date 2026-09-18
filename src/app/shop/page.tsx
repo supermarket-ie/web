@@ -38,12 +38,14 @@ export default function ShopPage() {
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-20">
-        <div className="pt-12 pb-10">
-          <h1 className="type-headline text-on-background mb-3">Shop by category</h1>
-          <p className="type-body-lg" style={{ color: 'var(--on-surface)' }}>
-            Live grocery prices across Tesco, Dunnes Stores and SuperValu in Ireland.
-            Updated twice weekly.
-          </p>
+        <div className="pt-8 pb-8">
+          <div className="rounded-3xl px-6 py-6 sm:px-8 sm:py-7" style={{ background: 'linear-gradient(135deg, #006A35 0%, #00944A 62%, #00a854 100%)' }}>
+            <p className="type-label mb-2" style={{ color: 'rgba(255,255,255,0.72)' }}>Explore the catalogue</p>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-[-0.03em] text-white">Browse supermarket products</h1>
+            <p className="mt-2 text-sm sm:text-base leading-6" style={{ color: 'rgba(255,255,255,0.78)' }}>
+              Current matched prices across Tesco, Dunnes Stores and SuperValu, organised around what your household needs.
+            </p>
+          </div>
         </div>
 
         {/* Category grid — cards on surface-container-lowest, section on surface */}
@@ -63,12 +65,12 @@ export default function ShopPage() {
 
         {/* CTA strip */}
         <div className="mt-12 rounded-2xl p-8 text-center" style={{ background: 'var(--surface-container)' }}>
-          <h2 className="type-title-lg text-on-background mb-2">Want a full weekly shop?</h2>
+          <h2 className="type-title-lg text-on-background mb-2">Want help building the whole shop?</h2>
           <p className="text-sm mb-6" style={{ color: 'var(--on-surface)' }}>
-            Tell our AI what you want to cook and get a personalised list with the best prices across all stores.
+            Ask your supermarket agent to combine food, meals and household essentials into one practical shop.
           </p>
           <Link href="/" className="btn-primary inline-flex px-6 py-3 text-sm">
-            Try the AI planner free →
+            Plan with your agent →
           </Link>
         </div>
       </main>
