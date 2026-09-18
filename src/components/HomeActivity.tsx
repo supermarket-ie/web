@@ -32,8 +32,8 @@ export function HomeActivity() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold" style={{ color: 'var(--on-surface)' }}>Activity</h2>
-        <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>What we remember and watch</span>
+        <h2 className="text-base font-bold" style={{ color: 'var(--on-surface)' }}>Household activity</h2>
+        <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>Previous shops and useful watches</span>
       </div>
 
       {briefing?.insights?.length ? (
@@ -75,7 +75,7 @@ export function HomeActivity() {
             {lists.map(list => {
               const total = Math.min(...(list.store_totals ?? []).map(s => s.total).filter(Number.isFinite));
               return (
-                <Link key={list.id} href={`/list?id=${encodeURIComponent(list.id)}`} className="flex items-center justify-between text-sm" style={{ textDecoration: 'none', color: 'var(--on-surface)' }}>
+                <Link key={list.id} href={`/list?list=${encodeURIComponent(list.id)}`} className="flex items-center justify-between text-sm" style={{ textDecoration: 'none', color: 'var(--on-surface)' }}>
                   <span className="truncate pr-3">{list.name || 'Saved shop'}</span>
                   <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{Number.isFinite(total) ? `€${total.toFixed(2)}` : new Date(list.created_at).toLocaleDateString('en-IE', { month: 'short', day: 'numeric' })}</span>
                 </Link>
