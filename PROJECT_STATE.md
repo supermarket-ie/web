@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 10 September 2026
+**Last updated:** 18 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -915,3 +915,32 @@ Decision-log addition:
   mapping repair.** Fix deterministic punctuation/hydration extraction, verify
   retailer SKU identity, and back off repeated repair failures without
   weakening exact-product or seven-day freshness rules.
+
+
+## 30. Signed-in experience design alignment — 18 September 2026
+
+A production visual review covered the authenticated Home, My Shop, Browse and
+Household surfaces. The Home experience already reflected the current
+household-agent direction, but the remaining signed-in routes mixed that design
+with older catalogue/planner styling: cyan section labels and glows, a neutral
+grey desktop navigation state, and legacy “AI planner” / “Checkout coming soon”
+language.
+
+The signed-in shell now uses the current green-led design tokens for active and
+hover states. My Shop and Household use brand green for section hierarchy and
+replace the legacy cyan decorative treatment with restrained green tonal
+accents. Browse gains the same green-gradient contextual header used by the
+authenticated experience and its CTA is framed around the supermarket agent and
+the complete household shop.
+
+The saved-shop handoff copy remains deliberately truthful. Until a retailer
+adapter is actually available on the live saved-shop path, the UI says retailer
+handoff is unavailable for that saved shop rather than implying checkout or
+trolley population.
+
+Decision-log addition:
+
+- **2026-09-18 — Signed-in UI converges on the household-agent design.** Home,
+  My Shop, Browse and Household share the green-led palette, tonal surfaces and
+  agent vocabulary; legacy cyan planner styling and premature checkout language
+  are removed from the principal authenticated journey.
