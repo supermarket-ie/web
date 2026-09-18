@@ -297,7 +297,17 @@ function AgentComposer({ input, setInput, send, busy, gated, prominent = false }
   );
 }
 
-function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveChat; storageKey: string | null; isGuest: boolean }) {
+function ShoppingAgentInner({
+  saved,
+  storageKey,
+  isGuest,
+  onJourneyStateChange,
+}: {
+  saved: SavedEveChat;
+  storageKey: string | null;
+  isGuest: boolean;
+  onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
+}) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
@@ -352,6 +362,15 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   const liveSuggestions = input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
+  const hasConversation = messages.some(message => message.role === 'user');
+  const hasProposedShop = Boolean(latestStructuredShop);
+
+  useEffect(() => {
+    onJourneyStateChange?.({
+      hasConversation,
+      hasProposedShop,
+    });
+  }, [hasConversation, hasProposedShop, onJourneyStateChange]);
 
   useEffect(() => {
     if (!isGuest) return;
@@ -632,7 +651,16 @@ function ShoppingAgentInner({ saved, storageKey, isGuest }: { saved: SavedEveCha
   );
 }
 
-export function HomePlanner() {
+export type HomePlannerJourneyState = {
+  hasConversation: boolean;
+  hasProposedShop: boolean;
+};
+
+export function HomePlanner({
+  onJourneyStateChange,
+}: {
+  onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
+} = {}) {
   const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
   const [isGuest, setIsGuest] = useState(true);
 
@@ -648,5 +676,12 @@ export function HomePlanner() {
     return null;
   }
 
-  return <ShoppingAgentInner saved={loaded.saved} storageKey={loaded.storageKey} isGuest={isGuest} />;
+  return (
+    <ShoppingAgentInner
+      saved={loaded.saved}
+      storageKey={loaded.storageKey}
+      isGuest={isGuest}
+      onJourneyStateChange={onJourneyStateChange}
+    />
+  );
 }

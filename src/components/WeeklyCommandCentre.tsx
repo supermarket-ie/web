@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { loadSession } from '@/lib/session';
-import { HomePlanner } from '@/components/HomePlanner';
+import { HomePlanner, type HomePlannerJourneyState } from '@/components/HomePlanner';
 import type { WeeklyPlanState, AgentNotice, MealSlot } from '@/app/api/plan/weekly/route';
 
 function formatWeekRange(weekStart: string): string {
@@ -62,6 +62,10 @@ export function WeeklyCommandCentre() {
   const [showDinners, setShowDinners] = useState(false);
   const [showLunches, setShowLunches] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  const [journeyState, setJourneyState] = useState<HomePlannerJourneyState>({
+    hasConversation: false,
+    hasProposedShop: false,
+  });
 
   const fetchPlan = useCallback(async (t: string) => {
     try {
@@ -114,9 +118,35 @@ export function WeeklyCommandCentre() {
 
   return (
     <div className="flex flex-col gap-4">
+      <section>
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#00944A' }}>
+              {journeyState.hasConversation ? 'Pick up where you left off' : 'Plan your next shop'}
+            </p>
+            <h2 className="mt-1 text-xl font-bold tracking-tight" style={{ color: 'var(--on-surface)' }}>
+              {journeyState.hasConversation ? 'Continue with Eve' : 'Start with Eve'}
+            </h2>
+          </div>
+          {journeyState.hasConversation && (
+            <span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: '#e5f7eb', color: '#176b3a' }}>
+              {journeyState.hasProposedShop ? 'Shop prepared' : 'In progress'}
+            </span>
+          )}
+        </div>
+        <div className="overflow-hidden rounded-2xl" style={{ border: '1px solid var(--surface-container)' }}>
+          <HomePlanner onJourneyStateChange={setJourneyState} />
+        </div>
+        {journeyState.hasConversation && (
+          <p className="mt-2 text-xs" style={{ color: 'var(--on-surface-variant)' }}>
+            This conversation is saved for this account on this device, so you can continue without starting again.
+          </p>
+        )}
+      </section>
+
       <div className="flex items-center justify-between pt-1">
         <div>
-          <h2 className="text-base font-bold" style={{ color: 'var(--on-surface)' }}>This week</h2>
+          <h2 className="text-base font-bold" style={{ color: 'var(--on-surface)' }}>Current shop</h2>
           <p className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>{weekLabel}</p>
         </div>
         <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: plan?.status === 'complete' ? '#00944A' : plan?.status === 'partial' ? 'var(--primary-container)' : 'var(--surface-container)', color: plan?.status === 'complete' ? '#fff' : plan?.status === 'partial' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)' }}>
@@ -158,12 +188,6 @@ export function WeeklyCommandCentre() {
         </div>
       )}
 
-      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--surface-container)' }}>
-        <div className="px-4 py-2.5" style={{ background: 'var(--surface-container)' }}>
-          <span className="text-xs font-semibold" style={{ color: 'var(--on-surface)' }}>What do you need?</span>
-        </div>
-        <HomePlanner />
-      </div>
     </div>
   );
 }
