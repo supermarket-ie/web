@@ -986,3 +986,8 @@ Decision-log addition:
   remains **Meet your supermarket agent** while authenticated Home can use more
   household-specific wording; both are rendered explicitly without DOM text
   replacement.
+
+The signed-in Home retains its existing layout, palette, copy, prompts and
+navigation. A low-opacity grocery doodle is also applied to the surrounding
+page background, fading out down the page; this is decorative only and does not
+change the existing patterned agent workspace.
