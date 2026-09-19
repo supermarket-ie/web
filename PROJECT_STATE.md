@@ -1155,10 +1155,21 @@ generic retailer mapping may accept a more specific variant only when every
 meaningful expected word is present and both sides carry compatible explicit
 size evidence. Size conflicts such as 500g versus 400g remain rejected.
 
-No model calls or AI matching were introduced. The next release check is a
-small targeted validation run before another 1,000-product refresh. Empty
-SuperValu product shells remain a separate remapping problem and are not made
-trusted by these name changes.
+No model calls or AI matching were introduced. A 150-product validation run
+per retailer then selected only products that had failed in the preceding full
+run. SuperValu recovered 27/150 previously failing mappings: 27 succeeded, 37
+remained direct-name mismatches and 86 remained empty product shells. Dunnes
+recovered 15/150: 13 of the previous no-confident-match cohort and two of the
+previous no-search cohort. Live trusted coverage consequently moved to 1,580
+SuperValu products (64.18%) and 846 Dunnes products (34.36%); demand-weighted
+coverage moved to 81.07% and 68.05% respectively.
+
+The targeted runs also exposed an observability distinction: their deliberately
+failure-heavy 18% and 10% success rates are useful repair metrics but should not
+replace the latest scheduled full-run health on the dashboard. Add explicit run
+scope (scheduled full run versus targeted validation/canary) before relying on
+`latest_run_status` for alerts. Empty SuperValu product shells remain a
+separate remapping problem and are not made trusted by the name changes.
 
 Decision-log addition:
 
