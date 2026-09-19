@@ -320,3 +320,14 @@ SuperValu direct-page validation similarly normalises retailer boilerplate,
 simple inflections and explicit retailer pack-unit wording. Explicit size
 conflicts remain rejected. The 192 empty product shells in the latest run remain
 a separate remapping/discovery workload.
+
+
+### Failure-cohort validation result
+
+A post-release run re-tested 150 products per retailer that had failed in the
+preceding full run. SuperValu recovered 27 (18%) and Dunnes recovered 15 (10%).
+These percentages describe deliberately failure-heavy repair cohorts, not normal
+scheduled-run coverage. The recovery added 27 and 15 current trusted prices
+respectively. Future operational reporting must distinguish targeted validation
+runs from scheduled full runs so canary thresholds do not overwrite full-run
+health.
