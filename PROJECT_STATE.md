@@ -1128,3 +1128,42 @@ Decision-log addition:
   Track trusted catalogue and demand coverage over time, alert on regressions,
   and repair retailer identities conservatively before considering a separate
   warehouse or model-assisted matching.
+
+
+## 36. Retailer failure-recovery tranche — 19 September 2026
+
+The first post-observability 1,000-product production runs completed degraded:
+SuperValu validated 701/1,000 (70.1%) and Dunnes validated 698/1,000 (69.8%).
+The resulting live trusted catalogue coverage was 1,553/2,462 (63.08%) for
+SuperValu and 831/2,462 (33.75%) for Dunnes. SuperValu failures were 192
+`empty_product_state` and 107 `direct_name_mismatch`; Dunnes failures were
+168 `no_search_results` and 134 `no_confident_match`.
+
+Failure samples showed a mix of deterministic false negatives and genuinely bad
+stale mappings. Examples such as `Celery` versus `Dunnes Stores Fresh Celery`
+should match after removing retailer boilerplate and normalising simple
+inflections, while a chilli-pepper mapping pointing to a pakora must remain
+rejected. Dunnes recovery now tries at most three de-duplicated retailer-owned
+queries: stored retailer name, the product title encoded in the resolved URL,
+and canonical name. The URL title is query evidence only; candidates still pass
+the existing SKU, name, size and type safeguards. Failure records now retain the
+queries and a bounded candidate sample for the next analysis tranche.
+
+SuperValu direct-name validation now recognises simple singular/plural wording,
+retailer boilerplate and retailer pack units such as piece, roll and box. A short
+generic retailer mapping may accept a more specific variant only when every
+meaningful expected word is present and both sides carry compatible explicit
+size evidence. Size conflicts such as 500g versus 400g remain rejected.
+
+No model calls or AI matching were introduced. The next release check is a
+small targeted validation run before another 1,000-product refresh. Empty
+SuperValu product shells remain a separate remapping problem and are not made
+trusted by these name changes.
+
+Decision-log addition:
+
+- **2026-09-19 — Repair deterministic retailer false negatives before broader
+  discovery.** Use bounded retailer-owned query variants and vocabulary
+  normalisation with regression fixtures; keep stale/wrong mappings fail closed,
+  retain diagnostic evidence, and validate on a small production tranche before
+  another full refresh.
