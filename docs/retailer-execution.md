@@ -420,3 +420,10 @@ trust boundary. Automatic exact resolution also requires exact explicit
 measure/pack agreement, no variant conflict, complete canonical signals and
 stored-title corroboration. Generic or malformed catalogue identities remain
 unresolved pending canonical product-policy work.
+
+Eight strict same-SKU exact Dunnes decisions increased live trusted coverage to
+921/2,462 (37.41%) and demand coverage to 74.50%. The next targeted replay
+confirmed that the older worker heuristic did not recognise these same strict
+decisions. The worker now reuses the resolution predicate for same-SKU
+candidates before its legacy fallback, ensuring accepted exact mappings remain
+refreshable without weakening general candidate matching.

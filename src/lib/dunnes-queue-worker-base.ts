@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { dunnesPackSignature, hasDunnesVariantConflict } from '@/lib/dunnes-discovery';
+import { isStrictExactResolution } from '@/lib/product-resolution';
 
 const STORE = 'dunnes';
 const STORE_ID = 258;
@@ -222,6 +223,20 @@ export function buildDunnesSearchQueries(product: DunnesQueueProduct) {
 }
 
 export function directResolvedCandidate(product: DunnesQueueProduct, candidates: Candidate[]) {
+  const strictSameSku = candidates.filter((candidate) =>
+    Boolean(candidate.sku && candidate.price && candidate.price > 0)
+    && isStrictExactResolution({
+      failure_id: 'retailer-refresh', store: 'dunnes',
+      canonical_name: product.canonicalName, store_product_name: product.storeProductName,
+      store_sku: product.storeSku, store_url: product.storeUrl,
+      failure_reason: 'refresh_validation', raw_error: null,
+      demand_units: 0, demand_rank: null, created_at: new Date(0).toISOString(),
+    }, {
+      sku: candidate.sku!, name: candidate.name, price: candidate.price!, url: candidate.url ?? '',
+    })
+  );
+  if (strictSameSku.length === 1) return strictSameSku[0];
+
   const identitySafe = candidates.filter((candidate) =>
     Boolean(candidate.name && candidate.price && candidate.price > 0)
     && isSizeCompatible(product.canonicalName, candidate.name)
