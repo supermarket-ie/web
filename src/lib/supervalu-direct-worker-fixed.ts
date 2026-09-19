@@ -3,10 +3,11 @@ export * from './supervalu-direct-worker-base';
 import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import type { SupervaluQueueProduct } from './supervalu-direct-worker-base';
 
-export async function selectSupervaluProducts(limit: number, query?: string): Promise<SupervaluQueueProduct[]> {
+export async function selectSupervaluProducts(limit: number, query?: string, failureRunId?: string): Promise<SupervaluQueueProduct[]> {
   const rows = await selectStoreProductsForRefresh('supervalu', limit, {
     productUrlOnly: true,
     query,
+    failureRunId,
   });
 
   return rows.map((row) => ({

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
+import { dunnesPackSignature, hasDunnesVariantConflict } from '@/lib/dunnes-discovery';
 
 const STORE = 'dunnes';
 const STORE_ID = 258;
@@ -95,8 +96,23 @@ function isSizeCompatible(canonical: string, candidate: string) {
   const a = extractSize(canonical);
   const b = extractSize(candidate);
   if (!a || !b) return true;
-  if (a.unit !== b.unit || a.isMultipack !== b.isMultipack) return false;
-  return Math.max(a.qty, b.qty) / Math.min(a.qty, b.qty) <= 1.1;
+  if (a.unit === b.unit && a.isMultipack === b.isMultipack) {
+    return Math.max(a.qty, b.qty) / Math.min(a.qty, b.qty) <= 1.1;
+  }
+
+  // Retailer titles often state a total weight instead of repeating "N pack".
+  // Accept that representation only when the richer pack parser finds the
+  // same explicit item count on both sides. Single-versus-multipack size
+  // changes (for example 18g versus 4x18g) remain rejected.
+  const expectedPack = dunnesPackSignature(canonical);
+  const candidatePack = dunnesPackSignature(candidate);
+  return Boolean(
+    expectedPack.count
+    && candidatePack.count
+    && expectedPack.count === candidatePack.count
+    && !expectedPack.multipack
+    && !candidatePack.multipack
+  );
 }
 
 const NON_FOOD_WORDS = [
@@ -187,6 +203,7 @@ export function directResolvedCandidate(product: DunnesQueueProduct, candidates:
     Boolean(candidate.name && candidate.price && candidate.price > 0)
     && isSizeCompatible(product.canonicalName, candidate.name)
     && !hasObviousTypeConflict(product.canonicalName, candidate.name)
+    && !hasDunnesVariantConflict(product.canonicalName, candidate.name)
     && hasCanonicalSignal(product.canonicalName, candidate.name)
     && retailerNameCompatible(product.storeProductName, candidate.name)
   );
@@ -209,6 +226,7 @@ function matchCandidate(canonical: string, candidates: Candidate[]) {
     if (!candidate.name || !candidate.price || candidate.price <= 0) continue;
     if (!isSizeCompatible(canonical, candidate.name)) continue;
     if (hasObviousTypeConflict(canonical, candidate.name)) continue;
+    if (hasDunnesVariantConflict(canonical, candidate.name)) continue;
 
     const normCandidate = normaliseName(candidate.name);
     if (normCandidate === normCanonical) return { candidate, score: 1 };
@@ -467,7 +485,7 @@ export async function processDunnesProduct(message: DunnesBatchMessage, product:
   if (!match) {
     const sample = candidates
       .slice(0, 5)
-      .map((candidate) => `${candidate.sku ?? 'no-sku'}:${candidate.name}`)
+      .map((candidate) => `${candidate.sku ?? 'no-sku'}:${candidate.name}:€${candidate.price ?? 'none'}`)
       .join(' | ');
     await finalize(message, product, {
       success: false,
