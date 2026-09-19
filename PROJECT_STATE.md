@@ -1323,3 +1323,9 @@ query does not itself authorize a mapping.
 The immutable `[ops] Dunnes compact discovery validation` operation replays
 only the 86 failures from run `6c30c0f8-2601-4ade-a371-c8ed5ebf5a56` with
 `targeted_validation` scope.
+
+Production run `4fe56cf5-5501-45fa-8f7e-5aff7785a2a6` recovered 18/86 of that
+cohort (12 updated prices and six unchanged). Dunnes live trusted coverage is
+now 913/2,462 (37.08%) and demand-weighted coverage is 74.44%. The 68 residuals
+are 55 `no_confident_match` and 13 `no_search_results`; automated matching must
+stop for the ambiguous set. Scheduled full-run health remains 69.80%.
