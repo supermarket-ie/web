@@ -1329,3 +1329,18 @@ cohort (12 updated prices and six unchanged). Dunnes live trusted coverage is
 now 913/2,462 (37.08%) and demand-weighted coverage is 74.44%. The 68 residuals
 are 55 `no_confident_match` and 13 `no_search_results`; automated matching must
 stop for the ambiguous set. Scheduled full-run health remains 69.80%.
+
+## 41. Demand-ranked manual product resolution — 19 September 2026
+
+After bounded retailer-owned recovery, ambiguous products must not be forced
+through weaker matching. The admin data-health surface now includes a private
+resolution queue built from each retailer's latest targeted failure cohort and
+ranked by actual list demand. Captured retailer candidates expose explicit
+`Choose product`, `Mark unavailable` and `Skip` decisions.
+
+Resolution decisions are audited in `product_resolution_decisions`, protected
+by RLS and service-role-only grants. Exact selection is accepted only when the
+chosen SKU appears in the captured retailer evidence; the atomic resolver then
+updates the retailer identity and writes the observed direct-retailer price.
+Unavailable mappings leave trusted refresh selection. Alternatives remain in
+their separate candidate table and are never silently promoted by this queue.
