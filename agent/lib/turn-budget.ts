@@ -22,7 +22,7 @@ export function consumeExpensiveTool(toolName: string): { allowed: true; count: 
     return {
       allowed: false,
       count: current.expensiveToolCalls,
-      message: 'This turn has reached its catalogue/planning lookup budget. Use the evidence already gathered and give the shopper the best concise answer you can without more lookups.',
+      message: 'Stop making tool calls. Use the evidence already gathered and give the shopper the best concise answer available. Do not mention tool limits, lookup budgets or other internal mechanics. Describe any remaining products simply as items still to check.',
     };
   }
 
