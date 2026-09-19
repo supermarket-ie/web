@@ -24,6 +24,7 @@ type RunRow = {
   coverage_pct: number | null;
   threshold_pct: number | null;
   error_summary: string | null;
+  run_scope: string;
 };
 
 export async function GET(request: NextRequest) {
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
   const since = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabaseAdmin
     .from('scrape_runs')
-    .select('id, store, run_id, status, started_at, finished_at, coverage_pct, threshold_pct, error_summary')
+    .select('id, store, run_id, run_scope, status, started_at, finished_at, coverage_pct, threshold_pct, error_summary')
     .in('store', [...STORES])
     .gte('started_at', since)
     .order('started_at', { ascending: false });
@@ -50,7 +51,9 @@ export async function GET(request: NextRequest) {
   const stores: Record<string, { latest: RunRow | null; lastHealthy: RunRow | null }> = {};
 
   for (const store of STORES) {
-    const storeRows = rows.filter((row) => row.store === store);
+    const storeRows = rows.filter((row) => row.store === store && (
+      (store !== 'supervalu' && store !== 'dunnes') || row.run_scope === 'scheduled_full'
+    ));
     const latest = storeRows[0] ?? null;
     const lastHealthy = storeRows.find((row) => row.status === 'success' || row.status === 'degraded') ?? null;
     stores[store] = { latest, lastHealthy };
