@@ -5,6 +5,7 @@ import { instructionsForTurn } from '../../../agent/instructions/capabilities';
 describe('Eve capability instruction routing', () => {
   it('selects complete-shop rules with supporting budget and price context', () => {
     expect(selectEveCapabilities('Build a complete household shop under €120 around current offers')).toEqual(expect.arrayContaining(['household_shop', 'budget', 'price']));
+    expect(instructionsForTurn('Build a complete household shop under €120').content).toMatch(/Do not spend individual resolve_product or get_current_price calls on every shop line/);
   });
   it('selects meal and ingredient guidance', () => {
     expect(selectEveCapabilities('Plan four dinners with ingredients reused to reduce waste')).toContain('meal');
