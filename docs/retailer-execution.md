@@ -393,3 +393,11 @@ size, pack, type and variant checks pass. This is mapping cleanup, not a global
 similarity-threshold reduction. Both changes use retailer-owned data and incur
 no AI-token or paid scraping usage. Exact-cohort production validation is the
 next step.
+
+Production validation recovered 6/115 SuperValu mappings and 23/109 Dunnes
+mappings. Live trusted coverage moved to 1,594/2,462 (64.74%) and 895/2,462
+(36.35%); demand-weighted coverage moved to 81.56% and 72.51%. Remaining
+failure cohorts are 109 for SuperValu (57 ambiguous remaps, 51 empty search
+states and one direct-name mismatch) and 86 for Dunnes (51 no-confident-match
+and 35 no-search-results). These residuals remain candidates for explicit
+catalogue discovery or manual product choice, not weaker identity matching.
