@@ -341,3 +341,24 @@ discovery results remain available as separate diagnostics and continue to
 produce scope-labelled coverage snapshots. Do not compare a deliberately
 failure-heavy repair cohort's success percentage with the scheduled full-run
 threshold.
+
+### Next deterministic recovery tranche
+
+Dunnes direct matching now recognises equal explicit item counts when one title
+uses `N Pack` and the retailer title uses a leading count plus total weight. It
+continues to reject different variants, sizes and single-versus-multipack
+changes. Failure samples include returned price state for the next cohort
+analysis.
+
+For SuperValu empty product shells, the direct worker performs at most two
+compact Storefront searches and accepts only a unique priced candidate that
+passes canonical name and pack validation (or one compatible candidate with
+the same SKU). It writes the replacement product URL/SKU through the existing
+finalizer. Ambiguous results and empty searches remain failures with bounded
+diagnostics. This path uses retailer data only and makes no model or paid
+retrieval call.
+
+An exact validation replay can pass the previous scrape run UUID as
+`failure_run=<uuid>` with `scope=targeted_validation`. The selector then limits
+the new run to products that recorded a failure in that run; scheduled selection
+and scheduled health remain unchanged.

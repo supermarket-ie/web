@@ -16,6 +16,11 @@ function parsePositiveInt(value: string | null, fallback: number, max: number) {
   return Math.min(Math.floor(parsed), max);
 }
 
+function parseUuid(value: string | null) {
+  if (!value) return undefined;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) ? value : null;
+}
+
 export async function GET(request: Request): Promise<Response> {
   if (process.env.DUNNES_VERCEL_WORKER_ENABLED !== 'true') {
     return Response.json({ error: 'Worker disabled' }, { status: 503 });
@@ -34,10 +39,12 @@ export async function GET(request: Request): Promise<Response> {
   const batchSize = parsePositiveInt(process.env.DUNNES_VERCEL_BATCH_SIZE ?? null, 5, 20);
   const staggerSeconds = parsePositiveInt(process.env.DUNNES_VERCEL_BATCH_STAGGER_SECONDS ?? null, 3, 120);
   const query = url.searchParams.get('q')?.trim() || undefined;
-  const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit, query });
+  const failureRunId = parseUuid(url.searchParams.get('failure_run'));
+  if (failureRunId === null) return Response.json({ error: 'failure_run must be a UUID' }, { status: 400 });
+  const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit, query: query ?? failureRunId });
   if (!resolvedScope.scope) return Response.json({ error: resolvedScope.error }, { status: 400 });
 
-  const products = await selectDunnesProducts(limit, query);
+  const products = await selectDunnesProducts(limit, query, failureRunId);
   if (products.length === 0) return Response.json({ status: 'no_products', queued: 0 });
 
   const runId = `vercel_dunnes_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
@@ -86,6 +93,7 @@ export async function GET(request: Request): Promise<Response> {
     batch_size: batchSize,
     stagger_seconds: staggerSeconds,
     filter: query ?? null,
+    failure_run: failureRunId ?? null,
     run_scope: resolvedScope.scope,
   });
 }

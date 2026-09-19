@@ -3,7 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase', () => ({ supabaseAdmin: {} }));
 import type { ProductPrice } from '@/lib/price-data';
 import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
-import { classifySupervaluProductPage, isDirectMappingCompatible, parseSupervaluProductPage } from '@/lib/supervalu-direct-worker';
+import {
+  buildSupervaluSearchQueries,
+  classifySupervaluProductPage,
+  isDirectMappingCompatible,
+  parseSupervaluProductPage,
+  parseSupervaluSearchPage,
+  selectSupervaluRemapCandidate,
+} from '@/lib/supervalu-direct-worker';
 import { buildDunnesSearchQueries, directResolvedCandidate, extractDunnesUrlSku } from '@/lib/dunnes-queue-worker';
 import { choosePepestoCandidate } from '@/lib/pepesto-tesco';
 
@@ -155,6 +162,42 @@ describe('retailer recovery safeguards', () => {
     expect(result).toEqual({ candidate: null, failureReason: 'empty_product_state' });
   });
 
+  it('parses and uniquely selects a canonical-safe SuperValu search remap', () => {
+    const product = {
+      storeProductId: 'mapping-1',
+      canonicalName: "Ben's Original Peri Peri Microwave Rice 220g",
+      storeProductName: "Ben's Original Peri Peri Microwave Rice 220g",
+      storeUrl: 'https://shop.supervalu.ie/sm/delivery/rsid/5550/product/product-id-old',
+      storeSku: 'old',
+      previousPrice: null,
+    };
+    expect(buildSupervaluSearchQueries(product)).toEqual(['ben peri peri microwave rice']);
+    const candidates = parseSupervaluSearchPage(`
+      <script>window.__PRELOADED_STATE__ = {"search":{"productCardDictionary":{
+        "new":{"name":"Ben's Original Peri Peri Microwave Rice 220g","sku":"1886686001","price":"€2.50","promotions":[]},
+        "wrong":{"name":"Ben's Original Pilau Microwave Rice 220g","sku":"1886686002","price":"€2.40","promotions":[]}
+      }}};</script>
+    `);
+    expect(candidates[0].url).toContain('/ben-s-original-peri-peri-microwave-rice-220g-id-1886686001');
+    expect(selectSupervaluRemapCandidate(product, candidates)?.sku).toBe('1886686001');
+  });
+
+  it('does not remap an ambiguous generic SuperValu product family', () => {
+    const product = {
+      storeProductId: 'mapping-1',
+      canonicalName: 'Clementines',
+      storeProductName: 'Clementines',
+      storeUrl: 'https://shop.supervalu.ie/sm/delivery/rsid/5550/product/product-id-old',
+      storeSku: 'old',
+      previousPrice: null,
+    };
+    const candidates = [
+      { name: 'SuperValu Clementines 500g', sku: 'one', price: 2, wasPrice: null, onPromotion: false, url: 'https://shop.supervalu.ie/product/one' },
+      { name: 'SuperValu Clementines 1kg', sku: 'two', price: 3, wasPrice: null, onPromotion: false, url: 'https://shop.supervalu.ie/product/two' },
+    ];
+    expect(selectSupervaluRemapCandidate(product, candidates)).toBeNull();
+  });
+
   it('accepts high-confidence retailer wording without weakening pack identity', () => {
     expect(isDirectMappingCompatible({
       storeProductId: 'mapping-1',
@@ -209,6 +252,39 @@ describe('retailer recovery safeguards', () => {
       storeSku: '100287669',
     }, [{
       sku: '100287669', name: 'Gosh Sweet Potato Pakora with Red Pepper Cumin & Chilli 171g', price: 3.5,
+      wasPrice: null, onPromotion: false, url: null,
+    }])).toBeNull();
+  });
+
+  it('accepts equivalent counted-pack wording while preserving variant and multipack rejection', () => {
+    const product = {
+      storeProductId: 'mapping-1',
+      canonicalName: 'Brennans Be Good Plain Bagels 6 Pack',
+      storeProductName: 'Brennans 6 Be Good Plain Bagels 270g',
+      storeUrl: 'https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/brennans-6-be-good-plain-bagels-270g/100325489',
+      storeSku: '100325489',
+      previousPrice: null,
+    };
+    expect(directResolvedCandidate(product, [{
+      sku: '100325489', name: 'Brennans 6 Be Good Plain Bagels 270g', price: 2.5,
+      wasPrice: null, onPromotion: false, url: null,
+    }])?.sku).toBe('100325489');
+
+    expect(directResolvedCandidate({
+      ...product,
+      canonicalName: 'Cadbury Dairy Milk Freddo Chocolate Bar 18g',
+      storeProductName: 'Cadbury Dairy Milk Freddo Chocolate Bar 18g',
+    }, [{
+      sku: '100325489', name: 'Cadbury Dairy Milk Freddo Chocolate Bar 4 Pack Multipack 72g (4 x 18g)', price: 2.5,
+      wasPrice: null, onPromotion: false, url: null,
+    }])).toBeNull();
+
+    expect(directResolvedCandidate({
+      ...product,
+      canonicalName: 'Kerrygold Unsalted Butter 227g',
+      storeProductName: 'Kerrygold Unsalted Butter 227g',
+    }, [{
+      sku: '100325489', name: 'Kerrygold Salted Butter 227g', price: 2.5,
       wasPrice: null, onPromotion: false, url: null,
     }])).toBeNull();
   });

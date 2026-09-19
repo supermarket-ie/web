@@ -1179,6 +1179,11 @@ Decision-log addition:
   retain diagnostic evidence, and validate on a small production tranche before
   another full refresh.
 
+The follow-up validation route can replay an exact prior failure cohort by run
+UUID. This prevents the standard coverage-priority selector from changing the
+sample between recovery tranches, while retaining `targeted_validation` scope so
+the result cannot replace scheduled full-run health.
+
 ## 37. Retailer run-scope observability — 19 September 2026
 
 `scrape_runs.run_scope` now distinguishes `scheduled_full`,
@@ -1208,3 +1213,36 @@ Decision-log addition:
   targeted failure cohort may update trusted coverage and its snapshot, but it
   cannot replace the latest scheduled full-run status used by dashboards and
   alerts.
+
+## 38. Empty-shell remapping and pack-expression recovery — 19 September 2026
+
+The post-validation diagnostics showed that Dunnes' remaining
+`no_confident_match` cohort mixes genuine stale/wrong mappings with a narrow
+false-negative class: the canonical name says `N Pack`, while the retailer title
+states the same leading item count plus a total weight. The direct worker now
+reuses the richer Dunnes pack parser for this case and accepts it only when both
+sides expose the same item count. Single-versus-multipack changes, explicit size
+changes and variant conflicts such as salted versus unsalted remain rejected.
+Candidate diagnostics now include whether a price was actually returned, so an
+identity failure can be distinguished from an unavailable search result.
+
+SuperValu `empty_product_state` rows now enter a bounded retailer-owned remap
+attempt. The worker issues at most two de-duplicated compact queries derived
+from the stored and canonical titles, parses the existing Storefront product
+card dictionary and constructs a new product URL from retailer name and SKU. A
+mapping changes only when exactly one priced candidate passes the canonical
+name/pack checks, or when one compatible candidate retains the same retailer
+SKU. Multiple plausible variants remain unresolved. The replacement URL, SKU
+and retailer title are persisted only through the existing successful product
+finalizer; unsuccessful attempts retain bounded query/candidate evidence.
+
+No AI matching, fuzzy-threshold reduction, browser extension, ScrapingBee or
+Pepesto credit was introduced. Validate this tranche on the previous failure
+cohort before another scheduled 1,000-product run.
+
+Decision-log addition:
+
+- **2026-09-19 — Repair empty shells through unique retailer-owned evidence.**
+  A search result can replace an expired SuperValu product identity only when
+  canonical identity and pack constraints leave one safe priced candidate;
+  ambiguous families stay unresolved.
