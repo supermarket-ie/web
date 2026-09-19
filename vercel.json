@@ -13,8 +13,8 @@
     {"path":"/api/cron/agent-tasks","schedule":"35 7 * * *"},
     {"path":"/api/cron/price-watchdog","schedule":"30 7 * * *"},
     {"path":"/api/cron/price-watchdog?nudge=thursday","schedule":"0 9 * * 4"},
-    {"path":"/api/workers/dunnes-scrape-trigger?limit=1000","schedule":"58 12 19 9 *"},
-    {"path":"/api/workers/supervalu-scrape-trigger?limit=1000","schedule":"58 12 19 9 *"},
+    {"path":"/api/workers/dunnes-scrape-trigger?limit=1000","schedule":"10 5 * * 1,4"},
+    {"path":"/api/workers/supervalu-scrape-trigger?limit=1000","schedule":"20 5 * * 1,4"},
     {"path":"/api/workers/pepesto-tesco-retrieve","schedule":"*/10 * * * *"},
     {"path":"/api/cron/scrape-watchdog","schedule":"45 7 * * 1,4"},
     {"path":"/api/cron/product-embeddings","schedule":"0 4 * * 0"}
