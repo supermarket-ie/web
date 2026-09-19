@@ -26,13 +26,13 @@ jobs:
         run: |
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "https://supermarket.ie/api/workers/dunnes-scrape-trigger?limit=1000"
+            "https://supermarket.ie/api/workers/dunnes-scrape-trigger?limit=1000&scope=scheduled_full"
       - name: Trigger SuperValu full production cycle
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "https://supermarket.ie/api/workers/supervalu-scrape-trigger?limit=1000"
+            "https://supermarket.ie/api/workers/supervalu-scrape-trigger?limit=1000&scope=scheduled_full"
 
   aldi-full:
     runs-on: ubuntu-latest
