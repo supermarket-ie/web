@@ -427,3 +427,10 @@ confirmed that the older worker heuristic did not recognise these same strict
 decisions. The worker now reuses the resolution predicate for same-SKU
 candidates before its legacy fallback, ensuring accepted exact mappings remain
 refreshable without weakening general candidate matching.
+
+Production replay `e878ac5f-4242-4856-aaa2-cd0333b5aeb3` then refreshed 26/86
+Dunnes products, exactly eight more than the earlier 18/86 result. Sixty remain:
+47 `no_confident_match` and 13 `no_search_results`. The combined SuperValu and
+Dunnes resolution queue is now 169 records. Dunnes remains at 921/2,462 live
+trusted products (37.41%) and 74.50% demand coverage; SuperValu remains at
+1,594/2,462 (64.74%) and 81.56% demand coverage.
