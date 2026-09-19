@@ -20,8 +20,8 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] dunnes alternative canary': { name: 'dunnes-alternative-canary', target: '/api/ops/dunnes-alternative-canary?limit=30' },
   '[ops] dunnes usage-ranked discovery': { name: 'dunnes-usage-ranked-discovery', target: '/api/workers/dunnes-discovery-trigger?limit=250&batch_size=1&stagger_seconds=2' },
   '[ops] dunnes discovery recovery': { name: 'dunnes-discovery-recovery', target: '/api/workers/dunnes-discovery-recover' },
-  '[ops] dunnes catch-up': { name: 'dunnes-catch-up', target: '/api/workers/dunnes-scrape-trigger?limit=275' },
-  '[ops] supervalu catch-up': { name: 'supervalu-catch-up', target: '/api/workers/supervalu-scrape-trigger?limit=1000' },
+  '[ops] dunnes catch-up': { name: 'dunnes-catch-up', target: '/api/workers/dunnes-scrape-trigger?limit=275&scope=catch_up' },
+  '[ops] supervalu catch-up': { name: 'supervalu-catch-up', target: '/api/workers/supervalu-scrape-trigger?limit=1000&scope=catch_up' },
   '[ops] tesco pepesto refresh': { name: 'tesco-pepesto-refresh', target: '/api/workers/pepesto-tesco-submit?limit=100' },
 };
 

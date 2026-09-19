@@ -58,7 +58,7 @@ jobs:
         run: |
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "https://supermarket.ie/api/workers/dunnes-scrape-trigger?limit=275"
+            "https://supermarket.ie/api/workers/dunnes-scrape-trigger?limit=275&scope=catch_up"
 
       - name: Trigger tightened Dunnes alternative validation
         if: steps.operation.outputs.operation == 'alternative-canary'

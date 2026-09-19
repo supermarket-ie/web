@@ -28,6 +28,10 @@ type CoverageRow = {
   latest_run_finished_at: string | null;
   latest_run_coverage_pct: number | null;
   latest_run_threshold_pct: number | null;
+  latest_auxiliary_run_id: string | null;
+  latest_auxiliary_run_scope: string | null;
+  latest_auxiliary_run_status: string | null;
+  latest_auxiliary_run_coverage_pct: number | null;
 };
 
 function isAuthorized(req: Request) {
@@ -92,18 +96,19 @@ export async function GET(req: Request) {
   const now = new Date();
   const t30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const latestRunQueries = STORES.map((store) => supabase
-    .from('scrape_runs')
-    .select('*')
-    .eq('store', store)
-    .neq('status', 'running')
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle());
+  const latestRunQueries = STORES.map((store) => {
+    let query = supabase
+      .from('scrape_runs')
+      .select('*')
+      .eq('store', store)
+      .neq('status', 'running');
+    if (store === 'supervalu' || store === 'dunnes') query = query.eq('run_scope', 'scheduled_full');
+    return query.order('started_at', { ascending: false }).limit(1).maybeSingle();
+  });
 
   const runHistoryQueries = STORES.map((store) => supabase
     .from('scrape_runs')
-    .select('id, run_id, retrieval_method, started_at, finished_at, duration_seconds, status, target_count, attempted_count, fetched, extracted, inserted, unchanged_count, failed, silently_skipped_count, coverage_pct, threshold_pct, threshold_breached, scrapingbee_requests, scrapingbee_credits, error_summary')
+    .select('id, run_id, run_scope, retrieval_method, started_at, finished_at, duration_seconds, status, target_count, attempted_count, fetched, extracted, inserted, unchanged_count, failed, silently_skipped_count, coverage_pct, threshold_pct, threshold_breached, scrapingbee_requests, scrapingbee_credits, error_summary')
     .eq('store', store)
     .order('started_at', { ascending: false })
     .limit(8));
@@ -125,7 +130,7 @@ export async function GET(req: Request) {
     supabase.from('retailer_category_coverage_current').select('*').gte('catalogue_products', 10).order('neither_live', { ascending: false }),
     supabase.from('retailer_coverage_snapshots').select('*').gte('captured_at', t30d).order('captured_at', { ascending: false }),
     supabase.from('scrape_failures').select('run_id, canonical_name, store, failure_stage, failure_reason, is_retryable, consecutive_failures').gte('created_at', t30d),
-    supabase.from('scrape_runs').select('run_id, store, retrieval_method, started_at, coverage_pct, threshold_pct, status').eq('threshold_breached', true).gte('started_at', t30d).order('started_at', { ascending: false }),
+    supabase.from('scrape_runs').select('run_id, store, run_scope, retrieval_method, started_at, coverage_pct, threshold_pct, status').eq('threshold_breached', true).gte('started_at', t30d).order('started_at', { ascending: false }),
   ]);
 
   const errors = [coverageResult, comparisonResult, categoriesResult, coverageHistoryResult, failuresResult, breachesResult]
@@ -203,6 +208,12 @@ export async function GET(req: Request) {
     category_coverage: categoriesResult.data ?? [],
     coverage_history: coverageHistory,
     latest_runs: latestRuns,
+    latest_auxiliary_runs: Object.fromEntries(coverage.map((row) => [row.store, {
+      run_id: row.latest_auxiliary_run_id,
+      run_scope: row.latest_auxiliary_run_scope,
+      status: row.latest_auxiliary_run_status,
+      coverage_pct: row.latest_auxiliary_run_coverage_pct,
+    }])),
     run_history: runHistory,
     latest_run_failures: latestRunFailures,
     failures_by_store: failuresByStore,

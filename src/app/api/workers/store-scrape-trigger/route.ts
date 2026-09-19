@@ -3,6 +3,7 @@ import { createDunnesScrapeRun, type DunnesBatchMessage, type DunnesQueueProduct
 import { createSupervaluScrapeRun, type SupervaluBatchMessage, type SupervaluQueueProduct } from '@/lib/supervalu-direct-worker';
 import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import { supabaseAdmin } from '@/lib/supabase';
+import { resolveRetailerRunScope, type RetailerRunScope } from '@/lib/scrape-run-scope';
 
 const SUPPORTED = ['dunnes', 'supervalu'] as const;
 type Store = (typeof SUPPORTED)[number];
@@ -39,7 +40,7 @@ async function markPublishFailure(runUuid: string, store: Store, queued: number,
   }).eq('id', runUuid);
 }
 
-async function queueDunnes(limit: number) {
+async function queueDunnes(limit: number, runScope: RetailerRunScope) {
   const rows = await selectStoreProductsForRefresh('dunnes', limit);
   const products: DunnesQueueProduct[] = rows.map((row) => ({
     storeProductId: row.store_product_id,
@@ -51,7 +52,7 @@ async function queueDunnes(limit: number) {
   }));
   if (!products.length) return { store: 'dunnes' as const, status: 'no_products', queued: 0 };
   const runId = `vercel_dunnes_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
-  const runUuid = await createDunnesScrapeRun(runId, products.length);
+  const runUuid = await createDunnesScrapeRun(runId, products.length, runScope);
   const batchSize = 5;
   const totalBatches = Math.ceil(products.length / batchSize);
   let queued = 0;
@@ -73,7 +74,7 @@ async function queueDunnes(limit: number) {
   return { store: 'dunnes' as const, status: 'queued', queued, run_id: runId, run_uuid: runUuid };
 }
 
-async function queueSupervalu(limit: number) {
+async function queueSupervalu(limit: number, runScope: RetailerRunScope) {
   const rows = await selectStoreProductsForRefresh('supervalu', limit, { productUrlOnly: true });
   const products: SupervaluQueueProduct[] = rows
     .filter((row) => Boolean(row.store_url))
@@ -87,7 +88,7 @@ async function queueSupervalu(limit: number) {
     }));
   if (!products.length) return { store: 'supervalu' as const, status: 'no_products', queued: 0 };
   const runId = `vercel_supervalu_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
-  const runUuid = await createSupervaluScrapeRun(runId, products.length);
+  const runUuid = await createSupervaluScrapeRun(runId, products.length, runScope);
   const batchSize = 3;
   const totalBatches = Math.ceil(products.length / batchSize);
   let queued = 0;
@@ -128,6 +129,8 @@ export async function GET(request: Request) {
   const stores = parseStores(requestedStores);
   if (!stores.length) return Response.json({ error: 'No supported stores requested' }, { status: 400 });
   const limit = parseLimit(url.searchParams.get('limit'));
+  const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit });
+  if (!resolvedScope.scope) return Response.json({ error: resolvedScope.error }, { status: 400 });
 
   const results: Array<Record<string, unknown>> = [];
   for (const store of stores) {
@@ -136,15 +139,15 @@ export async function GET(request: Request) {
       continue;
     }
     try {
-      if (store === 'dunnes') results.push(await queueDunnes(limit));
-      else results.push(await queueSupervalu(limit));
+      if (store === 'dunnes') results.push(await queueDunnes(limit, resolvedScope.scope));
+      else results.push(await queueSupervalu(limit, resolvedScope.scope));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       results.push({ store, status: 'error', error: message.slice(0, 300) });
     }
   }
 
-  return Response.json({ status: 'accepted', limit, stores: results });
+  return Response.json({ status: 'accepted', limit, run_scope: resolvedScope.scope, stores: results });
 }
 
 export async function POST() {

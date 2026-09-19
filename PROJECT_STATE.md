@@ -1178,3 +1178,33 @@ Decision-log addition:
   normalisation with regression fixtures; keep stale/wrong mappings fail closed,
   retain diagnostic evidence, and validate on a small production tranche before
   another full refresh.
+
+## 37. Retailer run-scope observability — 19 September 2026
+
+`scrape_runs.run_scope` now distinguishes `scheduled_full`,
+`targeted_validation`, `canary`, `catch_up`, `discovery` and `manual` work.
+The regular Dunnes and SuperValu cron URLs explicitly declare
+`scheduled_full`; filtered or sub-1,000 direct runs default to
+`targeted_validation`, and operational catch-up dispatches declare `catch_up`.
+A guard rejects attempts to label filtered or smaller runs as scheduled full.
+
+The private current-coverage view, authenticated data-health API and scheduled
+watchdog now use only the latest completed `scheduled_full` run for the primary
+health signal. The latest non-scheduled run remains visible separately with its
+actual scope and result. Coverage snapshots retain the scope of the run that
+caused them, so targeted repair gains remain measurable without turning their
+deliberately failure-heavy success rate into a false production-health alert.
+
+After the production migration, the primary run health correctly returned to
+the 19 September full runs: Dunnes 69.8% degraded and SuperValu 70.1% degraded.
+The later 150-product validation cohorts remain separately recorded as
+`targeted_validation`: Dunnes 10.0% and SuperValu 18.0%. Historical direct runs
+of at least 1,000 products were backfilled as scheduled full; smaller direct
+runs, canaries and discovery runs were classified separately.
+
+Decision-log addition:
+
+- **2026-09-19 — Scheduled scrape health is scope-aware.** A canary, catch-up or
+  targeted failure cohort may update trusted coverage and its snapshot, but it
+  cannot replace the latest scheduled full-run status used by dashboards and
+  alerts.

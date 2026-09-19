@@ -432,7 +432,7 @@ export async function selectSupervaluProducts(limit: number, query?: string): Pr
     });
 }
 
-export async function createSupervaluScrapeRun(runId: string, targetCount: number) {
+export async function createSupervaluScrapeRun(runId: string, targetCount: number, runScope: string) {
   const { data, error } = await supabaseAdmin
     .from('scrape_runs')
     .insert({
@@ -441,6 +441,7 @@ export async function createSupervaluScrapeRun(runId: string, targetCount: numbe
       started_at: new Date().toISOString(),
       target_count: targetCount,
       retrieval_method: 'vercel_direct_product_page',
+      run_scope: runScope,
       threshold_pct: 85,
       status: 'running',
     })

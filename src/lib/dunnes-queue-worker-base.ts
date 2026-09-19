@@ -335,7 +335,7 @@ export async function selectDunnesProducts(limit: number, query?: string): Promi
   });
 }
 
-export async function createDunnesScrapeRun(runId: string, targetCount: number) {
+export async function createDunnesScrapeRun(runId: string, targetCount: number, runScope: string) {
   const { data, error } = await supabaseAdmin
     .from('scrape_runs')
     .insert({
@@ -344,6 +344,7 @@ export async function createDunnesScrapeRun(runId: string, targetCount: number) 
       started_at: new Date().toISOString(),
       target_count: targetCount,
       retrieval_method: 'vercel_queue_dunnes_api_resolved_first',
+      run_scope: runScope,
       threshold_pct: 75,
       status: 'running',
     })
