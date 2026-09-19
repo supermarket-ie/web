@@ -1094,3 +1094,25 @@ Decision-log addition:
   presentation boundary.** Resolve all proposed lines in bounded batches and
   reserve **Needs resolving** for genuinely ambiguous or absent catalogue
   items; do not weaken canonical identity or trusted-price requirements.
+
+## 35. Actionable resolution and aggregate observability — 19 September 2026
+
+Household-shop resolution now records one aggregate server-side event after a
+successful presentation. Telemetry contains only line counts by coverage state,
+candidate-row counts, query-chunk count and elapsed milliseconds. It excludes
+product names, requested items, household assumptions and conversation text.
+Telemetry failure is non-blocking and cannot prevent the shop being shown.
+
+Unresolved lines are no longer a static dead end. A genuinely ambiguous line
+offers **Choose product**, which prefills the agent with a bounded request for
+the strongest current catalogue matches. A known canonical product without a
+trusted current price is labelled **Price unavailable** and offers **Find
+alternative**. Resolved and partially covered products do not receive these
+actions, and clicking an action does not silently edit or persist the shop.
+
+Decision-log addition:
+
+- **2026-09-19 — Resolution quality is measurable and shopper-correctable.**
+  Persist privacy-safe aggregate resolution metrics and route ambiguous or
+  unavailable lines back through an explicit agent choice without silently
+  substituting products.

@@ -19,6 +19,7 @@ export default defineTool({
   description: `Present a complete household shop in Supermarket.ie’s native structured shopping UI. Use this for complete, weekly or value-led household-shop outcomes after the household assumptions are known. Submit the complete proposal directly rather than making one product-lookup call per line: this tool batch-resolves ordinary product wording server-side, validates any supplied canonical_product_id values and leaves genuinely ambiguous needs unresolved. Never invent an ID. This tool owns current prices, promotion truth, totals and retailer coverage; never write those values in the input. After calling it, introduce the result briefly instead of repeating every shop line in prose.`,
   inputSchema: householdShopProposalSchema,
   async execute(rawProposal) {
+    const startedAt = Date.now();
     const proposal = householdShopProposalSchema.parse(rawProposal);
     const suppliedIds = [...new Set(proposal.items.flatMap(item => item.canonical_product_id ? [item.canonical_product_id] : []))];
     const seedChunks = chunks(householdShopResolutionSeeds(proposal), QUERY_CHUNK_SIZE);
@@ -96,6 +97,23 @@ export default defineTool({
       })),
       comparison_retailers: ['tesco', 'dunnes', 'supervalu'],
     });
+
+    const resolutionCounts = shop.items.reduce((counts, item) => {
+      counts[item.coverage_status] += 1;
+      return counts;
+    }, { resolved: 0, partial: 0, unavailable: 0, unresolved: 0 });
+    const { error: telemetryError } = await agentSupabase.from('agent_events').insert({
+      event_type: 'household_shop_resolution_completed',
+      metadata: {
+        total_lines: shop.items.length,
+        ...resolutionCounts,
+        catalogue_candidates: catalogueProducts.length,
+        price_candidates: priceRows.length,
+        query_chunks: seedChunks.length,
+        duration_ms: Date.now() - startedAt,
+      },
+    });
+    if (telemetryError) console.warn('[household-shop-resolution] telemetry insert failed', telemetryError.message);
 
     return { kind: 'household_shop' as const, shop };
   },

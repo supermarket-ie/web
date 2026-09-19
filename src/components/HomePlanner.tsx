@@ -704,7 +704,16 @@ function ShoppingAgentInner({
                     {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <FormattedAgentText text={text} />}
                   </div>
                 )}
-                {shops.map((shop, index) => <HouseholdShopCard key={`${message.id}:shop:${index}`} shop={shop} />)}
+                {shops.map((shop, index) => (
+                  <HouseholdShopCard
+                    key={`${message.id}:shop:${index}`}
+                    shop={shop}
+                    onResolve={prompt => {
+                      setInput(prompt);
+                      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Tell your agent what to change"]')?.focus());
+                    }}
+                  />
+                ))}
               </div>
             </div>
           );
