@@ -143,7 +143,13 @@ function hasCanonicalSignal(canonical: string, candidate: string) {
   return words.some((word) => candidateNorm.includes(word));
 }
 
-function directResolvedCandidate(product: DunnesQueueProduct, candidates: Candidate[]) {
+export function extractDunnesUrlSku(storeUrl: string | null) {
+  if (!storeUrl) return null;
+  const match = storeUrl.match(/\/([^/?#]+)(?:[?#]|$)/);
+  return match?.[1] && /^\d+$/.test(match[1]) ? match[1] : null;
+}
+
+export function directResolvedCandidate(product: DunnesQueueProduct, candidates: Candidate[]) {
   const usable = candidates.filter((candidate) =>
     Boolean(candidate.name && candidate.price && candidate.price > 0)
     && isSizeCompatible(product.canonicalName, candidate.name)
@@ -152,8 +158,9 @@ function directResolvedCandidate(product: DunnesQueueProduct, candidates: Candid
     && retailerNameCompatible(product.storeProductName, candidate.name)
   );
 
-  if (product.storeSku) {
-    const exactSku = usable.find((candidate) => candidate.sku === String(product.storeSku));
+  const knownSkus = new Set([product.storeSku, extractDunnesUrlSku(product.storeUrl)].filter(Boolean).map(String));
+  if (knownSkus.size) {
+    const exactSku = usable.find((candidate) => candidate.sku && knownSkus.has(candidate.sku));
     if (exactSku) return exactSku;
   }
 
@@ -209,7 +216,7 @@ function makeProductUrl(item: DunnesApiItem) {
 }
 
 async function fetchCandidates(queryName: string, product: DunnesQueueProduct): Promise<Candidate[]> {
-  const trimmedQuery = queryName.split(' ').slice(0, 5).join(' ').slice(0, 60);
+  const trimmedQuery = queryName.split(/\s+/).slice(0, 8).join(' ').slice(0, 90);
   const url = `${GATEWAY_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(trimmedQuery)}&take=8&page=1&skip=0`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);

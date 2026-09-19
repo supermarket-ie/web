@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase', () => ({ supabaseAdmin: {} }));
 import type { ProductPrice } from '@/lib/price-data';
 import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
-import { isDirectMappingCompatible, parseSupervaluProductPage } from '@/lib/supervalu-direct-worker';
+import { classifySupervaluProductPage, isDirectMappingCompatible, parseSupervaluProductPage } from '@/lib/supervalu-direct-worker';
+import { directResolvedCandidate, extractDunnesUrlSku } from '@/lib/dunnes-queue-worker';
 import { choosePepestoCandidate } from '@/lib/pepesto-tesco';
 
 function price(overrides: Partial<ProductPrice> = {}): ProductPrice {
@@ -142,6 +143,33 @@ describe('SuperValu promotion parsing', () => {
       wasPrice: null,
       onPromotion: false,
     })).toBe(false);
+  });
+});
+
+describe('retailer recovery safeguards', () => {
+  it('classifies an empty SuperValu product shell separately', () => {
+    const result = classifySupervaluProductPage(`
+      <meta itemprop="price" content="0">
+      <script>window.__PRELOADED_STATE__ = {"product":{"name":"","price":null}}</script>
+    `);
+    expect(result).toEqual({ candidate: null, failureReason: 'empty_product_state' });
+  });
+
+  it('uses a compatible Dunnes URL identity when the stored SKU has drifted', () => {
+    const storeUrl = 'https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/7up-zero/100324568';
+    expect(extractDunnesUrlSku(storeUrl)).toBe('100324568');
+    const candidate = directResolvedCandidate({
+      storeProductId: 'mapping-1',
+      canonicalName: '7UP Zero Sugar Pink Lemonade Bottle 500ml',
+      storeProductName: '7UP Zero Sugar Pink Lemonade Bottle 500ml',
+      storeUrl,
+      storeSku: 'old-barcode',
+      previousPrice: null,
+    }, [{
+      sku: '100324568', name: '7UP Zero Sugar Pink Lemonade Bottle 500ml', price: 1.9,
+      wasPrice: null, onPromotion: false, url: null,
+    }]);
+    expect(candidate?.sku).toBe('100324568');
   });
 });
 

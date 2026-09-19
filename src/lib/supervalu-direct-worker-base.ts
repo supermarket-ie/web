@@ -10,6 +10,11 @@ export type Candidate = {
   onPromotion: boolean;
 };
 
+export type SupervaluFetchResult = {
+  candidate: Candidate | null;
+  failureReason: 'empty_product_state' | 'product_not_found' | 'no_product_data' | null;
+};
+
 export type SupervaluQueueProduct = {
   storeProductId: string;
   canonicalName: string;
@@ -303,7 +308,28 @@ export function parseSupervaluProductPage(html: string): Candidate | null {
   return { name, sku: null, price, wasPrice: promotion.wasPrice, onPromotion: promotion.onPromotion };
 }
 
-export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Promise<Candidate | null> {
+export function classifySupervaluProductPage(html: string): SupervaluFetchResult {
+  const candidate = parseSupervaluProductPage(html);
+  if (candidate) return { candidate, failureReason: null };
+
+  const text = stripTags(html).toLowerCase();
+  if (/product\s+(?:was\s+)?not\s+found|page\s+not\s+found/.test(text)) {
+    return { candidate: null, failureReason: 'product_not_found' };
+  }
+
+  const state = record(extractAssignedJson(html, '__PRELOADED_STATE__'));
+  const product = record(state?.product);
+  const name = typeof product?.name === 'string' ? product.name.trim() : '';
+  const price = numericPrice(record(product?.price)?.amount ?? product?.price);
+  const zeroPriceShell = metaContent(html, ['product:price:amount', 'price']) === '0';
+  if ((product && !name && !price) || zeroPriceShell) {
+    return { candidate: null, failureReason: 'empty_product_state' };
+  }
+
+  return { candidate: null, failureReason: 'no_product_data' };
+}
+
+export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Promise<SupervaluFetchResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -320,8 +346,13 @@ export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Pro
     if (response.status === 429 || response.status >= 500) {
       throw new TransientSupervaluError(`SuperValu returned HTTP ${response.status}`, product, `http_${response.status}`);
     }
-    if (!response.ok) return null;
-    return parseSupervaluProductPage(await response.text());
+    if (!response.ok) {
+      return {
+        candidate: null,
+        failureReason: response.status === 404 ? 'product_not_found' : 'no_product_data',
+      };
+    }
+    return classifySupervaluProductPage(await response.text());
   } catch (error) {
     if (error instanceof TransientSupervaluError) throw error;
     const message = error instanceof Error ? error.message : String(error);
@@ -465,14 +496,15 @@ export async function processSupervaluProduct(message: SupervaluBatchMessage, pr
     return;
   }
 
-  const candidate = await fetchSupervaluProduct(product);
+  const result = await fetchSupervaluProduct(product);
+  const candidate = result.candidate;
   if (!candidate) {
     await finalize(message, product, {
       success: false,
       fetched: 1,
       extracted: 0,
       failureStage: 'parsing',
-      failureReason: 'no_product_data',
+      failureReason: result.failureReason ?? 'no_product_data',
     });
     return;
   }

@@ -1094,3 +1094,37 @@ Decision-log addition:
   presentation boundary.** Resolve all proposed lines in bounded batches and
   reserve **Needs resolving** for genuinely ambiguous or absent catalogue
   items; do not weaken canonical identity or trusted-price requirements.
+
+## 35. SuperValu and Dunnes coverage observability — 19 September 2026
+
+Retailer coverage is now measured independently of scrape transport success.
+Private Supabase views expose current canonical-catalogue, mapping, trusted-live,
+freshness, shopper-demand and category coverage for SuperValu and Dunnes, plus
+their shared overlap. A private snapshot table captures the same business-level
+metrics whenever a retailer run reaches a terminal state. The baseline at rollout
+was 852 live SuperValu products (34.61%), 810 Dunnes products (32.90%), and 635
+products live at both retailers (25.79% of the 2,462-product catalogue).
+
+The authenticated scrape-health API and `/admin/data-health` now present these
+metrics, category gaps, latest-run failure mixes and threshold alerts. The
+existing scheduled watchdog includes coverage under 50%, dual-retailer coverage
+under 40%, three-point regressions and prices due to expire within 24 hours in
+its operational email. Supabase remains the system of record: the current data
+volume and workload do not justify Snowflake, while snapshots provide a clean
+future export boundary if analytical scale changes.
+
+Live SuperValu samples established that most `no_product_data` results are HTTP
+200 empty product shells for expired mappings, not parser failures. They are now
+classified as `empty_product_state` so remapping can be measured separately.
+Dunnes recovery now accepts the numeric product identity embedded in an existing
+resolved URL when the stored SKU has drifted, but only after the existing name,
+size and type safeguards pass. Search queries retain up to eight words instead
+of five to reduce false `no_search_results`; no model calls were added and fuzzy
+confidence thresholds were not lowered.
+
+Decision-log addition:
+
+- **2026-09-19 — Coverage is a first-class operational metric in Supabase.**
+  Track trusted catalogue and demand coverage over time, alert on regressions,
+  and repair retailer identities conservatively before considering a separate
+  warehouse or model-assisted matching.
