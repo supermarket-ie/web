@@ -15,8 +15,11 @@ type Coverage = {
   top_100_demanded_live: number;
   live_coverage_pct: number;
   demand_coverage_pct: number;
-  latest_run_status: string;
-  latest_run_coverage_pct: number;
+  latest_run_status: string | null;
+  latest_run_coverage_pct: number | null;
+  latest_auxiliary_run_scope: string | null;
+  latest_auxiliary_run_status: string | null;
+  latest_auxiliary_run_coverage_pct: number | null;
 };
 
 type HealthPayload = {
@@ -74,9 +77,14 @@ function RetailerCard({ row }: { row: Coverage }) {
             ? 'bg-[#e7f6eb] text-[#1f7642]'
             : 'bg-[#fff1df] text-[#9a5a14]'
         }`}>
-          Latest run: {row.latest_run_status} · {Number(row.latest_run_coverage_pct).toFixed(1)}%
+          Scheduled run: {row.latest_run_status ?? 'not recorded'}{row.latest_run_coverage_pct == null ? '' : ` · ${Number(row.latest_run_coverage_pct).toFixed(1)}%`}
         </span>
       </div>
+      {row.latest_auxiliary_run_status ? (
+        <p className="mt-3 text-xs text-[#718077]">
+          Latest {title(row.latest_auxiliary_run_scope ?? 'targeted')} run: {row.latest_auxiliary_run_status} · {Number(row.latest_auxiliary_run_coverage_pct ?? 0).toFixed(1)}%
+        </p>
+      ) : null}
       <div className="mt-6 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div><span className="block text-[#77837b]">Resolved</span><strong>{row.resolved_products.toLocaleString()}</strong></div>
         <div><span className="block text-[#77837b]">Never observed</span><strong>{row.never_observed_products.toLocaleString()}</strong></div>
