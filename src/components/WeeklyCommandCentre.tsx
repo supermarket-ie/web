@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Check, CircleAlert, Clock3, ReceiptText, ShoppingBasket, Sparkles } from 'lucide-react';
+import { ArrowUpRight, Check, CircleAlert, Clock3, Eye, Pencil, Plus, ReceiptText, ShoppingBasket, Sparkles } from 'lucide-react';
 import { loadSession } from '@/lib/session';
 import { trackEvent, trackEventOnce } from '@/lib/analytics';
 import { HomePlanner, type HomePlannerJourneyState } from '@/components/HomePlanner';
@@ -10,6 +10,7 @@ import type { WeeklyPlanState } from '@/app/api/plan/weekly/route';
 import type { CurrentShopLine } from '@/lib/shopping/current-shop-summary';
 
 type HomeState = 'new' | 'progress' | 'ready';
+type ProductWatch = { id: string; canonical_name: string | null; product_family: string | null; source_request: string | null; condition?: { kind?: string; amount?: number } };
 
 function previewPlan(state: HomeState): WeeklyPlanState {
   const now = new Date();
@@ -78,7 +79,7 @@ function ReceiptLine({ line }: { line: CurrentShopLine }) {
   );
 }
 
-function LivingReceipt({ plan, state, token }: { plan: WeeklyPlanState | null; state: HomeState; token: string | null }) {
+function LivingReceipt({ plan, state, token, watches, onBudgetUpdated }: { plan: WeeklyPlanState | null; state: HomeState; token: string | null; watches: ProductWatch[]; onBudgetUpdated: (budget: number | null) => void }) {
   const shop = plan?.currentShop ?? null;
   const activeShop = Boolean(shop && plan?.weekStart && shop.generatedAt.slice(0, 10) >= plan.weekStart);
   const lines = activeShop && shop ? shop.lines : [];
@@ -88,6 +89,32 @@ function LivingReceipt({ plan, state, token }: { plan: WeeklyPlanState | null; s
   const estimate = activeShop && shop ? shop.estimatedTotal : plan?.budget.current ?? 0;
   const budgetDifference = budgetTarget == null ? null : budgetTarget - estimate;
   let visibleLineCount = 0;
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState(budgetTarget?.toString() ?? '');
+  const [budgetStatus, setBudgetStatus] = useState<'idle' | 'saving' | 'error'>('idle');
+
+  async function saveBudget() {
+    const nextBudget = budgetInput.trim() ? Number(budgetInput) : null;
+    if (nextBudget !== null && (!Number.isFinite(nextBudget) || nextBudget <= 0 || nextBudget > 5000)) {
+      setBudgetStatus('error');
+      return;
+    }
+    if (token === '__cookie__') {
+      setBudgetStatus('idle');
+      setEditingBudget(false);
+      onBudgetUpdated(nextBudget);
+      return;
+    }
+    setBudgetStatus('saving');
+    const response = await fetch('/api/household', {
+      method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weeklyBudget: nextBudget }),
+    });
+    if (!response.ok) { setBudgetStatus('error'); return; }
+    setBudgetStatus('idle');
+    setEditingBudget(false);
+    onBudgetUpdated(nextBudget);
+  }
 
   function focusAgent() {
     trackEvent('home_shop_action', { home_state: state, action: 'focus_agent' }, token ?? undefined);
@@ -108,7 +135,13 @@ function LivingReceipt({ plan, state, token }: { plan: WeeklyPlanState | null; s
         <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
           <div><p className="text-[10px] uppercase tracking-wider text-[#8b948e]">Items</p><p className="mt-0.5 font-mono text-lg font-bold">{activeShop && shop ? shop.itemCount : plan?.shoppingList.length ?? 0}</p></div>
           <div><p className="text-[10px] uppercase tracking-wider text-[#8b948e]">Estimate</p><p className="mt-0.5 font-mono text-lg font-bold">{estimate > 0 ? `€${estimate.toFixed(2)}` : '—'}</p></div>
-          <div><p className="text-[10px] uppercase tracking-wider text-[#8b948e]">Budget</p><p className="mt-0.5 text-xs font-semibold text-[#3c493f]">{budgetDifference == null ? 'No target set' : budgetDifference >= 0 ? `€${budgetDifference.toFixed(2)} remaining` : `€${Math.abs(budgetDifference).toFixed(2)} over target`}</p></div>
+          <div>
+            <div className="flex items-center gap-1.5"><p className="text-[10px] uppercase tracking-wider text-[#8b948e]">Budget</p><button type="button" onClick={() => { setBudgetInput(budgetTarget?.toString() ?? ''); setBudgetStatus('idle'); setEditingBudget(value => !value); }} aria-label="Edit weekly budget" className="rounded p-0.5 text-[#6d7870] hover:bg-[#edf4ef] hover:text-[#168049]"><Pencil className="size-3" /></button></div>
+            {editingBudget ? (
+              <div className="mt-1 flex items-center gap-1.5"><span className="text-xs font-bold">€</span><input aria-label="Weekly budget" type="number" min="1" max="5000" value={budgetInput} onChange={event => setBudgetInput(event.target.value)} placeholder="No limit" className="w-20 rounded-lg border border-[#cfd8d1] bg-white px-2 py-1 text-xs font-semibold outline-none focus:border-[#168049]" /><button type="button" onClick={() => void saveBudget()} disabled={budgetStatus === 'saving'} className="rounded-lg bg-[#173124] px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50">{budgetStatus === 'saving' ? 'Saving' : 'Save'}</button></div>
+            ) : <p className="mt-0.5 text-xs font-semibold text-[#3c493f]">{budgetDifference == null ? 'No target set' : budgetDifference >= 0 ? `€${budgetDifference.toFixed(2)} remaining` : `€${Math.abs(budgetDifference).toFixed(2)} over target`}</p>}
+            {budgetStatus === 'error' && <p className="mt-1 text-[10px] text-red-700">Enter a budget between €1 and €5,000.</p>}
+          </div>
           <div><p className="text-[10px] uppercase tracking-wider text-[#8b948e]">Meals</p><p className="mt-0.5 text-xs font-semibold text-[#3c493f]">{plannedDinners ? `${plannedDinners} of 7 dinners` : 'Not planned yet'}</p></div>
         </div>
       </div>
@@ -130,6 +163,13 @@ function LivingReceipt({ plan, state, token }: { plan: WeeklyPlanState | null; s
       </div>
 
       <div className="border-t border-dashed border-[#cfd6d0] px-5 py-5 sm:px-6">
+        <div className="mb-4 rounded-2xl border border-[#eee0bd] bg-[#fff8e5] px-3.5 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2"><Eye className="size-4 text-[#856315]" /><p className="text-xs font-bold text-[#4c4023]">Watching</p>{watches.length > 0 && <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-bold text-[#7a6228]">{watches.length}</span>}</div>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('sm:agent-prefill', { detail: 'I want to watch a product' }))} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#6c551f]"><Plus className="size-3" /> Add a watch</button>
+          </div>
+          {watches.length > 0 ? <div className="mt-2 space-y-1">{watches.slice(0, 2).map(watch => <p key={watch.id} className="truncate text-[11px] text-[#665a3d]">{watch.canonical_name || watch.product_family || watch.source_request || 'Product watch'}</p>)}</div> : <p className="mt-1 text-[11px] leading-4 text-[#7d7258]">Products and price conditions you ask your agent to monitor will appear here.</p>}
+        </div>
         <div className={`mb-3 flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold ${state === 'ready' ? 'bg-[#e9f7ed] text-[#27643d]' : state === 'progress' ? 'bg-[#fff4dd] text-[#7b5907]' : 'bg-[#f0f3f1] text-[#677169]'}`}>
           {state === 'ready' ? <Check className="size-4" /> : state === 'progress' ? <Clock3 className="size-4" /> : <Sparkles className="size-4" />}
           <span>{state === 'ready' ? 'Ready to review with current validated prices' : state === 'progress' && activeShop && shop?.unresolvedCount ? `${shop.unresolvedCount} choice${shop.unresolvedCount === 1 ? '' : 's'} still need attention` : state === 'progress' ? 'Your shop is taking shape' : 'Waiting for your direction'}</span>
@@ -150,6 +190,10 @@ export function WeeklyCommandCentre({ visualPreviewState }: { visualPreviewState
   const [loading, setLoading] = useState(!visualPreviewState);
   const [token, setToken] = useState<string | null>(visualPreviewState ? '__cookie__' : null);
   const [journeyState, setJourneyState] = useState<HomePlannerJourneyState>({ hasConversation: false, hasProposedShop: false });
+  const [watches, setWatches] = useState<ProductWatch[]>(() => visualPreviewState ? [
+    { id: 'preview-watch-1', canonical_name: 'Pampers Baby-Dry Size 5', product_family: 'Nappies', source_request: 'Tell me when Pampers Size 5 drops below €15', condition: { kind: 'price_below', amount: 15 } },
+    { id: 'preview-watch-2', canonical_name: 'Dairygold Spreadable 454g', product_family: 'Butter', source_request: 'Watch for a useful promotion', condition: { kind: 'promotion_started' } },
+  ] : []);
 
   const fetchPlan = useCallback(async (sessionToken: string) => {
     try {
@@ -165,7 +209,12 @@ export function WeeklyCommandCentre({ visualPreviewState }: { visualPreviewState
     const frame = requestAnimationFrame(() => {
       const sessionToken = loadSession()?.token ?? null;
       setToken(sessionToken);
-      if (sessionToken) void fetchPlan(sessionToken).finally(() => setLoading(false));
+      if (sessionToken) {
+        void Promise.all([
+          fetchPlan(sessionToken),
+          fetch(`/api/agent/watches?token=${encodeURIComponent(sessionToken)}`).then(response => response.ok ? response.json() : { watches: [] }).then(data => setWatches(data.watches ?? [])),
+        ]).finally(() => setLoading(false));
+      }
       else setLoading(false);
     });
     return () => cancelAnimationFrame(frame);
@@ -214,9 +263,9 @@ export function WeeklyCommandCentre({ visualPreviewState }: { visualPreviewState
           </div>
         )}
         <HomePlanner primaryHeading signedInEmptyState={emptyStateCopy} onJourneyStateChange={setJourneyState} />
-        {journeyState.hasConversation && <p className="border-t border-[#edf0ed] px-5 py-2.5 text-center text-[10px] text-[#8c958f]">This conversation continues on this device. Validated shops are saved to your account.</p>}
+        {journeyState.hasConversation && <p className="border-t border-[#edf0ed] px-5 py-2.5 text-center text-[10px] text-[#8c958f]">This conversation is saved automatically. Household preferences, watches and validated shops remain under your control.</p>}
       </section>
-      <LivingReceipt plan={plan} state={homeState} token={token} />
+      <LivingReceipt plan={plan} state={homeState} token={token} watches={watches} onBudgetUpdated={budget => setPlan(current => current ? { ...current, budget: { ...current.budget, target: budget, onTrack: budget == null || current.budget.current <= budget } } : current)} />
     </div>
   );
 }
