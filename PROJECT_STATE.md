@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 18 September 2026
+**Last updated:** 19 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -1060,3 +1060,37 @@ Decision-log addition:
   save automatically at the account level, while household preferences, watches
   and shops remain separately governed durable objects; starting a new chat does
   not erase or recreate those objects.
+
+## 34. Batched household-shop catalogue resolution — 19 September 2026
+
+Production review found that complete household shops could show many **Needs
+resolving** lines even when the named products existed in the canonical
+catalogue and had trusted current offers. `present_household_shop` previously
+validated only canonical product IDs supplied by the model. Generating a large
+shop therefore depended on one `resolve_product`/`get_current_price` call per
+line, while the shared turn budget allowed only ten expensive calls. Remaining
+lines were intentionally submitted without IDs and appeared unresolved.
+
+`present_household_shop` now performs bounded server-side batch resolution for
+the entire proposal before grounding it. It derives safe alphanumeric search
+seeds, queries catalogue products and the fail-closed `latest_prices` boundary
+in chunks, preserves valid supplied IDs, replaces invalid supplied IDs only
+when a safe match exists, and accepts either a unique exact canonical-name
+match or a clearly separated high-scoring current-offer match. The model no
+longer needs one catalogue tool call for every ordinary shop line.
+
+The distinction between product identity and price coverage remains explicit:
+an exact canonical product with no trusted current offer is now `unavailable`,
+not `unresolved`. Ambiguous families such as generic milk remain unresolved
+rather than being silently assigned to a variant. Existing trusted-offer,
+freshness, exact-relationship, total and retailer-coverage gates are unchanged.
+Complete-shop instructions send the full proposal directly to this batch
+boundary and reserve individual catalogue calls for standalone product questions
+or genuine ambiguity, avoiding redundant model-tool turns and token use.
+
+Decision-log addition:
+
+- **2026-09-19 — Complete-shop product resolution moved into the server-side
+  presentation boundary.** Resolve all proposed lines in bounded batches and
+  reserve **Needs resolving** for genuinely ambiguous or absent catalogue
+  items; do not weaken canonical identity or trusted-price requirements.
