@@ -48,6 +48,18 @@ type HealthPayload = {
   latest_run_failures: Record<string, Record<string, number>>;
 };
 
+type ResolutionCandidate = { sku: string; name: string; price: number; url: string };
+type ResolutionItem = {
+  failure_id: string;
+  store: 'supervalu' | 'dunnes';
+  canonical_name: string;
+  store_product_name: string;
+  failure_reason: string;
+  demand_units: number;
+  demand_rank: number | null;
+  candidates: ResolutionCandidate[];
+};
+
 function title(value: string) {
   return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -102,6 +114,7 @@ function RetailerCard({ row }: { row: Coverage }) {
 export default function RetailerDataHealthPage() {
   const [adminKey, setAdminKey] = useState('');
   const [data, setData] = useState<HealthPayload | null>(null);
+  const [resolutions, setResolutions] = useState<ResolutionItem[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -109,14 +122,19 @@ export default function RetailerDataHealthPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/admin/scrape-health', {
-        cache: 'no-store',
-        headers: { Authorization: `Bearer ${key}` },
-      });
+      const headers = { Authorization: `Bearer ${key}` };
+      const [response, resolutionResponse] = await Promise.all([
+        fetch('/api/admin/scrape-health', { cache: 'no-store', headers }),
+        fetch('/api/admin/product-resolutions', { cache: 'no-store', headers }),
+      ]);
       if (!response.ok) throw new Error(response.status === 401 ? 'That admin key was not accepted.' : 'Data health could not be loaded.');
       const payload = await response.json() as HealthPayload;
+      const resolutionPayload = resolutionResponse.ok
+        ? await resolutionResponse.json() as { items: ResolutionItem[] }
+        : { items: [] };
       sessionStorage.setItem('supermarket_admin_key', key);
       setData(payload);
+      setResolutions(resolutionPayload.items);
     } catch (loadError) {
       setData(null);
       setError(loadError instanceof Error ? loadError.message : 'Data health could not be loaded.');
@@ -136,6 +154,25 @@ export default function RetailerDataHealthPage() {
   function submit(event: FormEvent) {
     event.preventDefault();
     if (adminKey.trim()) void load(adminKey.trim());
+  }
+
+  async function resolve(item: ResolutionItem, action: 'exact' | 'unavailable' | 'skipped', candidate?: ResolutionCandidate) {
+    const confirmed = action === 'exact'
+      ? window.confirm(`Confirm ${candidate?.name ?? 'this product'} is the exact same consumer product as ${item.canonical_name}.`)
+      : action !== 'unavailable' || window.confirm(`Mark ${item.canonical_name} unavailable at ${title(item.store)}?`);
+    if (!confirmed) return;
+    setError('');
+    const response = await fetch('/api/admin/product-resolutions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ failure_id: item.failure_id, action, candidate }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ error: 'Resolution failed.' })) as { error?: string };
+      setError(payload.error ?? 'Resolution failed.');
+      return;
+    }
+    setResolutions((current) => current.filter((entry) => entry.failure_id !== item.failure_id));
   }
 
   if (!data) {
@@ -201,6 +238,45 @@ export default function RetailerDataHealthPage() {
           <Stat label="Either retailer" value={`${Number(data.comparison.either_live_pct).toFixed(1)}%`} detail="At least one trusted price" />
           <Stat label="SuperValu only" value={data.comparison.supervalu_only.toLocaleString()} />
           <Stat label="Neither retailer" value={data.comparison.neither_live.toLocaleString()} />
+        </section>
+
+        <section className="mt-8 rounded-3xl border border-[#dce4dc] bg-white p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold">Product resolution queue</h2>
+              <p className="mt-1 text-sm text-[#718077]">Demand-ranked retailer evidence. Choose only the exact same consumer product.</p>
+            </div>
+            <span className="rounded-full bg-[#eef5ef] px-3 py-1 text-sm font-semibold text-[#286f45]">{resolutions.length} open</span>
+          </div>
+          {error ? <p className="mt-4 rounded-xl bg-[#fff0ed] px-4 py-3 text-sm text-[#8c342a]">{error}</p> : null}
+          <div className="mt-5 space-y-4">
+            {resolutions.slice(0, 40).map((item) => (
+              <article key={item.failure_id} className="rounded-2xl border border-[#e2e8e2] p-5">
+                <div className="flex flex-wrap justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#28794a]">{title(item.store)} · {title(item.failure_reason)}</p>
+                    <h3 className="mt-1 text-lg font-semibold">{item.canonical_name}</h3>
+                    <p className="text-sm text-[#718077]">Stored as {item.store_product_name}</p>
+                  </div>
+                  <div className="text-right text-sm"><strong>{item.demand_units}</strong><span className="block text-xs text-[#718077]">demanded units</span></div>
+                </div>
+                {item.candidates.length ? (
+                  <div className="mt-4 grid gap-2">
+                    {item.candidates.map((candidate) => (
+                      <div key={candidate.sku} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#f7f9f7] px-4 py-3">
+                        <div><p className="font-medium">{candidate.name}</p><p className="text-xs text-[#718077]">SKU {candidate.sku} · €{candidate.price.toFixed(2)}</p></div>
+                        <button onClick={() => void resolve(item, 'exact', candidate)} className="rounded-lg bg-[#237344] px-3 py-2 text-sm font-semibold text-white">Choose product</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="mt-4 rounded-xl bg-[#fff7e9] px-4 py-3 text-sm text-[#895716]">No retailer candidate was returned.</p>}
+                <div className="mt-4 flex gap-2">
+                  <button onClick={() => void resolve(item, 'unavailable')} className="rounded-lg border border-[#d4b88b] px-3 py-2 text-sm font-semibold text-[#895716]">Mark unavailable</button>
+                  <button onClick={() => void resolve(item, 'skipped')} className="rounded-lg border border-[#d8dfd9] px-3 py-2 text-sm font-semibold text-[#68766e]">Skip</button>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
