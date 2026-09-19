@@ -1,6 +1,7 @@
 import { send } from '@vercel/queue';
 import { createDunnesScrapeRun, selectDunnesProducts, type DunnesBatchMessage } from '@/lib/dunnes-queue-worker-fixed';
 import { supabaseAdmin } from '@/lib/supabase';
+import { resolveRetailerRunScope } from '@/lib/scrape-run-scope';
 
 const TOPIC = 'dunnes-scrape-batches';
 
@@ -33,12 +34,14 @@ export async function GET(request: Request): Promise<Response> {
   const batchSize = parsePositiveInt(process.env.DUNNES_VERCEL_BATCH_SIZE ?? null, 5, 20);
   const staggerSeconds = parsePositiveInt(process.env.DUNNES_VERCEL_BATCH_STAGGER_SECONDS ?? null, 3, 120);
   const query = url.searchParams.get('q')?.trim() || undefined;
+  const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit, query });
+  if (!resolvedScope.scope) return Response.json({ error: resolvedScope.error }, { status: 400 });
 
   const products = await selectDunnesProducts(limit, query);
   if (products.length === 0) return Response.json({ status: 'no_products', queued: 0 });
 
   const runId = `vercel_dunnes_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
-  const runUuid = await createDunnesScrapeRun(runId, products.length);
+  const runUuid = await createDunnesScrapeRun(runId, products.length, resolvedScope.scope);
   const totalBatches = Math.ceil(products.length / batchSize);
   let queued = 0;
 
@@ -83,6 +86,7 @@ export async function GET(request: Request): Promise<Response> {
     batch_size: batchSize,
     stagger_seconds: staggerSeconds,
     filter: query ?? null,
+    run_scope: resolvedScope.scope,
   });
 }
 
