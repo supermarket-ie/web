@@ -23,6 +23,7 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] dunnes catch-up': { name: 'dunnes-catch-up', target: '/api/workers/dunnes-scrape-trigger?limit=275&scope=catch_up' },
   '[ops] supervalu catch-up': { name: 'supervalu-catch-up', target: '/api/workers/supervalu-scrape-trigger?limit=1000&scope=catch_up' },
   '[ops] dunnes recovery validation 2': { name: 'dunnes-recovery-validation-2', target: '/api/workers/dunnes-scrape-trigger?limit=150&scope=targeted_validation&failure_run=d1bf9e7a-9d02-4b05-823f-c89a01f56219' },
+  '[ops] dunnes recovery validation 3': { name: 'dunnes-recovery-validation-3', target: '/api/workers/dunnes-scrape-trigger?limit=150&scope=targeted_validation&failure_run=16cee815-0728-4fc9-8231-6d900bcfdb35' },
   '[ops] supervalu recovery validation 2': { name: 'supervalu-recovery-validation-2', target: '/api/workers/supervalu-scrape-trigger?limit=150&scope=targeted_validation&failure_run=2d7f8164-90f2-41e7-b420-a0f3c9628d43' },
   '[ops] tesco pepesto refresh': { name: 'tesco-pepesto-refresh', target: '/api/workers/pepesto-tesco-submit?limit=100' },
 };

@@ -272,6 +272,16 @@ describe('retailer recovery safeguards', () => {
 
     expect(directResolvedCandidate({
       ...product,
+      canonicalName: 'Glenisk Organic Kids Banana Yogurt 4 Pack',
+      storeProductName: 'Glenisk Organic Kids Banana Yogurt 4 x 90g (360g)',
+      storeSku: '100270889',
+    }, [{
+      sku: '100270889', name: 'Glenisk Organic Kids Banana Yogurt 4 x 90g (360g)', price: 2.49,
+      wasPrice: null, onPromotion: false, url: null,
+    }])?.sku).toBe('100270889');
+
+    expect(directResolvedCandidate({
+      ...product,
       canonicalName: 'Cadbury Dairy Milk Freddo Chocolate Bar 18g',
       storeProductName: 'Cadbury Dairy Milk Freddo Chocolate Bar 18g',
     }, [{

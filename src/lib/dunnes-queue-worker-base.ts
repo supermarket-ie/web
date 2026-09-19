@@ -102,16 +102,15 @@ function isSizeCompatible(canonical: string, candidate: string) {
 
   // Retailer titles often state a total weight instead of repeating "N pack".
   // Accept that representation only when the richer pack parser finds the
-  // same explicit item count on both sides. Single-versus-multipack size
-  // changes (for example 18g versus 4x18g) remain rejected.
+  // same explicit item count on both sides. This covers "4 Pack" versus
+  // "4 x 90g" while single-versus-multipack size changes (for example 18g
+  // versus 4x18g) remain rejected because the single item has no pack count.
   const expectedPack = dunnesPackSignature(canonical);
   const candidatePack = dunnesPackSignature(candidate);
   return Boolean(
     expectedPack.count
     && candidatePack.count
     && expectedPack.count === candidatePack.count
-    && !expectedPack.multipack
-    && !candidatePack.multipack
   );
 }
 
