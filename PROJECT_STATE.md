@@ -1184,6 +1184,28 @@ UUID. This prevents the standard coverage-priority selector from changing the
 sample between recovery tranches, while retaining `targeted_validation` scope so
 the result cannot replace scheduled full-run health.
 
+## 39. Exact retailer recovery validation — 19 September 2026
+
+The next recovery tranche was deployed through PRs #109 and #112 and validated
+only against exact prior-failure cohorts. SuperValu retried 123 remaining
+failures and recovered eight (6.50%). Dunnes first retried 135 remaining
+failures and recovered four; diagnostics then exposed that `N Pack` versus the
+same explicit `N x unit-size` notation was still being rejected. The narrow
+correction retained single-item/multipack and variant safeguards, and an exact
+replay recovered 22 of the remaining 131 failures (16.79%).
+
+Live trusted coverage is now 1,588/2,462 (64.50%) for SuperValu and 872/2,462
+(35.42%) for Dunnes. Demand-weighted coverage is 81.13% and 70.10%
+respectively. Scheduled full-run health remains correctly anchored to the prior
+1,000-product runs (SuperValu 70.10%, Dunnes 69.80%); the recovery results are
+separately labelled `targeted_validation`.
+
+The remaining exact cohorts are 115 SuperValu failures (51 empty search/product
+states, 37 direct-name mismatches and 27 ambiguous remaps) and 109 Dunnes
+failures (74 no-confident-match and 35 no-search-results). These should be
+treated as stale/ambiguous mapping or discovery work, not resolved by lowering
+confidence thresholds. No AI/model or paid-retrieval calls were introduced.
+
 ## 37. Retailer run-scope observability — 19 September 2026
 
 `scrape_runs.run_scope` now distinguishes `scheduled_full`,

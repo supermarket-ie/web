@@ -362,3 +362,17 @@ An exact validation replay can pass the previous scrape run UUID as
 `failure_run=<uuid>` with `scope=targeted_validation`. The selector then limits
 the new run to products that recorded a failure in that run; scheduled selection
 and scheduled health remain unchanged.
+
+### Exact-cohort production result
+
+The deployed tranche recovered 8/123 remaining SuperValu failures. The Dunnes
+diagnostics revealed one overly strict pack-notation case; after accepting
+`N Pack` versus the same explicit `N x unit-size` count while retaining the
+single-item/multipack and variant guards, the exact replay recovered 22/131.
+
+Current live trusted coverage is 1,588/2,462 (64.50%) for SuperValu and
+872/2,462 (35.42%) for Dunnes; demand-weighted coverage is 81.13% and 70.10%.
+The latest scheduled full-run health remains 70.10% and 69.80%, because these
+failure-heavy results remain scoped as `targeted_validation`. The remaining
+115 SuperValu and 109 Dunnes cases require stale-mapping cleanup or discovery,
+not weaker matching thresholds.
