@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
+import { boundedConversationMessages, validAgentChatProfile } from '@/lib/conversation-persistence';
 
 function sessionToken(req: NextRequest, explicit?: string | null) {
   return req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
@@ -31,10 +32,11 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await req.json();
-  const { token: explicitToken, messages, title, list_id } = body;
+  const { token: explicitToken, messages, title, list_id, profile } = body;
 
   const subscriberId = getSubscriberId(sessionToken(req, explicitToken));
   if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  if (profile !== undefined && !validAgentChatProfile(profile)) return NextResponse.json({ error: 'Conversation state is too large or invalid' }, { status: 400 });
 
   const { data: existing } = await supabaseAdmin
     .from('conversations')
@@ -46,9 +48,10 @@ export async function PATCH(
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (messages !== undefined) updates.messages = messages;
-  if (title !== undefined) updates.title = title;
+  if (messages !== undefined) updates.messages = boundedConversationMessages(messages);
+  if (title !== undefined) updates.title = typeof title === 'string' && title.trim() ? title.trim().slice(0, 120) : 'New conversation';
   if (list_id !== undefined) updates.list_id = list_id;
+  if (profile !== undefined) updates.profile = profile;
 
   const { data, error } = await supabaseAdmin
     .from('conversations')

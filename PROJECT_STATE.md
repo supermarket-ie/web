@@ -986,3 +986,77 @@ Decision-log addition:
   remains **Meet your supermarket agent** while authenticated Home can use more
   household-specific wording; both are rendered explicitly without DOM text
   replacement.
+
+## 32. Living Shop signed-in Home model — 18 September 2026
+
+The next signed-in Home iteration makes the household shop a visible, evolving
+product object beside the agent. The agent remains the primary place to express
+intent; a **Living Receipt** shows only deterministic application state from the
+current weekly plan and the latest validated saved shop.
+
+Home derives three presentation states without asking the model to classify
+them:
+
+- **New:** no current-week validated shop, no current agent journey and no
+  partial weekly plan;
+- **In progress:** the agent journey or weekly plan has started, or the current
+  saved shop still contains unresolved, unavailable or partially covered lines;
+- **Ready:** a shop saved during the current week contains at least one item and
+  every line is resolved.
+
+The current-shop summary is built server-side from subscriber-owned
+`saved_lists.items`. It exposes item count, selected-price estimate, unresolved
+count and bounded line detail. It does not use hypothetical complete-retailer
+totals as the household estimate, and it treats missing prices, unavailable
+lines and partial coverage as attention states. Older saved lists remain
+available under My Shop and recent activity but are not presented as this
+week's active shop.
+
+The receipt's action is **Review my shop** for a current saved shop. It does not
+claim retailer selection, trolley population or checkout. Without a current
+saved shop, its action returns focus to the agent. Home-state views and receipt
+actions are instrumented without logging household contents.
+
+Decision-log addition:
+
+- **2026-09-18 — Signed-in Home uses a deterministic Living Shop state.** The
+  visual shell may respond to agent continuity, but Ready status and receipt
+  facts come only from subscriber-scoped weekly-plan and validated saved-list
+  data; retailer execution remains outside this UI boundary.
+
+## 33. Account-backed chats and Living Receipt controls — 18 September 2026
+
+The Living Shop implementation extends the existing subscriber-owned
+`conversations` records rather than introducing a second chat store. A signed-in
+agent conversation is created after its first meaningful message and its Eve
+events/session plus a bounded display transcript are updated after completed
+turns. The latest account-backed agent chat resumes on Home; a requested chat ID
+must belong to the current subscriber and be marked as an agent chat. **New
+chat** clears only the active conversation. It does not clear household memory,
+the weekly budget, saved shops or persistent watches.
+
+The existing `/dashboard` history surface is now a primary **Chats** destination.
+Native agent chats reopen in the signed-in Home workspace; legacy pre-Eve
+conversations retain their bounded archive/continue path. Device-local storage
+remains a resilience cache and guest continuity mechanism, not the source of
+truth for signed-in chat history.
+
+The Living Receipt also exposes two durable controls without changing their
+underlying ownership model:
+
+- the weekly budget can be edited inline and is saved to the subscriber's
+  household record; the displayed remaining/over amount recalculates locally;
+- active product watches are listed in the receipt and **Add a watch** routes the
+  shopper into the agent, which still resolves and creates the persistent watch
+  through the governed agent tools.
+
+Conversation text does not implicitly become durable household memory. Budget
+changes, watches and saved shops remain explicit structured writes, even when
+they are requested inside a saved chat.
+
+Decision-log addition:
+
+- **2026-09-18 — Conversations organise the signed-in agent experience.** Chats
+  save automatically at the account level, while household preferences, watches
+  and shops remain separately governed durable objects; starting a new chat does
+  not erase or recreate those objects.

@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Flame,
   Eye,
+  MessageSquarePlus,
   Search,
   ShoppingBasket,
   Sparkles,
@@ -42,6 +43,7 @@ type SavedEveChat = {
 type LoadedEveChat = {
   saved: SavedEveChat;
   storageKey: string | null;
+  conversationId?: string | null;
 };
 
 type Starter = {
@@ -273,6 +275,7 @@ function AgentComposer({ input, setInput, send, busy, gated, placeholder, promin
       style={{ borderColor: 'rgba(20, 46, 31, 0.12)' }}
     >
       <textarea
+        aria-label="Tell your agent what to change"
         value={input}
         onChange={event => setInput(event.target.value)}
         onKeyDown={event => {
@@ -303,13 +306,19 @@ function ShoppingAgentInner({
   storageKey,
   isGuest,
   primaryHeading,
+  signedInEmptyState,
   onJourneyStateChange,
+  initialConversationId,
+  onNewChat,
 }: {
   saved: SavedEveChat;
   storageKey: string | null;
   isGuest: boolean;
   primaryHeading: boolean;
+  signedInEmptyState?: { eyebrow: string; title: string; description: string };
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
+  initialConversationId?: string | null;
+  onNewChat?: () => void;
 }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
@@ -318,6 +327,26 @@ function ShoppingAgentInner({
   const [structuredSave, setStructuredSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const scrollRef = useRef<HTMLDivElement>(null);
   const landingPromptHandled = useRef(false);
+  const conversationIdRef = useRef<string | null>(initialConversationId ?? null);
+  const transcriptRef = useRef<Array<{ role: string; content: string }>>([]);
+
+  async function ensureConversation(firstMessage: string) {
+    if (isGuest || conversationIdRef.current) return conversationIdRef.current;
+    const response = await fetch('/api/conversations', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: firstMessage.slice(0, 72),
+        messages: [{ role: 'user', content: firstMessage }],
+        profile: { eve_state: { version: 1, events: [], session: null } },
+      }),
+    });
+    if (!response.ok) return null;
+    const result = await response.json() as { conversation?: { id?: string } };
+    conversationIdRef.current = result.conversation?.id ?? null;
+    return conversationIdRef.current;
+  }
 
   const agent = useEveAgent({
     initialEvents: saved.events ?? [],
@@ -334,12 +363,32 @@ function ShoppingAgentInner({
           localStorage.setItem(storageKey, JSON.stringify({ events: snapshot.events, session: snapshot.session }));
         } catch {}
       }
+      const conversationId = conversationIdRef.current;
+      if (!isGuest && conversationId) {
+        window.setTimeout(() => {
+          void fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: transcriptRef.current,
+              profile: { eve_state: { version: 1, events: snapshot.events, session: snapshot.session } },
+            }),
+          });
+        }, 0);
+      }
       window.dispatchEvent(new CustomEvent('sm:eve-turn-finished'));
     },
   });
 
   const busy = agent.status === 'submitted' || agent.status === 'streaming';
   const messages = agent.data.messages;
+  useEffect(() => {
+    transcriptRef.current = messages.flatMap(message => {
+      const content = messageText(message);
+      return content ? [{ role: message.role, content }] : [];
+    });
+  }, [messages]);
   const latestStructuredShop = [...messages].reverse().flatMap(householdShops)[0] ?? null;
   const guestTurns = messages.filter(message => message.role === 'user').length;
   const showGuestGate = isGuest && (guestTurns >= 2 || messages.some(message =>
@@ -367,6 +416,17 @@ function ShoppingAgentInner({
     : [];
   const hasConversation = messages.some(message => message.role === 'user');
   const hasProposedShop = Boolean(latestStructuredShop);
+
+  useEffect(() => {
+    function prefill(event: Event) {
+      const value = (event as CustomEvent<string>).detail;
+      if (!value) return;
+      setInput(value);
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Tell your agent what to change"]')?.focus());
+    }
+    window.addEventListener('sm:agent-prefill', prefill);
+    return () => window.removeEventListener('sm:agent-prefill', prefill);
+  }, []);
 
   useEffect(() => {
     onJourneyStateChange?.({
@@ -490,6 +550,7 @@ function ShoppingAgentInner({
     });
     setInput('');
     setError('');
+    if (!isGuest) await ensureConversation(message);
     await agent.send([{ type: 'text', text: message }]);
   }
 
@@ -518,15 +579,15 @@ function ShoppingAgentInner({
 
   if (isEmpty) {
     return (
-      <div className="flex min-h-[440px] flex-col bg-transparent px-5 py-6 sm:px-8 sm:py-8">
+      <div className={`flex flex-col bg-transparent px-5 py-6 sm:px-8 sm:py-8 ${primaryHeading ? 'min-h-[590px]' : 'min-h-[440px]'}`}>
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
           <div className="mb-6">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#397250]">
               <span className="flex size-7 items-center justify-center rounded-full bg-[#daf2e2]"><Sparkles className="size-4" /></span>
-              {isGuest ? 'Ready when you are' : 'Your agent is ready'}
+              {isGuest ? 'Ready when you are' : signedInEmptyState?.eyebrow ?? 'Your agent is ready'}
             </div>
             {primaryHeading ? (
-              <h1 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">What should we sort out for the household?</h1>
+              <h1 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">{isGuest ? 'Meet your supermarket agent' : signedInEmptyState?.title ?? 'What should we sort out for the household?'}</h1>
             ) : (
               <h2 className="max-w-xl text-balance text-[1.75rem] font-bold tracking-[-0.045em] text-[#152219] sm:text-[2.25rem]">
                 {isGuest ? 'Meet your supermarket agent' : 'What should we sort out for the household?'}
@@ -535,7 +596,7 @@ function ShoppingAgentInner({
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#667169]">
               {isGuest
                 ? 'Thousands of tracked Irish supermarket prices and ingredient mappings.'
-                : 'Ask your agent to prepare, review or update the shop around your household.'}
+                : signedInEmptyState?.description ?? 'Ask your agent to prepare, review or update the shop around your household.'}
             </p>
           </div>
 
@@ -599,8 +660,15 @@ function ShoppingAgentInner({
   }
 
   return (
-    <div className="flex min-h-[470px] max-h-[68vh] flex-col bg-white/88 backdrop-blur-[2px]">
+    <div className={`flex max-h-[68vh] flex-col bg-white/88 backdrop-blur-[2px] ${primaryHeading ? 'min-h-[590px]' : 'min-h-[470px]'}`}>
       {primaryHeading && <h1 className="sr-only">Your agent</h1>}
+      {!isGuest && onNewChat && (
+        <div className="flex justify-end border-b border-[#edf0ed] px-4 py-2">
+          <button type="button" onClick={onNewChat} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-[#376047] transition hover:bg-[#eef7f0]">
+            <MessageSquarePlus className="size-3.5" /> New chat
+          </button>
+        </div>
+      )}
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
         {messages.map(message => {
           const text = messageText(message);
@@ -688,17 +756,42 @@ export type HomePlannerJourneyState = {
 export function HomePlanner({
   onJourneyStateChange,
   primaryHeading = false,
+  signedInEmptyState,
 }: {
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
   primaryHeading?: boolean;
+  signedInEmptyState?: { eyebrow: string; title: string; description: string };
 } = {}) {
   const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
   const [isGuest, setIsGuest] = useState(true);
+  const [chatKey, setChatKey] = useState(0);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setIsGuest(!loadSession()?.token);
-      setLoaded(loadSavedEveChat());
+      const guest = !loadSession()?.token;
+      setIsGuest(guest);
+      if (guest) {
+        setLoaded(loadSavedEveChat());
+        return;
+      }
+      const local = loadSavedEveChat();
+      const params = new URLSearchParams(window.location.search);
+      const requestedId = params.get('chat');
+      fetch('/api/conversations', { credentials: 'same-origin' })
+        .then(response => response.ok ? response.json() : Promise.reject(new Error('Could not load chats')))
+        .then(async (data: { conversations?: Array<{ id: string; agent_chat?: boolean }> }) => {
+          const selected = requestedId
+            ? data.conversations?.find(item => item.id === requestedId && item.agent_chat)
+            : data.conversations?.find(item => item.agent_chat);
+          if (!selected) return local;
+          const response = await fetch(`/api/conversations/${encodeURIComponent(selected.id)}`, { credentials: 'same-origin' });
+          if (!response.ok) return local;
+          const detail = await response.json() as { conversation?: { profile?: { eve_state?: SavedEveChat } } };
+          const saved = detail.conversation?.profile?.eve_state;
+          return saved ? { saved, storageKey: local.storageKey, conversationId: selected.id } : local;
+        })
+        .then(setLoaded)
+        .catch(() => setLoaded(local));
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -713,7 +806,16 @@ export function HomePlanner({
       storageKey={loaded.storageKey}
       isGuest={isGuest}
       primaryHeading={primaryHeading}
+      signedInEmptyState={signedInEmptyState}
       onJourneyStateChange={onJourneyStateChange}
+      initialConversationId={loaded.conversationId}
+      onNewChat={isGuest ? undefined : () => {
+        if (loaded.storageKey) localStorage.removeItem(loaded.storageKey);
+        window.history.replaceState({}, '', window.location.pathname);
+        setLoaded({ saved: {}, storageKey: loaded.storageKey, conversationId: null });
+        setChatKey(value => value + 1);
+      }}
+      key={chatKey}
     />
   );
 }

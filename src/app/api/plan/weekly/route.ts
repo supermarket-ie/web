@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { queryPriceChanges } from '@/lib/shopping/price-history';
 import { getSubscriberId } from '@/lib/auth';
+import { currentShopSummary, type CurrentShopSummary } from '@/lib/shopping/current-shop-summary';
 
 export const maxDuration = 30;
 
@@ -46,6 +47,7 @@ export interface WeeklyPlanState {
   budget: { target: number | null; current: number; onTrack: boolean };
   agentNotices: AgentNotice[];
   status: 'empty' | 'partial' | 'complete';
+  currentShop: CurrentShopSummary | null;
 }
 
 function getCurrentWeekStart(): string {
@@ -101,6 +103,7 @@ export async function GET(req: NextRequest) {
         action: 'plan_dinners',
       }],
       status: 'empty',
+      currentShop: null,
     } satisfies WeeklyPlanState);
   }
 
@@ -132,16 +135,27 @@ export async function GET(req: NextRequest) {
           action: 'plan_dinners',
         }],
         status: 'empty',
+        currentShop: null,
       } satisfies WeeklyPlanState);
     }
     plan = newPlan;
   }
 
-  const { data: household } = await supabaseAdmin
-    .from('households')
-    .select('weekly_budget')
-    .eq('subscriber_id', subscriberId)
-    .single();
+  const [{ data: household }, { data: latestSavedShop }] = await Promise.all([
+    supabaseAdmin
+      .from('households')
+      .select('weekly_budget')
+      .eq('subscriber_id', subscriberId)
+      .single(),
+    supabaseAdmin
+      .from('saved_lists')
+      .select('id, name, generated_at, created_at, items')
+      .eq('subscriber_id', subscriberId)
+      .order('generated_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const agentNotices: AgentNotice[] = [];
 
@@ -196,6 +210,7 @@ export async function GET(req: NextRequest) {
     },
     agentNotices,
     status: plan?.status ?? 'empty',
+    currentShop: currentShopSummary(latestSavedShop),
   };
 
   return NextResponse.json(response);

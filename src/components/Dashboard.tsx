@@ -278,6 +278,7 @@ interface Conversation {
   created_at: string;
   updated_at: string;
   message_count: number;
+  agent_chat?: boolean;
 }
 
 export function Dashboard() {
@@ -373,9 +374,9 @@ export function Dashboard() {
               <h1 className="font-bold text-xl leading-tight" style={{
                 background: 'linear-gradient(135deg, #ffffff, #6BFE9C)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-              }}>History</h1>
+              }}>Chats</h1>
               <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                Your past shops, price changes, and spending patterns.
+                Continue a conversation or revisit a previous shop.
               </p>
             </div>
           </div>
@@ -445,7 +446,7 @@ export function Dashboard() {
               <div key={conv.id}
                 className="rounded-2xl p-4 flex items-center justify-between group"
                 style={{ background: 'var(--surface-container-lowest)', border: '1px solid var(--surface-container)' }}>
-                <Link href={`/dashboard/chat/${conv.id}`} className="flex-1 min-w-0">
+                <Link href={conv.agent_chat ? `/?chat=${encodeURIComponent(conv.id)}` : `/dashboard/chat/${conv.id}`} className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate" style={{ color: 'var(--on-background)' }}>
                     {conv.title}
                   </p>
