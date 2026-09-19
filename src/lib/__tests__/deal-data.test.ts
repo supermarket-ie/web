@@ -4,7 +4,7 @@ vi.mock('@/lib/supabase', () => ({ supabaseAdmin: {} }));
 import type { ProductPrice } from '@/lib/price-data';
 import { isCurrentDeal, latestObservationAt } from '@/lib/deal-utils';
 import { classifySupervaluProductPage, isDirectMappingCompatible, parseSupervaluProductPage } from '@/lib/supervalu-direct-worker';
-import { directResolvedCandidate, extractDunnesUrlSku } from '@/lib/dunnes-queue-worker';
+import { buildDunnesSearchQueries, directResolvedCandidate, extractDunnesUrlSku } from '@/lib/dunnes-queue-worker';
 import { choosePepestoCandidate } from '@/lib/pepesto-tesco';
 
 function price(overrides: Partial<ProductPrice> = {}): ProductPrice {
@@ -153,6 +153,80 @@ describe('retailer recovery safeguards', () => {
       <script>window.__PRELOADED_STATE__ = {"product":{"name":"","price":null}}</script>
     `);
     expect(result).toEqual({ candidate: null, failureReason: 'empty_product_state' });
+  });
+
+  it('accepts high-confidence retailer wording without weakening pack identity', () => {
+    expect(isDirectMappingCompatible({
+      storeProductId: 'mapping-1',
+      canonicalName: 'Apples 6 Pack',
+      storeProductName: 'SuperValu Apples 6 Pack',
+      storeUrl: 'https://shop.supervalu.ie/product/apples',
+      storeSku: '1008857001',
+      previousPrice: null,
+    }, {
+      name: 'SuperValu Pink Lady Apples (6 Piece)',
+      sku: '1008857001',
+      price: 3.49,
+      wasPrice: null,
+      onPromotion: false,
+    })).toBe(true);
+
+    expect(isDirectMappingCompatible({
+      storeProductId: 'mapping-2',
+      canonicalName: 'Penne Pasta 500g',
+      storeProductName: 'SuperValu Penne Pasta 500g',
+      storeUrl: 'https://shop.supervalu.ie/product/penne',
+      storeSku: '1612291003',
+      previousPrice: null,
+    }, {
+      name: 'SuperValu Penne Pasta (400 g)',
+      sku: '1612291003',
+      price: 1.25,
+      wasPrice: null,
+      onPromotion: false,
+    })).toBe(false);
+  });
+
+  it('uses retailer stopwords and simple inflections without accepting a wrong food type', () => {
+    const celeryProduct = {
+      storeProductId: 'mapping-1',
+      canonicalName: 'Celery',
+      storeProductName: 'Celery',
+      storeUrl: 'https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/dunnes-stores-fresh-celery/100807380',
+      storeSku: '100807380',
+      previousPrice: null,
+    };
+    expect(directResolvedCandidate(celeryProduct, [{
+      sku: '100807380', name: 'Dunnes Stores Fresh Celery', price: 1.29,
+      wasPrice: null, onPromotion: false, url: null,
+    }])?.sku).toBe('100807380');
+
+    expect(directResolvedCandidate({
+      ...celeryProduct,
+      canonicalName: 'Chilli Peppers Red',
+      storeProductName: 'Chilli Peppers Red',
+      storeUrl: 'https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/gosh-pakora/100287669',
+      storeSku: '100287669',
+    }, [{
+      sku: '100287669', name: 'Gosh Sweet Potato Pakora with Red Pepper Cumin & Chilli 171g', price: 3.5,
+      wasPrice: null, onPromotion: false, url: null,
+    }])).toBeNull();
+  });
+
+  it('adds the current Dunnes URL title as a bounded recovery query', () => {
+    const queries = buildDunnesSearchQueries({
+      storeProductId: 'mapping-1',
+      canonicalName: 'Avonmore Unsalted Irish Butter 227g',
+      storeProductName: 'Unsalted Butter 227g',
+      storeUrl: 'https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/avonmore-pure-irish-unsalted-butter-227g/100131015',
+      storeSku: '100131015',
+      previousPrice: null,
+    });
+    expect(queries).toEqual([
+      'Unsalted Butter 227g',
+      'avonmore pure irish unsalted butter 227g',
+      'Avonmore Unsalted Irish Butter 227g',
+    ]);
   });
 
   it('uses a compatible Dunnes URL identity when the stored SKU has drifted', () => {
