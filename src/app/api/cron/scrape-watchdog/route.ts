@@ -82,6 +82,32 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const [{ data: coverage, error: coverageError }, { data: comparison, error: comparisonError }, { data: snapshots, error: snapshotError }] = await Promise.all([
+    supabaseAdmin.from('retailer_coverage_current').select('store, live_coverage_pct, expiring_within_24h'),
+    supabaseAdmin.from('retailer_comparison_coverage_current').select('both_live_pct').single(),
+    supabaseAdmin.from('retailer_coverage_snapshots').select('store, live_coverage_pct, captured_at').order('captured_at', { ascending: false }).limit(4),
+  ]);
+
+  if (coverageError || comparisonError || snapshotError) {
+    console.error('[scrape-watchdog] coverage telemetry unavailable', { coverageError, comparisonError, snapshotError });
+    issues.push('retailer coverage telemetry could not be loaded');
+  } else {
+    for (const row of coverage ?? []) {
+      const liveCoverage = Number(row.live_coverage_pct);
+      if (liveCoverage < 50) issues.push(`${row.store}: trusted catalogue coverage is ${liveCoverage.toFixed(1)}% (target 50%)`);
+      if (Number(row.expiring_within_24h) > 0) issues.push(`${row.store}: ${row.expiring_within_24h} trusted prices expire within 24h`);
+
+      const history = (snapshots ?? []).filter((snapshot) => snapshot.store === row.store);
+      if (history.length >= 2) {
+        const regression = Number(history[1].live_coverage_pct) - Number(history[0].live_coverage_pct);
+        if (regression >= 3) issues.push(`${row.store}: catalogue coverage fell ${regression.toFixed(1)} percentage points`);
+      }
+    }
+    if (Number(comparison?.both_live_pct) < 40) {
+      issues.push(`cross-retailer: only ${Number(comparison?.both_live_pct).toFixed(1)}% of products are live at both retailers (target 40%)`);
+    }
+  }
+
   if (issues.length === 0) {
     console.log('[scrape-watchdog] all stores healthy');
     return NextResponse.json({ healthy: true, issues: [], stores });
