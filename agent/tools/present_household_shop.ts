@@ -16,7 +16,7 @@ function uniqueBy<T>(rows: T[], key: (row: T) => string) {
 }
 
 export default defineTool({
-  description: `Present a complete household shop in Supermarket.ie’s native structured shopping UI. Use this for complete, weekly or value-led household-shop outcomes after the household assumptions are known. Resolve exact catalogue products first when practical and pass their canonical_product_id values. Leave uncertain needs unresolved rather than inventing an ID. This tool owns current prices, promotion truth, totals and retailer coverage; never write those values in the input. After calling it, introduce the result briefly instead of repeating every shop line in prose.`,
+  description: `Present a complete household shop in Supermarket.ie’s native structured shopping UI. Use this for complete, weekly or value-led household-shop outcomes after the household assumptions are known. Submit the complete proposal directly rather than making one product-lookup call per line: this tool batch-resolves ordinary product wording server-side, validates any supplied canonical_product_id values and leaves genuinely ambiguous needs unresolved. Never invent an ID. This tool owns current prices, promotion truth, totals and retailer coverage; never write those values in the input. After calling it, introduce the result briefly instead of repeating every shop line in prose.`,
   inputSchema: householdShopProposalSchema,
   async execute(rawProposal) {
     const proposal = householdShopProposalSchema.parse(rawProposal);
