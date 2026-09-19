@@ -80,7 +80,7 @@ function extractSize(name: string): { qty: number; unit: string; isMultipack: bo
     if (unit === 'cl') { qty *= 10; unit = 'ml'; }
     return { qty, unit, isMultipack: true };
   }
-  const pack = n.match(/(\d+)\s*(?:pack|pk)\b/i);
+  const pack = n.match(/(\d+)\s*(?:pack|pk|piece|pieces|roll|rolls|box|boxes)\b/i);
   if (pack) return { qty: Number(pack[1]), unit: 'ea', isMultipack: true };
   const single = n.match(/(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/i);
   if (!single) return null;
@@ -100,20 +100,47 @@ function isSizeCompatible(canonical: string, candidate: string) {
   return Math.max(a.qty, b.qty) / Math.min(a.qty, b.qty) <= 1.1;
 }
 
+const RETAILER_FILLER_WORDS = new Set([
+  'supervalu', 'storefront', 'signature', 'taste', 'fresh', 'irish', 'original',
+]);
+
+function normaliseWord(word: string) {
+  if (word.length > 4 && word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  if (word.length > 4 && /(?:ches|shes|xes|zes|oes)$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
+
+function nameWords(value: string) {
+  return normaliseName(value)
+    .replace(/\b\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl|x|pk|pack|ea|piece|pieces|roll|rolls|box|boxes)?\b/gi, ' ')
+    .split(/\s+/)
+    .map(normaliseWord)
+    .filter((word) => word.length > 2 && !RETAILER_FILLER_WORDS.has(word));
+}
+
 function isNameCompatible(expected: string, candidate: string) {
   if (!isSizeCompatible(expected, candidate)) return false;
   const cn = normaliseName(expected);
   const ca = normaliseName(candidate);
   if (cn === ca) return true;
 
-  const sizeRe = /\b\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl|x|pk|pack|ea)?\b/gi;
-  const a = cn.replace(sizeRe, '').replace(/\s+/g, ' ').trim();
-  const b = ca.replace(sizeRe, '').replace(/\s+/g, ' ').trim();
-  const aWords = a.split(/\s+/).filter((word) => word.length > 2);
-  const bWords = b.split(/\s+/).filter((word) => word.length > 2 && word !== 'storefront');
-  const aCoverage = aWords.length ? aWords.filter((word) => b.includes(word)).length / aWords.length : 0;
-  const bCoverage = bWords.length ? bWords.filter((word) => a.includes(word)).length / bWords.length : 0;
-  return aCoverage >= 0.65 && bCoverage >= 0.5;
+  const aWords = nameWords(expected);
+  const bWords = nameWords(candidate);
+  const aCoverage = aWords.length ? aWords.filter((word) => bWords.includes(word)).length / aWords.length : 0;
+  const bCoverage = bWords.length ? bWords.filter((word) => aWords.includes(word)).length / bWords.length : 0;
+  if (aCoverage >= 0.65 && bCoverage >= 0.5) return true;
+
+  // A short generic mapping (for example "Apples 6 Pack") may legitimately
+  // resolve to a more specific retailer variant. Accept that only when every
+  // meaningful expected word is present and both sides carry a compatible size.
+  return Boolean(
+    aWords.length > 0
+    && aWords.length <= 2
+    && aCoverage === 1
+    && extractSize(expected)
+    && extractSize(candidate),
+  );
 }
 
 export function isDirectMappingCompatible(product: SupervaluQueueProduct, candidate: Candidate) {

@@ -301,3 +301,22 @@ Capture retailer, mapped/total item count, approximate basket value and executio
 4. Determine whether any legitimate browser-native authenticated handoff exists; do not seek same-origin/security bypasses.
 5. If a new Pepesto Dunnes/SuperValu session is genuinely the only way to expose a decisive missing instruction, tell the user before spending credits and use the smallest possible test.
 6. Once an actual cart population works, bring the shared execution engine behind the existing Shopping Capability Layer and add transaction attribution.
+
+
+## Pricing recovery follow-up — 19 September 2026
+
+Fresh 1,000-product runs validated 701 SuperValu products (70.1%) and 698 Dunnes
+products (69.8%). These are price-pipeline results and do not change the cart
+execution status above.
+
+Dunnes now uses a bounded deterministic query ladder for failed resolved
+mappings: stored retailer title, title encoded in the retailer URL, then
+canonical title. Candidates continue through exact retailer identity, size and
+type safeguards; the URL title does not establish a trusted match by itself.
+Retailer boilerplate and simple inflections are normalised, and failed matches
+record bounded query/candidate diagnostics.
+
+SuperValu direct-page validation similarly normalises retailer boilerplate,
+simple inflections and explicit retailer pack-unit wording. Explicit size
+conflicts remain rejected. The 192 empty product shells in the latest run remain
+a separate remapping/discovery workload.
