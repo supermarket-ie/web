@@ -1084,6 +1084,9 @@ an exact canonical product with no trusted current offer is now `unavailable`,
 not `unresolved`. Ambiguous families such as generic milk remain unresolved
 rather than being silently assigned to a variant. Existing trusted-offer,
 freshness, exact-relationship, total and retailer-coverage gates are unchanged.
+Complete-shop instructions send the full proposal directly to this batch
+boundary and reserve individual catalogue calls for standalone product questions
+or genuine ambiguity, avoiding redundant model-tool turns and token use.
 
 Decision-log addition:
 
