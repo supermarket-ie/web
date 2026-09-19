@@ -115,12 +115,21 @@ function hasObviousTypeConflict(canonical: string, candidate: string) {
 const GENERIC_WORDS = new Set([
   'standard', 'fresh', 'irish', 'large', 'small', 'medium', 'premium', 'original',
   'pack', 'value', 'family', 'style', 'selected', 'selection', 'the', 'and', 'with',
+  'dunnes', 'store',
 ]);
+
+function normaliseWord(word: string) {
+  if (word.length > 4 && word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  if (word.length > 4 && /(?:ches|shes|xes|zes|oes)$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
 
 function significantWords(value: string) {
   return normaliseName(value)
     .replace(/\b\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl|x|pk|pack|ea)?\b/gi, ' ')
     .split(/\s+/)
+    .map(normaliseWord)
     .filter((word) => word.length > 2 && !GENERIC_WORDS.has(word));
 }
 
@@ -131,22 +140,46 @@ function retailerNameCompatible(expected: string, candidate: string) {
   const expectedNorm = normaliseName(expected);
   const candidateNorm = normaliseName(candidate);
   if (expectedNorm === candidateNorm) return true;
-  const expectedCoverage = expectedWords.filter((word) => candidateNorm.includes(word)).length / expectedWords.length;
-  const candidateCoverage = candidateWords.filter((word) => expectedNorm.includes(word)).length / candidateWords.length;
+  const expectedCoverage = expectedWords.filter((word) => candidateWords.includes(word)).length / expectedWords.length;
+  const candidateCoverage = candidateWords.filter((word) => expectedWords.includes(word)).length / candidateWords.length;
   return expectedCoverage >= 0.6 && candidateCoverage >= 0.5;
 }
 
 function hasCanonicalSignal(canonical: string, candidate: string) {
   const words = significantWords(canonical);
   if (!words.length) return true;
-  const candidateNorm = normaliseName(candidate);
-  return words.some((word) => candidateNorm.includes(word));
+  const candidateWords = significantWords(candidate);
+  return words.some((word) => candidateWords.includes(word));
 }
 
 export function extractDunnesUrlSku(storeUrl: string | null) {
   if (!storeUrl) return null;
   const match = storeUrl.match(/\/([^/?#]+)(?:[?#]|$)/);
   return match?.[1] && /^\d+$/.test(match[1]) ? match[1] : null;
+}
+
+export function extractDunnesUrlName(storeUrl: string | null) {
+  if (!storeUrl) return null;
+  const match = storeUrl.match(/\/product\/details\/([^/?#]+)\/\d+(?:[?#]|$)/i);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]).replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || null;
+  } catch {
+    return match[1].replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || null;
+  }
+}
+
+export function buildDunnesSearchQueries(product: DunnesQueueProduct) {
+  const seen = new Set<string>();
+  return [product.storeProductName, extractDunnesUrlName(product.storeUrl), product.canonicalName]
+    .map((query) => query?.trim())
+    .filter((query): query is string => {
+      if (!query) return false;
+      const key = normaliseName(query);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 export function directResolvedCandidate(product: DunnesQueueProduct, candidates: Candidate[]) {
@@ -169,9 +202,7 @@ export function directResolvedCandidate(product: DunnesQueueProduct, candidates:
 
 function matchCandidate(canonical: string, candidates: Candidate[]) {
   const normCanonical = normaliseName(canonical);
-  const sizeRe = /\b\d+(?:\.\d+)?\s*(?:g|kg|ml|l|cl|x|pk|pack|ea)?\b/gi;
-  const canonicalKeywords = normCanonical.replace(sizeRe, '').replace(/\s+/g, ' ').trim();
-  const canonicalWords = canonicalKeywords.split(/\s+/).filter((word) => word.length > 2);
+  const canonicalWords = significantWords(canonical);
   let best: { candidate: Candidate; score: number } | null = null;
 
   for (const candidate of candidates) {
@@ -182,13 +213,12 @@ function matchCandidate(canonical: string, candidates: Candidate[]) {
     const normCandidate = normaliseName(candidate.name);
     if (normCandidate === normCanonical) return { candidate, score: 1 };
 
-    const candidateKeywords = normCandidate.replace(sizeRe, '').replace(/\s+/g, ' ').trim();
-    const candidateWords = candidateKeywords.split(/\s+/).filter((word) => word.length > 2);
+    const candidateWords = significantWords(candidate.name);
     const canonicalCoverage = canonicalWords.length
-      ? canonicalWords.filter((word) => candidateKeywords.includes(word)).length / canonicalWords.length
+      ? canonicalWords.filter((word) => candidateWords.includes(word)).length / canonicalWords.length
       : 0;
     const candidateCoverage = candidateWords.length
-      ? candidateWords.filter((word) => canonicalKeywords.includes(word)).length / candidateWords.length
+      ? candidateWords.filter((word) => canonicalWords.includes(word)).length / candidateWords.length
       : 0;
     const score = canonicalCoverage * 0.7 + candidateCoverage * 0.3;
 
@@ -387,48 +417,64 @@ export async function finalizeDunnesPermanentFailure(
 }
 
 export async function processDunnesProduct(message: DunnesBatchMessage, product: DunnesQueueProduct) {
-  // Existing resolved identity is the safest refresh path. Query the retailer's
-  // own stored name first and prefer the known SKU, but still enforce canonical
-  // size/type signals so a historically bad mapping cannot be blindly refreshed.
-  const resolvedQuery = product.storeProductName?.trim() || product.canonicalName;
-  const resolvedCandidates = await fetchCandidates(resolvedQuery, product);
-  const direct = directResolvedCandidate(product, resolvedCandidates);
-  if (direct) {
-    await finalize(message, product, {
-      success: true,
-      candidate: direct,
-      fetched: 1,
-      extracted: 1,
-    });
-    return;
+  // Try the stored retailer title, the product title encoded in the resolved
+  // URL, and the canonical title. URL-derived titles recover catalogue renames
+  // without trusting the URL identity by itself: every candidate still passes
+  // SKU, name, size and product-type safeguards.
+  const queries = buildDunnesSearchQueries(product);
+  const candidates: Candidate[] = [];
+  const candidateKeys = new Set<string>();
+  let fetched = 0;
+
+  for (const query of queries) {
+    const queryCandidates = await fetchCandidates(query, product);
+    fetched += 1;
+
+    const direct = directResolvedCandidate(product, queryCandidates);
+    if (direct) {
+      await finalize(message, product, {
+        success: true,
+        candidate: direct,
+        fetched,
+        extracted: 1,
+      });
+      return;
+    }
+
+    for (const candidate of queryCandidates) {
+      const key = candidate.sku ?? `${normaliseName(candidate.name)}:${candidate.price ?? 'none'}`;
+      if (!candidateKeys.has(key)) {
+        candidateKeys.add(key);
+        candidates.push(candidate);
+      }
+    }
   }
 
-  // Discovery/repair fallback is deliberately separate and canonical-driven.
-  // It uses the stricter fuzzy matcher and never accepts the first result blindly.
-  const fallbackCandidates = normaliseName(resolvedQuery) === normaliseName(product.canonicalName)
-    ? resolvedCandidates
-    : await fetchCandidates(product.canonicalName, product);
-
-  if (fallbackCandidates.length === 0) {
+  if (candidates.length === 0) {
     await finalize(message, product, {
       success: false,
-      fetched: normaliseName(resolvedQuery) === normaliseName(product.canonicalName) ? 1 : 2,
+      fetched,
       extracted: 0,
       failureStage: 'parsing',
       failureReason: 'no_search_results',
+      rawError: `queries=${queries.join(' | ')}`,
     });
     return;
   }
 
-  const match = matchCandidate(product.canonicalName, fallbackCandidates);
+  const match = matchCandidate(product.canonicalName, candidates);
   if (!match) {
+    const sample = candidates
+      .slice(0, 5)
+      .map((candidate) => `${candidate.sku ?? 'no-sku'}:${candidate.name}`)
+      .join(' | ');
     await finalize(message, product, {
       success: false,
-      fetched: normaliseName(resolvedQuery) === normaliseName(product.canonicalName) ? 1 : 2,
+      fetched,
       extracted: 0,
       failureStage: 'matching',
       failureReason: 'no_confident_match',
-      rawError: `stored=${product.storeProductName}; sku=${product.storeSku ?? 'none'}; canonical=${product.canonicalName}`,
+      rawError: `stored=${product.storeProductName}; sku=${product.storeSku ?? 'none'}; canonical=${product.canonicalName}; candidates=${sample}`,
     });
     return;
   }
@@ -436,7 +482,7 @@ export async function processDunnesProduct(message: DunnesBatchMessage, product:
   await finalize(message, product, {
     success: true,
     candidate: match.candidate,
-    fetched: normaliseName(resolvedQuery) === normaliseName(product.canonicalName) ? 1 : 2,
+    fetched,
     extracted: 1,
   });
 }
