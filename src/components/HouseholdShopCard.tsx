@@ -6,6 +6,7 @@ import {
   householdShopToolOutputSchema,
   type HouseholdShopContract,
 } from '@/lib/shopping/household-shop-contract';
+import { householdShopResolutionAction } from '@/lib/household-shop-resolution-action';
 
 const STORE_NAMES: Record<string, string> = {
   tesco: 'Tesco',
@@ -32,7 +33,7 @@ export function householdShopFromPart(part: EveMessagePart): HouseholdShopContra
   return parsed.success ? parsed.data.shop : null;
 }
 
-export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
+export function HouseholdShopCard({ shop, onResolve }: { shop: HouseholdShopContract; onResolve?: (prompt: string) => void }) {
   const budget = shop.household.budget;
   const unresolvedCount = shop.missing_or_uncertain_items.filter(item =>
     item.status === 'unresolved' || item.status === 'unavailable',
@@ -84,7 +85,9 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
                 <span className="text-[11px] text-[#8a948d]">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
               </div>
               <div className="space-y-1">
-                {items.map(item => (
+                {items.map(item => {
+                  const resolutionAction = householdShopResolutionAction(item);
+                  return (
                   <div key={item.line_id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl px-2 py-2.5 hover:bg-[#f8faf8]">
                     <div className="min-w-0">
                       <div className="flex items-start gap-2">
@@ -115,11 +118,25 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
                           ) : null}
                         </>
                       ) : (
-                        <span className="rounded-full bg-[#fff5e8] px-2 py-1 text-[10px] font-medium text-[#8a5c24]">Needs resolving</span>
+                        <div className="flex flex-col items-end gap-1.5">
+                          <span className="rounded-full bg-[#fff5e8] px-2 py-1 text-[10px] font-medium text-[#8a5c24]">
+                            {item.coverage_status === 'unavailable' ? 'Price unavailable' : 'Needs resolving'}
+                          </span>
+                          {resolutionAction && onResolve && (
+                            <button
+                              type="button"
+                              onClick={() => onResolve(resolutionAction.prompt)}
+                              className="text-[10px] font-semibold text-[#08783b] underline decoration-[#9bc9aa] underline-offset-2 hover:text-[#055f2e]"
+                            >
+                              {resolutionAction.label}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
