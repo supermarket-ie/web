@@ -331,3 +331,13 @@ scheduled-run coverage. The recovery added 27 and 15 current trusted prices
 respectively. Future operational reporting must distinguish targeted validation
 runs from scheduled full runs so canary thresholds do not overwrite full-run
 health.
+
+### Run-scope reporting
+
+Direct-retailer runs now record an explicit operational scope. Scheduled
+1,000-product runs are the only Dunnes/SuperValu runs used for the primary
+dashboard and watchdog health signal. Targeted validation, canary, catch-up and
+discovery results remain available as separate diagnostics and continue to
+produce scope-labelled coverage snapshots. Do not compare a deliberately
+failure-heavy repair cohort's success percentage with the scheduled full-run
+threshold.
