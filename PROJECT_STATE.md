@@ -1294,3 +1294,20 @@ failures from run `a40142ef-2448-4c54-b477-b6cc4d77a2e7`, and `[ops] Dunnes
 mapping cleanup validation` replays the 109 failures from run
 `d75b1dc5-d497-4f11-a32b-7f378cdd35af`. Both remain scoped as
 `targeted_validation` and do not replace scheduled full-run health.
+
+### Production validation result
+
+Both immutable operations completed against their exact cohorts. SuperValu run
+`3f359792-3929-4778-a9af-9c9ae10022ae` recovered 6/115 mappings (five updated
+prices and one unchanged price), leaving 109 failures: 57
+`no_confident_remap`, 51 `empty_product_state` and one
+`direct_name_mismatch`. Dunnes run
+`6c30c0f8-2601-4ade-a371-c8ed5ebf5a56` recovered 23/109 mappings (three
+updated and 20 unchanged), leaving 86 failures: 51 `no_confident_match` and 35
+`no_search_results`.
+
+Live trusted coverage is now 1,594/2,462 (64.74%) for SuperValu and 895/2,462
+(36.35%) for Dunnes. Demand-weighted coverage is 81.56% and 72.51%
+respectively. Scheduled full-run health remains 70.10% for SuperValu and 69.80%
+for Dunnes; both mapping runs remain separately scoped as
+`targeted_validation`. The one-shot authorization issues were closed after use.
