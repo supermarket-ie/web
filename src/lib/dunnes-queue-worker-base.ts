@@ -167,6 +167,13 @@ function hasCanonicalSignal(canonical: string, candidate: string) {
   return words.some((word) => candidateWords.includes(word));
 }
 
+function hasCompleteCanonicalSignal(canonical: string, candidate: string) {
+  const words = significantWords(canonical);
+  if (!words.length) return false;
+  const candidateWords = significantWords(candidate);
+  return words.every((word) => candidateWords.includes(word));
+}
+
 export function extractDunnesUrlSku(storeUrl: string | null) {
   if (!storeUrl) return null;
   const match = storeUrl.match(/\/([^/?#]+)(?:[?#]|$)/);
@@ -198,21 +205,25 @@ export function buildDunnesSearchQueries(product: DunnesQueueProduct) {
 }
 
 export function directResolvedCandidate(product: DunnesQueueProduct, candidates: Candidate[]) {
-  const usable = candidates.filter((candidate) =>
+  const identitySafe = candidates.filter((candidate) =>
     Boolean(candidate.name && candidate.price && candidate.price > 0)
     && isSizeCompatible(product.canonicalName, candidate.name)
     && !hasObviousTypeConflict(product.canonicalName, candidate.name)
     && !hasDunnesVariantConflict(product.canonicalName, candidate.name)
     && hasCanonicalSignal(product.canonicalName, candidate.name)
-    && retailerNameCompatible(product.storeProductName, candidate.name)
   );
 
   const knownSkus = new Set([product.storeSku, extractDunnesUrlSku(product.storeUrl)].filter(Boolean).map(String));
   if (knownSkus.size) {
-    const exactSku = usable.find((candidate) => candidate.sku && knownSkus.has(candidate.sku));
+    const exactSku = identitySafe.find((candidate) =>
+      candidate.sku
+      && knownSkus.has(candidate.sku)
+      && hasCompleteCanonicalSignal(product.canonicalName, candidate.name)
+    );
     if (exactSku) return exactSku;
   }
 
+  const usable = identitySafe.filter((candidate) => retailerNameCompatible(product.storeProductName, candidate.name));
   return usable.length === 1 ? usable[0] : null;
 }
 
