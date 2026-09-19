@@ -72,3 +72,30 @@ export async function PUT(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ household: data });
 }
+
+export async function PATCH(req: NextRequest) {
+  const body = await req.json();
+  const subscriberId = getSubscriberId(sessionToken(req, body.token));
+  if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+
+  if (!Object.prototype.hasOwnProperty.call(body, 'weeklyBudget')) {
+    return NextResponse.json({ error: 'A weekly budget is required' }, { status: 400 });
+  }
+  const weeklyBudget = body.weeklyBudget === null ? null : Number(body.weeklyBudget);
+  if (weeklyBudget !== null && (!Number.isFinite(weeklyBudget) || weeklyBudget <= 0 || weeklyBudget > 5000)) {
+    return NextResponse.json({ error: 'Weekly budget must be between €1 and €5,000' }, { status: 400 });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('households')
+    .upsert({
+      subscriber_id: subscriberId,
+      weekly_budget: weeklyBudget,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'subscriber_id' })
+    .select('weekly_budget')
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ weeklyBudget: data.weekly_budget });
+}
