@@ -401,3 +401,9 @@ failure cohorts are 109 for SuperValu (57 ambiguous remaps, 51 empty search
 states and one direct-name mismatch) and 86 for Dunnes (51 no-confident-match
 and 35 no-search-results). These residuals remain candidates for explicit
 catalogue discovery or manual product choice, not weaker identity matching.
+
+The subsequent compact-query validation recovered another 18/86 Dunnes
+products. Dunnes now has 913/2,462 live trusted products (37.08%) and 74.44%
+demand coverage. The remaining Dunnes cohort is 55 ambiguous candidates and 13
+no-search-results; these require explicit catalogue/manual resolution rather
+than another confidence relaxation.
