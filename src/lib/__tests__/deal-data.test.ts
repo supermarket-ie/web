@@ -345,6 +345,22 @@ describe('retailer recovery safeguards', () => {
       'Unsalted Butter 227g',
       'avonmore pure irish unsalted butter 227g',
       'Avonmore Unsalted Irish Butter 227g',
+      'avonmore unsalted butter',
+    ]);
+  });
+
+  it('adds one compact Dunnes discovery query without size or merchandising filler', () => {
+    expect(buildDunnesSearchQueries({
+      storeProductId: 'mapping-1',
+      canonicalName: 'Glenisk High Protein Strawberry Strained Irish Yogurt 4 Pack',
+      storeProductName: 'missing old title',
+      storeUrl: null,
+      storeSku: '100334810',
+      previousPrice: null,
+    })).toEqual([
+      'missing old title',
+      'Glenisk High Protein Strawberry Strained Irish Yogurt 4 Pack',
+      'glenisk high protein strawberry yogurt',
     ]);
   });
 
