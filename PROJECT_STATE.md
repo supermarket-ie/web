@@ -1379,3 +1379,20 @@ older Dunnes worker's separate identity heuristic. The worker therefore reuses
 the same stricter exact-identity predicate so accepted resolutions remain
 refreshable after the initial seven-day observation. This applies only to
 same-SKU candidates and does not widen the fallback similarity matcher.
+
+Production verification run `e878ac5f-4242-4856-aaa2-cd0333b5aeb3`
+subsequently refreshed 26/86 products, exactly eight more than the preceding
+18/86 replay. All 26 were unchanged retailer prices and 60 remained unresolved,
+confirming that the eight audited decisions now survive the ordinary Dunnes
+refresh path. The live trusted figures remain 921/2,462 (37.41%) and 74.50%
+demand coverage because the replay refreshed existing observations rather than
+adding mappings. The current unresolved queue is 169 products: 60 Dunnes (47
+`no_confident_match`, 13 `no_search_results`) and 109 SuperValu (57
+`no_confident_remap`, 51 `empty_product_state`, one `direct_name_mismatch`).
+
+SuperValu replay `39dd552a-1640-40f6-bdeb-98d20edbc89d` attempted 112 legacy
+failure-cohort records, with three successful observations (two unchanged) and
+109 failures. It did not change live trusted coverage, which remains
+1,594/2,462 (64.74%) and 81.56% demand coverage. This confirms that the
+remaining SuperValu cohort needs better canonical data or new retailer evidence,
+not another pass with the same queries.
