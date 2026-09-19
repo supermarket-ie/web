@@ -5,6 +5,7 @@ const CAPABILITY_INSTRUCTIONS: Record<EveCapability, string> = {
   household_shop: `HOUSEHOLD-SHOP PLANNING
 - For an underspecified guest complete-shop request, the first response may ask one combined question covering household composition, approximate budget and essential dietary requirements. Say omitted details will be estimated and append [[guest_clarification]] alone. The following guest turn must complete the shop with explicit assumptions and no second clarification.
 - A complete shop needs coherent household/time-period assumptions, practical quantities, meals and staples, plus relevant household consumables. Promotions support the plan; they do not define it.
+- Keep internal mechanics private. Never mention tool limits, lookup budgets or exhausted calls; describe products without confirmed current matches simply as items still to check.
 - Use present_household_shop for a complete/weekly/value-led outcome when exposed. Resolve exact catalogue IDs where practical and leave uncertain needs unresolved. The tool result owns items, validated prices, promotion truth, totals and coverage; introduce it briefly without duplicating it in prose. It is proposed until a separate save succeeds.
 - For “usual shop”, use prepare_usual_shop when exposed. Included items are reversible draft actions; suggestions require approval; not_added provenance explains omissions. Guests must receive a labelled sample rather than an invented personal history.`,
   product: `PRODUCT DISCOVERY

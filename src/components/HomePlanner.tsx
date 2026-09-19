@@ -30,6 +30,7 @@ import {
 import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
 import { HouseholdShopCard, householdShopFromPart } from '@/components/HouseholdShopCard';
 import { archivedConversationResumePrompt } from '@/lib/conversation-migration';
+import { agentMessageBlocks } from '@/lib/agent-message-format';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 const GUEST_EVE_CHAT_KEY = `${LEGACY_EVE_CHAT_KEY}:guest`;
@@ -134,14 +135,33 @@ function householdShops(message: EveMessage) {
 }
 
 function FormattedAgentText({ text }: { text: string }) {
-  const parts = visibleAgentText(text).split(/(\*\*[^*]+\*\*)/g);
+  const blocks = agentMessageBlocks(visibleAgentText(text));
+
+  const inlineText = (value: string) => value.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={index}>{part.slice(2, -2)}</strong>
+      : <span key={index}>{part}</span>
+  );
+
   return (
-    <p className="whitespace-pre-wrap">
-      {parts.map((part, index) => part.startsWith('**') && part.endsWith('**')
-        ? <strong key={index}>{part.slice(2, -2)}</strong>
-        : <span key={index}>{part}</span>
-      )}
-    </p>
+    <div className="space-y-3">
+      {blocks.map((block, blockIndex) => block.type === 'table' ? (
+        <div key={blockIndex} className="overflow-x-auto rounded-xl border border-[#dfe5e0] bg-white">
+          <table className="w-full min-w-[360px] border-collapse text-left text-sm">
+            <thead className="bg-[#f6f8f6] text-[#26342b]">
+              <tr>{block.headers.map((header, index) => <th key={index} className="border-b border-[#dfe5e0] px-3 py-2 font-semibold">{inlineText(header)}</th>)}</tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, rowIndex) => (
+                <tr key={rowIndex} className="border-b border-[#edf0ed] last:border-0">
+                  {block.headers.map((_, cellIndex) => <td key={cellIndex} className="px-3 py-2 align-top">{inlineText(row[cellIndex] ?? '')}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p key={blockIndex} className="whitespace-pre-wrap">{inlineText(block.text)}</p>)}
+    </div>
   );
 }
 
@@ -669,7 +689,7 @@ function ShoppingAgentInner({
           </button>
         </div>
       )}
-      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
         {messages.map(message => {
           const text = messageText(message);
           const shops = householdShops(message);
@@ -704,13 +724,6 @@ function ShoppingAgentInner({
           </div>
         )}
 
-        {busy && !hasVisibleAnswer && (
-          <div className="flex items-center gap-2 pl-9 text-xs text-[#758078]">
-            <span className="flex gap-1">{[0, 1, 2].map(i => <span key={i} className="size-1.5 animate-bounce rounded-full bg-[#0a8f45]" style={{ animationDelay: `${i * 140}ms` }} />)}</span>
-            Working on that…
-          </div>
-        )}
-
         {error && <div className="ml-9 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-800">{error}</div>}
 
         {showGuestGate && (
@@ -731,6 +744,15 @@ function ShoppingAgentInner({
           </div>
         )}
       </div>
+
+      {busy && (
+        <div role="status" aria-live="polite" className="flex shrink-0 items-center gap-2 border-t border-[#edf0ed] bg-[#f7faf7] px-5 py-2 text-xs font-medium text-[#5f6e63] sm:px-7">
+          <span className="flex gap-1" aria-hidden="true">
+            {[0, 1, 2].map(i => <span key={i} className="size-1.5 animate-bounce rounded-full bg-[#0a8f45]" style={{ animationDelay: `${i * 140}ms` }} />)}
+          </span>
+          Working on that…
+        </div>
+      )}
 
       <div className="border-t border-[#edf0ed] bg-white p-3 sm:p-4">
         <AgentComposer
@@ -776,6 +798,12 @@ export function HomePlanner({
       }
       const local = loadSavedEveChat();
       const params = new URLSearchParams(window.location.search);
+      if (params.get('new_chat') === '1') {
+        if (local.storageKey) localStorage.removeItem(local.storageKey);
+        window.history.replaceState({}, '', window.location.pathname);
+        setLoaded({ saved: {}, storageKey: local.storageKey, conversationId: null });
+        return;
+      }
       const requestedId = params.get('chat');
       fetch('/api/conversations', { credentials: 'same-origin' })
         .then(response => response.ok ? response.json() : Promise.reject(new Error('Could not load chats')))
