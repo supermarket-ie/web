@@ -2,11 +2,21 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { loadSession, clearSession } from '@/lib/session';
 import { AgentMark } from '@/components/homepage/AgentMark';
 
 const NAV_ITEMS = [
+  {
+    href: '/dashboard',
+    label: 'Chats',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+      </svg>
+    ),
+    match: (p: string) => p === '/dashboard' || p.startsWith('/dashboard/chat'),
+  },
   {
     href: '/',
     label: 'Home',
@@ -58,7 +68,6 @@ const HIDDEN_ON = ['/blog', '/compare', '/deals', '/store', '/cost-of-weekly-sho
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [listToken, setListToken] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -69,12 +78,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     setListToken(token);
     setReady(true);
 
-    // Old History route is no longer a primary destination. Direct visits remain
-    // supported, but the generic dashboard landing returns signed-in users Home.
-    if (token && pathname === '/dashboard') {
-      router.replace('/');
-    }
-
     function handleSessionReady(e: Event) {
       const newToken = (e as CustomEvent<{ token: string }>).detail?.token ?? null;
       if (newToken && newToken !== token) {
@@ -84,7 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     window.addEventListener('sm:session-ready', handleSessionReady);
     return () => window.removeEventListener('sm:session-ready', handleSessionReady);
-  }, [pathname, router]);
+  }, [pathname]);
 
   const hideNav = HIDDEN_ON.some(p => pathname.startsWith(p));
   const showNav = ready && !!listToken && !hideNav;
