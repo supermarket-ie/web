@@ -9,6 +9,7 @@ import {
   isDirectMappingCompatible,
   parseSupervaluProductPage,
   parseSupervaluSearchPage,
+  parseSupervaluSearchResponse,
   selectSupervaluRemapCandidate,
 } from '@/lib/supervalu-direct-worker';
 import { buildDunnesSearchQueries, directResolvedCandidate, extractDunnesUrlSku } from '@/lib/dunnes-queue-worker';
@@ -182,6 +183,18 @@ describe('retailer recovery safeguards', () => {
     expect(selectSupervaluRemapCandidate(product, candidates)?.sku).toBe('1886686001');
   });
 
+  it('parses available products from the SuperValu Storefront gateway', () => {
+    const candidates = parseSupervaluSearchResponse({ items: [
+      { name: 'SuperValu White Pitta 6 Pack', sku: 12345, priceNumeric: 1.65, available: true, promotions: [] },
+      { name: 'Unavailable Pitta 6 Pack', sku: 67890, priceNumeric: 1.5, available: false },
+    ] });
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      name: 'SuperValu White Pitta 6 Pack', sku: '12345', price: 1.65,
+    });
+    expect(candidates[0].url).toContain('/supervalu-white-pitta-6-pack-id-12345');
+  });
+
   it('does not remap an ambiguous generic SuperValu product family', () => {
     const product = {
       storeProductId: 'mapping-1',
@@ -252,6 +265,26 @@ describe('retailer recovery safeguards', () => {
       storeSku: '100287669',
     }, [{
       sku: '100287669', name: 'Gosh Sweet Potato Pakora with Red Pepper Cumin & Chilli 171g', price: 3.5,
+      wasPrice: null, onPromotion: false, url: null,
+    }])).toBeNull();
+  });
+
+  it('accepts a known Dunnes SKU only when every canonical product term remains present', () => {
+    const product = {
+      storeProductId: 'mapping-1',
+      canonicalName: 'Baby Corn 145g',
+      storeProductName: 'Baby Corn 145g',
+      storeUrl: 'https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/baby-corn/100123456',
+      storeSku: '100123456',
+      previousPrice: null,
+    };
+    expect(directResolvedCandidate(product, [{
+      sku: '100123456', name: 'Dunnes Fresh Seasonal Vegetables Baby Corn 145g', price: 1.75,
+      wasPrice: null, onPromotion: false, url: null,
+    }])?.sku).toBe('100123456');
+
+    expect(directResolvedCandidate({ ...product, canonicalName: 'Chilli Peppers Red' }, [{
+      sku: '100123456', name: 'Gosh Sweet Potato Pakora with Red Pepper Cumin & Chilli 171g', price: 3.5,
       wasPrice: null, onPromotion: false, url: null,
     }])).toBeNull();
   });

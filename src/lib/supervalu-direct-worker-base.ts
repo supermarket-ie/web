@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 const STORE = 'supervalu';
 const STORE_PATH = '/sm/delivery/rsid/5550';
 const SITE_URL = 'https://shop.supervalu.ie';
+const STORE_ID = 5550;
+const GATEWAY_BASE = 'https://storefrontgateway.supervalu.ie/api';
 
 export type Candidate = {
   name: string;
@@ -218,6 +220,44 @@ export function parseSupervaluSearchPage(html: string): Candidate[] {
     const candidate = candidateFromRetailerProduct(product, html);
     if (!candidate) return [];
     return [{ ...candidate, url: supervaluProductUrl(candidate.name, candidate.sku) }];
+  });
+}
+
+type SupervaluSearchItem = {
+  sku?: string | number | null;
+  productId?: string | number | null;
+  name?: string | null;
+  priceNumeric?: number | null;
+  wholePrice?: number | null;
+  wasPriceNumeric?: number | null;
+  wasWholePrice?: number | null;
+  available?: boolean | null;
+  promotions?: unknown[] | null;
+  tprPrice?: Array<{ active?: boolean }> | null;
+};
+
+export function parseSupervaluSearchResponse(value: unknown): Candidate[] {
+  const body = record(value);
+  const items = Array.isArray(body?.items) ? body.items : [];
+  return items.flatMap((raw) => {
+    const item = record(raw) as SupervaluSearchItem | null;
+    if (!item || item.available === false) return [];
+    const name = typeof item.name === 'string' ? item.name.trim() : '';
+    const skuValue = item.sku ?? item.productId;
+    const sku = skuValue == null ? null : String(skuValue);
+    const price = numericPrice(item.priceNumeric ?? item.wholePrice);
+    if (!name || !sku || !price) return [];
+    const rawWas = numericPrice(item.wasPriceNumeric ?? item.wasWholePrice);
+    const wasPrice = rawWas && rawWas > price ? rawWas : null;
+    const activeTpr = (item.tprPrice ?? []).some((entry) => entry.active === true);
+    return [{
+      name,
+      sku,
+      price,
+      wasPrice,
+      onPromotion: Boolean(wasPrice || activeTpr || (item.promotions?.length ?? 0) > 0),
+      url: supervaluProductUrl(name, sku),
+    }];
   });
 }
 
@@ -444,21 +484,25 @@ async function fetchSupervaluSearchCandidates(query: string, product: SupervaluQ
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await fetch(`${SITE_URL}${STORE_PATH}/results?q=${encodeURIComponent(query)}`, {
+    const url = `${GATEWAY_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(query)}&take=12&page=1&skip=0`;
+    const response = await fetch(url, {
       signal: controller.signal,
       cache: 'no-store',
       redirect: 'follow',
       headers: {
         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        accept: 'application/json, text/plain, */*',
         'accept-language': 'en-IE,en;q=0.9',
+        'x-site-host': SITE_URL,
+        'x-site-location': 'HeadersBuilderInterceptor',
+        'x-correlation-id': crypto.randomUUID(),
       },
     });
     if (response.status === 429 || response.status >= 500) {
       throw new TransientSupervaluError(`SuperValu search returned HTTP ${response.status}`, product, `search_http_${response.status}`);
     }
     if (!response.ok) return [];
-    return parseSupervaluSearchPage(await response.text());
+    return parseSupervaluSearchResponse(await response.json());
   } catch (error) {
     if (error instanceof TransientSupervaluError) throw error;
     const message = error instanceof Error ? error.message : String(error);
@@ -605,44 +649,45 @@ export async function processSupervaluProduct(message: SupervaluBatchMessage, pr
 
   const result = await fetchSupervaluProduct(product);
   const candidate = result.candidate;
-  if (!candidate) {
-    if (result.failureReason === 'empty_product_state') {
-      const queries = buildSupervaluSearchQueries(product);
-      const candidates: Candidate[] = [];
-      const seen = new Set<string>();
-      for (const query of queries) {
-        const found = await fetchSupervaluSearchCandidates(query, product);
-        for (const item of found) {
-          const key = item.sku ?? `${normaliseName(item.name)}:${item.price}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            candidates.push(item);
-          }
+  const directMismatch = Boolean(candidate && !isDirectMappingCompatible(product, candidate));
+  if (result.failureReason === 'empty_product_state' || directMismatch) {
+    const queries = buildSupervaluSearchQueries(product);
+    const candidates: Candidate[] = [];
+    const seen = new Set<string>();
+    for (const query of queries) {
+      const found = await fetchSupervaluSearchCandidates(query, product);
+      for (const item of found) {
+        const key = item.sku ?? `${normaliseName(item.name)}:${item.price}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          candidates.push(item);
         }
       }
-      const remapped = selectSupervaluRemapCandidate(product, candidates);
-      if (remapped) {
-        await finalize(message, product, {
-          success: true,
-          candidate: remapped,
-          fetched: 1 + queries.length,
-          extracted: 1,
-        });
-        return;
-      }
-      const sample = candidates.slice(0, 4)
-        .map((item) => `${item.sku ?? 'no-sku'}:${item.name}:€${item.price}`)
-        .join(' | ');
+    }
+    const remapped = selectSupervaluRemapCandidate(product, candidates);
+    if (remapped) {
       await finalize(message, product, {
-        success: false,
+        success: true,
+        candidate: remapped,
         fetched: 1 + queries.length,
-        extracted: candidates.length > 0 ? 1 : 0,
-        failureStage: candidates.length > 0 ? 'matching' : 'parsing',
-        failureReason: candidates.length > 0 ? 'no_confident_remap' : 'empty_product_state',
-        rawError: `queries=${queries.join(' | ')}; candidates=${sample || 'none'}`,
+        extracted: 1,
       });
       return;
     }
+    const sample = candidates.slice(0, 4)
+      .map((item) => `${item.sku ?? 'no-sku'}:${item.name}:€${item.price}`)
+      .join(' | ');
+    await finalize(message, product, {
+      success: false,
+      fetched: 1 + queries.length,
+      extracted: candidates.length > 0 || candidate ? 1 : 0,
+      failureStage: candidates.length > 0 || candidate ? 'matching' : 'parsing',
+      failureReason: candidates.length > 0 ? 'no_confident_remap' : (directMismatch ? 'direct_name_mismatch' : 'empty_product_state'),
+      rawError: `queries=${queries.join(' | ')}; direct=${candidate?.name ?? 'none'}; candidates=${sample || 'none'}`,
+    });
+    return;
+  }
+  if (!candidate) {
     await finalize(message, product, {
       success: false,
       fetched: 1,
@@ -652,18 +697,5 @@ export async function processSupervaluProduct(message: SupervaluBatchMessage, pr
     });
     return;
   }
-  if (!isDirectMappingCompatible(product, candidate)) {
-    await finalize(message, product, {
-      success: false,
-      candidate,
-      fetched: 1,
-      extracted: 1,
-      failureStage: 'matching',
-      failureReason: 'direct_name_mismatch',
-      rawError: `canonical=${product.canonicalName}; stored=${product.storeProductName}; fetched=${candidate.name}`,
-    });
-    return;
-  }
-
   await finalize(message, product, { success: true, candidate, fetched: 1, extracted: 1 });
 }

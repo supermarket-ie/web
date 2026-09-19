@@ -1268,3 +1268,22 @@ Decision-log addition:
   A search result can replace an expired SuperValu product identity only when
   canonical identity and pack constraints leave one safe priced candidate;
   ambiguous families stay unresolved.
+
+## 40. Retailer-owned mapping cleanup — 19 September 2026
+
+Live inspection confirmed that SuperValu exposes a Storefront JSON search
+gateway at `storefrontgateway.supervalu.ie/api` for store `5550`. The previous
+recovery parsed server-rendered search state, but the public HTML did not
+populate that state and therefore produced false empty searches. The direct
+worker now consumes retailer-owned JSON search results for empty product shells
+and incompatible/stale direct mappings. It still requires one canonical- and
+size-compatible priced candidate, with a same-SKU preference; ambiguous
+families remain unresolved.
+
+Dunnes known-SKU recovery now permits retailer merchandising words around a
+generic stored title only when the candidate matches the stored or URL SKU and
+contains every meaningful canonical product term. Existing size, pack, food
+type and variant guards remain mandatory. This safely covers title expansions
+such as `Baby Corn 145g` while continuing to reject stale links such as chilli
+peppers mapped to a pakora product. Neither path uses an AI/model or paid
+retrieval service. Production impact remains pending exact-cohort validation.
