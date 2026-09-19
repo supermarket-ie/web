@@ -25,6 +25,8 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] dunnes recovery validation 2': { name: 'dunnes-recovery-validation-2', target: '/api/workers/dunnes-scrape-trigger?limit=150&scope=targeted_validation&failure_run=d1bf9e7a-9d02-4b05-823f-c89a01f56219' },
   '[ops] dunnes recovery validation 3': { name: 'dunnes-recovery-validation-3', target: '/api/workers/dunnes-scrape-trigger?limit=150&scope=targeted_validation&failure_run=16cee815-0728-4fc9-8231-6d900bcfdb35' },
   '[ops] supervalu recovery validation 2': { name: 'supervalu-recovery-validation-2', target: '/api/workers/supervalu-scrape-trigger?limit=150&scope=targeted_validation&failure_run=2d7f8164-90f2-41e7-b420-a0f3c9628d43' },
+  '[ops] supervalu mapping discovery validation': { name: 'supervalu-mapping-discovery-validation', target: '/api/workers/supervalu-scrape-trigger?limit=150&scope=targeted_validation&failure_run=a40142ef-2448-4c54-b477-b6cc4d77a2e7' },
+  '[ops] dunnes mapping cleanup validation': { name: 'dunnes-mapping-cleanup-validation', target: '/api/workers/dunnes-scrape-trigger?limit=150&scope=targeted_validation&failure_run=d75b1dc5-d497-4f11-a32b-7f378cdd35af' },
   '[ops] tesco pepesto refresh': { name: 'tesco-pepesto-refresh', target: '/api/workers/pepesto-tesco-submit?limit=100' },
 };
 

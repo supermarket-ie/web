@@ -1287,3 +1287,10 @@ type and variant guards remain mandatory. This safely covers title expansions
 such as `Baby Corn 145g` while continuing to reject stale links such as chilli
 peppers mapped to a pakora product. Neither path uses an AI/model or paid
 retrieval service. Production impact remains pending exact-cohort validation.
+
+The production dispatcher has two immutable, owner-authorized operations for
+that validation: `[ops] SuperValu mapping discovery validation` replays the 115
+failures from run `a40142ef-2448-4c54-b477-b6cc4d77a2e7`, and `[ops] Dunnes
+mapping cleanup validation` replays the 109 failures from run
+`d75b1dc5-d497-4f11-a32b-7f378cdd35af`. Both remain scoped as
+`targeted_validation` and do not replace scheduled full-run health.
