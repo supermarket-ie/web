@@ -1311,3 +1311,15 @@ Live trusted coverage is now 1,594/2,462 (64.74%) for SuperValu and 895/2,462
 respectively. Scheduled full-run health remains 70.10% for SuperValu and 69.80%
 for Dunnes; both mapping runs remain separately scoped as
 `targeted_validation`. The one-shot authorization issues were closed after use.
+
+Live retailer probes of the 35 Dunnes `no_search_results` residuals found that
+the catalogue still contains some exact products, but the Storefront search API
+returns no items for their full merchandising title. A single additional
+compact query now removes size and bounded merchandising filler while retaining
+the first five meaningful canonical product terms. Returned candidates still
+pass the existing SKU, size, pack, type and variant safeguards; the compact
+query does not itself authorize a mapping.
+
+The immutable `[ops] Dunnes compact discovery validation` operation replays
+only the 86 failures from run `6c30c0f8-2601-4ade-a371-c8ed5ebf5a56` with
+`targeted_validation` scope.
