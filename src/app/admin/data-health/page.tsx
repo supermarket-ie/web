@@ -58,6 +58,8 @@ type ResolutionItem = {
   demand_units: number;
   demand_rank: number | null;
   candidates: ResolutionCandidate[];
+  exactCandidates: ResolutionCandidate[];
+  classification: string;
 };
 
 function title(value: string) {
@@ -244,7 +246,7 @@ export default function RetailerDataHealthPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold">Product resolution queue</h2>
-              <p className="mt-1 text-sm text-[#718077]">Demand-ranked retailer evidence. Choose only the exact same consumer product.</p>
+              <p className="mt-1 text-sm text-[#718077]">Demand-ranked internal evidence, classified conservatively. Only server-validated exact candidates can be applied.</p>
             </div>
             <span className="rounded-full bg-[#eef5ef] px-3 py-1 text-sm font-semibold text-[#286f45]">{resolutions.length} open</span>
           </div>
@@ -257,21 +259,24 @@ export default function RetailerDataHealthPage() {
                     <p className="text-xs font-semibold uppercase tracking-wide text-[#28794a]">{title(item.store)} · {title(item.failure_reason)}</p>
                     <h3 className="mt-1 text-lg font-semibold">{item.canonical_name}</h3>
                     <p className="text-sm text-[#718077]">Stored as {item.store_product_name}</p>
+                    <p className="mt-1 text-xs font-medium text-[#895716]">{title(item.classification)}</p>
                   </div>
                   <div className="text-right text-sm"><strong>{item.demand_units}</strong><span className="block text-xs text-[#718077]">demanded units</span></div>
                 </div>
                 {item.candidates.length ? (
                   <div className="mt-4 grid gap-2">
-                    {item.candidates.map((candidate) => (
+                    {item.candidates.map((candidate) => {
+                      const exact = item.exactCandidates.some((itemCandidate) => itemCandidate.sku === candidate.sku);
+                      return (
                       <div key={candidate.sku} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#f7f9f7] px-4 py-3">
                         <div><p className="font-medium">{candidate.name}</p><p className="text-xs text-[#718077]">SKU {candidate.sku} · €{candidate.price.toFixed(2)}</p></div>
-                        <button onClick={() => void resolve(item, 'exact', candidate)} className="rounded-lg bg-[#237344] px-3 py-2 text-sm font-semibold text-white">Choose product</button>
+                        {exact ? <button onClick={() => void resolve(item, 'exact', candidate)} className="rounded-lg bg-[#237344] px-3 py-2 text-sm font-semibold text-white">Apply exact match</button> : <span className="text-xs font-medium text-[#718077]">Evidence only</span>}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : <p className="mt-4 rounded-xl bg-[#fff7e9] px-4 py-3 text-sm text-[#895716]">No retailer candidate was returned.</p>}
                 <div className="mt-4 flex gap-2">
-                  <button onClick={() => void resolve(item, 'unavailable')} className="rounded-lg border border-[#d4b88b] px-3 py-2 text-sm font-semibold text-[#895716]">Mark unavailable</button>
                   <button onClick={() => void resolve(item, 'skipped')} className="rounded-lg border border-[#d8dfd9] px-3 py-2 text-sm font-semibold text-[#68766e]">Skip</button>
                 </div>
               </article>

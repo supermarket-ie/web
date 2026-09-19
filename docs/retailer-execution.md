@@ -407,3 +407,16 @@ products. Dunnes now has 913/2,462 live trusted products (37.08%) and 74.44%
 demand coverage. The remaining Dunnes cohort is 55 ambiguous candidates and 13
 no-search-results; these require explicit catalogue/manual resolution rather
 than another confidence relaxation.
+
+### Resolution safety follow-up
+
+The combined 177-record residual was classified before further writes: 65
+search/query failures, 51 variant/size/pack conflicts, 38 insufficient-evidence
+records, 15 poor or underspecified canonical identities and eight conservative
+same-SKU exact candidates. No current record qualifies as a proven retailer
+absence. Candidate identity and price must be reconstructed from captured
+retailer evidence server-side; browser-supplied candidate fields are not a
+trust boundary. Automatic exact resolution also requires exact explicit
+measure/pack agreement, no variant conflict, complete canonical signals and
+stored-title corroboration. Generic or malformed catalogue identities remain
+unresolved pending canonical product-policy work.

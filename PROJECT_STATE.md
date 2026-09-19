@@ -1344,3 +1344,30 @@ chosen SKU appears in the captured retailer evidence; the atomic resolver then
 updates the retailer identity and writes the observed direct-retailer price.
 Unavailable mappings leave trusted refresh selection. Alternatives remain in
 their separate candidate table and are never silently promoted by this queue.
+
+## 42. Product-resolution hardening and residual classification — 19 September 2026
+
+The 177-record SuperValu/Dunnes residual was classified before any further
+mapping changes. The conservative classification produced 65 retailer
+search/query failures, 51 variant/size/pack conflicts, 38 insufficient-evidence
+records, 15 poor or underspecified canonical identities and only eight
+same-SKU exact candidates. No record has enough repeated independent evidence
+to be labelled a genuine retailer absence.
+
+The resolution path now derives candidate name, URL and price from captured
+retailer evidence on the server rather than trusting browser fields. Automatic
+eligibility requires the existing retailer SKU, complete canonical product
+signals, exact explicit measure and pack count, no candidate-side or
+canonical-side variant conflict, and corroboration from the stored retailer
+title. Generic canonical phrases embedded in a different product do not
+qualify. The database verifies the complete evidence tuple and retailer
+URL/SKU before updating mapping or price state.
+
+The `unavailable` action is disabled until repeated independent discovery
+evidence is modelled. The admin queue remains an internal audit/exception
+surface and offers an apply action only for server-validated exact candidates.
+Canonical identities such as `Cornflakes`, `Deodorant Roll-On`, `Snackpack`,
+`Stripes` and `Stackz` are product-policy/data-quality work, not candidates for
+relaxed matching. Obvious stale mappings must be cleared or rediscovered
+without renaming a generic canonical product to the arbitrary retailer item it
+happened to reference.
