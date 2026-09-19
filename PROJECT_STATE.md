@@ -1371,3 +1371,11 @@ Canonical identities such as `Cornflakes`, `Deodorant Roll-On`, `Snackpack`,
 relaxed matching. Obvious stale mappings must be cleared or rediscovered
 without renaming a generic canonical product to the arbitrary retailer item it
 happened to reference.
+
+The first eight strict exact Dunnes decisions raised live trusted coverage from
+913 to 921 products (37.08% to 37.41%) and demand-weighted coverage from 74.44%
+to 74.50%. A fresh targeted run showed that these products still failed the
+older Dunnes worker's separate identity heuristic. The worker therefore reuses
+the same stricter exact-identity predicate so accepted resolutions remain
+refreshable after the initial seven-day observation. This applies only to
+same-SKU candidates and does not widen the fallback similarity matcher.

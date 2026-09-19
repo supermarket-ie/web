@@ -332,6 +332,27 @@ describe('retailer recovery safeguards', () => {
     }])).toBeNull();
   });
 
+  it('keeps strict resolution-queue exact matches refreshable', () => {
+    const product = {
+      storeProductId: 'mapping-1', canonicalName: 'Wholemeal Pitta 6 Pack',
+      storeProductName: "Eghoyan's Bakery Ltd 6 Wholemeal Pitta 360g",
+      storeUrl: 'https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/eghoyans-6-wholemeal-pitta/100316536',
+      storeSku: '100316536', previousPrice: null,
+    };
+    expect(directResolvedCandidate(product, [{
+      sku: '100316536', name: "Eghoyan's Bakery Ltd 6 Wholemeal Pitta 360g", price: 1.49,
+      wasPrice: null, onPromotion: false, url: product.storeUrl,
+    }])?.sku).toBe('100316536');
+
+    expect(directResolvedCandidate({
+      ...product, canonicalName: 'Chilli Peppers Red',
+      storeProductName: 'Chilli Peppers Red', storeSku: '100287669',
+    }, [{
+      sku: '100287669', name: 'Gosh Sweet Potato Pakora with Red Pepper Cumin & Chilli 171g', price: 3,
+      wasPrice: null, onPromotion: false, url: product.storeUrl,
+    }])).toBeNull();
+  });
+
   it('adds the current Dunnes URL title as a bounded recovery query', () => {
     const queries = buildDunnesSearchQueries({
       storeProductId: 'mapping-1',
