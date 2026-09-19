@@ -376,3 +376,20 @@ The latest scheduled full-run health remains 70.10% and 69.80%, because these
 failure-heavy results remain scoped as `targeted_validation`. The remaining
 115 SuperValu and 109 Dunnes cases require stale-mapping cleanup or discovery,
 not weaker matching thresholds.
+
+### Retailer-owned mapping discovery
+
+SuperValu's public Storefront configuration exposes a JSON gateway at
+`storefrontgateway.supervalu.ie/api`; store-scoped search for store `5550`
+returns priced product identities. Recovery now uses that endpoint instead of
+the unpopulated server-rendered search dictionary. It is bounded to the two
+existing compact queries and applies to both empty product shells and stale
+direct-name mismatches. Replacement still requires a unique canonical- and
+size-compatible result, so generic or ambiguous families remain manual choices.
+
+For Dunnes, an existing SKU or URL SKU may survive retailer title expansion
+only when all meaningful canonical terms remain present and the existing
+size, pack, type and variant checks pass. This is mapping cleanup, not a global
+similarity-threshold reduction. Both changes use retailer-owned data and incur
+no AI-token or paid scraping usage. Exact-cohort production validation is the
+next step.
