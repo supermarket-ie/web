@@ -148,6 +148,18 @@ function significantWords(value: string) {
     .filter((word) => word.length > 2 && !GENERIC_WORDS.has(word));
 }
 
+const DISCOVERY_FILLER_WORDS = new Set([
+  'bottle', 'liquid', 'month', 'professional', 'protection', 'reseal',
+  'sachet', 'strained', 'tub',
+]);
+
+function compactDunnesDiscoveryQuery(value: string) {
+  return significantWords(value)
+    .filter((word) => !DISCOVERY_FILLER_WORDS.has(word))
+    .slice(0, 5)
+    .join(' ');
+}
+
 function retailerNameCompatible(expected: string, candidate: string) {
   const expectedWords = significantWords(expected);
   const candidateWords = significantWords(candidate);
@@ -193,7 +205,12 @@ export function extractDunnesUrlName(storeUrl: string | null) {
 
 export function buildDunnesSearchQueries(product: DunnesQueueProduct) {
   const seen = new Set<string>();
-  return [product.storeProductName, extractDunnesUrlName(product.storeUrl), product.canonicalName]
+  return [
+    product.storeProductName,
+    extractDunnesUrlName(product.storeUrl),
+    product.canonicalName,
+    compactDunnesDiscoveryQuery(product.canonicalName),
+  ]
     .map((query) => query?.trim())
     .filter((query): query is string => {
       if (!query) return false;
