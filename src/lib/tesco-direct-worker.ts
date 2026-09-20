@@ -17,8 +17,8 @@ type FetchFailureReason =
   | 'network_error';
 
 type DirectFetchResult =
-  | { ok: true; html: string }
-  | { ok: false; reason: FetchFailureReason; error: string };
+  | { ok: true; html: string; finalUrl: string; status: number }
+  | { ok: false; reason: FetchFailureReason; error: string; finalUrl?: string; status?: number };
 
 type Candidate = {
   sku: string | null;
@@ -190,17 +190,17 @@ async function directFetch(url: string): Promise<DirectFetchResult> {
       const html = await response.text();
 
       if (response.status === 200 && !looksBlocked(html)) {
-        return { ok: true, html };
+        return { ok: true, html, finalUrl: response.url, status: response.status };
       }
       if (looksBlocked(html)) {
         // A confirmed Akamai/security challenge is an egress-level signal.
         // Stop immediately: retrying or falling through to search only hammers
         // an identity that now needs a 24-48 hour cooldown.
-        return { ok: false, reason: 'blocked_challenge', error: 'Tesco challenge page returned to direct Vercel request' };
+        return { ok: false, reason: 'blocked_challenge', error: 'Tesco challenge page returned to direct Vercel request', finalUrl: response.url, status: response.status };
       }
       if (response.status === 429) {
         if (attempt < DEFAULT_FETCH_RETRIES) { await sleep(4_000); continue; }
-        return { ok: false, reason: 'rate_limited', error: 'Tesco returned HTTP 429' };
+        return { ok: false, reason: 'rate_limited', error: 'Tesco returned HTTP 429', finalUrl: response.url, status: response.status };
       }
 
       const transient = response.status === 408 || response.status === 425 || response.status >= 500;
@@ -209,6 +209,8 @@ async function directFetch(url: string): Promise<DirectFetchResult> {
         ok: false,
         reason: transient ? 'http_transient' : 'http_permanent',
         error: `Tesco returned HTTP ${response.status}: ${html.slice(0, 120)}`,
+        finalUrl: response.url,
+        status: response.status,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -221,6 +223,82 @@ async function directFetch(url: string): Promise<DirectFetchResult> {
   }
 
   return { ok: false, reason: 'network_error', error: 'Maximum direct Tesco attempts exceeded' };
+}
+
+function skuFromUrl(value: string | null | undefined) {
+  return value?.match(/\/products\/(\d+)/)?.[1] ?? null;
+}
+
+function pageAvailability(html: string): string {
+  const lower = html.toLowerCase();
+  if (lower.includes('out of stock') || lower.includes('currently unavailable')) return 'unavailable';
+  if (lower.includes('add to trolley') || lower.includes('add to basket')) return 'available';
+  return 'unknown';
+}
+
+async function recordCanaryEvidence(input: {
+  message: TescoBatchMessage;
+  product: TescoQueueProduct;
+  finalUrl: string | null;
+  returnedSku: string | null;
+  returnedName: string | null;
+  price: number | null;
+  availability: string;
+  classification: string;
+  httpStatus: number | null;
+  detail?: string | null;
+}) {
+  const { error } = await supabaseAdmin.from('tesco_direct_canary_results').upsert({
+    run_id: input.message.runUuid,
+    store_product_id: input.product.storeProductId,
+    requested_url: input.product.storeUrl,
+    final_url: input.finalUrl,
+    expected_sku: input.product.storeSku,
+    returned_sku: input.returnedSku,
+    returned_name: input.returnedName,
+    price: input.price,
+    availability: input.availability,
+    classification: input.classification,
+    http_status: input.httpStatus,
+    detail: input.detail?.slice(0, 500) ?? null,
+  }, { onConflict: 'run_id,store_product_id' });
+  if (error) throw new Error(`Failed recording Tesco direct evidence: ${error.message}`);
+}
+
+export async function processTescoProductExactDirect(message: TescoBatchMessage, product: TescoQueueProduct) {
+  const result = await directFetch(product.storeUrl);
+  if (!result.ok) {
+    const classification = result.reason === 'blocked_challenge'
+      ? 'access_challenge_response'
+      : result.reason === 'network_error' || result.reason === 'timeout'
+        ? 'network_failure'
+        : result.status === 404 || result.status === 410
+          ? 'product_removed_or_unavailable'
+          : 'insufficient_evidence';
+    await recordCanaryEvidence({ message, product, finalUrl: result.finalUrl ?? null, returnedSku: skuFromUrl(result.finalUrl), returnedName: null, price: null, availability: 'unknown', classification, httpStatus: result.status ?? null, detail: result.error });
+    if (isTransient(result.reason)) throw new TransientTescoError(result.error, product, result.reason, 0, 0);
+    await finalizeFailure(message, product, classification, result.error, 0);
+    return;
+  }
+
+  const parsed = parseProductPage(result.html);
+  const returnedSku = skuFromUrl(result.finalUrl);
+  const redirected = result.finalUrl !== product.storeUrl;
+  const availability = pageAvailability(result.html);
+  let classification: string;
+  if (returnedSku && returnedSku !== product.storeSku) classification = 'redirected_to_different_sku';
+  else if (availability === 'unavailable') classification = 'product_removed_or_unavailable';
+  else if (!returnedSku) classification = 'insufficient_evidence';
+  else if (!parsed?.name || !parsed.price) classification = 'parsing_failure';
+  else classification = redirected ? 'redirected_exact_sku' : 'successful_exact_sku';
+
+  await recordCanaryEvidence({ message, product, finalUrl: result.finalUrl, returnedSku, returnedName: parsed?.name ?? null, price: parsed?.price ?? null, availability, classification, httpStatus: result.status });
+
+  if ((classification === 'successful_exact_sku' || classification === 'redirected_exact_sku') && parsed?.price && returnedSku === product.storeSku) {
+    await finalizeSuccess(message, product, parsed.price, { url: result.finalUrl, sku: returnedSku, name: parsed.name }, 1);
+    return;
+  }
+  await finalizeFailure(message, product, classification, null, 1, classification === 'parsing_failure' ? 'parsing' : 'fetching');
 }
 
 function isTransient(reason: string) {

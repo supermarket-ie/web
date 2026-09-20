@@ -2,6 +2,7 @@ import { send } from '@vercel/queue';
 import {
   createTescoScrapeRun,
   selectTescoProducts,
+  selectTescoExactDirectCanaryProducts,
   TransientTescoError,
   type TescoBatchMessage,
 } from '@/lib/tesco-queue-worker';
@@ -65,6 +66,41 @@ export async function GET(request: Request): Promise<Response> {
   const batchSize = parsePositiveInt(process.env.TESCO_VERCEL_BATCH_SIZE ?? null, 3, 10);
   const staggerSeconds = parsePositiveInt(process.env.TESCO_VERCEL_BATCH_STAGGER_SECONDS ?? null, 20, 300);
   const query = url.searchParams.get('q')?.trim() || undefined;
+  const exactDirectCanary = url.searchParams.get('mode') === 'exact_direct_canary';
+
+  if (exactDirectCanary) {
+    const products = await selectTescoExactDirectCanaryProducts(Math.min(limit, 20));
+    if (products.length === 0) return Response.json({ status: 'no_products', queued: 0 });
+
+    const runId = `tesco_direct_canary_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
+    const runUuid = await createTescoScrapeRun(runId, products.length);
+    const batch: TescoBatchMessage = {
+      runUuid,
+      runId,
+      batchIndex: 0,
+      totalBatches: 1,
+      products,
+      mode: 'exact_direct_canary',
+    };
+    try {
+      await send(TOPIC, batch, {
+        idempotencyKey: `${runUuid}:exact-direct-canary`,
+        retentionSeconds: 86_400,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await failRun(runUuid, `Queue publish failed: ${message}`);
+      return Response.json({ error: 'Queue publish failed', run_id: runId }, { status: 502 });
+    }
+    return Response.json({
+      status: 'queued',
+      transport: 'exact_direct_no_paid_proxy',
+      run_id: runId,
+      run_uuid: runUuid,
+      target_count: products.length,
+      queued: products.length,
+    }, { status: 202 });
+  }
 
   // The pool is deliberately empty until a real, controllable egress identity
   // (for example Vercel Static IP in dub1) has been provisioned and approved.

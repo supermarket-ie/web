@@ -6,6 +6,7 @@ import {
   type TescoBatchMessage,
 } from '@/lib/tesco-queue-worker';
 import { processTescoProductDirect } from '@/lib/tesco-direct-worker';
+import { processTescoProductExactDirect } from '@/lib/tesco-direct-worker';
 import {
   claimTescoEgress,
   markTescoEgressBlocked,
@@ -114,7 +115,11 @@ export const POST = handleCallback<TescoBatchMessage>(
         }
 
         try {
-          await processTescoProductDirect(message, product);
+          if (message.mode === 'exact_direct_canary') {
+            await processTescoProductExactDirect(message, product);
+          } else {
+            await processTescoProductDirect(message, product);
+          }
         } catch (error) {
           if (error instanceof TransientTescoError) {
             if (error.reason === 'blocked_challenge') {

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
+import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 
 const BASE_URL = 'https://www.tesco.ie';
 const SCRAPINGBEE_ENDPOINT = 'https://app.scrapingbee.com/api/v1';
@@ -19,6 +20,7 @@ export type TescoBatchMessage = {
   batchIndex: number;
   totalBatches: number;
   products: TescoQueueProduct[];
+  mode?: 'legacy_direct' | 'exact_direct_canary';
 };
 
 type ScrapingBeeFailureReason =
@@ -445,13 +447,32 @@ export async function selectTescoProducts(limit: number, query?: string) {
   }));
 }
 
+export async function selectTescoExactDirectCanaryProducts(limit = 20) {
+  const rows = await selectStoreProductsForRefresh('tesco', Math.min(Math.max(limit, 1), 20), {
+    productUrlOnly: true,
+  });
+  return rows
+    .filter((row) => Boolean(row.store_sku && row.store_url && /\/products\/\d+/.test(row.store_url)))
+    .map((row): TescoQueueProduct => ({
+      storeProductId: row.store_product_id,
+      canonicalName: row.canonical_name,
+      storeProductName: row.store_product_name,
+      storeUrl: row.store_url!,
+      storeSku: row.store_sku,
+      previousPrice: row.previous_price,
+    }));
+}
+
 export async function createTescoScrapeRun(runId: string, targetCount: number) {
   const { data, error } = await supabaseAdmin
     .from('scrape_runs')
     .insert({
       run_id: runId,
       store: 'tesco',
-      retrieval_method: 'vercel_queue_scrapingbee',
+      retrieval_method: runId.startsWith('tesco_direct_canary_')
+        ? 'vercel_queue_tesco_exact_direct'
+        : 'vercel_queue_scrapingbee',
+      run_scope: runId.startsWith('tesco_direct_canary_') ? 'canary' : 'manual',
       started_at: new Date().toISOString(),
       status: 'running',
       target_count: targetCount,
