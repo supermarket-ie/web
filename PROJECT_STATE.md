@@ -1659,3 +1659,34 @@ zero safe recovery. The temporary schedules were removed after each bounded
 submission. Even with additional spend authorised, do not repeat this search
 strategy across another cohort: corrected canonical queries still reproduce
 the obsolete stored alternatives rather than discover defensible new SKUs.
+
+## 52. Tesco Pepesto yield reconciliation — 20 September 2026
+
+The apparent fall from 397/500 exact matches on 5–6 September to 19/250 on
+20 September was primarily a request-shape failure, not loss of Pepesto's
+Tesco transport. The historical `/search` contract accepted a `products`
+array and returned ten independently attributable items for each ten-product
+session. The current contract accepts a singular free-text `product` field.
+When ten stored titles were joined into that field, each session returned only
+one item: 25 sessions therefore produced 25 items for 250 nominal products,
+and the other 225 were misleadingly finalised as failed despite never having
+an independently returned result.
+
+The old headline also requires an identity qualification. Exact response-SKU
+matching proved agreement with the stored mapping, not agreement between that
+mapping and the canonical product. The old cohort contains known material
+mismatches. It must not be blindly reactivated.
+
+The ordinary multi-product `/search` submission route is retired. The shared
+search adapter now permits exactly one product per session, which preserves
+attribution for the bounded candidate-discovery workflow. Trusted price
+refreshes use the cheaper batched `/products` path instead.
+
+A new `proven_search_success` products cohort recovers only stale mappings
+from historical Pepesto sessions that returned one item per requested product,
+had a successful receipt, remain resolved, and pass the deterministic
+canonical identity classifier including duplicate-SKU checks. Fresh mappings
+are excluded. Selection remains demand-ranked, is capped at 50, requires an
+explicit `proven-products-canary` confirmation, and supports a zero-credit
+`dry_run=true` inspection before any queue message or Pepesto request is
+created.
