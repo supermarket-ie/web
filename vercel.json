@@ -2,6 +2,7 @@
   "regions": ["dub1"],
   "functions": {
     "src/app/api/queues/tesco-scrape-batch/route.ts": {"maxDuration":300,"experimentalTriggers":[{"type":"queue/v2beta","topic":"tesco-scrape-batches","retryAfterSeconds":30,"initialDelaySeconds":0}]},
+    "src/app/api/queues/pepesto-tesco-products-batch/route.ts": {"maxDuration":300,"experimentalTriggers":[{"type":"queue/v2beta","topic":"pepesto-tesco-products-batches","retryAfterSeconds":30,"initialDelaySeconds":0}]},
     "src/app/api/queues/dunnes-scrape-batch/route.ts": {"maxDuration":300,"experimentalTriggers":[{"type":"queue/v2beta","topic":"dunnes-scrape-batches","retryAfterSeconds":15,"initialDelaySeconds":0}]},
     "src/app/api/queues/dunnes-discovery-batch/route.ts": {"maxDuration":300,"experimentalTriggers":[{"type":"queue/v2beta","topic":"dunnes-discovery-batches","retryAfterSeconds":15,"initialDelaySeconds":0}]},
     "src/app/api/queues/supervalu-scrape-batch/route.ts": {"maxDuration":300,"experimentalTriggers":[{"type":"queue/v2beta","topic":"supervalu-scrape-batches","retryAfterSeconds":15,"initialDelaySeconds":0}]},
