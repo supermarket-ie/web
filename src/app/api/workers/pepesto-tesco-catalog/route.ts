@@ -42,6 +42,7 @@ export async function GET(request: Request) {
   let actualCost = 0;
   let matched = 0;
   let failed = 0;
+  let candidatesReturned = 0;
   const observedBatchCosts: number[] = [];
 
   try {
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
 
       const batchCreditsBefore = creditsAfter;
       const candidates = await retrievePepestoCatalog(urls);
+      candidatesReturned += candidates.length;
       creditsAfter = await getPepestoCreditsCents();
       const batchCost = Math.max(0, batchCreditsBefore - creditsAfter);
       actualCost += batchCost;
@@ -68,7 +70,7 @@ export async function GET(request: Request) {
       if (spent + actualCost >= dailyCap && index + CATALOG_BATCH_SIZE < run.products.length) throw new Error('Daily Pepesto spend cap reached before all catalog batches completed');
     }
 
-    return Response.json({ status: 'complete', run_id: run.runId, run_uuid: run.runUuid, target: run.products.length, attempted: matched + failed, matched, failed, coverage_pct: Number(((matched / run.products.length) * 100).toFixed(2)), credits_before_cents: creditsBefore, credits_after_cents: creditsAfter, actual_cost_cents: actualCost, observed_batch_costs_cents: observedBatchCosts });
+    return Response.json({ status: 'complete', run_id: run.runId, run_uuid: run.runUuid, target: run.products.length, attempted: matched + failed, candidates_returned: candidatesReturned, matched, failed, coverage_pct: Number(((matched / run.products.length) * 100).toFixed(2)), credits_before_cents: creditsBefore, credits_after_cents: creditsAfter, actual_cost_cents: actualCost, observed_batch_costs_cents: observedBatchCosts });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await supabaseAdmin.from('scrape_runs').update({ status: 'failed', finished_at: new Date().toISOString(), error_summary: message.slice(0, 500), pepesto_credits_before_cents: creditsBefore, pepesto_credits_after_cents: creditsAfter, pepesto_actual_cost_cents: actualCost }).eq('id', run.runUuid);
