@@ -1427,3 +1427,28 @@ future `/link` requests. This does not expose, delete or silently rotate the
 existing Vault credential. Reconcile that stored credential with the funded
 Pepesto account and revalidate the current `/search` contract before retrying
 the paid refresh.
+
+## 45. Funded Pepesto relink and Tesco refresh — 20 September 2026
+
+The Pepesto credential was explicitly relinked using only
+`colin@supermarket.ie`. The replacement key passed `/credits` validation before
+the Vault value was changed, and the funded account reported 2,990 euro cents
+(€29.90). No API key was exposed.
+
+Pepesto's current `/search` contract uses a singular comma-separated `product`
+string rather than the former `products` array. PR #138 updated the adapter to
+that documented contract while retaining ten-product batching and the exact
+retailer-SKU acceptance gate. A corrected ten-product canary submitted 10/10,
+cost 12 cents and recovered one exact unchanged price.
+
+Production run `pepesto_tesco_20260920103339`
+(`c8812c38-678b-4346-8580-3cf14023ea3e`) then submitted and retrieved all 250
+requested products across 25 sessions. Credits moved from 2,978 to 2,678 euro
+cents: an actual cost of €3.00, exactly 12 cents per batch. Nineteen exact-SKU
+prices were accepted: six newly inserted observations and 13 unchanged current
+prices. The other 231 results failed the exact-SKU gate and were not mapped.
+The run is recorded as `failed` only because 7.60% exact recovery is below the
+existing 70% health threshold; submission, retrieval and spend accounting all
+completed. `latest_prices` now contains 19 fresh Tesco rows, bringing Tesco
+back into the live dataset without weakening matching rules. Remaining Pepesto
+balance is €26.78.
