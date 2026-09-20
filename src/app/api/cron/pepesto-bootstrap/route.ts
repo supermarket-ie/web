@@ -79,21 +79,37 @@ export async function GET(request: NextRequest) {
   if (!authorized(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    let apiKey = await getStoredKey();
+    const relinkRequested = ['1', 'true'].includes(request.nextUrl.searchParams.get('relink')?.toLowerCase() ?? '');
+    let apiKey = relinkRequested ? null : await getStoredKey();
     let linkedNow = false;
 
     if (!apiKey) {
-      apiKey = await linkPepesto();
-      await storeKey(apiKey);
+      const linkedKey = await linkPepesto();
+      // Validate the linked identity before replacing the Vault credential. A
+      // failed or malformed relink must never destroy the last usable key.
+      const linkedCredits = await checkCredits(linkedKey);
+      await storeKey(linkedKey);
+      apiKey = linkedKey;
       linkedNow = true;
+
+      console.log('[pepesto-bootstrap] verified', { linkedNow, relinkRequested, euroCents: linkedCredits });
+      return NextResponse.json({
+        ok: true,
+        linked_now: linkedNow,
+        relink_requested: relinkRequested,
+        key_stored_in_vault: true,
+        euro_cents: linkedCredits,
+        euro_balance: Number((linkedCredits / 100).toFixed(2)),
+      });
     }
 
     const euroCents = await checkCredits(apiKey);
-    console.log('[pepesto-bootstrap] verified', { linkedNow, euroCents });
+    console.log('[pepesto-bootstrap] verified', { linkedNow, relinkRequested, euroCents });
 
     return NextResponse.json({
       ok: true,
       linked_now: linkedNow,
+      relink_requested: relinkRequested,
       key_stored_in_vault: true,
       euro_cents: euroCents,
       euro_balance: Number((euroCents / 100).toFixed(2)),
