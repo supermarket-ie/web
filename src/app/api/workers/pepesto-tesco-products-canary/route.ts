@@ -37,7 +37,6 @@ export async function GET(request:Request){
       })),
       pepesto_credit_spent_cents:0,
     };
-    console.log('[pepesto-tesco-products-canary] dry run',dryRunResult);
     return Response.json(dryRunResult);
   }
   const run=await createPepestoProductsRun(products);
