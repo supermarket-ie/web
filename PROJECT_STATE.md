@@ -1495,3 +1495,23 @@ exact recovery and failure-reason reporting. `retailer_coverage_current` now
 includes Tesco, and `main_retailer_comparison_coverage_current` reports products
 covered by at least two and by all three main retailers. Production canary
 results and any decision to scale remain pending deployment verification.
+
+The production canary stopped on its first exact stored URL with HTTP 403 and
+classified the response as an access challenge. The Vercel Dublin egress was
+quarantined and direct retrieval was not scaled. No Pepesto credit was used.
+
+## 48. Untouched Pepesto products cohort — 20 September 2026
+
+Receipt analysis showed that the two 250-product preferred-URL runs overlapped
+on 186 mappings, including 179 repeated non-successes. Repeating the same
+selection was therefore the cause of much of the diminishing return. There are
+2,104 unresolved exact Tesco mappings that no preferred-products run attempted;
+558 of these already have fresh trusted prices at both other main retailers.
+
+The products canary now selects up to 50 mappings from this untouched cohort,
+preserving the existing demand/overlap ranking and exact stored-SKU acceptance
+gate. It publishes one durable queue message and returns the run UUID
+immediately. The paid response, cost and progress are persisted in a private
+service-role-only batch table so queue redelivery can resume finalisation
+without intentionally repeating the paid request. This does not use direct
+Tesco retrieval or any legacy proxy integration.
