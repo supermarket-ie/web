@@ -170,3 +170,15 @@ discovery query is now canonical-name-first under a regression test. Following
 explicit approval for additional spend, the default discovery cap is €1.20;
 the endpoint itself has no same-day guard, while temporary scheduling can pass
 an explicit run-count limit.
+
+The corrected run then queried three canonical identities independently for a
+further 36 cents, moving the balance from €20.34 to €19.98. It recovered 0/3
+exact replacements. Each query returned the same obsolete alternative already
+invalidated: Tesco own-label bananas for the Fyffes canonical, the old Muller
+SKU without 180g size corroboration, and H.W. Nevills wholemeal wraps for
+Fitzgeralds wraps. All were rejected and no trusted mapping or price changed.
+
+The two bounded runs cost 72 cents in total and produced zero safe recovery.
+Both temporary schedules were removed. Further cohorts using the same Pepesto
+search strategy are stopped despite the higher authorised cap; the corrected
+evidence shows repetition of obsolete alternatives, not useful SKU discovery.
