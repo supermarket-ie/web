@@ -35,6 +35,7 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] tesco catalog refresh': { name: 'tesco-catalog-refresh', target: '/api/workers/pepesto-tesco-catalog?limit=250' },
   '[ops] tesco products canary': { name: 'tesco-products-canary', target: '/api/workers/pepesto-tesco-products?limit=50' },
   '[ops] tesco products refresh': { name: 'tesco-products-refresh', target: '/api/workers/pepesto-tesco-products?limit=250' },
+  '[ops] tesco exact direct canary': { name: 'tesco-exact-direct-canary', target: '/api/workers/tesco-scrape-trigger?limit=20&mode=exact_direct_canary' },
 };
 
 function normalizeTitle(value: string) {
