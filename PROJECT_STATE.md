@@ -1452,3 +1452,24 @@ existing 70% health threshold; submission, retrieval and spend accounting all
 completed. `latest_prices` now contains 19 fresh Tesco rows, bringing Tesco
 back into the live dataset without weakening matching rules. Remaining Pepesto
 balance is €26.78.
+
+
+## 46. Tesco preferred-products coverage gain — 20 September 2026
+
+Pepesto's preselected `/catalog` endpoint returned no rows for existing Tesco
+Ireland product URLs in two 50-product canaries; each cost 96 cents. The
+250-product catalog operation was therefore not released. The cached
+`/products` endpoint was then integrated with multi-line product requests and
+existing Tesco URLs supplied as preferences. Returned candidates remain subject
+to an exact stored retailer-SKU gate across the complete batch, so omitted or
+reordered Pepesto items cannot cause positional mis-mapping.
+
+The corrected 50-product canary recovered 19 exact products for 32 cents.
+Production run `pepesto_tesco_20260920121121`
+(`1d49106a-848f-4cf8-8f37-d2c173b810ec`) then attempted 250, returned 171
+Pepesto items and accepted 64 exact Tesco SKUs for €1.60. The other 186 were
+safely rejected. Across the funded work, fresh Tesco coverage increased from 19
+to 106 products (4.31% of 2,462), a 5.58x increase. Demand-weighted Tesco
+coverage is 819/1,659 units (49.37%). Ninety-eight Tesco products overlap at
+least one of SuperValu or Dunnes, and 70 products are currently live at all
+three retailers. The remaining Pepesto balance is €22.62.
