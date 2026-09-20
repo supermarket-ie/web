@@ -448,11 +448,13 @@ export async function selectTescoProducts(limit: number, query?: string) {
 }
 
 export async function selectTescoExactDirectCanaryProducts(limit = 20) {
-  const rows = await selectStoreProductsForRefresh('tesco', Math.min(Math.max(limit, 1), 20), {
+  const boundedLimit = Math.min(Math.max(limit, 1), 20);
+  const rows = await selectStoreProductsForRefresh('tesco', 2500, {
     productUrlOnly: true,
   });
   return rows
     .filter((row) => Boolean(row.store_sku && row.store_url && /\/products\/\d+/.test(row.store_url)))
+    .slice(0, boundedLimit)
     .map((row): TescoQueueProduct => ({
       storeProductId: row.store_product_id,
       canonicalName: row.canonical_name,
