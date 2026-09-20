@@ -38,6 +38,16 @@ export async function getPepestoCreditsCents(){ const j=await post('/credits',{}
 export async function submitPepestoSearch(products:TescoQueueProduct[]){ if(products.length<1||products.length>10) throw new Error('Pepesto search batch must contain 1-10 products'); const product=products.map(p=>p.storeProductName||p.canonicalName).join(', '); const j=await post('/search',{product,supermarket_domain:'tesco.ie'}); if(!isRecord(j)||!j.search_session_id) throw new Error('Pepesto search did not return search_session_id'); return String(j.search_session_id); }
 export async function retrievePepestoSearch(sessionId:string){ return post('/retrieve',{search_session_id:sessionId}); }
 
+export async function retrievePepestoProducts(products:TescoQueueProduct[]){
+  if(products.length<1||products.length>50) throw new Error('Pepesto products batch must contain 1-50 products');
+  return post('/products',{
+    recipe_kg_tokens:[],
+    manual_shopping_list:products.map(product=>product.storeProductName||product.canonicalName).join('\n'),
+    supermarket_domain:'tesco.ie',
+    preferred_product_urls:products.map(product=>product.storeUrl).filter((value):value is string=>Boolean(value)),
+  });
+}
+
 export async function retrievePepestoCatalog(productUrls:string[]){
   if(productUrls.length<1||productUrls.length>50) throw new Error('Pepesto catalog batch must contain 1-50 product URLs');
   const payload=await post('/catalog',{supermarket_domain:'tesco.ie',product_urls:productUrls});
