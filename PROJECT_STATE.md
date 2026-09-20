@@ -1643,3 +1643,19 @@ explicitly queries the canonical name, with a regression test that preserves
 stored-title preference only for ordinary exact-SKU price refreshes. The
 operator endpoint has no same-day guard; its default observed-spend cap is
 €1.20 and an optional run-count limit is available for one-shot scheduling.
+
+The corrected canonical-query run
+`pepesto_tesco_discovery_20260920191847`
+(`36a98b6a-a0fd-4125-85f0-c62a87ddd25f`) submitted three independently
+attributed searches for 36 cents. Credits moved from €20.34 to €19.98. It
+returned exactly one candidate per query and recovered 0/3 exact replacements:
+Fyffes loose bananas still returned the Tesco own-label SKU, the 180g Muller
+canonical still returned the invalidated SKU without corroborating size
+evidence, and Fitzgeralds wraps still returned H.W. Nevills wholemeal wraps.
+All three were rejected and no mapping or trusted price changed.
+
+Together, the invalid first run and corrected run cost 72 cents and produced
+zero safe recovery. The temporary schedules were removed after each bounded
+submission. Even with additional spend authorised, do not repeat this search
+strategy across another cohort: corrected canonical queries still reproduce
+the obsolete stored alternatives rather than discover defensible new SKUs.
