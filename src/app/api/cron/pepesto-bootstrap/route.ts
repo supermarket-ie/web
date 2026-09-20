@@ -6,7 +6,6 @@ export const maxDuration = 60;
 
 const PEPESTO_BASE = 'https://s.pepesto.com/api';
 const PEPESTO_EMAIL = 'colin@supermarket.ie';
-const PEPESTO_ALIAS = 'Supermarket';
 
 function authorized(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -44,7 +43,7 @@ async function linkPepesto(): Promise<string> {
   const response = await fetch(`${PEPESTO_BASE}/link`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: PEPESTO_EMAIL, alias: PEPESTO_ALIAS }),
+    body: JSON.stringify({ email: PEPESTO_EMAIL }),
     cache: 'no-store',
   });
   const text = await response.text();
