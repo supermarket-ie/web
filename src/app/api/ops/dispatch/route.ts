@@ -29,13 +29,7 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] dunnes mapping cleanup validation': { name: 'dunnes-mapping-cleanup-validation', target: '/api/workers/dunnes-scrape-trigger?limit=150&scope=targeted_validation&failure_run=d75b1dc5-d497-4f11-a32b-7f378cdd35af' },
   '[ops] dunnes compact discovery validation': { name: 'dunnes-compact-discovery-validation', target: '/api/workers/dunnes-scrape-trigger?limit=100&scope=targeted_validation&failure_run=6c30c0f8-2601-4ade-a371-c8ed5ebf5a56' },
   '[ops] pepesto relink': { name: 'pepesto-relink', target: '/api/cron/pepesto-bootstrap?relink=1' },
-  '[ops] tesco pepesto canary': { name: 'tesco-pepesto-canary', target: '/api/workers/pepesto-tesco-submit?limit=10' },
-  '[ops] tesco pepesto refresh': { name: 'tesco-pepesto-refresh', target: '/api/workers/pepesto-tesco-submit?limit=250' },
-  '[ops] tesco catalog canary': { name: 'tesco-catalog-canary', target: '/api/workers/pepesto-tesco-catalog?limit=50' },
-  '[ops] tesco catalog refresh': { name: 'tesco-catalog-refresh', target: '/api/workers/pepesto-tesco-catalog?limit=250' },
-  '[ops] tesco products canary': { name: 'tesco-products-canary', target: '/api/workers/pepesto-tesco-products-canary?limit=50' },
-  '[ops] tesco products refresh': { name: 'tesco-products-refresh', target: '/api/workers/pepesto-tesco-products?limit=250' },
-  '[ops] tesco exact direct canary': { name: 'tesco-exact-direct-canary', target: '/api/workers/tesco-scrape-trigger?limit=20&mode=exact_direct_canary' },
+  '[ops] tesco pepesto search refresh': { name: 'tesco-pepesto-search-refresh', target: '/api/workers/pepesto-tesco-search-refresh?confirm=tesco-search-refresh&limit=50&max_cost_cents=600' },
 };
 
 function normalizeTitle(value: string) {
