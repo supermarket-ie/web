@@ -43,6 +43,11 @@ export async function retrievePepestoCatalog(productUrls:string[]){
   const payload=await post('/catalog',{supermarket_domain:'tesco.ie',product_urls:productUrls});
   if(!isRecord(payload)) throw new Error('Pepesto catalog returned an invalid payload');
   if(Array.isArray(payload.products)) return payload.products.filter(isRecord) as PepestoCandidate[];
+  if(isRecord(payload.products)) {
+    return Object.entries(payload.products)
+      .filter(([,value])=>isRecord(value))
+      .map(([key,value])=>({...(value as PepestoCandidate),product_id:String((value as PepestoCandidate).product_id||key)}));
+  }
   // Retain compatibility with the URL-keyed response shown in some Pepesto
   // catalog examples while preferring the current protocol's products array.
   return Object.entries(payload)
