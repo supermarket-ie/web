@@ -1396,3 +1396,17 @@ failure-cohort records, with three successful observations (two unchanged) and
 1,594/2,462 (64.74%) and 81.56% demand coverage. This confirms that the
 remaining SuperValu cohort needs better canonical data or new retailer evidence,
 not another pass with the same queries.
+
+## 43. Retired browser-based data-health page — 20 September 2026
+
+The `/admin/data-health` browser page has been removed. It was an internal
+exception-handling interface and is no longer part of the operating workflow;
+product resolution remains an autonomous, evidence-gated process. The page was
+not present in public navigation or the sitemap and carried `noindex` metadata
+while it existed. Its removal now makes the URL return the standard not-found
+response.
+
+The protected admin APIs, resolution audit table, queue view and atomic resolver
+remain in place for developer-operated diagnostics and audited technical
+operations. Removing the browser page does not change retailer discovery,
+coverage calculation, matching safeguards or price refresh behaviour.
