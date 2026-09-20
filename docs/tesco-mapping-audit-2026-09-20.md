@@ -116,9 +116,11 @@ and marks only the mapping status as failed so it exits `latest_prices` and all
 trusted consumer coverage. The update is guarded by the snapshotted identity;
 it will not overwrite a mapping that changed after the audit.
 
-The migration was executed inside a production transaction and rolled back to
-verify its SQL and guards. Production still has no audit table and zero rows
-with the audit failure marker at this point.
+The migration was first executed inside a production transaction and rolled
+back to verify its SQL and guards. It was then applied after PR #171 passed CI,
+the preview reached `READY` and production deployment
+`dpl_5vZFcKCa6jUpxfcWL3po34RVZKZ7` reached `READY` at commit
+`b7507cb90931143cd1e1d919fdea17c368aa33d2`.
 
 ## Corrected baseline if the repair set is applied
 
@@ -135,3 +137,10 @@ The demand denominator had increased from 1,659 to 1,681 units by the time of
 the second pass; current and corrected demand percentages therefore use the
 same live denominator of 1,681. Correctness takes precedence over retaining the
 118-row headline.
+
+Production verification confirmed all predicted results: 26/26 decisions have
+an applied audit action, 26 mappings carry the audit failure marker and none of
+those mappings remains in `latest_prices`. Tesco now has 92 trusted canonical
+products, 91 unique trusted SKUs, 3.74% catalogue coverage, 641/1,681 demanded
+units (38.13%), 794 products live at two or more main retailers and 67 live at
+all three. No recent Vercel runtime errors were present after release.

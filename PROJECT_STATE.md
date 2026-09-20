@@ -1587,5 +1587,19 @@ mapping identity, current-observation timestamp, classification, reason and
 evidence source before changing `url_status` to `failed`. SKU, URL, title and
 historical observations remain intact. The mutation is guarded by the stored
 identity so it cannot invalidate a mapping changed after the audit. A full
-production transaction dry-run completed and was rolled back; no production
-row or schema change has yet been retained.
+production transaction dry-run completed and was rolled back before release.
+
+PR #171 then passed CI and preview verification and was merged at commit
+`b7507cb90931143cd1e1d919fdea17c368aa33d2`. Production deployment
+`dpl_5vZFcKCa6jUpxfcWL3po34RVZKZ7` reached `READY`, after which the audited
+Supabase migration was applied. Verification found 26 decisions and 26 applied
+actions, 26 audit-failed mappings and zero audited mappings leaking through
+`latest_prices`.
+
+The corrected live result exactly matched the dry-run: 92 trusted Tesco
+canonical products, 91 unique SKUs, 3.74% catalogue coverage and 641/1,681
+demanded units (38.13%). Main-retailer overlap is now 794 products at two or
+more retailers and 67 at all three. Supabase advisors showed no new unindexed
+foreign key; the private audit table intentionally follows the existing
+service-role-only RLS-without-user-policy pattern. Vercel reported no recent
+production runtime errors.
