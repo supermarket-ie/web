@@ -1722,3 +1722,33 @@ claim. The 8/10 canary repeated the same numerical prices observed on
 6 September, and four promotion flags lacked a corresponding previous price;
 therefore freshness and promotion evidence require separate monitoring and
 must not be inferred from SKU agreement alone.
+
+## 54. Proven Tesco search refresh batches — 20 September 2026
+
+The restored one-product-per-session Pepesto `/search` path was scaled through
+two bounded production operations after the corrected 8/10 canary. PR #187
+scheduled the first 50-product batch; run
+`pepesto_tesco_search_20260920214644`
+(`bd1fef45-3a4a-4652-8f92-69b37ebdccc1`) accepted 40 exact stored SKUs and
+safely rejected 10. Observed credit moved from €18.46 to €12.46, an actual cost
+of €6.00. Corrected fresh Tesco coverage increased from 102 after the earlier
+paid experiments to 142/2,462.
+
+PR #189 scheduled the requested next batch with the same 50-product and €6.00
+ceilings. The identity-audited stale proven-success selector contained only 20
+eligible products, so the operation submitted those 20 rather than broadening
+into unproven mappings merely to fill the limit. Run
+`pepesto_tesco_search_20260920222204`
+(`e8678d31-2aed-4510-8148-fd085277cc13`) fetched all 20 in the next collector
+pass, accepted 14 exact stored SKUs and safely rejected six. The run succeeded
+at 70% yield. Credits moved from €12.46 to €10.06, an actual cost of €2.40.
+
+The second operation added 14 distinct `pepesto_search` observations and
+brought fresh trusted Tesco coverage to 156/2,462 (6.34%). Across the two scaled
+batches, 54/70 products were accepted (77.14%) for €8.40. The six residual stale
+products from the second operation remain ineligible for trust without a future
+exact response; do not immediately repeat them merely to spend the remaining
+balance. Price freshness remains a separate confidence dimension from exact SKU
+identity. The fixed-date paid triggers were removed after collection; there is
+still no persistent paid Tesco schedule.
+
