@@ -89,7 +89,49 @@ such as flour for pancake mix remain evidence only.
 
 ## Next safe step
 
-Before any production mutation, finish row-level audit output for the 324
-non-equivalent duplicate groups and the 23 fresh unique-SKU title-review rows.
-Then prepare an explicit, reversible repair set containing only deterministic
-invalidations and recalculate the corrected coverage baseline.
+The second read-only pass completed the row-level audit of all 29 fresh rows
+whose SKU is duplicated elsewhere and all 23 fresh unique-SKU rows whose title
+did not contain every canonical term. The combined deterministic repair set
+contains 26 fresh mappings. Fourteen title-review rows are corroborated exact
+identities, two remain ambiguous (`Chia Loaf` and `Frozen Mixed Veg 1kg`), and
+seven are material mismatches; two of those seven were already in the first
+12-row set. The duplicate-SKU pass added nine further deterministic mismatches.
+
+Additional conflicts include:
+
+- chilli-infused olive oil mapped to plain olive oil;
+- onions mapped to breaded onion rings;
+- onion powder mapped to onion granules;
+- generic pitta, chicken and salmon mapped to wholemeal, free-range or organic
+  variants;
+- branded wraps mapped to a different brand and formulation;
+- natural yogurt mapped to peach yogurt with a different pack/size;
+- oyster chicken thighs mapped to boneless thighs;
+- generic kiwi and Tesco grapes mapped to gold kiwi and Keelings black grapes.
+
+The repair migration records a complete pre-change JSON snapshot and reason in
+the private, RLS-protected `retailer_mapping_audit_decisions` table before it
+changes a mapping. It preserves the old Tesco SKU, URL, title and observations,
+and marks only the mapping status as failed so it exits `latest_prices` and all
+trusted consumer coverage. The update is guarded by the snapshotted identity;
+it will not overwrite a mapping that changed after the audit.
+
+The migration was executed inside a production transaction and rolled back to
+verify its SQL and guards. Production still has no audit table and zero rows
+with the audit failure marker at this point.
+
+## Corrected baseline if the repair set is applied
+
+| Measure | Current | After 26 deterministic invalidations |
+|---|---:|---:|
+| Fresh trusted canonical rows | 118 | 92 |
+| Unique fresh Tesco SKUs | 114 | 91 |
+| Catalogue coverage | 4.79% | 3.74% |
+| Demand-weighted coverage | 50.86% | 38.13% |
+| Products live at two or more main retailers | 803 | 794 |
+| Products live at all three main retailers | 78 | 67 |
+
+The demand denominator had increased from 1,659 to 1,681 units by the time of
+the second pass; current and corrected demand percentages therefore use the
+same live denominator of 1,681. Correctness takes precedence over retaining the
+118-row headline.
