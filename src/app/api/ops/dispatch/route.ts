@@ -31,6 +31,8 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] pepesto relink': { name: 'pepesto-relink', target: '/api/cron/pepesto-bootstrap?relink=1' },
   '[ops] tesco pepesto canary': { name: 'tesco-pepesto-canary', target: '/api/workers/pepesto-tesco-submit?limit=10' },
   '[ops] tesco pepesto refresh': { name: 'tesco-pepesto-refresh', target: '/api/workers/pepesto-tesco-submit?limit=250' },
+  '[ops] tesco catalog canary': { name: 'tesco-catalog-canary', target: '/api/workers/pepesto-tesco-catalog?limit=50' },
+  '[ops] tesco catalog refresh': { name: 'tesco-catalog-refresh', target: '/api/workers/pepesto-tesco-catalog?limit=250' },
 };
 
 function normalizeTitle(value: string) {
