@@ -1515,3 +1515,21 @@ immediately. The paid response, cost and progress are persisted in a private
 service-role-only batch table so queue redelivery can resume finalisation
 without intentionally repeating the paid request. This does not use direct
 Tesco retrieval or any legacy proxy integration.
+
+Production run `pepesto_tesco_20260920143901`
+(`97f092ea-8cd6-49ed-bd04-a3ce7545c751`) processed all 50 untouched mappings
+asynchronously. Pepesto returned 22 shopping-list items but no candidate with
+an exact requested stored SKU. All 50 were safely rejected, the run cost 32
+cents and the balance moved from €21.02 to €20.70. The returned evidence shows
+that `/products` ignored the preferred URLs for this residual cohort and fell
+back to broad name alternatives. Do not scale or repeat this cohort.
+
+The canary also exposed a pre-existing Tesco mapping-integrity issue. Across
+the catalogue, 325 Tesco SKUs are assigned to more than one canonical product
+(742 mapping rows). Current Tesco coverage contains 118 canonical rows but 114
+unique retailer SKUs. Some duplicates are catalogue synonyms, while others are
+materially invalid (for example red chilli mapped to a red bell pepper SKU).
+Exact response-SKU matching cannot repair a bad stored mapping: Tesco mapping
+identity must be audited and invalid rows cleared or re-resolved before further
+coverage spending. No returned alternative may be promoted without full brand,
+type, variant, size and pack agreement.
