@@ -25,6 +25,9 @@ export async function GET(request: Request) {
     .select('pepesto_actual_cost_cents').eq('store', 'tesco')
     .eq('retrieval_method', 'pepesto_candidate_discovery').gte('started_at', since.toISOString());
   if (costError) return Response.json({ error: `Unable to verify today's Pepesto spend: ${costError.message}` }, { status: 500 });
+  if ((costRows ?? []).length > 0) {
+    return Response.json({ status: 'already_run_today', submitted: 0 });
+  }
   const spentToday = (costRows ?? []).reduce((sum, row) => sum + Number(row.pepesto_actual_cost_cents || 0), 0);
   if (spentToday >= canaryCap) {
     return Response.json({ error: 'Tesco discovery canary spend cap reached', spent_cents: spentToday, cap_cents: canaryCap }, { status: 429 });
