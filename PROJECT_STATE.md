@@ -1533,3 +1533,32 @@ Exact response-SKU matching cannot repair a bad stored mapping: Tesco mapping
 identity must be audited and invalid rows cleared or re-resolved before further
 coverage spending. No returned alternative may be promoted without full brand,
 type, variant, size and pack agreement.
+
+## 49. Tesco mapping risk audit baseline — 20 September 2026
+
+A read-only production audit introduced a deterministic Tesco identity
+classifier covering URL/SKU corroboration, brand and own-label status, product
+type, variant, explicit measure, pack count, fresh/frozen state, material
+formulation and generic canonical identities. Duplicate-SKU status is a risk
+signal only: a group cannot be called a synonym without complete group-level
+identity corroboration.
+
+The live baseline remains 118 fresh canonical rows and 114 unique fresh Tesco
+SKUs, but at least 12 current rows have deterministic material conflicts. These
+include red chilli mapped to a bell pepper, 250g mushrooms mapped to 300g,
+180g Muller Rice mapped to 170g, several pack-count conflicts, branded
+canonicals mapped to Tesco or another brand, pizza mapped to a baguette,
+semolina pasta mapped to flour and yogurt mapped to a yogurt drink. No mapping
+or price was changed during this pass.
+
+All 325 duplicate-SKU groups (742 mapping rows) were enumerated. Only one group
+has the same normalised canonical term set, and it still fails brand/own-label
+corroboration, so no group is yet accepted automatically as a genuine synonym.
+Within fresh coverage, 29 rows use a SKU duplicated elsewhere in the catalogue.
+
+The persisted evidence from Pepesto run
+`97f092ea-8cd6-49ed-bd04-a3ce7545c751` was reused without another paid request.
+None of its alternative SKUs passed the strict exact-replacement test. The next
+step is to complete row-level classification of the non-equivalent duplicate
+groups and the remaining fresh title-review cohort, then prepare a reversible
+deterministic invalidation set before recalculating corrected coverage.
