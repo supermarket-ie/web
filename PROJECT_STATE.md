@@ -1562,3 +1562,30 @@ None of its alternative SKUs passed the strict exact-replacement test. The next
 step is to complete row-level classification of the non-equivalent duplicate
 groups and the remaining fresh title-review cohort, then prepare a reversible
 deterministic invalidation set before recalculating corrected coverage.
+
+## 50. Tesco deterministic repair set — 20 September 2026
+
+The row-level read-only audit is complete for all 29 fresh rows whose Tesco SKU
+is duplicated elsewhere and all 23 fresh unique-SKU rows whose retailer title
+does not contain every canonical term. The combined repair set contains 26
+fresh material mismatches. It extends the first 12-row result with plain oil for
+chilli-infused oil, onions versus breaded onion rings, powder versus granules,
+wholemeal/free-range/organic substitutions, conflicting brands, yogurt
+variant/pack changes, oyster versus boneless chicken thighs and materially
+different fruit variants.
+
+If all 26 mappings are invalidated, Tesco trusted coverage will correct from
+118 to 92 canonical products and from 114 to 91 unique SKUs. Catalogue coverage
+will move from 4.79% to 3.74%; using the current 1,681-unit demand denominator,
+demand-weighted coverage will move from 50.86% to 38.13%. Main-retailer overlap
+will correct from 803 to 794 products with at least two live retailers and from
+78 to 67 with all three.
+
+The prepared migration introduces a private, RLS-protected
+`retailer_mapping_audit_decisions` table. Each repair stores the complete prior
+mapping identity, current-observation timestamp, classification, reason and
+evidence source before changing `url_status` to `failed`. SKU, URL, title and
+historical observations remain intact. The mutation is guarded by the stored
+identity so it cannot invalidate a mapping changed after the audit. A full
+production transaction dry-run completed and was rolled back; no production
+row or schema change has yet been retained.
