@@ -22,4 +22,9 @@ describe('Pepesto Tesco search query', () => {
   it('uses the canonical identity for audited candidate discovery', () => {
     expect(pepestoSearchQuery([product({ discoveryMode: 'audited_candidate_discovery' })])).toBe('Onions 1kg');
   });
+
+  it('rejects multi-product search requests to preserve result attribution', () => {
+    expect(() => pepestoSearchQuery([product(), product({ storeProductId: 'sp-2' })]))
+      .toThrow('exactly one independently attributable product');
+  });
 });
