@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import { choosePepestoCandidate, extractPepestoItems, finalizePepestoProduct, retrievePepestoSearch } from '@/lib/pepesto-tesco';
+import { choosePepestoCandidate, extractPepestoCandidates, extractPepestoItems, finalizePepestoProduct, normalizePepestoCandidate, retrievePepestoSearch } from '@/lib/pepesto-tesco';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
+import { classifyTescoReplacement, type TescoMappingEvidence } from '@/lib/tesco-mapping-audit';
 
 export const dynamic='force-dynamic'; export const maxDuration=120;
 function authorized(r:Request){const s=process.env.CRON_SECRET;return Boolean(s&&r.headers.get('authorization')===`Bearer ${s}`)}
@@ -8,6 +9,69 @@ function responseState(payload: unknown) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return '';
   const row = payload as Record<string, unknown>;
   return String(row.status || row.state || '').toLowerCase();
+}
+
+async function finalizeCandidateDiscovery(runUuid:string,product:TescoQueueProduct,payload:unknown){
+ const mapping:TescoMappingEvidence={
+   storeProductId:product.storeProductId,
+   canonicalName:product.canonicalName,
+   canonicalBrand:product.canonicalBrand??null,
+   storeProductName:product.storeProductName,
+   storeBrand:product.storeBrand??null,
+   isOwnBrand:product.isOwnBrand??null,
+   storeSku:product.storeSku,
+   storeUrl:product.storeUrl,
+   duplicateSkuCount:1,
+   isFresh:false,
+ };
+ const rows=extractPepestoCandidates(payload).map((rawCandidate,candidateIndex)=>{
+   const candidate=normalizePepestoCandidate(rawCandidate);
+   const classified=classifyTescoReplacement(mapping,{
+     sku:candidate.sku??'',url:candidate.url,name:candidate.name,
+     evidenceSource:'pepesto-search-single',
+   });
+   const audit=candidate.name&&candidate.priceCents>0?classified:{
+     ...classified,
+     classification:'insufficient_evidence' as const,
+     reasons:['candidate requires a non-empty name and positive observed price'],
+   };
+   return {
+     run_uuid:runUuid,
+     store_product_id:product.storeProductId,
+     candidate_index:candidateIndex,
+     query_text:product.canonicalName,
+     candidate_name:candidate.name||null,
+     candidate_url:candidate.url||null,
+     candidate_sku:candidate.sku,
+     candidate_price_cents:candidate.priceCents||null,
+     classification:audit.classification,
+     reasons:audit.reasons,
+     identity_signals:audit.signals,
+     raw_candidate:rawCandidate,
+   };
+ });
+ let persisted:Array<{id:string;candidate_sku:string|null;classification:string}>=[];
+ if(rows.length){
+   const {data,error}=await supabaseAdmin.from('tesco_candidate_discovery_evidence')
+     .upsert(rows,{onConflict:'run_uuid,store_product_id,candidate_index'})
+     .select('id,candidate_sku,classification');
+   if(error) throw new Error(`Failed persisting Tesco candidate evidence: ${error.message}`);
+   persisted=(data??[]) as typeof persisted;
+ }
+ const exact=persisted.filter(row=>row.classification==='exact_replacement_candidate'&&row.candidate_sku);
+ const exactSkus=new Set(exact.map(row=>row.candidate_sku));
+ if(exact.length&&exactSkus.size===1){
+   const {error}=await supabaseAdmin.rpc('finalize_tesco_candidate_discovery',{
+     p_run_uuid:runUuid,
+     p_candidate_id:exact[0].id,
+     p_previous_price:product.previousPrice,
+     p_on_promotion:false,
+   });
+   if(error) throw new Error(`Tesco candidate finalization failed: ${error.message}`);
+   return true;
+ }
+ await finalizePepestoProduct(runUuid,product,null);
+ return false;
 }
 
 export async function GET(request:Request){
@@ -23,9 +87,15 @@ export async function GET(request:Request){
      }
      const products=(session.products||[]) as TescoQueueProduct[]; const items=extractPepestoItems(payload); let batchMatched=0,batchFailed=0;
      for(let i=0;i<products.length;i++){
-       const product=products[i]; const target=String(product.storeProductName||product.canonicalName).toLowerCase();
-       const exact=items.find(x=>String(x?.item_name||'').toLowerCase()===target); const item=exact||items[i]||{};
-       const candidate=choosePepestoCandidate(product,item); const ok=await finalizePepestoProduct(session.run_uuid,product,candidate);
+       const product=products[i];
+       let ok=false;
+       if(product.discoveryMode==='audited_candidate_discovery'){
+         ok=await finalizeCandidateDiscovery(session.run_uuid,product,payload);
+       }else{
+         const target=String(product.storeProductName||product.canonicalName).toLowerCase();
+         const exact=items.find(x=>String(x?.item_name||'').toLowerCase()===target); const item=exact||items[i]||{};
+         const candidate=choosePepestoCandidate(product,item); ok=await finalizePepestoProduct(session.run_uuid,product,candidate);
+       }
        if(ok){matched++;batchMatched++;} else {failed++;batchFailed++;}
      }
      await supabaseAdmin.from('pepesto_tesco_sessions').update({status:'done',retrieved_at:new Date().toISOString(),result_summary:{items:items.length,matched:batchMatched,failed:batchFailed},last_error:null}).eq('id',session.id); completed++;

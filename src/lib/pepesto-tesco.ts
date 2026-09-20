@@ -7,7 +7,7 @@ export const PEPESTO_BATCH_SIZE = 10;
 
 type PricePromotion = { promo?: boolean; promo_percentage?: number };
 type PricePerUnit = { price?: number; promotion?: PricePromotion };
-type PepestoCandidate = { product_name?: string; name?: string; price?: PricePerUnit | number; price_cents?: number; product_id?: string; url?: string };
+export type PepestoCandidate = { product_name?: string; name?: string; price?: PricePerUnit | number; price_cents?: number; product_id?: string; url?: string };
 type PepestoProductWrapper = { product?: PepestoCandidate; session_token?: string; num_units_to_buy?: number };
 type PepestoItem = { item_name?: string; products?: PepestoProductWrapper[]; candidates?: PepestoCandidate[]; results?: PepestoCandidate[] };
 type JsonRecord = Record<string, unknown>;
@@ -29,6 +29,21 @@ function candidatePromotion(c:PepestoCandidate){
 function unwrapCandidates(item:PepestoItem):PepestoCandidate[]{
   const wrapped=(item.products||[]).map(x=>x?.product).filter((value): value is PepestoCandidate => Boolean(value));
   return [...wrapped,...(item.candidates||[]),...(item.results||[])];
+}
+
+export function extractPepestoCandidates(payload:unknown):PepestoCandidate[]{
+  return extractPepestoItems(payload).flatMap(unwrapCandidates);
+}
+
+export function normalizePepestoCandidate(candidate:PepestoCandidate){
+  const url=candidateUrl(candidate);
+  return {
+    name:candidateName(candidate),
+    url,
+    sku:skuFromUrl(url),
+    priceCents:candidatePriceCents(candidate),
+    promotion:candidatePromotion(candidate),
+  };
 }
 
 async function key(){ const {data,error}=await supabaseAdmin.rpc('get_pepesto_api_key'); if(error||typeof data!=='string'||!data) throw new Error('Pepesto API key unavailable'); return data; }

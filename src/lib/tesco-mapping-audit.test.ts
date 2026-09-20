@@ -67,4 +67,31 @@ describe('Tesco mapping risk audit', () => {
     });
     expect(result.classification).toBe('material_mismatch');
   });
+
+  it('requires an explicit replacement size when the canonical has one', () => {
+    const result = classifyTescoReplacement(mapping(), {
+      sku: '987654321', url: 'https://www.tesco.ie/shop/en-IE/products/987654321',
+      name: 'Dolmio Stir In Carbonara Pasta Sauce', evidenceSource: 'pepesto-search-single',
+    });
+    expect(result.classification).toBe('material_mismatch');
+    expect(result.reasons).toContain('measureExactnessFailed');
+  });
+
+  it('requires an exact canonical brand in a replacement title', () => {
+    const result = classifyTescoReplacement(mapping(), {
+      sku: '987654321', url: 'https://www.tesco.ie/shop/en-IE/products/987654321',
+      name: 'Tesco Stir In Carbonara Pasta Sauce 150g', evidenceSource: 'pepesto-search-single',
+    });
+    expect(result.classification).toBe('material_mismatch');
+  });
+
+  it('allows a Tesco own-label candidate when the canonical has no explicit brand', () => {
+    const result = classifyTescoReplacement(mapping({
+      canonicalName: 'Closed Cup Mushrooms 250g', canonicalBrand: null,
+    }), {
+      sku: '987654321', url: 'https://www.tesco.ie/shop/en-IE/products/987654321',
+      name: 'Tesco Closed Cup Mushrooms 250g', evidenceSource: 'pepesto-search-single',
+    });
+    expect(result.classification).toBe('exact_replacement_candidate');
+  });
 });

@@ -12,6 +12,10 @@ export type TescoQueueProduct = {
   storeUrl: string;
   storeSku: string | null;
   previousPrice: number | null;
+  canonicalBrand?: string | null;
+  storeBrand?: string | null;
+  isOwnBrand?: boolean | null;
+  discoveryMode?: 'audited_candidate_discovery';
 };
 
 export type TescoBatchMessage = {

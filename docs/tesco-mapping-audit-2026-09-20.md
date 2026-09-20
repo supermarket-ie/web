@@ -144,3 +144,20 @@ those mappings remains in `latest_prices`. Tesco now has 92 trusted canonical
 products, 91 unique trusted SKUs, 3.74% catalogue coverage, 641/1,681 demanded
 units (38.13%), 794 products live at two or more main retailers and 67 live at
 all three. No recent Vercel runtime errors were present after release.
+
+## Candidate-discovery guardrail
+
+The follow-up recovery implementation uses one audited canonical identity per
+Pepesto search session and persists every returned candidate. This avoids the
+multi-item positional ambiguity seen in earlier search retrievals and does not
+repeat either the empty `/catalog` or residual preferred-URL `/products`
+cohorts.
+
+An alternative SKU can be applied only when exactly one distinct candidate
+passes URL/SKU corroboration, positive-price, full canonical-term, brand,
+product-type, variant, formulation, explicit-size and pack checks. The mapping
+repair and new observation are atomic and generate a second audit decision.
+Everything else remains private evidence. The operator route requires an
+explicit confirmation token, is limited to five audited mappings, and has a
+60-cent discovery-specific daily cap; the first production canary is limited
+to three products.
