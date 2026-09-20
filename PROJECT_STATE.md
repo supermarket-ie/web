@@ -1468,8 +1468,9 @@ The corrected 50-product canary recovered 19 exact products for 32 cents.
 Production run `pepesto_tesco_20260920121121`
 (`1d49106a-848f-4cf8-8f37-d2c173b810ec`) then attempted 250, returned 171
 Pepesto items and accepted 64 exact Tesco SKUs for €1.60. The other 186 were
-safely rejected. Across the funded work, fresh Tesco coverage increased from 19
-to 106 products (4.31% of 2,462), a 5.58x increase. Demand-weighted Tesco
-coverage is 819/1,659 units (49.37%). Ninety-eight Tesco products overlap at
-least one of SuperValu or Dunnes, and 70 products are currently live at all
-three retailers. The remaining Pepesto balance is €22.62.
+safely rejected. Across the funded work, fresh Tesco coverage initially increased from 19 to 106 products. A second
+250-product preferred-products run (`22304113-97c9-4dff-bd83-94f480b0b71d`)
+added 12 more exact prices for €1.60 before further identical retries were
+stopped for diminishing returns. Final fresh Tesco coverage is 118/2,462
+(4.79%), a 6.21x increase from the first successful run. Demand-weighted Tesco
+coverage is 845/1,659 units (50.93%). The remaining Pepesto balance is €21.02.
