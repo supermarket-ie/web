@@ -38,6 +38,18 @@ export async function getPepestoCreditsCents(){ const j=await post('/credits',{}
 export async function submitPepestoSearch(products:TescoQueueProduct[]){ if(products.length<1||products.length>10) throw new Error('Pepesto search batch must contain 1-10 products'); const product=products.map(p=>p.storeProductName||p.canonicalName).join(', '); const j=await post('/search',{product,supermarket_domain:'tesco.ie'}); if(!isRecord(j)||!j.search_session_id) throw new Error('Pepesto search did not return search_session_id'); return String(j.search_session_id); }
 export async function retrievePepestoSearch(sessionId:string){ return post('/retrieve',{search_session_id:sessionId}); }
 
+export async function retrievePepestoCatalog(productUrls:string[]){
+  if(productUrls.length<1||productUrls.length>50) throw new Error('Pepesto catalog batch must contain 1-50 product URLs');
+  const payload=await post('/catalog',{supermarket_domain:'tesco.ie',product_urls:productUrls});
+  if(!isRecord(payload)) throw new Error('Pepesto catalog returned an invalid payload');
+  if(Array.isArray(payload.products)) return payload.products.filter(isRecord) as PepestoCandidate[];
+  // Retain compatibility with the URL-keyed response shown in some Pepesto
+  // catalog examples while preferring the current protocol's products array.
+  return Object.entries(payload)
+    .filter(([key,value])=>/^https?:\/\//.test(key)&&isRecord(value))
+    .map(([key,value])=>({...(value as PepestoCandidate),product_id:String((value as PepestoCandidate).product_id||key)}));
+}
+
 export async function selectPepestoTescoProducts(limit:number,query?:string){
   const rows=await selectStoreProductsForRefresh('tesco',limit,{query});
   return rows.map((r):TescoQueueProduct=>{
@@ -47,7 +59,7 @@ export async function selectPepestoTescoProducts(limit:number,query?:string){
   });
 }
 
-export async function createPepestoRun(limit:number,query?:string){ const products=await selectPepestoTescoProducts(limit,query); if(!products.length) return null; const runId=`pepesto_tesco_${new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14)}`; const {data,error}=await supabaseAdmin.from('scrape_runs').insert({run_id:runId,store:'tesco',retrieval_method:'pepesto_search',started_at:new Date().toISOString(),status:'running',target_count:products.length,threshold_pct:70,attempted_count:0,fetched:0,extracted:0,inserted:0,unchanged_count:0,failed:0,silently_skipped_count:0,threshold_breached:false,scrapingbee_requests:0,scrapingbee_credits:0}).select('id').single(); if(error||!data?.id) throw new Error(`Failed opening Pepesto Tesco run: ${error?.message||'missing id'}`); return {runUuid:String(data.id),runId,products}; }
+export async function createPepestoRun(limit:number,query?:string,options:{productUrlOnly?:boolean;retrievalMethod?:string}={}){ const rows=await selectStoreProductsForRefresh('tesco',limit,{query,productUrlOnly:options.productUrlOnly}); const products=rows.map((r):TescoQueueProduct=>{const canonicalName=r.canonical_name||r.store_product_name||'';const fallbackUrl=`https://www.tesco.ie/shop/en-IE/search?query=${encodeURIComponent(canonicalName)}`;return {storeProductId:r.store_product_id,canonicalName,storeProductName:r.store_product_name||canonicalName,storeUrl:r.store_url||fallbackUrl,storeSku:r.store_sku||null,previousPrice:r.previous_price??null};}); if(!products.length) return null; const runId=`pepesto_tesco_${new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14)}`; const {data,error}=await supabaseAdmin.from('scrape_runs').insert({run_id:runId,store:'tesco',retrieval_method:options.retrievalMethod||'pepesto_search',started_at:new Date().toISOString(),status:'running',target_count:products.length,threshold_pct:70,attempted_count:0,fetched:0,extracted:0,inserted:0,unchanged_count:0,failed:0,silently_skipped_count:0,threshold_breached:false,scrapingbee_requests:0,scrapingbee_credits:0}).select('id').single(); if(error||!data?.id) throw new Error(`Failed opening Pepesto Tesco run: ${error?.message||'missing id'}`); return {runUuid:String(data.id),runId,products}; }
 
 export function choosePepestoCandidate(product:TescoQueueProduct,item:PepestoItem){
   const candidates=unwrapCandidates(item).filter(c=>candidateName(c)&&candidatePriceCents(c)>0);
@@ -55,6 +67,10 @@ export function choosePepestoCandidate(product:TescoQueueProduct,item:PepestoIte
   // Tesco refreshes therefore require the retailer SKU embedded in the
   // returned product URL to match the stored mapping exactly.
   return candidates.find(c=>product.storeSku && skuFromUrl(candidateUrl(c))===product.storeSku)??null;
+}
+
+export function choosePepestoCatalogCandidate(product:TescoQueueProduct,candidates:PepestoCandidate[]){
+  return candidates.find(candidate=>product.storeSku&&skuFromUrl(candidateUrl(candidate))===product.storeSku&&candidateName(candidate)&&candidatePriceCents(candidate)>0)??null;
 }
 
 export async function finalizePepestoProduct(runUuid:string,product:TescoQueueProduct,candidate:PepestoCandidate|null){ if(!candidate){ const {error}=await supabaseAdmin.rpc('finalize_tesco_scrape_product',{p_run_uuid:runUuid,p_store_product_id:product.storeProductId,p_success:false,p_price:null,p_previous_price:product.previousPrice,p_store_url:product.storeUrl,p_store_sku:product.storeSku,p_store_product_name:product.storeProductName,p_fetched:1,p_extracted:0,p_scrapingbee_requests:0,p_scrapingbee_credits:0,p_failure_stage:'parsing',p_failure_reason:'pepesto_no_confident_match',p_canonical_name:product.canonicalName,p_raw_error:null}); if(error) throw new Error(`Pepesto failure finalization failed: ${error.message}`); return false; }
