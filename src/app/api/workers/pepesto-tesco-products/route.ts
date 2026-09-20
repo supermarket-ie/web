@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import { choosePepestoCandidate, createPepestoRun, extractPepestoItems, finalizePepestoProduct, getPepestoCreditsCents, retrievePepestoProducts } from '@/lib/pepesto-tesco';
+import { choosePepestoCandidateFromItems, createPepestoRun, extractPepestoItems, finalizePepestoProduct, getPepestoCreditsCents, retrievePepestoProducts } from '@/lib/pepesto-tesco';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -52,11 +52,11 @@ export async function GET(request: Request) {
 
       const items = extractPepestoItems(payload);
       itemsReturned += items.length;
-      for (let itemIndex = 0; itemIndex < products.length; itemIndex += 1) {
-        const product = products[itemIndex];
-        const target = String(product.storeProductName || product.canonicalName).toLowerCase();
-        const exact = items.find(item => String(item.item_name || '').toLowerCase() === target);
-        const candidate = choosePepestoCandidate(product, exact || items[itemIndex] || {});
+      for (const product of products) {
+        // Pepesto may omit unresolved items or reorder results. Identity comes
+        // from the exact retailer SKU, so scan the complete batch response
+        // instead of relying on array position or rewritten item names.
+        const candidate = choosePepestoCandidateFromItems(product, items);
         const accepted = await finalizePepestoProduct(run.runUuid, product, candidate);
         if (accepted) matched += 1;
         else failed += 1;
