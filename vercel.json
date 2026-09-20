@@ -110,10 +110,6 @@
     {
       "path": "/api/cron/product-embeddings",
       "schedule": "0 4 * * 0"
-    },
-    {
-      "path": "/api/workers/pepesto-tesco-products-canary?cohort=proven_search_success&confirm=proven-products-canary&dry_run=true&limit=50",
-      "schedule": "* * * * *"
     }
   ]
 }
