@@ -1410,3 +1410,20 @@ The protected admin APIs, resolution audit table, queue view and atomic resolver
 remain in place for developer-operated diagnostics and audited technical
 operations. Removing the browser page does not change retailer discovery,
 coverage calculation, matching safeguards or price refresh behaviour.
+
+## 44. Pepesto account identity and blocked Tesco refresh — 20 September 2026
+
+An owner-authorised 250-product Tesco refresh reached the protected production
+dispatch but submitted no products and spent no credit. Pepesto reported a
+balance of 16 cents and rejected the first `/search` request with HTTP 400
+(`no products specified`). Run `pepesto_tesco_20260920100817` is recorded as
+failed with a target of 250, zero submitted and zero actual cost. Tesco remains
+outside `latest_prices` until a successful exact-SKU refresh produces current
+observations.
+
+Pepesto bootstrap linking now identifies the account only by
+`colin@supermarket.ie`; the optional `Supermarket` alias has been removed from
+future `/link` requests. This does not expose, delete or silently rotate the
+existing Vault credential. Reconcile that stored credential with the funded
+Pepesto account and revalidate the current `/search` contract before retrying
+the paid refresh.
