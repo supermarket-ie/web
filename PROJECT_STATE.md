@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 19 September 2026
+**Last updated:** 20 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -1474,3 +1474,24 @@ added 12 more exact prices for €1.60 before further identical retries were
 stopped for diminishing returns. Final fresh Tesco coverage is 118/2,462
 (4.79%), a 6.21x increase from the first successful run. Demand-weighted Tesco
 coverage is 845/1,659 units (50.93%). The remaining Pepesto balance is €21.02.
+
+## 47. Queue-backed exact Tesco direct canary — 20 September 2026
+
+Tesco direct recovery now has a separate `exact_direct_canary` queue mode. The
+trigger creates a durable canary run and returns HTTP 202 with its run UUID
+immediately; all 20 demand-ranked unresolved exact mappings are processed by
+the existing Vercel Queue consumer. This path makes no Pepesto or ScrapingBee
+request.
+
+The canary fetches only each stored Tesco product URL. It records requested and
+final URL, expected and returned SKU, retailer title, price, availability, HTTP
+status and a bounded failure classification. A price is accepted only when the
+SKU in the final Tesco URL exactly equals the stored SKU. There is no fuzzy
+search fallback and no alternative SKU can update a mapping in this mode.
+
+Evidence is retained in the private, RLS-protected
+`tesco_direct_canary_results` table, with a service-role-only run summary for
+exact recovery and failure-reason reporting. `retailer_coverage_current` now
+includes Tesco, and `main_retailer_comparison_coverage_current` reports products
+covered by at least two and by all three main retailers. Production canary
+results and any decision to scale remain pending deployment verification.
