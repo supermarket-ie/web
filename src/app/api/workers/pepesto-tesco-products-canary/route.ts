@@ -24,18 +24,22 @@ export async function GET(request:Request){
   const products=cohort==='proven_search_success'
     ? await selectProvenPepestoTescoProducts(limit)
     : await selectUntouchedPepestoTescoProducts(limit);
-  if(url.searchParams.get('dry_run')==='true') return Response.json({
-    status:'dry_run',
-    cohort:cohort==='proven_search_success'?'previously_successful_identity_audited':'never_attempted_products_endpoint',
-    selected_count:products.length,
-    products:products.map(product=>({
-      store_product_id:product.storeProductId,
-      canonical_name:product.canonicalName,
-      store_product_name:product.storeProductName,
-      store_sku:product.storeSku,
-    })),
-    pepesto_credit_spent_cents:0,
-  });
+  if(url.searchParams.get('dry_run')==='true') {
+    const dryRunResult={
+      status:'dry_run',
+      cohort:cohort==='proven_search_success'?'previously_successful_identity_audited':'never_attempted_products_endpoint',
+      selected_count:products.length,
+      products:products.map(product=>({
+        store_product_id:product.storeProductId,
+        canonical_name:product.canonicalName,
+        store_product_name:product.storeProductName,
+        store_sku:product.storeSku,
+      })),
+      pepesto_credit_spent_cents:0,
+    };
+    console.log('[pepesto-tesco-products-canary] dry run',dryRunResult);
+    return Response.json(dryRunResult);
+  }
   const run=await createPepestoProductsRun(products);
   if(!run) return Response.json({status:'no_products',queued:0});
   const creditsBefore=await getPepestoCreditsCents();
