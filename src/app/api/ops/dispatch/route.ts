@@ -28,6 +28,8 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] supervalu mapping discovery validation': { name: 'supervalu-mapping-discovery-validation', target: '/api/workers/supervalu-scrape-trigger?limit=150&scope=targeted_validation&failure_run=a40142ef-2448-4c54-b477-b6cc4d77a2e7' },
   '[ops] dunnes mapping cleanup validation': { name: 'dunnes-mapping-cleanup-validation', target: '/api/workers/dunnes-scrape-trigger?limit=150&scope=targeted_validation&failure_run=d75b1dc5-d497-4f11-a32b-7f378cdd35af' },
   '[ops] dunnes compact discovery validation': { name: 'dunnes-compact-discovery-validation', target: '/api/workers/dunnes-scrape-trigger?limit=100&scope=targeted_validation&failure_run=6c30c0f8-2601-4ade-a371-c8ed5ebf5a56' },
+  '[ops] pepesto relink': { name: 'pepesto-relink', target: '/api/cron/pepesto-bootstrap?relink=1' },
+  '[ops] tesco pepesto canary': { name: 'tesco-pepesto-canary', target: '/api/workers/pepesto-tesco-submit?limit=10' },
   '[ops] tesco pepesto refresh': { name: 'tesco-pepesto-refresh', target: '/api/workers/pepesto-tesco-submit?limit=250' },
 };
 
