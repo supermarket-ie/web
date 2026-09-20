@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
+import { pepestoSearchQuery } from '@/lib/pepesto-query';
 
 const BASE = 'https://s.pepesto.com/api';
 export const PEPESTO_BATCH_SIZE = 10;
@@ -50,7 +51,7 @@ async function key(){ const {data,error}=await supabaseAdmin.rpc('get_pepesto_ap
 async function post(path:string,body:unknown): Promise<unknown> { const k=await key(); const r=await fetch(`${BASE}${path}`,{method:'POST',headers:{authorization:`Bearer ${k}`,'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body),cache:'no-store'}); const text=await r.text(); if(!r.ok) throw new Error(`Pepesto ${path} failed (${r.status}): ${text.slice(0,180)}`); return JSON.parse(text) as unknown; }
 
 export async function getPepestoCreditsCents(){ const j=await post('/credits',{}); if(!isRecord(j)) return 0; return Number(j.euro_cents ?? j.credits_remaining ?? 0); }
-export async function submitPepestoSearch(products:TescoQueueProduct[]){ if(products.length<1||products.length>10) throw new Error('Pepesto search batch must contain 1-10 products'); const product=products.map(p=>p.storeProductName||p.canonicalName).join(', '); const j=await post('/search',{product,supermarket_domain:'tesco.ie'}); if(!isRecord(j)||!j.search_session_id) throw new Error('Pepesto search did not return search_session_id'); return String(j.search_session_id); }
+export async function submitPepestoSearch(products:TescoQueueProduct[]){ if(products.length<1||products.length>10) throw new Error('Pepesto search batch must contain 1-10 products'); const product=pepestoSearchQuery(products); const j=await post('/search',{product,supermarket_domain:'tesco.ie'}); if(!isRecord(j)||!j.search_session_id) throw new Error('Pepesto search did not return search_session_id'); return String(j.search_session_id); }
 export async function retrievePepestoSearch(sessionId:string){ return post('/retrieve',{search_session_id:sessionId}); }
 
 export async function retrievePepestoProducts(products:TescoQueueProduct[]){

@@ -18,15 +18,17 @@ export async function GET(request: Request) {
   }
   const requested = Number(url.searchParams.get('limit') || 3);
   const limit = Math.max(1, Math.min(Number.isFinite(requested) ? Math.floor(requested) : 3, 5));
-  const canaryCap = Math.max(1, Math.min(Number(process.env.PEPESTO_TESCO_DISCOVERY_CAP_CENTS || 60), 100));
+  const canaryCap = Math.max(1, Math.min(Number(process.env.PEPESTO_TESCO_DISCOVERY_CAP_CENTS || 120), 200));
+  const requestedMaxRuns = Number(url.searchParams.get('max_runs_today') || 0);
+  const maxRunsToday = Number.isFinite(requestedMaxRuns) && requestedMaxRuns > 0 ? Math.floor(requestedMaxRuns) : null;
   const since = new Date();
   since.setUTCHours(0, 0, 0, 0);
   const { data: costRows, error: costError } = await supabaseAdmin.from('scrape_runs')
     .select('pepesto_actual_cost_cents').eq('store', 'tesco')
     .eq('retrieval_method', 'pepesto_candidate_discovery').gte('started_at', since.toISOString());
   if (costError) return Response.json({ error: `Unable to verify today's Pepesto spend: ${costError.message}` }, { status: 500 });
-  if ((costRows ?? []).length > 0) {
-    return Response.json({ status: 'already_run_today', submitted: 0 });
+  if (maxRunsToday && (costRows ?? []).length >= maxRunsToday) {
+    return Response.json({ status: 'requested_run_limit_reached', submitted: 0, max_runs_today: maxRunsToday });
   }
   const spentToday = (costRows ?? []).reduce((sum, row) => sum + Number(row.pepesto_actual_cost_cents || 0), 0);
   if (spentToday >= canaryCap) {

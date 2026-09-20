@@ -158,6 +158,15 @@ passes URL/SKU corroboration, positive-price, full canonical-term, brand,
 product-type, variant, formulation, explicit-size and pack checks. The mapping
 repair and new observation are atomic and generate a second audit decision.
 Everything else remains private evidence. The operator route requires an
-explicit confirmation token, is limited to five audited mappings, and has a
-60-cent discovery-specific daily cap; the first production canary is limited
-to three products.
+explicit confirmation token, is limited to five audited mappings per request,
+and has a €1.20 discovery-specific daily cap after explicit approval for
+additional testing.
+
+The first production submission cost 36 cents but was invalid as a discovery
+measurement: it inherited the normal refresh preference for the obsolete
+stored retailer title rather than querying the canonical identity. Five
+candidates were persisted and all were rejected; no mapping changed. The
+discovery query is now canonical-name-first under a regression test. Following
+explicit approval for additional spend, the default discovery cap is €1.20;
+the endpoint itself has no same-day guard, while temporary scheduling can pass
+an explicit run-count limit.

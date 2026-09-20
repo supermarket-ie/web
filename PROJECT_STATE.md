@@ -1610,8 +1610,9 @@ The next Tesco recovery path is deliberately different from the exhausted
 multi-product `/search`, `/catalog` and preferred-URL `/products` retries. It
 selects only mappings invalidated by the deterministic audit and submits one
 canonical identity per Pepesto search session. This removes positional
-attribution guesses and caps each operator-confirmed canary at five products
-and 60 cents of observed same-day discovery spend by default.
+attribution guesses and caps each operator-confirmed request at five products.
+Following explicit approval for more testing, observed same-day discovery spend
+is capped at €1.20 by default.
 
 Every candidate returned by `/retrieve` is persisted in the private,
 service-role-only `tesco_candidate_discovery_evidence` table, including its raw
@@ -1629,6 +1630,16 @@ by a service-role-only database function. Ambiguous, incomplete and conflicting
 candidates remain evidence only.
 
 The schema was executed successfully inside a production transaction and
-rolled back before release. No paid candidate-discovery request had been made
-at the time this implementation was prepared; deployment and a maximum
-three-product initial canary remain the next operational steps.
+rolled back before release, then applied after PR #173 passed verification and
+production deployment reached `READY`.
+
+The first three-product production submission cost 36 cents, but persisted
+evidence showed that discovery had incorrectly inherited the ordinary refresh
+query preference and sent each obsolete stored Tesco title instead of its
+canonical identity. Five returned candidates simply reproduced or varied the
+invalid mappings; all were rejected and no mapping or trusted price changed.
+This is not a valid discovery-yield measurement. Candidate discovery now
+explicitly queries the canonical name, with a regression test that preserves
+stored-title preference only for ordinary exact-SKU price refreshes. The
+operator endpoint has no same-day guard; its default observed-spend cap is
+€1.20 and an optional run-count limit is available for one-shot scheduling.
