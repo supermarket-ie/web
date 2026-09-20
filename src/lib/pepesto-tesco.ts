@@ -84,6 +84,11 @@ export function choosePepestoCandidate(product:TescoQueueProduct,item:PepestoIte
   return candidates.find(c=>product.storeSku && skuFromUrl(candidateUrl(c))===product.storeSku)??null;
 }
 
+export function choosePepestoCandidateFromItems(product:TescoQueueProduct,items:PepestoItem[]){
+  const candidates=items.flatMap(unwrapCandidates).filter(candidate=>candidateName(candidate)&&candidatePriceCents(candidate)>0);
+  return candidates.find(candidate=>product.storeSku&&skuFromUrl(candidateUrl(candidate))===product.storeSku)??null;
+}
+
 export function choosePepestoCatalogCandidate(product:TescoQueueProduct,candidates:PepestoCandidate[]){
   return candidates.find(candidate=>product.storeSku&&skuFromUrl(candidateUrl(candidate))===product.storeSku&&candidateName(candidate)&&candidatePriceCents(candidate)>0)??null;
 }
