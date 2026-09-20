@@ -374,7 +374,8 @@ product-identity failures must remain separately observable.
 
 Retailer specifics:
 
-- **Tesco:** uses Pepesto `/search` in batches of ten, not ScrapingBee. Accept
+- **Tesco:** uses Pepesto `/search` with exactly one product per independently
+  attributable session. Accept
   only an exact Tesco SKU in the returned product URL. The synchronous
   `/products` route was tested and is unsafe as the primary refresh because it
   can generalise branded queries. Pepesto currently returns current price,
@@ -1677,10 +1678,12 @@ matching proved agreement with the stored mapping, not agreement between that
 mapping and the canonical product. The old cohort contains known material
 mismatches. It must not be blindly reactivated.
 
-The ordinary multi-product `/search` submission route is retired. The shared
-search adapter now permits exactly one product per session, which preserves
-attribution for the bounded candidate-discovery workflow. Trusted price
-refreshes use the cheaper batched `/products` path instead.
+The ambiguous legacy multi-product submission endpoint is retired. The shared
+search adapter permits exactly one product per session, preserving attribution
+for both trusted price refresh and bounded candidate discovery. `/search`
+followed by the asynchronous `/retrieve` collector is the validated Tesco
+price-refresh path. The synchronous `/products` route is not an operational
+Tesco refresh route.
 
 A new `proven_search_success` products cohort recovers only stale mappings
 from historical Pepesto sessions that returned one item per requested product,
@@ -1690,3 +1693,32 @@ are excluded. Selection remains demand-ranked, is capped at 50, requires an
 explicit `proven-products-canary` confirmation, and supports a zero-credit
 `dry_run=true` inspection before any queue message or Pepesto request is
 created.
+
+## 53. Tesco Pepesto search golden path restored — 20 September 2026
+
+The corrected one-product-per-session `/search` canary returned 8 exact Tesco
+SKU matches from 10 products. It cost 120 cents, moving the Pepesto balance
+from €19.66 to €18.46. Two non-matches were rejected. This is consistent with
+the earlier 397/500 exact-SKU baseline and confirms that the poor 2/50 result
+from `/products` was specific to the wrong retrieval route, not a general loss
+of Pepesto viability.
+
+The single production operation is now `[ops] tesco pepesto search refresh`,
+which targets `/api/workers/pepesto-tesco-search-refresh`. It requires explicit
+confirmation, submits one product per search session, records observed credits
+before and after, enforces a per-run spend ceiling and leaves result collection
+to the existing ten-minute `/retrieve` worker. Paid submission remains manual;
+there is no persistent paid schedule.
+
+`/products`, `/catalog`, candidate-discovery and direct Tesco experiments are
+not exposed as normal production refresh operations. The legacy ambiguous
+submission endpoint returns `410` and points only to the search-refresh route.
+The query builder and submitter both reject multi-product search requests, and
+a regression test locks this attribution rule in place.
+
+Operational confidence must remain split into two measures: exact response-SKU
+agreement establishes product identity, while price freshness is a separate
+claim. The 8/10 canary repeated the same numerical prices observed on
+6 September, and four promotion flags lacked a corresponding previous price;
+therefore freshness and promotion evidence require separate monitoring and
+must not be inferred from SKU agreement alone.
