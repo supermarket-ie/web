@@ -122,6 +122,17 @@ function packCount(value: string | null | undefined) {
   return Number(text.match(/\b(\d+)\s*(?:x|pack|pk|rolls?|pieces?|bars?|cans?|bottles?)\b/)?.[1] ?? 0) || null;
 }
 
+function sameMeasure(left: string | null | undefined, right: string | null | undefined) {
+  const a = measure(left);
+  const b = measure(right);
+  if (!a && !b) return true;
+  return Boolean(a && b && a.amount === b.amount && a.unit === b.unit);
+}
+
+function samePackCount(left: string | null | undefined, right: string | null | undefined) {
+  return packCount(left) === packCount(right);
+}
+
 function differentExplicitGroup(left: string, right: string, groups: string[][]) {
   return groups.some(group => {
     const a = group.filter(term => left.includes(term));
@@ -204,7 +215,16 @@ export function classifyTescoMapping(mapping: TescoMappingEvidence): TescoMappin
 }
 
 export function classifyTescoReplacement(mapping: TescoMappingEvidence, candidate: TescoCandidateEvidence): TescoMappingAudit {
-  const signals = tescoIdentitySignals(mapping, candidate.name);
+  // Stored retailer brand/own-label fields describe the mapping being replaced,
+  // not the expected identity. Replacement decisions derive those expectations
+  // from the canonical product only.
+  const expectedMapping = {
+    ...mapping,
+    storeBrand: null,
+    isOwnBrand: plain(mapping.canonicalBrand) === 'tesco',
+  };
+  const signals = tescoIdentitySignals(expectedMapping, candidate.name);
+  if (!plain(mapping.canonicalBrand)) signals.ownLabelConflict = false;
   const conflicts = mismatchReasons(signals);
   if (conflicts.length > 0) return { classification: 'material_mismatch', signals, reasons: conflicts };
   if (!candidate.sku || !skuFromUrl(candidate.url) || skuFromUrl(candidate.url) !== candidate.sku) {
@@ -212,6 +232,16 @@ export function classifyTescoReplacement(mapping: TescoMappingEvidence, candidat
   }
   if (signals.genericCanonical || !signals.canonicalTermsCovered) {
     return { classification: 'ambiguous', signals, reasons: ['candidate does not establish full exact canonical identity'] };
+  }
+  const canonicalBrand = plain(mapping.canonicalBrand);
+  if (canonicalBrand && !plain(candidate.name).includes(canonicalBrand)) {
+    return { classification: 'material_mismatch', signals, reasons: ['brandExactnessFailed'] };
+  }
+  if (!sameMeasure(mapping.canonicalName, candidate.name)) {
+    return { classification: 'material_mismatch', signals, reasons: ['measureExactnessFailed'] };
+  }
+  if (!samePackCount(mapping.canonicalName, candidate.name)) {
+    return { classification: 'material_mismatch', signals, reasons: ['packExactnessFailed'] };
   }
   return { classification: 'exact_replacement_candidate', signals, reasons: ['candidate identity agrees on all material deterministic checks'] };
 }

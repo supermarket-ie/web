@@ -1603,3 +1603,32 @@ more retailers and 67 at all three. Supabase advisors showed no new unindexed
 foreign key; the private audit table intentionally follows the existing
 service-role-only RLS-without-user-policy pattern. Vercel reported no recent
 production runtime errors.
+
+## 51. Strict Tesco candidate-discovery canary — 20 September 2026
+
+The next Tesco recovery path is deliberately different from the exhausted
+multi-product `/search`, `/catalog` and preferred-URL `/products` retries. It
+selects only mappings invalidated by the deterministic audit and submits one
+canonical identity per Pepesto search session. This removes positional
+attribution guesses and caps each operator-confirmed canary at five products
+and 60 cents of observed same-day discovery spend by default.
+
+Every candidate returned by `/retrieve` is persisted in the private,
+service-role-only `tesco_candidate_discovery_evidence` table, including its raw
+payload, URL/SKU, title, price, deterministic signals and classification. A
+zero-candidate session is still remembered through the durable session record
+and is not selected again automatically.
+
+The replacement gate is stricter than the existing exact-stored-SKU refresh
+gate. A new Tesco SKU may be applied only when exactly one distinct candidate
+has a corroborated Tesco product URL/SKU, positive observed price, complete
+canonical terms, exact explicit brand, size and pack agreement, and no product
+type, variant, own-label, fresh/frozen or formulation conflict. Mapping repair,
+price observation, audit decision and run accounting are committed atomically
+by a service-role-only database function. Ambiguous, incomplete and conflicting
+candidates remain evidence only.
+
+The schema was executed successfully inside a production transaction and
+rolled back before release. No paid candidate-discovery request had been made
+at the time this implementation was prepared; deployment and a maximum
+three-product initial canary remain the next operational steps.
