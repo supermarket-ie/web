@@ -30,7 +30,10 @@ export async function GET(request: Request) {
 
   const creditsBefore = await getPepestoCreditsCents();
   if (creditsBefore <= 0) return Response.json({ error: 'No Pepesto credits available', credits_before_cents: creditsBefore }, { status: 402 });
-  const run = await createPepestoRun(limit, undefined, { productUrlOnly: true, retrievalMethod: 'pepesto_catalog_preselected' });
+  // The shared selector's legacy productUrlOnly filter recognises `/product/`
+  // URLs, while Tesco Ireland uses `/products/`. Select resolved SKU mappings
+  // normally and enforce complete URLs below before making a paid request.
+  const run = await createPepestoRun(limit, undefined, { retrievalMethod: 'pepesto_catalog_preselected' });
   if (!run) return Response.json({ status: 'no_products', attempted: 0 });
 
   await supabaseAdmin.from('scrape_runs').update({ pepesto_credits_before_cents: creditsBefore }).eq('id', run.runUuid);
