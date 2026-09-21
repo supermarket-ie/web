@@ -21,6 +21,10 @@
     {"path":"/api/workers/pepesto-tesco-retrieve","schedule":"*/10 * * * *"},
     {"path":"/api/cron/scrape-watchdog","schedule":"45 7 * * 1,4"},
     {"path":"/api/cron/product-embeddings","schedule":"0 4 * * 0"},
-    {"path":"/api/cron/pepesto-bootstrap","schedule":"33 20 21 9 *"}
+    {"path":"/api/workers/pepesto-tesco-search-refresh?confirm=tesco-search-refresh&limit=50&max_cost_cents=600&wave=1","schedule":"42 20 21 9 *"},
+    {"path":"/api/workers/pepesto-tesco-search-refresh?confirm=tesco-search-refresh&limit=50&max_cost_cents=600&wave=2","schedule":"45 20 21 9 *"},
+    {"path":"/api/workers/pepesto-tesco-search-refresh?confirm=tesco-search-refresh&limit=50&max_cost_cents=600&wave=3","schedule":"48 20 21 9 *"},
+    {"path":"/api/workers/pepesto-tesco-search-refresh?confirm=tesco-search-refresh&limit=50&max_cost_cents=600&wave=4","schedule":"51 20 21 9 *"},
+    {"path":"/api/workers/pepesto-tesco-search-refresh?confirm=tesco-search-refresh&limit=50&max_cost_cents=600&wave=5","schedule":"54 20 21 9 *"}
   ]
 }
