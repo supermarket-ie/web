@@ -1,4 +1,8 @@
-import { createTescoCandidateDiscoveryRun, selectAuditedTescoDiscoveryProducts } from '@/lib/tesco-candidate-discovery';
+import {
+  createTescoCandidateDiscoveryRun,
+  MAX_TESCO_CANDIDATE_DISCOVERY_PRODUCTS,
+  selectAuditedTescoDiscoveryProducts,
+} from '@/lib/tesco-candidate-discovery';
 import { getPepestoCreditsCents, submitPepestoSearch } from '@/lib/pepesto-tesco';
 import { supabaseAdmin } from '@/lib/supabase';
 
@@ -17,8 +21,15 @@ export async function GET(request: Request) {
     return Response.json({ error: 'Explicit exact-candidate-canary confirmation is required' }, { status: 400 });
   }
   const requested = Number(url.searchParams.get('limit') || 3);
-  const limit = Math.max(1, Math.min(Number.isFinite(requested) ? Math.floor(requested) : 3, 5));
-  const canaryCap = Math.max(1, Math.min(Number(process.env.PEPESTO_TESCO_DISCOVERY_CAP_CENTS || 120), 200));
+  const limit = Math.max(1, Math.min(
+    Number.isFinite(requested) ? Math.floor(requested) : 3,
+    MAX_TESCO_CANDIDATE_DISCOVERY_PRODUCTS,
+  ));
+  const requestedCap = Number(url.searchParams.get('max_cost_cents')
+    || process.env.PEPESTO_TESCO_DISCOVERY_CAP_CENTS
+    || 120);
+  const canaryCap = Math.max(1, Math.min(Number.isFinite(requestedCap) ? Math.floor(requestedCap) : 120, 240));
+  const demandOnly = url.searchParams.get('demand_only') === 'true';
   const requestedMaxRuns = Number(url.searchParams.get('max_runs_today') || 0);
   const maxRunsToday = Number.isFinite(requestedMaxRuns) && requestedMaxRuns > 0 ? Math.floor(requestedMaxRuns) : null;
   const since = new Date();
@@ -35,7 +46,20 @@ export async function GET(request: Request) {
     return Response.json({ error: 'Tesco discovery canary spend cap reached', spent_cents: spentToday, cap_cents: canaryCap }, { status: 429 });
   }
 
-  const products = await selectAuditedTescoDiscoveryProducts(limit);
+  const products = await selectAuditedTescoDiscoveryProducts(limit, { demandOnly });
+  if (url.searchParams.get('dry_run') === 'true') {
+    return Response.json({
+      status: 'dry_run',
+      strategy: 'single_canonical_query_all_candidates_persisted',
+      cohort: demandOnly ? 'untried_audited_demanded_mapping_repairs' : 'untried_audited_mapping_repairs',
+      target_count: products.length,
+      max_cost_cents: canaryCap,
+      products: products.map((product) => ({
+        store_product_id: product.storeProductId,
+        canonical_name: product.canonicalName,
+      })),
+    });
+  }
   const run = await createTescoCandidateDiscoveryRun(products);
   if (!run) return Response.json({ status: 'no_products', submitted: 0 });
   const creditsBefore = await getPepestoCreditsCents();
@@ -69,6 +93,7 @@ export async function GET(request: Request) {
     return Response.json({
       status: 'submitted',
       strategy: 'single_canonical_query_all_candidates_persisted',
+      cohort: demandOnly ? 'untried_audited_demanded_mapping_repairs' : 'untried_audited_mapping_repairs',
       run_id: run.runId,
       run_uuid: run.runUuid,
       target_count: run.products.length,
