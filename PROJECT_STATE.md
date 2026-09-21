@@ -1841,3 +1841,29 @@ the cleanup deployment reached production before retrieval finished. The free
 ten-minute `/retrieve` worker completed the queue. There is no persistent paid
 Tesco schedule. Exact response-SKU agreement continues to establish identity
 only; price freshness remains a separate confidence measure.
+
+
+## 58. Demand-first Tesco mapping-repair tranche prepared — 21 September 2026
+
+The completed 250-product refresh lifted Tesco catalogue coverage but did not
+change demand coverage. A live audit found 163 missing-demand Tesco mappings.
+Only 19 were untried mappings with basic URL/SKU evidence, and deterministic
+identity review rejects that apparent pool because the stored Tesco identities
+contain material brand, product, formulation, measure or pack conflicts.
+Repeating the normal refresh selector would therefore continue into
+zero-demand catalogue gaps rather than safely improve household-list coverage.
+
+The next safe tranche is instead the remaining 20 untried mappings already
+invalidated by the deterministic risk audit. All 20 are tied to current demand,
+representing 67 demanded units. Candidate discovery searches by canonical
+identity, persists every candidate, and permits a mapping and price update only
+when one exact replacement SKU passes the full brand, type, variant, measure,
+pack, formulation and URL/SKU checks.
+
+The protected candidate-discovery route now supports an explicit
+`demand_only=true` cohort of up to 20 products, a caller-supplied spend ceiling
+hard-limited to 240 cents, and `dry_run=true` inspection before any run, credit
+lookup or Pepesto request is created. At the currently observed 12 cents per
+one-product search, the complete tranche is expected to cost €2.40. Treat that
+as a bounded current-tariff estimate and continue recording actual credits
+before and after the run. No paid schedule is installed.
