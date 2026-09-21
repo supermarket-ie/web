@@ -20,3 +20,13 @@ export function independentlyReturnedProductIds(sessions: PepestoSessionEvidence
   }
   return ids;
 }
+
+export function oneProductSearchAttemptIds(sessions: PepestoSessionEvidence[]) {
+  const ids = new Set<string>();
+  for (const session of sessions) {
+    if (!Array.isArray(session.products) || session.products.length !== 1) continue;
+    const product = session.products[0] as SessionProduct | undefined;
+    if (product?.storeProductId) ids.add(String(product.storeProductId));
+  }
+  return ids;
+}
