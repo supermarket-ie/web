@@ -1805,3 +1805,39 @@ for the five-batch tranche from roughly 130 minutes to about 50 minutes without
 changing candidate extraction, exact-SKU acceptance, finalisation or failure
 handling. Paid submission remains manual and no persistent Tesco paid schedule
 is installed.
+
+## 57. Tesco 250-product recovery tranche — 21 September 2026
+
+A live zero-spend balance check confirmed €33.96 before release. PR #195 then
+scheduled five separately accounted 50-product operations through the validated
+one-product-per-session Pepesto `/search` route. All 250 distinct audited,
+previously untried candidates were submitted and retrieved successfully:
+
+- `pepesto_tesco_search_20260921204248`
+  (`23aab187-26d8-486d-a700-147f2779e1e9`): 47 accepted, 3 rejected.
+- `pepesto_tesco_search_20260921204518`
+  (`a1463436-ba28-45df-8c62-1bc119618792`): 45 accepted, 5 rejected.
+- `pepesto_tesco_search_20260921204823`
+  (`ee2d8bee-235f-4974-96ec-8b16b141b65c`): 47 accepted, 3 rejected.
+- `pepesto_tesco_search_20260921205127`
+  (`f868643a-0325-49e9-b556-4433317f3577`): 46 accepted, 4 rejected.
+- `pepesto_tesco_search_20260921205442`
+  (`b1c79adc-74bc-4138-88a2-320f70d31924`): 39 accepted, 11 rejected.
+
+The tranche accepted 224/250 exact stored Tesco SKUs (89.6%) and safely
+rejected 26. All 250 Pepesto sessions returned and no retrieval session failed.
+Observed credits moved from €33.96 to €3.96: €30.00 actual spend, exactly
+matching the aggregate five-run ceiling.
+
+Fresh trusted Tesco coverage increased by the same 224 products, from
+202/2,462 (8.20%) to 426/2,462 (17.30%). Demand coverage remained
+836/1,681 units (49.73%), showing that this tranche repaired audited catalogue
+gaps rather than the currently demanded subset. Across the three main
+retailers, products with at least one live price increased from 1,800 to 1,828,
+at least two from 841 to 939 and all three from 120 to 218.
+
+PR #196 removed all five fixed-date paid triggers immediately after submission;
+the cleanup deployment reached production before retrieval finished. The free
+ten-minute `/retrieve` worker completed the queue. There is no persistent paid
+Tesco schedule. Exact response-SKU agreement continues to establish identity
+only; price freshness remains a separate confidence measure.
