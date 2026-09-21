@@ -1775,3 +1775,33 @@ a corroborated Tesco product URL before any price observation is trusted. The
 fallback does not repair mappings, accept alternative SKUs or weaken brand,
 variant, size, pack, formulation or duplicate-SKU safeguards.
 
+## 56. Audited Tesco search scale validation — 21 September 2026
+
+PR #191 deployed the audited-untried selector and PR #192 released one bounded
+50-product operation through the corrected one-product-per-session `/search`
+route. Run `pepesto_tesco_search_20260921172137`
+(`b1333407-f9b3-40c1-b99a-a8d76d0aa615`) retrieved all 50 sessions, accepted
+46 exact stored Tesco SKUs and safely rejected four. The run succeeded at 92%
+yield. Credits moved from €10.06 to €4.06, an actual cost of €6.00.
+
+Fresh trusted Tesco coverage increased from 156 before the operation to
+202/2,462 (8.20%). Demand coverage is 836/1,681 units (49.73%). Across the main
+retailers, 1,800 canonical products now have at least one live price, 841 have
+at least two and 120 have all three. The fixed-date paid trigger was removed
+after completion.
+
+The validated next recovery tranche is 250 audited, previously untried
+products, released as five separately accounted 50-product runs with a €6.00
+ceiling each. At the currently observed 12 cents per product this requires
+about €30; require a live balance of at least €35 before release and continue
+to record actual before/after credit rather than treating that observation as
+a permanent tariff. At the latest 92% yield, 250 products would add about 230
+trusted prices and bring Tesco to roughly 432/2,462 (17.55%), but this is a
+planning estimate rather than a promised result.
+
+The `/retrieve` worker now checks up to 50 sessions per ten-minute pass instead
+of 20 and has a 300-second runtime allowance. This reduces expected collection
+for the five-batch tranche from roughly 130 minutes to about 50 minutes without
+changing candidate extraction, exact-SKU acceptance, finalisation or failure
+handling. Paid submission remains manual and no persistent Tesco paid schedule
+is installed.
