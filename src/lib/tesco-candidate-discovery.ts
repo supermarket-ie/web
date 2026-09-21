@@ -16,8 +16,13 @@ type AuditRow = {
   prior_mapping: PriorMapping;
 };
 
-export async function selectAuditedTescoDiscoveryProducts(limit: number): Promise<TescoQueueProduct[]> {
-  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 5));
+export const MAX_TESCO_CANDIDATE_DISCOVERY_PRODUCTS = 20;
+
+export async function selectAuditedTescoDiscoveryProducts(
+  limit: number,
+  options: { demandOnly?: boolean } = {},
+): Promise<TescoQueueProduct[]> {
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), MAX_TESCO_CANDIDATE_DISCOVERY_PRODUCTS));
   const { data: decisions, error: decisionError } = await supabaseAdmin
     .from('retailer_mapping_audit_decisions')
     .select('store_product_id,prior_mapping')
@@ -68,6 +73,7 @@ export async function selectAuditedTescoDiscoveryProducts(limit: number): Promis
   }
 
   return eligible
+    .filter((row) => !options.demandOnly || (demand.get(row.prior_mapping.canonical_name ?? '') ?? 0) > 0)
     .sort((left, right) => {
       const demandDiff = (demand.get(right.prior_mapping.canonical_name ?? '') ?? 0) - (demand.get(left.prior_mapping.canonical_name ?? '') ?? 0);
       return demandDiff || left.store_product_id.localeCompare(right.store_product_id);
