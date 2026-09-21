@@ -3,7 +3,7 @@ import { choosePepestoCandidate, extractPepestoCandidates, extractPepestoItems, 
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
 import { classifyTescoReplacement, type TescoMappingEvidence } from '@/lib/tesco-mapping-audit';
 
-export const dynamic='force-dynamic'; export const maxDuration=120;
+export const dynamic='force-dynamic'; export const maxDuration=300;
 function authorized(r:Request){const s=process.env.CRON_SECRET;return Boolean(s&&r.headers.get('authorization')===`Bearer ${s}`)}
 function responseState(payload: unknown) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return '';
@@ -76,7 +76,9 @@ async function finalizeCandidateDiscovery(runUuid:string,product:TescoQueueProdu
 
 export async function GET(request:Request){
  if(!authorized(request)) return Response.json({error:'Unauthorized'},{status:401});
- const {data:sessions,error}=await supabaseAdmin.from('pepesto_tesco_sessions').select('id,run_uuid,search_session_id,products,status,submitted_at').in('status',['submitted','in_progress']).order('submitted_at',{ascending:true}).limit(20);
+ const requested=Number(new URL(request.url).searchParams.get('limit')||50);
+ const limit=Math.max(1,Math.min(Number.isFinite(requested)?Math.floor(requested):50,50));
+ const {data:sessions,error}=await supabaseAdmin.from('pepesto_tesco_sessions').select('id,run_uuid,search_session_id,products,status,submitted_at').in('status',['submitted','in_progress']).order('submitted_at',{ascending:true}).limit(limit);
  if(error) return Response.json({error:error.message},{status:500});
  let completed=0,pending=0,matched=0,failed=0;
  for(const session of sessions??[]){
