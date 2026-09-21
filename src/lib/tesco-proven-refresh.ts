@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { classifyTescoMapping } from '@/lib/tesco-mapping-audit';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
-import { independentlyReturnedProductIds, type PepestoSessionEvidence } from '@/lib/tesco-proven-refresh-core';
+import { independentlyReturnedProductIds, oneProductSearchAttemptIds, type PepestoSessionEvidence } from '@/lib/tesco-proven-refresh-core';
 
 type StoreProductRow = {
   id: string;
@@ -31,8 +31,6 @@ export async function selectProvenPepestoTescoProducts(limit: number): Promise<T
     .select('id').eq('store', 'tesco').eq('retrieval_method', 'pepesto_search');
   if (runError) throw new Error(`Failed loading prior Tesco search runs: ${runError.message}`);
   const runIds = (runs ?? []).map((row) => String(row.id));
-  if (!runIds.length) return [];
-
   const sessions: PepestoSessionEvidence[] = [];
   for (const runIdChunk of chunks(runIds)) {
     const { data, error } = await supabaseAdmin.from('pepesto_tesco_sessions')
@@ -41,7 +39,7 @@ export async function selectProvenPepestoTescoProducts(limit: number): Promise<T
     sessions.push(...((data ?? []) as PepestoSessionEvidence[]));
   }
   const independentlyReturnedIds = independentlyReturnedProductIds(sessions);
-  if (!independentlyReturnedIds.size) return [];
+  const oneProductAttemptIds = oneProductSearchAttemptIds(sessions);
 
   const successfulIds = new Set<string>();
   for (const runIdChunk of chunks(runIds)) {
@@ -53,40 +51,29 @@ export async function selectProvenPepestoTescoProducts(limit: number): Promise<T
       if (independentlyReturnedIds.has(id)) successfulIds.add(id);
     }
   }
-  if (!successfulIds.size) return [];
-
-  const ids = [...successfulIds];
   const rows: StoreProductRow[] = [];
-  for (const idChunk of chunks(ids)) {
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabaseAdmin.from('store_products')
       .select('id,product_id,store_product_name,brand,is_own_brand,store_url,store_sku,url_status,products(canonical_name,brand)')
-      .in('id', idChunk).eq('store', 'tesco');
-    if (error) throw new Error(`Failed loading proven Tesco mappings: ${error.message}`);
+      .eq('store', 'tesco').order('id').range(from, from + pageSize - 1);
+    if (error) throw new Error(`Failed loading Tesco mappings: ${error.message}`);
     rows.push(...((data ?? []) as StoreProductRow[]));
+    if ((data ?? []).length < pageSize) break;
   }
 
   const freshIds = new Set<string>();
-  for (const idChunk of chunks(ids)) {
-    const { data, error } = await supabaseAdmin.from('latest_prices')
-      .select('store_product_id').in('store_product_id', idChunk);
-    if (error) throw new Error(`Failed checking fresh Tesco mappings: ${error.message}`);
-    for (const row of data ?? []) freshIds.add(String(row.store_product_id));
-  }
+  const { data: freshRows, error: freshError } = await supabaseAdmin.from('latest_prices')
+    .select('store_product_id').eq('store', 'tesco');
+  if (freshError) throw new Error(`Failed checking fresh Tesco mappings: ${freshError.message}`);
+  for (const row of freshRows ?? []) freshIds.add(String(row.store_product_id));
 
-  const skus = [...new Set(rows.map((row) => row.store_sku).filter((sku): sku is string => Boolean(sku)))];
   const peersBySku = new Map<string, string[]>();
-  for (const skuChunk of chunks(skus)) {
-    const { data, error } = await supabaseAdmin.from('store_products')
-      .select('store_sku,products(canonical_name)').eq('store', 'tesco').in('store_sku', skuChunk);
-    if (error) throw new Error(`Failed checking Tesco duplicate SKUs: ${error.message}`);
-    for (const raw of data ?? []) {
-      const row = raw as { store_sku: string | null; products: { canonical_name?: string | null } | Array<{ canonical_name?: string | null }> | null };
-      if (!row.store_sku) continue;
-      const product = Array.isArray(row.products) ? row.products[0] : row.products;
-      const canonicalName = product?.canonical_name;
-      if (!canonicalName) continue;
-      peersBySku.set(row.store_sku, [...(peersBySku.get(row.store_sku) ?? []), canonicalName]);
-    }
+  for (const row of rows) {
+    if (!row.store_sku) continue;
+    const canonicalName = relatedProduct(row)?.canonical_name;
+    if (!canonicalName) continue;
+    peersBySku.set(row.store_sku, [...(peersBySku.get(row.store_sku) ?? []), canonicalName]);
   }
 
   const eligible = rows.filter((row) => {
@@ -122,9 +109,15 @@ export async function selectProvenPepestoTescoProducts(limit: number): Promise<T
   }
 
   return eligible.sort((left, right) => {
+    const priority = (row: StoreProductRow) => {
+      if (!oneProductAttemptIds.has(row.id)) return successfulIds.has(row.id) ? 2 : 1;
+      return 0;
+    };
     const leftName = relatedProduct(left)?.canonical_name ?? '';
     const rightName = relatedProduct(right)?.canonical_name ?? '';
-    return (demand.get(rightName) ?? 0) - (demand.get(leftName) ?? 0) || left.id.localeCompare(right.id);
+    return priority(right) - priority(left)
+      || (demand.get(rightName) ?? 0) - (demand.get(leftName) ?? 0)
+      || left.id.localeCompare(right.id);
   }).slice(0, safeLimit).map((row) => {
     const canonical = relatedProduct(row);
     const canonicalName = canonical?.canonical_name ?? row.store_product_name ?? '';

@@ -1752,3 +1752,26 @@ balance. Price freshness remains a separate confidence dimension from exact SKU
 identity. The fixed-date paid triggers were removed after collection; there is
 still no persistent paid Tesco schedule.
 
+## 55. Audited untried Tesco search cohort — 21 September 2026
+
+After the two scaled corrected-search batches, the original stale
+`proven_search_success` pool had been consumed apart from six products rejected
+in the latest run. Repeating those six immediately would likely repay for the
+same alternatives, so the selector now continues into a new safety-preserving
+cohort instead.
+
+Selection still prioritises independently attributable historical exact-search
+successes. If fewer than the requested limit remain, it then fills from resolved,
+stale Tesco mappings that pass the deterministic canonical identity audit as
+`obsolete_mapping` or a fully corroborated `exact_synonym_duplicate`. Products
+already tried by the corrected one-product workflow are ranked behind untried
+audited mappings, including sessions that returned no item. This avoids immediate
+paid retries while allowing future refresh once the broader untried pool is
+eventually exhausted.
+
+The response acceptance contract is unchanged: one product per Pepesto
+`/search` session, asynchronous `/retrieve`, and an exact stored Tesco SKU in
+a corroborated Tesco product URL before any price observation is trusted. The
+fallback does not repair mappings, accept alternative SKUs or weaken brand,
+variant, size, pack, formulation or duplicate-SKU safeguards.
+
