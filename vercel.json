@@ -110,10 +110,6 @@
     {
       "path": "/api/cron/product-embeddings",
       "schedule": "0 4 * * 0"
-    },
-    {
-      "path": "/api/workers/pepesto-tesco-candidate-discovery?confirm=exact-candidate-canary&limit=20&demand_only=true&max_cost_cents=240&max_runs_today=1",
-      "schedule": "42 11 22 9 *"
     }
   ]
 }
