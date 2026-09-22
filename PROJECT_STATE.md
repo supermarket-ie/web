@@ -1867,3 +1867,28 @@ lookup or Pepesto request is created. At the currently observed 12 cents per
 one-product search, the complete tranche is expected to cost €2.40. Treat that
 as a bounded current-tariff estimate and continue recording actual credits
 before and after the run. No paid schedule is installed.
+
+
+## 59. Demand-first Tesco mapping-repair result — 22 September 2026
+
+PR #199 released the prepared 20-product demand-only candidate-discovery
+tranche. Run `pepesto_tesco_discovery_20260922114211`
+(`3240abfb-78b6-4037-bf4c-68a2b128dee6`) submitted and retrieved all 20
+one-product Pepesto search sessions. Credits moved from €3.96 to €1.56, an
+actual cost of €2.40 matching the run ceiling.
+
+The operation persisted 40 candidate rows across 16 products; four products
+returned no candidates. Nineteen candidate rows across eight products were
+material mismatches and 12 rows across nine products were ambiguous. Two
+products produced nine individually exact-looking candidates, but each had
+multiple qualifying SKUs: seven materially different chicken-thigh products
+for the underspecified `Chicken Thighs` canonical and both white and wholemeal
+six-pack pitta for `Pitta Bread 6 Pack`. The single-SKU finalisation rule
+correctly rejected both groups rather than guessing a variant.
+
+No mapping or price was accepted. Tesco coverage therefore remained
+426/2,462 (17.30%) and demand coverage remained 836/1,681 units (49.73%).
+The 20 products are now recorded as attempted discovery evidence and must not
+be repaid for without new deterministic identity evidence or a canonical
+product-definition repair. PR #200 removed the fixed-date paid trigger after
+submission; no persistent paid Tesco schedule remains.
