@@ -113,4 +113,29 @@ describe('Tesco mapping risk audit', () => {
     expect(wholemeal.classification).toBe('material_mismatch');
     expect(wholemeal.reasons).toContain('variantConflict');
   });
+
+  it('uses structured single-piece evidence to corroborate a loose product', () => {
+    const result = classifyTescoReplacement(mapping({
+      canonicalName: 'Loose Pink Lady Apples 1 Pack', canonicalBrand: null,
+    }), {
+      sku: '284182372', url: 'https://www.tesco.ie/shop/en-IE/products/284182372',
+      name: 'Tesco Pink Lady Apple', structuredQuantity: { pieces: 1 },
+      evidenceSource: 'pepesto-search-single',
+    });
+
+    expect(result.classification).toBe('exact_replacement_candidate');
+  });
+
+  it('rejects a multi-piece pack for a loose single-item canonical', () => {
+    const result = classifyTescoReplacement(mapping({
+      canonicalName: 'Loose Royal Gala Apples 1 Pack', canonicalBrand: null,
+    }), {
+      sku: '284475550', url: 'https://www.tesco.ie/shop/en-IE/products/284475550',
+      name: 'Tesco Gala Apples', structuredQuantity: { pieces: 5 },
+      evidenceSource: 'pepesto-search-single',
+    });
+
+    expect(result.classification).toBe('material_mismatch');
+    expect(result.reasons).toContain('packCountConflict');
+  });
 });
