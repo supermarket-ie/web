@@ -3,13 +3,28 @@
 -- canonical as white pitta, which disambiguates the two Tesco candidates.
 do $$
 declare
-  v_product_id constant uuid := '8071e3b7-c80e-4ffe-9371-bee76ce65375';
-  v_store_product_id constant uuid := '53d5b0f4-579b-4eb3-b8f7-7272e967dde6';
-  v_run_uuid constant uuid := '3240abfb-78b6-4037-bf4c-68a2b128dee6';
+  v_product_id uuid;
+  v_store_product_id uuid;
+  v_run_uuid uuid;
   v_candidate_id uuid;
   v_candidate_created_at timestamptz;
   v_prior_mapping jsonb;
 begin
+  select p.id into strict v_product_id
+  from public.products p
+  where p.canonical_name = 'Pitta Bread 6 Pack';
+
+  select sp.id into strict v_store_product_id
+  from public.store_products sp
+  where sp.product_id = v_product_id
+    and sp.store = 'tesco';
+
+  select r.id into strict v_run_uuid
+  from public.scrape_runs r
+  where r.run_id = 'pepesto_tesco_discovery_20260922114211'
+    and r.store = 'tesco'
+    and r.retrieval_method = 'pepesto_candidate_discovery';
+
   if exists (
     select 1 from public.products
     where canonical_name = 'White Pitta Bread 6 Pack' and id <> v_product_id
