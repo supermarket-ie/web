@@ -1892,3 +1892,22 @@ The 20 products are now recorded as attempted discovery evidence and must not
 be repaid for without new deterministic identity evidence or a canonical
 product-definition repair. PR #200 removed the fixed-date paid trigger after
 submission; no persistent paid Tesco schedule remains.
+
+## 60. Deterministic canonical repair from persisted Tesco evidence — 22 September 2026
+
+The 20-product demand-first evidence was reconciled against Dunnes and
+SuperValu identities without another Pepesto request. Only `Pitta Bread 6
+Pack` had enough cross-retailer evidence for a deterministic repair: the
+existing SuperValu SKU/URL explicitly identifies the product as white pitta,
+which resolves the otherwise ambiguous white-versus-wholemeal Tesco pair.
+
+The canonical is clarified to `White Pitta Bread 6 Pack`, including its eight
+existing list-item units. Tesco is restored to exact SKU `254945564`, `Tesco
+White Plain Pitta Bread 6 Pack`, with the persisted €0.88 observation from run
+`3240abfb-78b6-4037-bf4c-68a2b128dee6`. The wholemeal SKU is retained as
+rejected evidence with an explicit variant conflict, and the prior mapping is
+preserved in `retailer_mapping_audit_decisions`.
+
+The other 19 products remain unresolved because their persisted candidates do
+not prove exact brand, type, variant, measure, pack or formulation identity.
+No further Pepesto credit was spent and no paid schedule was added.
