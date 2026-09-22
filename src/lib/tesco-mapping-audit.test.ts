@@ -94,4 +94,23 @@ describe('Tesco mapping risk audit', () => {
     });
     expect(result.classification).toBe('exact_replacement_candidate');
   });
+
+  it('uses a clarified white pitta canonical to reject the wholemeal variant', () => {
+    const white = classifyTescoReplacement(mapping({
+      canonicalName: 'White Pitta Bread 6 Pack', canonicalBrand: null,
+    }), {
+      sku: '254945564', url: 'https://www.tesco.ie/shop/en-IE/products/254945564',
+      name: 'Tesco White Plain Pitta Bread 6 Pack', evidenceSource: 'pepesto-search-single',
+    });
+    const wholemeal = classifyTescoReplacement(mapping({
+      canonicalName: 'White Pitta Bread 6 Pack', canonicalBrand: null,
+    }), {
+      sku: '254945610', url: 'https://www.tesco.ie/shop/en-IE/products/254945610',
+      name: 'Tesco Wholemeal Pitta Bread 6 Pack', evidenceSource: 'pepesto-search-single',
+    });
+
+    expect(white.classification).toBe('exact_replacement_candidate');
+    expect(wholemeal.classification).toBe('material_mismatch');
+    expect(wholemeal.reasons).toContain('variantConflict');
+  });
 });
