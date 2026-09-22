@@ -26,6 +26,7 @@ export type TescoCandidateEvidence = {
   sku: string;
   url: string;
   name: string;
+  structuredQuantity?: { grams?: number; millilitres?: number; pieces?: number } | null;
   observedAt?: string | null;
   evidenceSource: string;
 };
@@ -224,7 +225,21 @@ export function classifyTescoReplacement(mapping: TescoMappingEvidence, candidat
     storeBrand: null,
     isOwnBrand: plain(mapping.canonicalBrand) === 'tesco',
   };
-  const signals = tescoIdentitySignals(expectedMapping, candidate.name);
+  const quantity = candidate.structuredQuantity ?? {};
+  const quantityText = Number(quantity.grams) > 0
+    ? `${quantity.grams}g`
+    : Number(quantity.millilitres) > 0
+      ? `${quantity.millilitres}ml`
+      : Number(quantity.pieces) > 0
+        ? `${quantity.pieces} pieces`
+        : '';
+  const evidencedName = `${candidate.name} ${quantityText}`.trim();
+  const signals = tescoIdentitySignals(expectedMapping, evidencedName);
+  if (Number(quantity.pieces) === 1 && plain(mapping.canonicalName).includes('loose')) {
+    const expected = terms(mapping.canonicalName).filter(term => term !== 'loose');
+    const actual = new Set(terms(evidencedName));
+    signals.canonicalTermsCovered = expected.length > 0 && expected.every(term => actual.has(term));
+  }
   if (!plain(mapping.canonicalBrand)) signals.ownLabelConflict = false;
   const conflicts = mismatchReasons(signals);
   if (conflicts.length > 0) return { classification: 'material_mismatch', signals, reasons: conflicts };
@@ -238,10 +253,10 @@ export function classifyTescoReplacement(mapping: TescoMappingEvidence, candidat
   if (canonicalBrand && !plain(candidate.name).includes(canonicalBrand)) {
     return { classification: 'material_mismatch', signals, reasons: ['brandExactnessFailed'] };
   }
-  if (!sameMeasure(mapping.canonicalName, candidate.name)) {
+  if (!sameMeasure(mapping.canonicalName, evidencedName)) {
     return { classification: 'material_mismatch', signals, reasons: ['measureExactnessFailed'] };
   }
-  if (!samePackCount(mapping.canonicalName, candidate.name)) {
+  if (!samePackCount(mapping.canonicalName, evidencedName)) {
     return { classification: 'material_mismatch', signals, reasons: ['packExactnessFailed'] };
   }
   return { classification: 'exact_replacement_candidate', signals, reasons: ['candidate identity agrees on all material deterministic checks'] };
