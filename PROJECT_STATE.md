@@ -1911,3 +1911,23 @@ preserved in `retailer_mapping_audit_decisions`.
 The other 19 products remain unresolved because their persisted candidates do
 not prove exact brand, type, variant, measure, pack or formulation identity.
 No further Pepesto credit was spent and no paid schedule was added.
+
+## 61. Structured-quantity Tesco demand repairs — 22 September 2026
+
+The wider missing-demand backlog was reconciled against persisted candidate
+payloads and Dunnes/SuperValu identities without another Pepesto request.
+Structured candidate quantity is now part of deterministic replacement
+classification, allowing `pieces=1` to corroborate the otherwise omitted
+`loose`/single-item wording while still rejecting multi-piece packs.
+
+Three further mappings had sufficient exact evidence. `Loose Pink Lady Apples
+1 Pack` maps to Tesco SKU `284182372` at €0.60 and `Loose Aubergines 1 Pack`
+maps to Tesco SKU `266344796` at €0.85; both persisted candidates explicitly
+report one piece. The branded Dr. Oetker canonical is corrected from pizza to
+`Dr. Oetker Bistro Pepperoni Baguettes 2 Pack 250g`, matching both the Dunnes
+identity and existing Tesco SKU `260285673` with its prior trusted €2.00
+Pepesto observation.
+
+All prior mappings and evidence decisions remain auditable. Other candidates
+remain unresolved where brand, type, variant, formulation, measure or pack
+identity is not exact. No Pepesto credit was spent and no schedule was added.

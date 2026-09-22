@@ -10,6 +10,17 @@ function responseState(payload: unknown) {
   const row = payload as Record<string, unknown>;
   return String(row.status || row.state || '').toLowerCase();
 }
+function structuredQuantity(candidate: unknown) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  const row=candidate as Record<string,unknown>;
+  const raw=(row.quantity && typeof row.quantity === 'object' ? row.quantity : null) as Record<string,unknown>|null;
+  if(!raw) return null;
+  return {
+    grams:Number(raw.grams)||undefined,
+    millilitres:Number(raw.millilitres)||undefined,
+    pieces:Number(raw.pieces)||undefined,
+  };
+}
 
 async function finalizeCandidateDiscovery(runUuid:string,product:TescoQueueProduct,payload:unknown){
  const mapping:TescoMappingEvidence={
@@ -28,6 +39,7 @@ async function finalizeCandidateDiscovery(runUuid:string,product:TescoQueueProdu
    const candidate=normalizePepestoCandidate(rawCandidate);
    const classified=classifyTescoReplacement(mapping,{
      sku:candidate.sku??'',url:candidate.url,name:candidate.name,
+     structuredQuantity:structuredQuantity(rawCandidate),
      evidenceSource:'pepesto-search-single',
    });
    const audit=candidate.name&&candidate.priceCents>0?classified:{
