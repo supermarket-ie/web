@@ -65,6 +65,7 @@ const PRODUCT_TYPES = [
 
 const VARIANT_GROUPS = [
   ['red', 'green', 'yellow', 'orange', 'white'],
+  ['white', 'wholemeal'],
   ['salted', 'unsalted'],
   ['smooth', 'crunchy'],
   ['plain', 'self raising', 'wholemeal'],
