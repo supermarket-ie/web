@@ -30,6 +30,7 @@ const OPERATIONS: Record<string, Operation> = {
   '[ops] dunnes compact discovery validation': { name: 'dunnes-compact-discovery-validation', target: '/api/workers/dunnes-scrape-trigger?limit=100&scope=targeted_validation&failure_run=6c30c0f8-2601-4ade-a371-c8ed5ebf5a56' },
   '[ops] pepesto relink': { name: 'pepesto-relink', target: '/api/cron/pepesto-bootstrap?relink=1' },
   '[ops] tesco pepesto search refresh': { name: 'tesco-pepesto-search-refresh', target: '/api/workers/pepesto-tesco-search-refresh?confirm=tesco-search-refresh&limit=50&max_cost_cents=600' },
+  '[ops] tesco pepesto search preview': { name: 'tesco-pepesto-search-preview', target: '/api/workers/pepesto-tesco-search-refresh?confirm=tesco-search-refresh&limit=500&dry_run=true' },
 };
 
 function normalizeTitle(value: string) {
