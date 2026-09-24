@@ -18,10 +18,32 @@ export async function GET(request: Request) {
   }
 
   const requested = Number(url.searchParams.get('limit') || 10);
-  const limit = Math.max(1, Math.min(Number.isFinite(requested) ? Math.floor(requested) : 10, 50));
+  const dryRun = url.searchParams.get('dry_run') === 'true';
+  const maxLimit = dryRun ? 1000 : 50;
+  const limit = Math.max(1, Math.min(Number.isFinite(requested) ? Math.floor(requested) : 10, maxLimit));
   const requestedCap = Number(url.searchParams.get('max_cost_cents') || 120);
   const maxCostCents = Math.max(1, Math.min(Number.isFinite(requestedCap) ? Math.floor(requestedCap) : 120, 2000));
-  const products = await selectProvenPepestoTescoProducts(limit);
+  const products = await selectProvenPepestoTescoProducts(limit, { preview: dryRun });
+  if (dryRun) {
+    const productIds = products.map(product => String((product as { productId?: string }).productId || '')).filter(Boolean);
+    const distinct = new Set(productIds);
+    const fingerprintInput = products.map(product => `${(product as { productId?: string }).productId || ''}:${product.storeProductId}`).join('|');
+    let hash = 2166136261;
+    for (let i = 0; i < fingerprintInput.length; i += 1) {
+      hash ^= fingerprintInput.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return Response.json({
+      status: 'preview',
+      requested_count: limit,
+      selected_store_product_count: products.length,
+      distinct_canonical_product_count: distinct.size,
+      duplicate_canonical_count: products.length - distinct.size,
+      expected_cost_cents_at_12c: products.length * 12,
+      manifest_id: `tesco-${products.length}-${(hash >>> 0).toString(16).padStart(8, '0')}`,
+      products,
+    });
+  }
   if (!products.length) return Response.json({ status: 'no_products', submitted: 0 });
 
   const runId = `pepesto_tesco_search_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;

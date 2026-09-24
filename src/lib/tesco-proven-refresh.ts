@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { classifyTescoMapping } from '@/lib/tesco-mapping-audit';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
-import { independentlyReturnedProductIds, oneProductSearchAttemptIds, type PepestoSessionEvidence } from '@/lib/tesco-proven-refresh-core';
+import { independentlyReturnedProductIds, oneProductSearchAttemptCanonicalIds, selectUniqueCanonicalCandidates, type PepestoSessionEvidence } from '@/lib/tesco-proven-refresh-core';
 
 type StoreProductRow = {
   id: string;
@@ -25,8 +25,9 @@ function chunks<T>(values: T[], size = 200) {
   return result;
 }
 
-export async function selectProvenPepestoTescoProducts(limit: number): Promise<TescoQueueProduct[]> {
-  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 50));
+export async function selectProvenPepestoTescoProducts(limit: number, options: { preview?: boolean } = {}): Promise<TescoQueueProduct[]> {
+  const maxLimit = options.preview ? 1000 : 50;
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), maxLimit));
   const { data: runs, error: runError } = await supabaseAdmin.from('scrape_runs')
     .select('id').eq('store', 'tesco').eq('retrieval_method', 'pepesto_search');
   if (runError) throw new Error(`Failed loading prior Tesco search runs: ${runError.message}`);
@@ -39,7 +40,7 @@ export async function selectProvenPepestoTescoProducts(limit: number): Promise<T
     sessions.push(...((data ?? []) as PepestoSessionEvidence[]));
   }
   const independentlyReturnedIds = independentlyReturnedProductIds(sessions);
-  const oneProductAttemptIds = oneProductSearchAttemptIds(sessions);
+  const canonicalByStoreProductId = new Map<string, string>();
 
   const successfulIds = new Set<string>();
   for (const runIdChunk of chunks(runIds)) {
@@ -59,14 +60,20 @@ export async function selectProvenPepestoTescoProducts(limit: number): Promise<T
       .eq('store', 'tesco').order('id').range(from, from + pageSize - 1);
     if (error) throw new Error(`Failed loading Tesco mappings: ${error.message}`);
     rows.push(...((data ?? []) as StoreProductRow[]));
+    for (const row of (data ?? []) as StoreProductRow[]) canonicalByStoreProductId.set(row.id, row.product_id);
     if ((data ?? []).length < pageSize) break;
   }
 
-  const freshIds = new Set<string>();
+  const oneProductAttemptCanonicalIds = oneProductSearchAttemptCanonicalIds(sessions, canonicalByStoreProductId);
+
+  const freshCanonicalIds = new Set<string>();
   const { data: freshRows, error: freshError } = await supabaseAdmin.from('latest_prices')
     .select('store_product_id').eq('store', 'tesco');
   if (freshError) throw new Error(`Failed checking fresh Tesco mappings: ${freshError.message}`);
-  for (const row of freshRows ?? []) freshIds.add(String(row.store_product_id));
+  for (const row of freshRows ?? []) {
+    const canonical = canonicalByStoreProductId.get(String(row.store_product_id));
+    if (canonical) freshCanonicalIds.add(canonical);
+  }
 
   const peersBySku = new Map<string, string[]>();
   for (const row of rows) {
@@ -77,7 +84,7 @@ export async function selectProvenPepestoTescoProducts(limit: number): Promise<T
   }
 
   const eligible = rows.filter((row) => {
-    if (row.url_status === 'failed' || freshIds.has(row.id)) return false;
+    if (row.url_status === 'failed' || freshCanonicalIds.has(row.product_id)) return false;
     const canonical = relatedProduct(row);
     const canonicalName = canonical?.canonical_name ?? '';
     const peers = row.store_sku ? peersBySku.get(row.store_sku) ?? [] : [];
@@ -108,21 +115,27 @@ export async function selectProvenPepestoTescoProducts(limit: number): Promise<T
     }
   }
 
-  return eligible.sort((left, right) => {
-    const priority = (row: StoreProductRow) => {
-      if (!oneProductAttemptIds.has(row.id)) return successfulIds.has(row.id) ? 2 : 1;
-      return 0;
+  const candidates = eligible.map((row) => {
+    const canonical = relatedProduct(row);
+    const canonicalName = canonical?.canonical_name ?? '';
+    return {
+      productId: row.product_id,
+      storeProductId: row.id,
+      demandUnits: demand.get(canonicalName) ?? 0,
+      proven: successfulIds.has(row.id),
+      resolved: row.url_status === 'resolved' && Boolean(row.store_sku && row.store_url && row.store_product_name),
+      audited: true,
+      value: row,
     };
-    const leftName = relatedProduct(left)?.canonical_name ?? '';
-    const rightName = relatedProduct(right)?.canonical_name ?? '';
-    return priority(right) - priority(left)
-      || (demand.get(rightName) ?? 0) - (demand.get(leftName) ?? 0)
-      || left.id.localeCompare(right.id);
-  }).slice(0, safeLimit).map((row) => {
+  });
+
+  const selected = selectUniqueCanonicalCandidates(candidates, safeLimit, oneProductAttemptCanonicalIds);
+  return selected.map(({ value: row }) => {
     const canonical = relatedProduct(row);
     const canonicalName = canonical?.canonical_name ?? row.store_product_name ?? '';
     return {
       storeProductId: row.id,
+      productId: row.product_id,
       canonicalName,
       canonicalBrand: canonical?.brand ?? null,
       storeProductName: row.store_product_name ?? canonicalName,
