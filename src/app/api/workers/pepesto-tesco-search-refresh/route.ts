@@ -21,7 +21,9 @@ export async function GET(request: Request) {
   const limit = Math.max(1, Math.min(Number.isFinite(requested) ? Math.floor(requested) : 10, 50));
   const requestedCap = Number(url.searchParams.get('max_cost_cents') || 120);
   const maxCostCents = Math.max(1, Math.min(Number.isFinite(requestedCap) ? Math.floor(requestedCap) : 120, 2000));
+  const dryRun = url.searchParams.get('dry_run') === 'true';
   const products = await selectProvenPepestoTescoProducts(limit);
+  if (dryRun) return Response.json({ status: 'preview', requested_count: limit, selected_count: products.length, products });
   if (!products.length) return Response.json({ status: 'no_products', submitted: 0 });
 
   const runId = `pepesto_tesco_search_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
