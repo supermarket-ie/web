@@ -25,8 +25,9 @@ function chunks<T>(values: T[], size = 200) {
   return result;
 }
 
-export async function selectProvenPepestoTescoProducts(limit: number): Promise<TescoQueueProduct[]> {
-  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 50));
+export async function selectProvenPepestoTescoProducts(limit: number, options: { preview?: boolean } = {}): Promise<TescoQueueProduct[]> {
+  const maxLimit = options.preview ? 1000 : 50;
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), maxLimit));
   const { data: runs, error: runError } = await supabaseAdmin.from('scrape_runs')
     .select('id').eq('store', 'tesco').eq('retrieval_method', 'pepesto_search');
   if (runError) throw new Error(`Failed loading prior Tesco search runs: ${runError.message}`);
