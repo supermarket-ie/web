@@ -25,9 +25,9 @@ export async function GET(request: Request) {
   const maxCostCents = Math.max(1, Math.min(Number.isFinite(requestedCap) ? Math.floor(requestedCap) : 120, 2000));
   const products = await selectProvenPepestoTescoProducts(limit, { preview: dryRun });
   if (dryRun) {
-    const productIds = products.map(product => String((product as TescoQueueProduct & { productId?: string }).productId || '')).filter(Boolean);
+    const productIds = products.map(product => String((product as { productId?: string }).productId || '')).filter(Boolean);
     const distinct = new Set(productIds);
-    const fingerprintInput = products.map(product => `${(product as TescoQueueProduct & { productId?: string }).productId || ''}:${product.storeProductId}`).join('|');
+    const fingerprintInput = products.map(product => `${(product as { productId?: string }).productId || ''}:${product.storeProductId}`).join('|');
     let hash = 2166136261;
     for (let i = 0; i < fingerprintInput.length; i += 1) {
       hash ^= fingerprintInput.charCodeAt(i);
