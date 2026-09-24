@@ -73,3 +73,19 @@ describe('canonical Tesco selection', () => {
     expect([...ids]).toEqual(['canonical']);
   });
 });
+
+describe('large preview selection', () => {
+  it('can produce 500 unique canonical selections without padding duplicates', () => {
+    const candidates = Array.from({ length: 550 }, (_, index) => ({
+      productId: `p-${String(index).padStart(3,'0')}`,
+      storeProductId: `s-${String(index).padStart(3,'0')}`,
+      demandUnits: index < 10 ? 100 - index : 0,
+      proven: false, resolved: true, audited: true, value: index,
+    }));
+    candidates.push({ ...candidates[0], storeProductId: 'duplicate-row', proven: true });
+    const selected = selectUniqueCanonicalCandidates(candidates, 500);
+    expect(selected).toHaveLength(500);
+    expect(new Set(selected.map(x => x.productId)).size).toBe(500);
+    expect(selected[0].productId).toBe('p-000');
+  });
+});
