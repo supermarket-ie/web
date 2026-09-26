@@ -10,6 +10,8 @@ describe('material product identity contradictions', () => {
     ['Bananas 6 pack', 'SuperValu Single Loose Banana (1 kg)', 'Fruit'],
     ['Free Range Eggs 12', 'Free Range Eggs 6 Pack', 'Dairy'],
     ['Mushrooms 250g', 'Closed Cup Mushrooms 300g', 'Vegetables'],
+    ['Whole milk 2 litre carton', 'Whole Milk 1L', 'Dairy'],
+    ['Still water one 2L bottle', 'SuperValu Still Water 6 Pack (2 L)', 'Drinks'],
     ['Chicken Breast Fillets ~500g-1kg pack', 'Chicken Breast Fillets 291g', 'Meat'],
     ['Butter 200-250g', 'Butter 400g', 'Dairy'],
     ['White Bread 800g', 'Wholemeal Bread 800g', 'Bakery'],

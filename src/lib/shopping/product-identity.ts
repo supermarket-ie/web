@@ -1,6 +1,8 @@
 import { dunnesPackSignature } from '../dunnes-discovery';
 
-const text = (value: string) => value.toLowerCase().replace(/[’']/g, '').replace(/\s+/g, ' ').trim();
+const text = (value: string) => value.toLowerCase().replace(/[’']/g, '')
+  .replace(/\b(?:litres?|liters?)\b/g, 'l').replace(/\bkilograms?\b/g, 'kg').replace(/\bgrams?\b/g, 'g')
+  .replace(/\s+/g, ' ').trim();
 const PROCESSED = /\b(?:puffs?|snacks?|juice|smoothie|yog[uh]rt|puree|purée|cake|biscuits?|bread|crisps?|sauce|soup|rings|powder|granules|rice)\b/;
 const PRODUCE = /^(?:(?:fresh|loose|mini|organic|irish|baby|red|green)\s+)*(bananas?|apples?|carrots?|onions?|potatoes?|tomatoes?|peppers?|broccoli|mushrooms?)\b/;
 
@@ -13,7 +15,8 @@ function packSignature(value: string) {
   const pack = dunnesPackSignature(normalized);
   const trailingCount = normalized.match(/\b(?:eggs?|bananas?|apples?|peppers?|fillets?)\s+(\d+)\b/);
   const leadingCount = normalized.match(/\b(\d+)\s+(?:[a-z]+\s+){0,4}(?:eggs?|bananas?|apples?|peppers?|fillets?)\b/);
-  return { ...pack, count: pack.count ?? (trailingCount ? Number(trailingCount[1]) : leadingCount ? Number(leadingCount[1]) : null) };
+  const singleUnit = /\b(?:one|single|1)\s+(?:\d+(?:\.\d+)?\s*(?:kg|g|l|ml)\s+)?(?:bottle|carton|can|tin|tub|bar)\b/.test(normalized);
+  return { ...pack, count: pack.count ?? (trailingCount ? Number(trailingCount[1]) : leadingCount ? Number(leadingCount[1]) : singleUnit ? 1 : null) };
 }
 
 /** A requested measure/count needs positive pack evidence before pricing. */
@@ -21,7 +24,7 @@ export function hasConfirmedRequestedPack(expectedName: string, evidence: string
   const requested = packSignature(expectedName);
   const packs = evidence.map(packSignature);
   return (requested.amount === null || packs.some(pack => pack.amount !== null)) &&
-    (requested.count === null || packs.some(pack => pack.count === requested.count));
+    ((requested.count ?? 1) <= 1 || packs.some(pack => pack.count === requested.count));
 }
 
 /** Reject explicit contradictions; absence of a conflict does not prove a match. */

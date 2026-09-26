@@ -2209,3 +2209,15 @@ The final pack regressions bring local validation to 294 tests across 44 files;
 TypeScript and lint pass. Final preview and production checks remain release
 gates. Signed-in autosave selection is covered by regression tests; the live
 checks use guest sessions and do not create an account solely for testing.
+
+Commit `c3472de` passed release CI and reached a READY preview. The final
+diagnostic asked one permitted dietary clarification, then completed the shop
+in 75.056 seconds after the answer: one `present_household_shop` call, no
+individual lookups, 36 proposed lines, 16 priced and €45.67 explicitly described
+as a partial subtotal. Bananas were six individual units; unconfirmed salmon
+packs remained unpriced. This is not directly comparable to the one-turn
+baseline because it used a clarification. Validation also exposed the wording
+`one 2L bottle` against a six-bottle offer; the final guard recognises explicit
+single containers and written units such as `2 litre`, with regression cases.
+Production verification remains a release gate and will be recorded on PR #230.
+Final local validation passes 296 tests, TypeScript and lint.
