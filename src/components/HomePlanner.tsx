@@ -30,6 +30,7 @@ import {
 import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
 import { HouseholdShopCard, householdShopFromPart } from '@/components/HouseholdShopCard';
 import { archivedConversationResumePrompt } from '@/lib/conversation-migration';
+import { takeAgentLandingHandoff } from '@/lib/agent-landing-handoff';
 import { agentMessageBlocks } from '@/lib/agent-message-format';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
@@ -579,13 +580,14 @@ function ShoppingAgentInner({
     if (landingPromptHandled.current || busy) return;
     const params = new URLSearchParams(window.location.search);
     const archivedConversationId = params.get('resume_conversation')?.trim();
-    const requestedPrompt = params.get('agent_prompt')?.trim();
+    const draft = params.get('agent_draft') === 'weekly-shop' ? takeAgentLandingHandoff() : null;
+    const requestedPrompt = draft?.prompt ?? params.get('agent_prompt')?.trim();
     const prompt = archivedConversationId
       ? archivedConversationResumePrompt(archivedConversationId, requestedPrompt)
       : requestedPrompt;
     if (!prompt) return;
 
-    const landingPath = params.get('agent_landing');
+    const landingPath = draft?.landingPath ?? params.get('agent_landing');
 
     landingPromptHandled.current = true;
     const cleanUrl = `${window.location.pathname}${window.location.hash}`;

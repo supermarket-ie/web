@@ -71,16 +71,29 @@ export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}
     return _priceCache;
   }
 
-  let result;
+  const viewRows: ProductPrice[] = [];
   try {
-    result = await withSupabaseRetry(
-      'latest_prices.all_current_prices',
-      () => supabaseAdmin
-        .from('latest_prices')
-        .select('canonical_product_id, canonical_name, category, store, price, was_price, on_promotion, store_product_name, store_sku, store_url, observed_at, source, relationship_type, freshness_state'),
-    );
+    // PostgREST caps each response. Read every page in a deterministic order;
+    // never publish/cache a partially loaded catalogue if a later page fails.
+    let from = 0;
+    while (true) {
+      const { data, error } = await withSupabaseRetry(
+        'latest_prices.all_current_prices',
+        () => supabaseAdmin
+          .from('latest_prices')
+          .select('canonical_product_id, canonical_name, category, store, price, was_price, on_promotion, store_product_name, store_sku, store_url, observed_at, source, relationship_type, freshness_state')
+          .order('canonical_product_id')
+          .order('store')
+          .range(from, from + 999),
+      );
+      if (error) throw new Error(`latest_prices query failed: ${error.message ?? 'unknown database error'}`);
+      if (!data?.length) break;
+      viewRows.push(...data as ProductPrice[]);
+      // Advance by the returned count, even if the API cap is below 1,000.
+      from += data.length;
+    }
   } catch (error) {
-    if (error instanceof DependencyUnavailableError && isKnownCiSupabasePlaceholder()) {
+    if (isKnownCiSupabasePlaceholder()) {
       console.warn('[price-data] CI Supabase placeholder unavailable; allowing empty static-build data');
       return [];
     }
@@ -91,20 +104,6 @@ export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}
     throw error;
   }
 
-  const { data: viewRows, error: viewError } = result;
-
-  if (viewError) {
-    if (isKnownCiSupabasePlaceholder()) {
-      console.warn('[price-data] CI Supabase placeholder query failed; allowing empty static-build data');
-      return [];
-    }
-    console.error('[price-data] latest_prices query failed; refusing empty/raw fallback:', {
-      code: viewError.code ?? null,
-      message: viewError.message ?? null,
-    });
-    throw new Error(`latest_prices query failed: ${viewError.message ?? 'unknown database error'}`);
-  }
-
   if (!viewRows || viewRows.length === 0) {
     console.warn('[price-data] latest_prices returned zero rows');
     return [];
@@ -113,7 +112,7 @@ export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}
   const seen = new Set<string>();
   const results: ProductPrice[] = [];
   for (const r of viewRows as unknown as ProductPrice[]) {
-    const key = `${r.canonical_name}::${r.store}`;
+    const key = `${r.canonical_product_id}::${r.store}`;
     if (seen.has(key)) continue;
     seen.add(key);
     results.push(r);
