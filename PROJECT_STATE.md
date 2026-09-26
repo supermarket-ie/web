@@ -1991,7 +1991,7 @@ returned HTTP 401 without credentials. A fresh real-user signup and GA4
 completion event have not yet been observed after the release; continue using
 `subscribers` and `agent_events` as the registration source of truth.
 
-## 64. Contact landing route — 26 September 2026 (pending release)
+## 64. Contact landing route — 26 September 2026
 
 The `/contact` page appears in public search results, although GA4 classified
 all 538 sessions landing there on 12–25 September as direct traffic. Indexing
@@ -1999,6 +1999,10 @@ alone does not establish the cause of the spike. To test whether these visits
 include shoppers, move the existing contact form to `/contact-us`, update the
 footer and vendor contact links, and add the new canonical URL to the sitemap.
 Temporarily redirect `/contact` to the agent homepage with `?entry=contact` so
-GA4 can distinguish old-link traffic from normal homepage landings. Keep the
-redirect reversible and compare those landing sessions with agent starts and
-verified registrations before treating the traffic as qualified demand.
+GA4 can distinguish old-link traffic from normal homepage landings. PR #223
+merged as `0340ecf`; the production deployment reached READY. Live checks
+confirmed `/contact` returns HTTP 307 with `Location: /?entry=contact`, the
+marked homepage returns HTTP 200, and `/contact-us` returns HTTP 200 with its
+canonical and footer link. Keep the redirect reversible and compare those
+landing sessions with agent starts and verified registrations before treating
+the traffic as qualified demand.
