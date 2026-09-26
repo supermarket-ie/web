@@ -2169,10 +2169,25 @@ reversible SQL in `supabase/operations/2026-09-26-quarantine-banana-mappings.sql
 preserves each prior mapping in the existing private audit table and invalidates
 only the unchanged erroneous mapping. A transaction dry run returned exactly
 those two rows, both excluded from `latest_prices`, and was rolled back.
-Application remains pending until the release checks below.
+The same transaction was then committed and independently checked: both
+erroneous mappings are absent from `latest_prices`. Trusted row counts are now
+Tesco 539, Dunnes 919 and SuperValu 1,020 (2,478 total). No observation or prior
+mapping was deleted, and no retailer refresh or paid retrieval was triggered.
 
 Local validation passed 288 tests across 44 files, TypeScript and lint. New
 regressions cover banana/snack and pack conflicts, ordinary pack wording,
 latest-proposal selection and compact model output. Preview latency, final
-release checks, data application and production verification remain pending;
+release checks and production verification remain pending;
 do not claim a measured speed improvement or conversion uplift yet.
+
+PR #230's first preview exposed an additional lifecycle defect: capability
+instructions were selected from `ctx.messages` at Eve `turn.started`, before
+the current delivery entered history. The first request therefore received
+only the fallback product module, and the repeat-lookup loop persisted despite
+the new household guidance. Eve 0.39.0 documents this ordering. Capability
+selection now runs in the supported HTTP channel `onMessage` hook against the
+actual incoming text/parts, returning application-owned guidance as request
+context and preserving `defaultEveAuth`. The stable core and protected-tool
+checks are unchanged. Instructions remain modular; historical instructions
+are no longer mistakenly treated as the current turn's intent. Regression
+checks cover the first weekly-shop delivery and structured text input.

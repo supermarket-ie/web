@@ -1,4 +1,5 @@
-import { eveChannel } from 'eve/channels/eve';
+import { defaultEveAuth, eveChannel } from 'eve/channels/eve';
+import { capabilityContextForMessage } from '../lib/capability-instructions';
 import { localDev, type AuthFn } from 'eve/channels/auth';
 import { verifySessionToken } from '../../src/lib/auth';
 
@@ -54,4 +55,7 @@ export default eveChannel({
   // preview inside Eve lets the agent explain why sign-in is useful instead
   // of leaking the channel's raw 401 response into the homepage.
   auth: [supermarketSessionAuth(), localDev(), supermarketGuestAuth()],
+  onMessage(ctx, message) {
+    return { auth: defaultEveAuth(ctx), context: capabilityContextForMessage(message) };
+  },
 });

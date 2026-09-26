@@ -1,5 +1,4 @@
-import { defineDynamic, defineInstructions } from 'eve/instructions';
-import { messageText, selectEveCapabilities, type EveCapability } from '../lib/instruction-routing';
+import { messageText, selectEveCapabilities, type EveCapability } from './instruction-routing';
 
 const CAPABILITY_INSTRUCTIONS: Record<EveCapability, string> = {
   household_shop: `HOUSEHOLD-SHOP PLANNING
@@ -47,12 +46,8 @@ export function instructionsForTurn(text: string) {
   return { selected, content: selected.map(capability => CAPABILITY_INSTRUCTIONS[capability]).join('\n\n') };
 }
 
-export default defineDynamic({
-  events: {
-    'turn.started': (_event, ctx) => {
-      const text = ctx.messages.filter(message => message.role === 'user').slice(-4).map(message => messageText(message.content)).join('\n');
-      const { content } = instructionsForTurn(text);
-      return defineInstructions({ content });
-    },
-  },
-});
+/** Resolve against the incoming delivery. Eve turn.started instruction snapshots
+ * precede that delivery, so history-based routing misses a first user's intent. */
+export function capabilityContextForMessage(message: unknown) {
+  return [instructionsForTurn(messageText(message)).content];
+}
