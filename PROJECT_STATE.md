@@ -2291,3 +2291,89 @@ separation, quantities, request scope, bounded search and draft expiry/restore.
 The full local suite passes 306 tests across 46 files; TypeScript and changed-file
 lint pass. Release CI, preview interaction and
 production confirmation remain release gates and will be recorded on the PR.
+
+PR #232 merged as `f3ac83f7`; production deployment
+`dpl_4EuUkBUAcfbQdsyQh4EqvytNpjpF` reached READY with both public aliases.
+Preview verified add/remove/quantity editing, draft restoration, household and
+budget preservation, one completed agent shop and the save/signup invitation.
+Production verified the public page, catalogue search, editing and totals.
+No signup email or account was created. These checks complete sprint 2; the
+full email-verification continuation remains sprint 4.
+
+## 72. Product search coverage and useful catalogue discovery — 26 September 2026
+
+Sprint 3 starts from GitHub main and READY production `f3ac83f7`. Supabase still
+has 2,478 trusted offers (Tesco 539, Dunnes 919, SuperValu 1,020) for 1,248
+canonical products. The old product-page/sitemap rule required resolved mappings
+at all three main retailers: 1,029 products qualified, while 325 products with
+fresh trusted offers were excluded. Category pages additionally rebuilt prices
+from raw observation history, required all-three overlap, and did not link
+individual products. The browse directory read an unpaginated mapping subset,
+linked unavailable product routes and displayed blurred zero-price placeholders.
+
+The public pre-release sitemap returned only 29 product URLs, despite the live
+mapping-based eligibility count of 1,029. HTTP checks confirmed that the Andrex
+four-roll and Baby Spinach 90g URLs returned 404, while Chicken Mince returned
+200. Distinguish this observed public sitemap from the larger theoretical
+eligibility count; neither is a measurement of Google's indexed-page count.
+
+A shared public catalogue now joins canonical identities to the same guarded
+`latest_prices` evidence used by the shopping workspace. One currently trusted
+retailer is sufficient. Metadata records are fully paginated in stable ID order;
+a failed page aborts the read rather than publishing a partial catalogue. Only
+metadata is persistently cached; freshness/identity eligibility is recalculated
+when pages render. Price reads retain the existing bounded cache/resilience
+policy. Product pages, categories and the sitemap revalidate every 30 minutes.
+Product pages use on-demand ISR instead of rebuilding the whole catalogue per
+product during deployment. CI's existing explicit placeholder environment may
+return an empty catalogue; preview and production cannot use that exception.
+
+The guarded snapshot yields 1,230 products with prices across 24 categories,
+including 317 products excluded by the previous publishing rule. The new sitemap
+lists those currently priced products with actual observation/template dates,
+replacing the blanket June date. Existing canonical product URLs remain valid
+when prices expire: they show missing prices, related products and an editable
+add-to-shop action. They are not redirected or marked noindex. The sitemap
+omits 116 previously eligible products currently without a guarded price; their
+pages remain accessible. Existing names/slugs are preserved. Future equal-name
+collisions receive distinct ID-suffixed URLs rather than merging price evidence.
+
+The shop/category directory links to crawlable product pages and adds the six
+previously omitted categories (Baby, Chilled, Pet Care, Oils, Seasoning, Stock).
+Canonical category names/slugs share one configuration. Historical browse
+category queries and space/ampersand category paths redirect to their canonical
+category route. `/browse` offers server-rendered product search and pagination;
+search-result queries are noindex/follow, ordinary pagination self-canonicalises.
+There is no signup gate for this public price evidence.
+
+Product pages display exact retailer names, observed dates, source links and
+explicit missing-price states. Product JSON-LD only includes visible, guarded
+offers. Unverified stock availability and invented future promotion-end dates
+are removed; category ItemList markup links to actual product URLs. Existing
+nutrition remains retailer-labelled and is included only for a current matched
+retailer product. Price claims do not promise national cheapest-store status.
+
+An add-to-shop quantity form preserves the existing draft's household, budget,
+notes, products and quantities, enforces 50-product/20-unit limits, and reloads
+current prices in the existing workspace. Only intentions enter session storage.
+The original product landing path continues through the agent handoff for funnel
+attribution. `product_added_to_shop` records the public landing path and item
+count; no shopping notes, budget or household details enter this event. Existing
+Eve grounding, save and registration paths are reused; no email flow is changed.
+
+Validation exposed two existing identity errors: Chicken Mince had a Dunnes
+Turkey Breast Mince offer, and ordinary `100% Pure Honey` had a specialist Manuka
+Honey offer. Shared identity checks now reject explicit meat-species conflicts
+and ordinary/manuka contradictions, including in the builder/household guard.
+The chicken URL remains available with missing prices. No catalogue row, mapping,
+observation, schema, paid retailer job or schedule was changed. These guards catch
+known contradictions, not proof that every historic mapping has been re-audited.
+
+Local validation passes 314 tests across 47 files, TypeScript, changed-file lint
+and diff checks. New regressions cover single-store eligibility, stale/zero/pack
+exclusions, the observed identity errors, stable URLs without prices, equal-name
+identity separation, truthful schema, category aliases and draft preservation.
+Preview interaction, release CI and READY production verification remain gates;
+final deployment and live evidence will be recorded on this sprint's PR. Search
+Console query/position access remains unavailable: no indexing, ranking, traffic
+or registration uplift is claimed from publishing more eligible pages alone.

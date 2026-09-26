@@ -1,389 +1,55 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
-import { notFound } from 'next/navigation';
-import { supabaseAdmin } from '@/lib/supabase';
-import { itemListJsonLd } from '@/lib/structured-data';
-import { POSTS } from '@/lib/blog';
-import { AgentLandingCTA } from '@/components/AgentLandingCTA';
+import { ProductCatalogueList } from '@/components/ProductCatalogueList';
+import { getProductCatalogue } from '@/lib/product-catalogue-data';
+import { catalogueItemList } from '@/lib/product-catalogue';
+import { CATALOGUE_CATEGORIES, catalogueCategory } from '@/lib/catalogue-categories';
+import { SHOP_BUILDER_PATH } from '@/lib/shop-builder';
 
-export const revalidate = 43200; // 12 hours — matches scrape frequency
-
+export const revalidate = 1800;
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
-
-// Category metadata for SEO + display
-const CATEGORY_META: Record<string, {
-  title: string;
-  description: string;
-  emoji: string;
-  keywords: string[];
-}> = {
-  'dairy': {
-    title: 'Dairy Prices Ireland',
-    description: 'Compare milk, cheese, butter, cream and yogurt prices across Tesco, Dunnes Stores and SuperValu in Ireland. Updated twice weekly.',
-    emoji: '🥛',
-    keywords: ['cheapest milk Ireland', 'butter price Ireland', 'cheese price Tesco Dunnes SuperValu'],
-  },
-  'meat': {
-    title: 'Meat Prices Ireland',
-    description: 'Compare chicken, beef, pork and lamb prices across Irish supermarkets. Find the cheapest cuts at Tesco, Dunnes and SuperValu.',
-    emoji: '🥩',
-    keywords: ['cheapest chicken Ireland', 'beef mince price Ireland', 'meat prices Tesco Dunnes'],
-  },
-  'bakery': {
-    title: 'Bread & Bakery Prices Ireland',
-    description: 'Compare bread, rolls, wraps and bakery prices across Tesco, Dunnes Stores and SuperValu in Ireland.',
-    emoji: '🍞',
-    keywords: ['cheapest bread Ireland', 'bread price Tesco Dunnes SuperValu', 'bakery prices Ireland'],
-  },
-  'vegetables': {
-    title: 'Vegetable Prices Ireland',
-    description: 'Compare fresh vegetable prices across Irish supermarkets. Find the cheapest veg at Tesco, Dunnes and SuperValu.',
-    emoji: '🥦',
-    keywords: ['cheapest vegetables Ireland', 'veg prices Tesco Dunnes SuperValu', 'fresh veg Ireland'],
-  },
-  'fruit': {
-    title: 'Fruit Prices Ireland',
-    description: 'Compare fresh fruit prices across Tesco, Dunnes Stores and SuperValu in Ireland. Updated twice weekly.',
-    emoji: '🍎',
-    keywords: ['cheapest fruit Ireland', 'fruit prices Tesco Dunnes SuperValu'],
-  },
-  'breakfast': {
-    title: 'Breakfast & Cereal Prices Ireland',
-    description: 'Compare cereal, porridge and breakfast prices across Irish supermarkets.',
-    emoji: '🥣',
-    keywords: ['cheapest cereal Ireland', 'porridge price Ireland', 'breakfast prices Tesco Dunnes'],
-  },
-  'beverages': {
-    title: 'Drinks & Beverages Prices Ireland',
-    description: 'Compare juice, water, squash and soft drink prices across Tesco, Dunnes and SuperValu in Ireland.',
-    emoji: '🧃',
-    keywords: ['cheapest drinks Ireland', 'orange juice price Ireland', 'beverages Tesco Dunnes SuperValu'],
-  },
-  'tinned': {
-    title: 'Tinned Food Prices Ireland',
-    description: 'Compare tinned tomatoes, beans, tuna and canned food prices across Irish supermarkets.',
-    emoji: '🥫',
-    keywords: ['cheapest tinned food Ireland', 'tinned tomatoes price Ireland', 'canned food prices'],
-  },
-  'frozen': {
-    title: 'Frozen Food Prices Ireland',
-    description: 'Compare frozen food prices across Tesco, Dunnes Stores and SuperValu in Ireland.',
-    emoji: '🧊',
-    keywords: ['cheapest frozen food Ireland', 'frozen prices Tesco Dunnes SuperValu'],
-  },
-  'household': {
-    title: 'Household Products Prices Ireland',
-    description: 'Compare cleaning products, toilet roll and household essentials prices across Irish supermarkets.',
-    emoji: '🧹',
-    keywords: ['cheapest cleaning products Ireland', 'household prices Tesco Dunnes SuperValu'],
-  },
-  'snacks': {
-    title: 'Snacks & Crisps Prices Ireland',
-    description: 'Compare crisps, biscuits, popcorn and snack prices across Tesco, Dunnes and SuperValu in Ireland.',
-    emoji: '🍿',
-    keywords: ['cheapest crisps Ireland', 'snack prices Ireland', 'biscuits price Tesco Dunnes'],
-  },
-  'condiments': {
-    title: 'Condiments & Sauces Prices Ireland',
-    description: 'Compare ketchup, mayo, sauces and condiment prices across Irish supermarkets.',
-    emoji: '🧴',
-    keywords: ['condiments prices Ireland', 'ketchup price Ireland', 'sauce prices Tesco Dunnes'],
-  },
-  'pasta-and-rice': {
-    title: 'Pasta & Rice Prices Ireland',
-    description: 'Compare pasta, rice, noodles and grains prices across Tesco, Dunnes and SuperValu in Ireland.',
-    emoji: '🍝',
-    keywords: ['cheapest pasta Ireland', 'rice price Ireland', 'pasta price Tesco Dunnes SuperValu'],
-  },
-  'fish': {
-    title: 'Fish & Seafood Prices Ireland',
-    description: 'Compare fish fillet, tuna, salmon and seafood prices across Irish supermarkets.',
-    emoji: '🐟',
-    keywords: ['cheapest fish Ireland', 'salmon price Ireland', 'fish prices Tesco Dunnes SuperValu'],
-  },
-  'dairy alternatives': {
-    title: 'Dairy Alternative Prices Ireland',
-    description: 'Compare oat milk, almond milk and plant-based dairy prices across Irish supermarkets.',
-    emoji: '🌾',
-    keywords: ['cheapest oat milk Ireland', 'almond milk price Ireland', 'plant milk prices'],
-  },
-  'personal care': {
-    title: 'Personal Care Prices Ireland',
-    description: 'Compare shampoo, shower gel, toothpaste and toiletry prices across Tesco, Dunnes and SuperValu.',
-    emoji: '🧴',
-    keywords: ['cheapest shampoo Ireland', 'toiletries prices Ireland', 'personal care Tesco Dunnes'],
-  },
-  'baking': {
-    title: 'Baking Ingredients Prices Ireland',
-    description: 'Compare flour, sugar, baking powder and baking ingredient prices across Irish supermarkets.',
-    emoji: '🧁',
-    keywords: ['baking ingredients prices Ireland', 'cheapest flour Ireland', 'sugar price Ireland'],
-  },
-  'spreads': {
-    title: 'Spreads & Jams Prices Ireland',
-    description: 'Compare peanut butter, jam, honey and spread prices across Tesco, Dunnes and SuperValu.',
-    emoji: '🫙',
-    keywords: ['cheapest peanut butter Ireland', 'jam price Ireland', 'spreads prices Tesco Dunnes'],
-  },
-};
-
-function slugToCategory(slug: string): string {
-  return slug
-    .replace(/-and-/g, ' & ')
-    .split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-}
-
-function categoryToSlug(cat: string): string {
-  return cat.toLowerCase().replace(/\s+&\s+/g, '-').replace(/\s+/g, '-');
-}
-
-function fmt(n: number) { return `€${n.toFixed(2)}`; }
-
-const STORE_INFO = {
-  tesco:     { name: 'Tesco',         color: '#003A8C', light: '#EEF3FB' },
-  dunnes:    { name: 'Dunnes Stores', color: '#7B0017', light: '#FAEAEC' },
-  supervalu: { name: 'SuperValu',     color: '#D4400F', light: '#FEF0E8' },
-};
-async function getCategoryProducts(category: string) {
-  const { data: spRows } = await supabaseAdmin
-    .from('store_products')
-    .select('id, store, store_product_name, store_url, products(canonical_name, category)')
-    .eq('url_status', 'resolved');
-
-  let priceRows: { store_product_id: string; price: number; on_promotion: boolean; was_price: number | null; observed_at: string }[] = [];
-  let offset = 0;
-  const PAGE = 1000;
-  while (true) {
-    const { data } = await supabaseAdmin
-      .from('price_observations')
-      .select('store_product_id, price, on_promotion, was_price, observed_at')
-      .order('observed_at', { ascending: false })
-      .range(offset, offset + PAGE - 1);
-    if (!data || data.length === 0) break;
-    priceRows = priceRows.concat(data);
-    if (data.length < PAGE) break;
-    offset += PAGE;
-  }
-
-  if (!spRows || !priceRows.length) return null;
-
-  const latestPrice = new Map<string, { price: number; on_promotion: boolean; was_price: number | null }>();
-  for (const row of priceRows) {
-    if (!latestPrice.has(row.store_product_id)) {
-      latestPrice.set(row.store_product_id, { price: row.price, on_promotion: row.on_promotion, was_price: row.was_price });
-    }
-  }
-
-  const byProduct = new Map<string, { canonical: string; stores: Map<string, { price: number; name: string; url: string | null; on_promotion: boolean; was_price: number | null }> }>();
-
-  const MAIN_STORES = ['tesco', 'dunnes', 'supervalu'];
-
-  for (const sp of spRows) {
-    const p = sp.products as unknown as { canonical_name: string; category: string } | null;
-    if (!p) continue;
-    if (p.category.toLowerCase() !== category.toLowerCase()) continue;
-    const obs = latestPrice.get(sp.id);
-    if (!obs) continue;
-
-    if (!byProduct.has(p.canonical_name)) {
-      byProduct.set(p.canonical_name, { canonical: p.canonical_name, stores: new Map() });
-    }
-    byProduct.get(p.canonical_name)!.stores.set(sp.store, {
-      price: obs.price,
-      name: sp.store_product_name,
-      url: sp.store_url,
-      on_promotion: obs.on_promotion ?? false,
-      was_price: obs.was_price ?? null,
-    });
-  }
-
-  const filtered = Array.from(byProduct.values())
-    .filter(p => MAIN_STORES.every(s => p.stores.has(s)))
-    .sort((a, b) => a.canonical.localeCompare(b.canonical));
-
-  return filtered;
-}
-
-export async function generateStaticParams() {
-  return Object.keys(CATEGORY_META).map(slug => ({ category: slug }));
-}
+export function generateStaticParams() { return CATALOGUE_CATEGORIES.map(category => ({ category: category.slug })); }
 
 export async function generateMetadata({ params }: { params: Promise<{ category: string }> }): Promise<Metadata> {
-  const { category } = await params;
-  const meta = CATEGORY_META[category];
-  const catName = meta?.title ?? `${slugToCategory(category)} Prices Ireland`;
-  return {
-    title: `${catName} | supermarket.ie`,
-    description: meta?.description ?? `Compare ${slugToCategory(category)} prices across Tesco, Dunnes Stores and SuperValu in Ireland.`,
-    keywords: meta?.keywords,
-    alternates: { canonical: `${BASE_URL}/shop/${category}` },
-    openGraph: {
-      title: catName,
-      description: meta?.description,
-    },
-  };
+  const category = catalogueCategory((await params).category);
+  if (!category) return { title: 'Category not found' };
+  const title = `${category.name} Prices Ireland`;
+  const description = `${category.description}. Browse matched Irish supermarket prices, check pack sizes and add products to your household shop.`;
+  return { title, description, alternates: { canonical: `${BASE_URL}/shop/${category.slug}` }, openGraph: { title, description } };
 }
 
 export default async function CategoryPage({ params }: { params: Promise<{ category: string }> }) {
-  const { category } = await params;
-  const categoryName = slugToCategory(category);
-  const meta = CATEGORY_META[category];
-
-  const products = await getCategoryProducts(categoryName);
-  if (!products) notFound();
-  const hasProducts = products.length > 0;
-
-  // ItemList structured data
-  const jsonLd = itemListJsonLd({
-    name: meta?.title ?? `${categoryName} Prices Ireland`,
-    description: meta?.description ?? `${categoryName} prices across Irish supermarkets`,
-    url: `/shop/${category}`,
-    items: products.map(p => {
-      const sorted = [...p.stores.entries()].sort((a, b) => a[1].price - b[1].price);
-      return { name: p.canonical, price: sorted[0]?.[1]?.price };
-    }),
-  });
-
-  // Related blog posts (up to 2) for this category
-  const categoryBlogPosts = POSTS.filter(p =>
-    p.category === 'Saving Money' || p.category === 'Price Comparison'
-  ).slice(0, 2);
-
-  return (
-    <div className="min-h-screen bg-[#f8faf8]">
-      <SiteHeader />
-
-      <main className="max-w-6xl mx-auto px-6 pb-16">
-        <Breadcrumbs items={[{ label: 'Shop by category', href: '/shop' }, { label: categoryName, href: `/shop/${category}` }]} />
-
-        {/* Hero */}
-        <div className="pt-4 pb-6">
-          <div className="text-4xl mb-3">{meta?.emoji ?? '🛒'}</div>
-          <h1 className="text-3xl font-bold text-[#2F2F2E] mb-2">
-            {categoryName} for your household shop
-          </h1>
-          <p className="text-[#5c5b5b]">
-            Explore current {categoryName.toLowerCase()} products and prices across Irish supermarkets, or ask the agent to choose around your meals, preferences and budget.
-          </p>
-        </div>
-
-        <div className="mb-8">
-          <AgentLandingCTA
-            context="category"
-            title={`What do you need from ${categoryName.toLowerCase()}?`}
-            description="Ask for a product, dietary requirement, meal or household shop. The agent will use current products and prices rather than giving you a generic category ranking."
-            prompt={`Help me choose ${categoryName.toLowerCase()} for my household shop`}
-          />
-        </div>
-
-        {/* Product list */}
-        {hasProducts ? (
-          <>
-            <h2 className="text-lg font-bold text-[#2F2F2E] mb-3">{products.length} {categoryName.toLowerCase()} products</h2>
-            <div className="bg-white rounded-2xl divide-y divide-[#F3F0EF] mb-8" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
-              {products.map(({ canonical, stores }) => {
-                const sorted = [...stores.entries()].sort((a, b) => a[1].price - b[1].price);
-                const best = sorted[0];
-                return (
-                  <div key={canonical} className="px-4 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <div className="text-sm font-medium text-[#2F2F2E]">{canonical}</div>
-                          {sorted.some(([, s]) => s.on_promotion) && (
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-[#004a23] px-1.5 py-0.5 rounded-md" style={{ background: '#6BFE9C' }}>🏷️ Offer</span>
-                          )}
-                        </div>
-                        {best && (
-                          <div className="text-xs text-[#5c5b5b] mt-0.5">
-                            Best: <span style={{ color: STORE_INFO[best[0] as keyof typeof STORE_INFO]?.color }}>{STORE_INFO[best[0] as keyof typeof STORE_INFO]?.name}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        {best && (
-                          <div className="text-sm font-bold text-[#2F2F2E]">{fmt(best[1].price)}</div>
-                        )}
-                        {best && best[1].was_price && (
-                          <div className="text-xs text-[#B2BEC3] line-through">{fmt(best[1].was_price)}</div>
-                        )}
-                      </div>
-                    </div>
-                    {sorted.length > 1 && (
-                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                        {sorted.map(([store, { price, on_promotion }]) => (
-                          <span key={store} className="text-xs text-[#B2BEC3]">
-                            {STORE_INFO[store as keyof typeof STORE_INFO]?.name.split(' ')[0]} {fmt(price)}
-                            {on_promotion && <span className="ml-0.5 text-[#006A35]">🏷️</span>}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <div className="bg-white rounded-2xl p-8 text-center text-[#5c5b5b] mb-8" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
-            <p className="text-lg mb-2">Prices coming soon</p>
-            <p className="text-sm">We&apos;re adding {categoryName.toLowerCase()} products — check back shortly.</p>
-          </div>
-        )}
-
-        {/* AI agent CTA */}
-        <div className="rounded-2xl p-6 text-center mb-10" style={{ background: '#EAE7E7' }}>
-          <div className="text-2xl mb-2">{meta?.emoji ?? '🛒'}</div>
-          <h3 className="font-bold text-[#2F2F2E] mb-1">Continue with your household agent</h3>
-          <p className="text-sm text-[#5c5b5b] mb-4">
-            Turn these products into a meal, a list, a saved preference or a monitored item.
-          </p>
-          <Link href="/"
-            className="inline-block px-6 py-3 rounded-full font-semibold transition text-[#004a23]"
-            style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
-            Ask Supermarket.ie →
-          </Link>
-        </div>
-
-        {/* Related blog posts */}
-        {categoryBlogPosts.length > 0 && (
-          <div className="mb-10">
-            <h2 className="text-lg font-bold text-[#2F2F2E] mb-4">Related guides</h2>
-            <div className="space-y-2">
-              {categoryBlogPosts.map(p => (
-                <Link key={p.slug} href={`/blog/${p.slug}`}
-                  className="block bg-white rounded-xl p-4 transition group" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
-                  <div className="text-xs mb-1" style={{ color: 'rgba(175,173,172,0.8)' }}>{p.category} · {p.readingTime}</div>
-                  <div className="text-sm font-semibold text-[#2F2F2E] group-hover:text-[#006A35] transition">{p.title}</div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Other categories */}
-        <h2 className="text-lg font-bold text-[#2F2F2E] mb-4">Browse other categories</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {Object.entries(CATEGORY_META)
-            .filter(([slug]) => slug !== category)
-            .slice(0, 9)
-            .map(([slug, m]) => (
-              <Link key={slug} href={`/shop/${slug}`}
-                className="bg-white rounded-xl p-3 flex items-center gap-2 transition hover:shadow-sm" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
-                <span className="text-xl">{m.emoji}</span>
-                <span className="text-sm font-medium text-[#2F2F2E]">{slugToCategory(slug)}</span>
-              </Link>
-            ))}
-        </div>
-      </main>
-
-      <SiteFooter />
-
-      {/* ItemList structured data */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-    </div>
-  );
+  const slug = (await params).category;
+  const category = catalogueCategory(slug);
+  if (!category) notFound();
+  if (category.slug !== slug) permanentRedirect(`/shop/${category.slug}`);
+  const products = (await getProductCatalogue()).filter(product => product.category === category.name && product.updatedAt);
+  return <>
+    <SiteHeader />
+    <main className="mx-auto max-w-5xl px-4 pb-16">
+      <Breadcrumbs items={[{ label: 'Shop by category', href: '/shop' }, { label: category.name, href: `/shop/${category.slug}` }]} />
+      <header className="py-6">
+        <p className="mb-3 text-3xl" aria-hidden="true">{category.emoji}</p>
+        <h1 className="text-3xl font-bold tracking-tight text-[#173525]">{category.name} for your household shop</h1>
+        <p className="mt-3 text-sm leading-6 text-[#526c5b]">{category.description}. Open a product to see matched prices, retailer pack details and when each price was checked.</p>
+        <p className="mt-2 text-sm text-[#607065]">{products.length} products with current prices. Coverage varies by product; missing prices are shown clearly.</p>
+      </header>
+      {products.length ? <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(catalogueItemList(products, `${category.name} products`, `/shop/${category.slug}`, BASE_URL)).replace(/</g, '\\u003c') }} />
+        <ProductCatalogueList products={products} />
+      </> : <p className="rounded-2xl border border-[#dce6de] bg-white p-6 text-[#607065]">We don’t currently have fresh matched prices in this category. You can still describe what you need to your agent.</p>}
+      <section className="my-8 rounded-2xl bg-[#edf7ef] p-6">
+        <h2 className="text-lg font-semibold text-[#173525]">Bring your household shop together</h2>
+        <p className="mt-2 text-sm leading-6 text-[#526c5b]">Add food and household essentials, adjust quantities and review the list with your agent. Register to save your shop.</p>
+        <Link href={`${SHOP_BUILDER_PATH}#build-your-shop`} className="mt-4 inline-block rounded-xl bg-[#21603b] px-5 py-3 text-sm font-semibold text-white">Build my shop →</Link>
+      </section>
+      <h2 className="mb-3 text-lg font-semibold text-[#173525]">Browse other categories</h2>
+      <div className="flex flex-wrap gap-2">{CATALOGUE_CATEGORIES.filter(item => item.slug !== category.slug).map(item => <Link key={item.slug} href={`/shop/${item.slug}`} className="rounded-full border border-[#dce6de] bg-white px-4 py-2 text-sm text-[#21603b]">{item.name}</Link>)}</div>
+    </main>
+    <SiteFooter />
+  </>;
 }

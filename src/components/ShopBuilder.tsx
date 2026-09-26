@@ -53,6 +53,7 @@ export function ShopBuilder({ suggestions }: { suggestions: ShopProduct[] }) {
   const [budget, setBudget] = useState('');
   const [needs, setNeeds] = useState('');
   const [completeWeek, setCompleteWeek] = useState(false);
+  const [entryPath, setEntryPath] = useState<string | undefined>();
   const [restored, setRestored] = useState(false);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
@@ -66,6 +67,7 @@ export function ShopBuilder({ suggestions }: { suggestions: ShopProduct[] }) {
     if (draft) {
       setItems(draft.items.map(item => ({ ...item, category: '', offers: {} })));
       setAdults(draft.adults); setChildren(draft.children); setBudget(draft.budget); setNeeds(draft.needs); setCompleteWeek(draft.completeWeek);
+      setEntryPath(draft.entryPath);
       if (draft.items.length) {
         const params = new URLSearchParams({ ids: draft.items.map(item => item.id).join(',') });
         fetch(`/api/shop-builder?${params}`, { signal: controller.signal })
@@ -86,10 +88,10 @@ export function ShopBuilder({ suggestions }: { suggestions: ShopProduct[] }) {
     try {
       sessionStorage.setItem(SHOP_DRAFT_KEY, JSON.stringify({
         items: items.map(({ id, name, quantity }) => ({ id, name, quantity })),
-        adults, children, budget, needs, completeWeek, createdAt: Date.now(),
+        adults, children, budget, needs, completeWeek, entryPath, createdAt: Date.now(),
       }));
     } catch { /* The final handoff provides an actionable error if storage is unavailable. */ }
-  }, [items, adults, children, budget, needs, completeWeek, restored]);
+  }, [items, adults, children, budget, needs, completeWeek, entryPath, restored]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -129,14 +131,14 @@ export function ShopBuilder({ suggestions }: { suggestions: ShopProduct[] }) {
     if (starting || (!items.length && !needs.trim())) return;
     setError('');
     try {
-      saveAgentLandingHandoff(shopBuilderPrompt({ items, adults, children, budget, needs, completeWeek }), SHOP_BUILDER_PATH);
+      saveAgentLandingHandoff(shopBuilderPrompt({ items, adults, children, budget, needs, completeWeek }), entryPath ?? SHOP_BUILDER_PATH);
     } catch {
       setError('Your browser could not keep this shop for the next step. Please allow session storage and try again.');
       return;
     }
     setStarting(true);
     try {
-      trackEvent('landing_agent_started', { context: 'comparison', experience: 'shop_builder', landing_path: SHOP_BUILDER_PATH, selected_item_count: items.length, has_budget: Boolean(budget), complete_week: completeWeek });
+      trackEvent('landing_agent_started', { context: entryPath ? 'product' : 'comparison', experience: 'shop_builder', landing_path: entryPath ?? SHOP_BUILDER_PATH, workspace_path: SHOP_BUILDER_PATH, selected_item_count: items.length, has_budget: Boolean(budget), complete_week: completeWeek });
     } catch { /* A tracking failure must not block the shop. */ }
     window.location.assign('/?agent_draft=shop-builder');
   }

@@ -37,6 +37,15 @@ export function hasProductIdentityConflict(expectedName: string, actualName: str
   const produce = expected.match(PRODUCE)?.[1].replace(/(?:es|s)$/, '');
   if (freshProduce && produce && !actual.includes(produce)) return true;
   if (/\beggs?\b/.test(expected) && !/\bnoodles?\b/.test(expected) && /\bnoodles?\b/.test(actual)) return true;
+  if (/^meat$/i.test(category ?? '')) {
+    const species = ['chicken', 'turkey', 'beef', 'pork', 'lamb', 'duck', 'venison'];
+    const present = (value: string) => species.filter(word => new RegExp(`\\b${word}\\b`).test(value));
+    const left = present(expected), right = present(actual);
+    if (left.length && right.length && (left.length !== right.length || left.some(word => !right.includes(word)))) return true;
+  }
+  // Specialist manuka honey must not become a price for an ordinary honey listing.
+  if (/\bhoney\b/.test(expected) && /\bhoney\b/.test(actual) &&
+      /\bman[uū]ka\b/.test(expected) !== /\bman[uū]ka\b/.test(actual)) return true;
 
   const expectedPack = packSignature(expected);
   const actualPack = packSignature(actual);

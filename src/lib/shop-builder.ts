@@ -11,7 +11,22 @@ export type ShopDraft = {
   budget: string;
   needs: string;
   completeWeek: boolean;
+  entryPath?: string;
 };
+
+export function addProductToDraft(draft: ShopDraft | null, item: ShopDraft['items'][number], entryPath: string): ShopDraft {
+  const current = draft ?? { items: [], adults: '2', children: '0', budget: '', needs: '', completeWeek: false };
+  const existing = current.items.find(line => line.id === item.id);
+  if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity + (existing?.quantity ?? 0) > 20) {
+    throw new RangeError('A product can have up to 20 units. Adjust its quantity in your shop.');
+  }
+  if (!existing && current.items.length >= SHOP_BUILDER_LIMIT) throw new RangeError('Your shop already has 50 products. Remove one in your shop before adding another.');
+  return {
+    ...current,
+    items: existing ? current.items.map(line => line.id === item.id ? { ...line, quantity: line.quantity + item.quantity } : line) : [...current.items, { id: item.id, name: item.name, quantity: item.quantity }],
+    entryPath: current.entryPath ?? entryPath,
+  };
+}
 
 export function shopBuilderPrompt(draft: ShopDraft): string {
   return [
@@ -47,6 +62,7 @@ export function readShopDraft(raw: string | null, now = Date.now()): ShopDraft |
       ids.add(item.id);
       items.push({ id: item.id, name: item.name, quantity: item.quantity });
     }
-    return { items, adults: value.adults, children: value.children, budget: value.budget, needs: value.needs, completeWeek: value.completeWeek };
+    const entryPath = typeof value.entryPath === 'string' && /^\/browse\/[a-z0-9-]{1,240}$/.test(value.entryPath) ? value.entryPath : undefined;
+    return { items, adults: value.adults, children: value.children, budget: value.budget, needs: value.needs, completeWeek: value.completeWeek, ...(entryPath ? { entryPath } : {}) };
   } catch { return null; }
 }
