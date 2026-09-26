@@ -1,9 +1,7 @@
 'use client';
 
-import type { EveMessagePart } from 'eve/react';
 import { AlertCircle, CheckCircle2, ShoppingBasket, Store } from 'lucide-react';
 import {
-  householdShopToolOutputSchema,
   type HouseholdShopContract,
 } from '@/lib/shopping/household-shop-contract';
 
@@ -19,17 +17,6 @@ function storeName(value: string) {
 
 function euro(value: number) {
   return new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' }).format(value);
-}
-
-export function householdShopFromPart(part: EveMessagePart): HouseholdShopContract | null {
-  if (
-    part.type !== 'dynamic-tool'
-    || part.toolName !== 'present_household_shop'
-    || part.state !== 'output-available'
-    || part.partial
-  ) return null;
-  const parsed = householdShopToolOutputSchema.safeParse(part.output);
-  return parsed.success ? parsed.data.shop : null;
 }
 
 export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {

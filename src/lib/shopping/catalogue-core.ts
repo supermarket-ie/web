@@ -1,4 +1,5 @@
 import type { ResolvedProduct, RetailerOffer } from './contracts';
+import { hasProductIdentityConflict } from './product-identity';
 
 export type CataloguePriceRow = {
   canonical_product_id?: string | null;
@@ -63,6 +64,7 @@ export function resolveCatalogueRows(
 
   const grouped = new Map<string, CataloguePriceRow[]>();
   for (const row of rows) {
+    if (hasProductIdentityConflict(row.canonical_name, row.store_product_name, row.category)) continue;
     const existing = grouped.get(row.canonical_name) ?? [];
     existing.push(row);
     grouped.set(row.canonical_name, existing);
@@ -88,6 +90,7 @@ export function resolveCatalogueRows(
 
   for (const [canonicalName, productRows] of grouped) {
     const canonicalNorm = normaliseCatalogueText(canonicalName);
+    if (hasProductIdentityConflict(query, canonicalName)) continue;
     const canonicalTokens = canonicalNorm.split(' ').filter(Boolean);
     const paddedCanonical = ` ${canonicalNorm} `;
     const storeNames = productRows.map(row => normaliseCatalogueText(row.store_product_name)).join(' ');

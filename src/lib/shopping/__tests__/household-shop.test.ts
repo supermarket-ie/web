@@ -73,6 +73,19 @@ const proposal = {
 };
 
 describe('groundHouseholdShop', () => {
+  it('excludes a mis-mapped baby snack even when it has an exact fresh flag', () => {
+    const badProduct = { canonical_product_id: 'banana-id', canonical_name: 'Mini Bananas', category: 'Fruit' };
+    const result = groundHouseholdShop({
+      proposal: { ...proposal, items: [{ ...proposal.items[0], canonical_product_id: 'banana-id', display_label: 'Bananas', unit_or_pack_expectation: 'loose fruit' }] },
+      catalogue_products: [badProduct],
+      latest_prices: [{ ...row('banana-id', 'supervalu', 2.75), ...badProduct, store_product_name: "Ella's Kitchen Strawberry & Banana Mini Puffs 4 Pack 8g" }],
+    });
+    expect(result.items[0].selected_offer).toBeNull();
+    expect(result.items[0].coverage_status).toBe('unavailable');
+    expect(result.totals.priced_lines).toBe(0);
+    expect(result.store_coverage.every(store => store.basket_total === null)).toBe(true);
+  });
+
   it('uses only trusted offers and calculates all totals in code', () => {
     const result = groundHouseholdShop({
       proposal: {

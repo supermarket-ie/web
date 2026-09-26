@@ -4,6 +4,7 @@ import type { CataloguePriceRow } from '../../src/lib/shopping/catalogue-core';
 import { groundHouseholdShop } from '../../src/lib/shopping/household-shop';
 import { householdShopResolutionSeeds, resolveHouseholdShopProposal } from '../lib/household-shop-resolution';
 import { agentSupabase } from '../lib/supabase';
+import { householdShopModelSummary } from '../lib/household-shop-summary';
 
 const QUERY_CHUNK_SIZE = 12;
 
@@ -98,5 +99,8 @@ export default defineTool({
     });
 
     return { kind: 'household_shop' as const, shop };
+  },
+  toModelOutput(output) {
+    return { type: 'json', value: householdShopModelSummary(output.shop) };
   },
 });
