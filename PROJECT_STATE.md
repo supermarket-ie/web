@@ -2239,3 +2239,55 @@ or single-versus-multipack conflicts. A grounding regression verifies one
 `2 litre bottle` at the trusted €2.25 price. The fix is separately gated through
 CI and production verification; the earlier production result is not treated
 as final success while this known regression remains.
+
+PR #231 merged as `cdc26087`; production deployment
+`dpl_A2t1Jfius62Z3D5Zm8576X9h6Kkj` reached READY with both public aliases.
+The five-item guest check priced milk at €2.25, carrots at €1.45, a dozen eggs
+at €4.35 and six loose bananas at €1.86. One card displayed an explicit €9.91
+subtotal for 4/5 lines, with the unconfirmed individual water bottles excluded.
+The registration prompt followed completion; no email or account was created.
+
+## 71. Search landing shopping workspace — 26 September 2026
+
+Sprint 2 of the traffic/registration work targets the existing organic entrance
+`/compare/supermarket-prices-ireland`. Baseline GitHub main and READY production
+were verified at `cdc26087`; Supabase still returned 2,478 trusted offers. The
+page had a prefilled prompt redirect and static price examples, with no way to
+select products or edit a shop there. The shortcut-button releases remain
+reverted; this work introduces a functional shopping workspace instead.
+
+Visitors can search the currently priced catalogue, add up to 50 exact canonical
+products, change quantities from 1–20, remove lines and immediately see retailer
+coverage and subtotals. Products with one retailer remain useful; three-retailer
+overlap is not an entry requirement. A bounded public search route returns at
+most eight products, or refreshes up to 50 exact selected IDs. Both search and
+the crawlable initial examples use the existing fully paginated `latest_prices`
+reader, the seven-day boundary and explicit identity-conflict checks. Unmarked
+canonical single units cannot show a retailer multipack price. Empty and
+unpriced lists have no numeric total, and incomplete store totals remain null.
+Retailer names, dates and price exclusions remain inspectable.
+
+The visitor supplies household size, optional budget and free-form needs. The
+default request keeps to their list; completing the rest of the week is an
+explicit option. Review continues through the existing Eve runtime and native
+shop/save invitation. Household text and selected quantities travel via the
+existing single-use session handoff, never a prompt query string. A separate
+30-minute tab-local draft preserves intentions when returning to the page;
+stored offers/prices are discarded and refreshed. Persistence still requires
+registration and existing server grounding. This is not a second planner or
+retailer checkout path, and it does not complete sprint 4's email verification
+and cross-device continuation audit.
+
+`shop_builder_edited` records aggregate action/count metadata, and
+`landing_agent_started` identifies the builder, selected count and landing path.
+No product query, shopping text, budget value or household detail is included
+in those events. The URL, title, canonical, H1 and public price evidence remain;
+the page adds useful crawlable comparison guidance and related links. ISR is
+30 minutes, consistent with the weekly-shop page. No mapping, schema or retailer
+job is changed, and no ranking or registration uplift is claimed.
+
+Focused validation passes 15 tests covering identity/price truth, canonical-ID
+separation, quantities, request scope, bounded search and draft expiry/restore.
+The full local suite passes 306 tests across 46 files; TypeScript and changed-file
+lint pass. Release CI, preview interaction and
+production confirmation remain release gates and will be recorded on the PR.

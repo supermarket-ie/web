@@ -575,7 +575,7 @@ function ShoppingAgentInner({
     if (landingPromptHandled.current || busy) return;
     const params = new URLSearchParams(window.location.search);
     const archivedConversationId = params.get('resume_conversation')?.trim();
-    const draft = params.get('agent_draft') === 'weekly-shop' ? takeAgentLandingHandoff() : null;
+    const draft = ['weekly-shop', 'shop-builder'].includes(params.get('agent_draft') ?? '') ? takeAgentLandingHandoff() : null;
     const requestedPrompt = draft?.prompt ?? params.get('agent_prompt')?.trim();
     const prompt = archivedConversationId
       ? archivedConversationResumePrompt(archivedConversationId, requestedPrompt)
