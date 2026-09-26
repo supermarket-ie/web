@@ -12,6 +12,11 @@ const securityHeaders = [
 const IS_STAGING = (process.env.NEXT_PUBLIC_BASE_URL ?? '').includes('staging');
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    // Keep the unexpected /contact landing traffic measurable while the
+    // contact form moves to a distinct URL. This is reversible after review.
+    return [{ source: '/contact', destination: '/?entry=contact', permanent: false }];
+  },
   async headers() {
     const headers = [
       {

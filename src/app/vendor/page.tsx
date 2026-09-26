@@ -205,7 +205,7 @@ export default function VendorLandingPage() {
           </Link>
           <p className="text-sm mt-4" style={{ color: 'rgba(249,246,245,0.4)' }}>
             Questions?{' '}
-            <Link href="/contact" className="underline hover:opacity-80" style={{ color: 'var(--primary-container)' }}>
+            <Link href="/contact-us" className="underline hover:opacity-80" style={{ color: 'var(--primary-container)' }}>
               Get in touch
             </Link>
           </p>

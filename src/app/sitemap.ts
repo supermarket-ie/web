@@ -110,6 +110,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // /api/products removed — JSON API endpoints should not be in the sitemap
     { url: `${BASE_URL}/privacy`, changeFrequency: 'yearly' as const, priority: 0.3 },
     { url: `${BASE_URL}/terms`, changeFrequency: 'yearly' as const, priority: 0.3 },
+    { url: `${BASE_URL}/contact-us`, changeFrequency: 'yearly' as const, priority: 0.3 },
 
     // Product pages — server-rendered with live public prices (/browse/[slug])
     // Source: store_products with url_status=resolved in all 3 main stores
