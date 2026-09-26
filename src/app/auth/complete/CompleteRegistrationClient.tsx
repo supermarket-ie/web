@@ -23,9 +23,21 @@ export default function CompleteRegistrationClient({
       familySize,
       expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
     });
-    if (isNewRegistration) trackVerifiedSignupInGoogle();
-    router.replace('/');
-    router.refresh();
+    let navigated = false;
+    const navigate = () => {
+      if (navigated) return;
+      navigated = true;
+      router.replace('/');
+      router.refresh();
+    };
+    if (isNewRegistration) {
+      // The completion event is sent from this short-lived redirect page.
+      // Give the tag a bounded chance to process it before navigation.
+      const fallback = window.setTimeout(navigate, 1200);
+      trackVerifiedSignupInGoogle(() => { window.clearTimeout(fallback); navigate(); });
+    } else {
+      navigate();
+    }
   }, [email, familySize, isNewRegistration, router]);
 
   return <main className="flex min-h-screen items-center justify-center bg-[#F9F6F5] text-[#1D2324]">Confirming your account…</main>;

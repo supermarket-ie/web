@@ -60,14 +60,19 @@ export function trackEvent(
   }).catch(() => {}); // Swallow errors - analytics should never break the app
 }
 
-export function trackVerifiedSignupInGoogle() {
-  if (typeof window === 'undefined') return;
-  window.gtag?.('event', 'signup_completed', {
+export function trackVerifiedSignupInGoogle(onComplete: () => void) {
+  if (typeof window === 'undefined' || !window.gtag) {
+    onComplete();
+    return;
+  }
+  window.gtag?.('event', 'sign_up', { method: 'email' });
+  window.gtag('event', 'signup_completed', {
     method: 'email',
     flow: 'verified_email_continuation',
     verified: true,
+    event_callback: onComplete,
+    event_timeout: 1000,
   });
-  window.gtag?.('event', 'sign_up', { method: 'email' });
 }
 
 export function trackEventOnce(

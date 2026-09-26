@@ -25,12 +25,15 @@ export async function GET(request: Request) {
     const previous = { startDate: '28daysAgo', endDate: '15daysAgo' };
     const metrics = ['activeUsers', 'newUsers', 'sessions', 'engagedSessions', 'screenPageViews', 'keyEvents']
       .map(name => ({ name }));
-    const [totals, daily, sources, landings, events] = await Promise.all([
+    const contactPage = { filter: { fieldName: 'landingPagePlusQueryString', stringFilter: { matchType: 'EXACT' as const, value: '/contact' } } };
+    const [totals, daily, sources, landings, events, contactDaily, contactSources] = await Promise.all([
       runGoogleAnalyticsReport({ dateRanges: [current, previous], metrics }),
       runGoogleAnalyticsReport({ dateRanges: [{ startDate: '28daysAgo', endDate: 'yesterday' }], dimensions: [{ name: 'date' }], metrics, orderBys: [{ dimension: { dimensionName: 'date' } }], limit: 30 }),
       runGoogleAnalyticsReport({ dateRanges: [current], dimensions: [{ name: 'sessionSourceMedium' }], metrics: [{ name: 'sessions' }, { name: 'activeUsers' }], orderBys: [{ desc: true, metric: { metricName: 'sessions' } }], limit: 15 }),
       runGoogleAnalyticsReport({ dateRanges: [current], dimensions: [{ name: 'landingPagePlusQueryString' }], metrics: [{ name: 'sessions' }, { name: 'activeUsers' }], orderBys: [{ desc: true, metric: { metricName: 'sessions' } }], limit: 15 }),
       runGoogleAnalyticsReport({ dateRanges: [current], dimensions: [{ name: 'eventName' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], orderBys: [{ desc: true, metric: { metricName: 'eventCount' } }], limit: 40 }),
+      runGoogleAnalyticsReport({ dateRanges: [{ startDate: '28daysAgo', endDate: 'yesterday' }], dimensions: [{ name: 'date' }, { name: 'landingPagePlusQueryString' }], metrics: [{ name: 'sessions' }, { name: 'engagedSessions' }], dimensionFilter: contactPage, orderBys: [{ dimension: { dimensionName: 'date' } }], limit: 30 }),
+      runGoogleAnalyticsReport({ dateRanges: [current], dimensions: [{ name: 'landingPagePlusQueryString' }, { name: 'sessionSourceMedium' }], metrics: [{ name: 'sessions' }, { name: 'engagedSessions' }], dimensionFilter: contactPage, orderBys: [{ desc: true, metric: { metricName: 'sessions' } }], limit: 20 }),
     ]);
 
     return Response.json({
@@ -41,6 +44,8 @@ export async function GET(request: Request) {
       sources: rows(sources),
       landings: rows(landings),
       events: rows(events),
+      contact_daily: rows(contactDaily),
+      contact_sources: rows(contactSources),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[analytics-traffic-report]', error instanceof Error ? error.message : error);

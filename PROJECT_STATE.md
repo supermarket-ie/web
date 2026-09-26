@@ -1932,7 +1932,7 @@ All prior mappings and evidence decisions remain auditable. Other candidates
 remain unresolved where brand, type, variant, formulation, measure or pack
 identity is not exact. No Pepesto credit was spent and no schedule was added.
 
-## 62. On-demand private GA4 traffic report — 26 September 2026 (pending release)
+## 62. On-demand private GA4 traffic report — 26 September 2026
 
 The production service-account connection in `src/lib/google-analytics.ts`
 remains configured in Vercel. The August traffic assessment used a temporary
@@ -1940,7 +1940,7 @@ public endpoint and cron that were removed after use; there was no surviving
 on-demand report route. Do not assume the GA4 connector itself is an invocable
 report without a deployed entry point.
 
-The proposed read-only operation `[ops] analytics traffic report` uses the
+The deployed read-only operation `[ops] analytics traffic report` uses the
 existing owner-authored GitHub issue dispatcher and a `CRON_SECRET`-protected
 route. It compares the last 14 complete GA4 property days with the preceding
 14 days and returns daily activity, source/medium, landing pages and event
@@ -1949,5 +1949,34 @@ the public dispatcher returns only status and dispatch ID for this operation,
 including idempotent replays. The operation sends no personal or credential
 data to public logs. After deployment, create a fresh owner-authored issue with
 that exact title, call `/api/ops/dispatch?issue=<number>`, and read its private
-response through the database. Verify the actual production report before
-claiming current GA4 traffic figures.
+response through the database. PR #219 was merged as `68ca948`, the Vercel
+production deployment reached READY and issue #220 ran successfully. The
+private report is in `ops_manual_dispatches` dispatch
+`4d8632d2-52e5-4d05-838a-b651a8ecc91c`.
+
+For 12–25 September, GA4 counted 1,241 sessions and 1,109 new users, versus
+668 sessions and 580 new users in the preceding 14 days. The `/contact`
+landing page accounts for 538 sessions, the comparison landing page 138 and
+home 99. GA4 reported 68 signup prompt views and six `signup_started` events;
+`keyEvents` was zero. The database has no new subscriber from 19–25 September;
+two signup verification emails were sent on 20 and 21 September with no
+signup-source verification link open. A controlled registration on 26
+September did receive the email and completed the protected session. The
+Supabase egress quota outage on 22–23 September is not a complete explanation
+for the earlier registration stop. GA4's client completion event is missing
+despite server-confirmed registrations, so use `subscribers` and
+`agent_events` as the registration source of truth until GA4 is verified.
+
+## 63. Registration funnel recovery — 26 September 2026 (pending release)
+
+The `/contact` traffic spike must be broken down by day and source before
+attributing it to qualified household demand. Extend the private report with
+those two breakdowns; continue to keep the payload private. The signup
+confirmation page currently queues a GA4 event and redirects immediately.
+Initialize its tag queue before hydration and give the event callback a
+bounded 1.2 seconds before redirect. This improves client delivery but is not
+a substitute for a verified server-side conversion record. The email link
+handoff is lengthened from 15 to 30 minutes with consistent email and UI
+copy, a prompt to check Updates/spam and an explicit retry option. Existing
+rate limits remain in place. Verify production behavior and fresh analytics
+after deployment before declaring GA4 conversion reporting repaired.
