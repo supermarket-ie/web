@@ -1967,16 +1967,26 @@ for the earlier registration stop. GA4's client completion event is missing
 despite server-confirmed registrations, so use `subscribers` and
 `agent_events` as the registration source of truth until GA4 is verified.
 
-## 63. Registration funnel recovery — 26 September 2026 (pending release)
+## 63. Registration funnel recovery — 26 September 2026
 
-The `/contact` traffic spike must be broken down by day and source before
-attributing it to qualified household demand. Extend the private report with
-those two breakdowns; continue to keep the payload private. The signup
-confirmation page currently queues a GA4 event and redirects immediately.
-Initialize its tag queue before hydration and give the event callback a
-bounded 1.2 seconds before redirect. This improves client delivery but is not
-a substitute for a verified server-side conversion record. The email link
-handoff is lengthened from 15 to 30 minutes with consistent email and UI
-copy, a prompt to check Updates/spam and an explicit retry option. Existing
-rate limits remain in place. Verify production behavior and fresh analytics
-after deployment before declaring GA4 conversion reporting repaired.
+PR #221, merged as `fe96006`, extended the private report with `/contact`
+daily and source breakdowns. The production deployment reached READY and the
+second owner-authorized dispatch through issue #220 succeeded as
+`fc88f227-1af9-4e2a-bf56-218d8ad76c57`. All 538 `/contact` landing
+sessions in the 12–25 September report were classified as `(direct) / (none)`;
+184 were engaged sessions. The surge begins on 17 September (40 sessions),
+then 91 on 18 September and 57–76 a day on several subsequent days. This is
+not evidence of qualified household interest, but GA4 alone cannot establish
+whether visits were automated. Do not add a shopper signup prompt to the
+partnership/contact page on this evidence alone.
+
+The release initializes the GA4 tag queue before hydration and gives the
+verified signup completion event callback up to 1.2 seconds before redirect.
+This improves client delivery but is not a substitute for a verified
+server-side conversion record. The email link is valid for 30 minutes rather
+than 15, with consistent email and UI copy, a prompt to check Updates/spam
+and an explicit retry option. Existing rate limits remain in place. The
+production sign-in page returned HTTP 200 and the protected analytics route
+returned HTTP 401 without credentials. A fresh real-user signup and GA4
+completion event have not yet been observed after the release; continue using
+`subscribers` and `agent_events` as the registration source of truth.
