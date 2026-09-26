@@ -2007,7 +2007,7 @@ canonical and footer link. Keep the redirect reversible and compare those
 landing sessions with agent starts and verified registrations before treating
 the traffic as qualified demand.
 
-## 65. Immediate acquisition and signup improvements — 26 September 2026 (pending release)
+## 65. Immediate acquisition and signup improvements — 26 September 2026
 
 The 14-day GA4 increase of 573 sessions included 536 additional `/contact`
 landings compared with the preceding 14 days. Excluding that page leaves 703
@@ -2024,8 +2024,14 @@ visitor's first agent answer available before the email gate. For signup
 emails, distinguish the subject and message from ordinary sign-in, making the
 saved conversation and next step explicit. Observe subsequent prompt-to-email,
 email-to-verification and verified-subscriber counts before claiming uplift.
+PR #225 merged as `0d97777`; CI and preview passed and the production
+deployment reached READY. The private dispatch above returned HTTP 200.
+Its new `organic_landings` list has 126 Google organic sessions on the main
+comparison page, 40 on home and a long tail of product pages. The new
+`redirected_contact_events` list was empty on the same partial day; that is
+not yet an outcome measure. Preview showed the comparison-page task buttons.
 
-## 66. Product search handoff — 26 September 2026 (pending release)
+## 66. Product search handoff — 26 September 2026
 
 The expanded private GA4 report ran successfully after PR #225 as dispatch
 `987c7be5-a7c5-4bb2-b9ca-5e7b9d3cddbf`. In the last 14 completed days,
@@ -2037,4 +2043,7 @@ the plain homepage, losing the viewed product. Carry the product and its
 landing path into the agent prompt, and offer one-tap add, alternative and
 watch tasks in the existing product agent card. This changes the journey for
 existing indexed product pages; subsequent agent starts and verified signups
-still need measurement before claiming an uplift.
+still need measurement before claiming an uplift. PR #226 merged as `aca3676`
+after CI and preview passed. The production deployment reached READY, and
+`/browse/chicken-mince` rendered the three tasks and a price-panel link whose
+agent prompt includes `Chicken Mince` and the product landing path.
