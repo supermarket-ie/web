@@ -1931,3 +1931,23 @@ Pepesto observation.
 All prior mappings and evidence decisions remain auditable. Other candidates
 remain unresolved where brand, type, variant, formulation, measure or pack
 identity is not exact. No Pepesto credit was spent and no schedule was added.
+
+## 62. On-demand private GA4 traffic report — 26 September 2026 (pending release)
+
+The production service-account connection in `src/lib/google-analytics.ts`
+remains configured in Vercel. The August traffic assessment used a temporary
+public endpoint and cron that were removed after use; there was no surviving
+on-demand report route. Do not assume the GA4 connector itself is an invocable
+report without a deployed entry point.
+
+The proposed read-only operation `[ops] analytics traffic report` uses the
+existing owner-authored GitHub issue dispatcher and a `CRON_SECRET`-protected
+route. It compares the last 14 complete GA4 property days with the preceding
+14 days and returns daily activity, source/medium, landing pages and event
+counts. The response is stored in the private `ops_manual_dispatches` table;
+the public dispatcher returns only status and dispatch ID for this operation,
+including idempotent replays. The operation sends no personal or credential
+data to public logs. After deployment, create a fresh owner-authored issue with
+that exact title, call `/api/ops/dispatch?issue=<number>`, and read its private
+response through the database. Verify the actual production report before
+claiming current GA4 traffic figures.
