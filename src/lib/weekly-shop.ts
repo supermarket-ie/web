@@ -81,10 +81,10 @@ export function weeklyShopPrompt(input: {
   ];
   if (input.useExample) {
     const selected = input.items.filter(item => input.quantities[item.id] > 0);
-    lines.push('Use these selected products and quantities as my starting list. Quantities are packs or individual items as named; fill out the rest of the week around my needs:');
-    lines.push(...selected.map(item => `${input.quantities[item.id]} × ${item.name} (catalogue ID ${item.id})`));
+    lines.push('Start with these products (quantities are packs or individual items as named):');
+    lines.push(...selected.map(item => `${input.quantities[item.id]} × ${item.name}`));
   }
-  if (input.needs.trim()) lines.push(`My shopping list, meals, dietary needs or things I already have: ${input.needs.trim()}`);
-  lines.push('Show a proposed household shop with quantities, current matched prices and explicit missing prices. State assumptions. Do not count missing prices as zero or claim an incomplete retailer subtotal is a complete weekly cost.');
+  if (input.needs.trim()) lines.push(`Other details: ${input.needs.trim()}`);
+  lines.push('Fill out the rest of the week around my needs. Prepare a first draft with quantities and current prices where available, flag anything you cannot price, and state any assumptions.');
   return lines.join('\n');
 }

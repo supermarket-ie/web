@@ -39,7 +39,8 @@ describe('weekly-shop cost truth', () => {
     const prompt = weeklyShopPrompt({ adults: 2, children: 2, budget: '120', needs: 'School lunches; already have pasta.', useExample: true, items, quantities: { milk: 3, bread: 0 } });
     expect(prompt).toContain('2 adults and 2 children');
     expect(prompt).toContain('€120');
-    expect(prompt).toContain('3 × Milk 2L (catalogue ID milk)');
+    expect(prompt).toContain('3 × Milk 2L');
+    expect(prompt).not.toContain('catalogue ID');
     expect(prompt).not.toContain('Bread 800g');
     expect(prompt).not.toContain('2.25');
     expect(prompt).toContain('already have pasta');

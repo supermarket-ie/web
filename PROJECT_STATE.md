@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 20 September 2026
+**Last updated:** 26 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -2105,6 +2105,22 @@ remain unverified. Track subsequent `landing_agent_started` and `agent_started`
 with this landing path, then server-confirmed registrations in `agent_events`;
 GA4's completion-event limitation remains as recorded in section 63.
 
-Local regression tests, the behavioural gate, TypeScript and lint were checked;
-release CI, deployed browser verification and production status are recorded
-below once completed.
+PR #229's initial commit `77c5595` passed release CI (build, tests, behavioural
+gate and lint), and its Vercel preview reached READY. TypeScript also passed
+locally. Preview HTTP 200 and server HTML contained the public prices, coverage,
+editable quantities and guide. Default subtotals were Tesco €16.79 (8/17),
+Dunnes €33.97 (11/17) and SuperValu €41.52 (14/17). Browser quantity/removal
+changes recalculated correctly. A 2-adult/1-child/€100 request preserved the
+selected quantities and existing-supplies notes, cleared the handoff URL,
+produced structured household shops and reached the existing save/signup form.
+The server recorded `agent_started` against this landing path. No signup email
+was sent and no new registration was created during this check.
+
+The completed agent response took several minutes. It also exposed pre-existing
+catalogue/agent quality issues: a fresh-banana request matched a baby snack,
+the prose flagged that mismatch while the structured proposal still included
+it, and two successive proposal versions remained visible. These are separate
+follow-ups; this page fix does not claim to repair catalogue matching or agent
+response speed. The visible handoff text now uses product names and quantities
+without exposing internal catalogue IDs. Production verification remains a
+release gate; a READY preview alone is not proof of a successful release.
