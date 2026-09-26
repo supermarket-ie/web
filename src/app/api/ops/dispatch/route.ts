@@ -14,9 +14,10 @@ type GitHubIssue = {
   user?: { login?: string | null } | null;
 };
 
-type Operation = { name: string; target: string };
+type Operation = { name: string; target: string; privateResult?: boolean };
 
 const OPERATIONS: Record<string, Operation> = {
+  '[ops] analytics traffic report': { name: 'analytics-traffic-report', target: '/api/ops/analytics-traffic-report', privateResult: true },
   '[ops] dunnes alternative canary': { name: 'dunnes-alternative-canary', target: '/api/ops/dunnes-alternative-canary?limit=30' },
   '[ops] dunnes usage-ranked discovery': { name: 'dunnes-usage-ranked-discovery', target: '/api/workers/dunnes-discovery-trigger?limit=250&batch_size=1&stagger_seconds=2' },
   '[ops] dunnes discovery recovery': { name: 'dunnes-discovery-recovery', target: '/api/workers/dunnes-discovery-recover' },
@@ -80,7 +81,10 @@ export async function GET(request: Request) {
   const dispatchKey = createHash('sha256').update(`${issue.id}:${issue.updated_at}:${operation.name}`).digest('hex');
   const { data: existing, error: existingError } = await supabaseAdmin.from('ops_manual_dispatches').select('id, status, response, created_at, completed_at').eq('dispatch_key', dispatchKey).maybeSingle();
   if (existingError) return Response.json({ error: existingError.message }, { status: 500 });
-  if (existing) return Response.json({ operation: operation.name, issue_number: issueNumber, already_dispatched: true, dispatch: existing });
+  if (existing) return Response.json({
+    operation: operation.name, issue_number: issueNumber, already_dispatched: true,
+    dispatch: operation.privateResult ? { id: existing.id, status: existing.status, completed_at: existing.completed_at } : existing,
+  });
 
   const { data: dispatch, error: insertError } = await supabaseAdmin.from('ops_manual_dispatches').insert({ dispatch_key: dispatchKey, issue_number: issueNumber, issue_updated_at: issue.updated_at, operation: operation.name, status: 'running' }).select('id').single();
   if (insertError) {
@@ -99,5 +103,8 @@ export async function GET(request: Request) {
   } catch (error) { payload = { error: error instanceof Error ? error.message : String(error) }; }
 
   await supabaseAdmin.from('ops_manual_dispatches').update({ status, response: { target_status: targetStatus, payload }, completed_at: new Date().toISOString() }).eq('id', dispatch.id);
-  return Response.json({ operation: operation.name, issue_number: issueNumber, dispatch_id: dispatch.id, target_status: targetStatus, result: payload }, { status: status === 'success' ? 200 : 502 });
+  return Response.json({
+    operation: operation.name, issue_number: issueNumber, dispatch_id: dispatch.id, target_status: targetStatus,
+    ...(operation.privateResult ? {} : { result: payload }),
+  }, { status: status === 'success' ? 200 : 502 });
 }
