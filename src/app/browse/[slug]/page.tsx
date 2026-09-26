@@ -236,7 +236,7 @@ function NutritionTable({ n }: { n: { calories_per_100: number | null; protein_p
 
 // ── Price comparison table (server-rendered, always public) ───────────────────
 
-function PriceTable({ prices, productName, slug }: { prices: PriceRow[]; productName: string; slug: string }) {
+function PriceTable({ prices, productName }: { prices: PriceRow[]; productName: string }) {
   if (prices.length === 0) return null;
   const cheapest = prices[0];
 
@@ -291,9 +291,9 @@ function PriceTable({ prices, productName, slug }: { prices: PriceRow[]; product
           Building your weekly shop?
         </p>
         <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.8)' }}>
-          Ask your agent to include {productName} while it helps prepare the rest of your household shop.
+          Our AI planner adds {productName} and everything else you need — then picks the cheapest store for your full basket.
         </p>
-        <Link href={`/?agent_prompt=${encodeURIComponent(`Add ${productName} to my household shop`)}&agent_landing=${encodeURIComponent(`/browse/${slug}`)}`}
+        <Link href="/"
           className="inline-block px-4 py-2 rounded-lg text-sm font-bold transition-opacity hover:opacity-90"
           style={{ background: '#6BFE9C', color: '#003300' }}>
           Plan my weekly shop →
@@ -365,11 +365,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             title={`What would you like to do with ${product.canonical_name}?`}
             description="Ask for an alternative, check whether it suits a preference, add it to a shop or have the agent watch it for a useful change."
             prompt={`Help me choose and use ${product.canonical_name} in my household shop`}
-            suggestions={[
-              { label: 'Add to my shop', prompt: `Add ${product.canonical_name} to my household shop` },
-              { label: 'Find an alternative', prompt: `Find an alternative to ${product.canonical_name} for my shop` },
-              { label: 'Watch this product', prompt: `Watch ${product.canonical_name} for a useful change` },
-            ]}
           />
         </div>
 
@@ -380,7 +375,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         )}
 
         {/* Live price comparison — always public, server-rendered */}
-        <PriceTable prices={prices} productName={product.canonical_name} slug={slug} />
+        <PriceTable prices={prices} productName={product.canonical_name} />
 
         {/* Available at */}
         {stores.length > 0 && (

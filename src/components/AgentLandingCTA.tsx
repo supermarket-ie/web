@@ -10,7 +10,6 @@ type AgentLandingCTAProps = {
   description: string;
   prompt: string;
   context: 'comparison' | 'deals' | 'category' | 'product' | 'article';
-  suggestions?: Array<{ label: string; prompt: string }>;
 };
 
 export function AgentLandingCTA({
@@ -19,17 +18,16 @@ export function AgentLandingCTA({
   description,
   prompt,
   context,
-  suggestions = [],
 }: AgentLandingCTAProps) {
   const [request, setRequest] = useState(prompt);
 
-  function startAgent(value: string, action: 'typed' | 'suggestion') {
-    const nextRequest = value.trim();
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextRequest = request.trim();
     if (!nextRequest) return;
 
     trackEvent('landing_agent_started', {
       context,
-      action,
       landing_path: window.location.pathname,
     });
     const params = new URLSearchParams({
@@ -37,11 +35,6 @@ export function AgentLandingCTA({
       agent_landing: window.location.pathname,
     });
     window.location.assign(`/?${params.toString()}`);
-  }
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    startAgent(request, 'typed');
   }
 
   return (
@@ -72,16 +65,6 @@ export function AgentLandingCTA({
           Ask the agent <ArrowRight className="size-4" />
         </button>
       </form>
-      {suggestions.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2" aria-label="Suggested shopping tasks">
-          {suggestions.map(suggestion => (
-            <button key={suggestion.label} type="button" onClick={() => startAgent(suggestion.prompt, 'suggestion')}
-              className="rounded-full border border-[#dce9df] bg-[#f5faf6] px-3.5 py-2 text-xs font-semibold text-[#245d38] transition hover:bg-[#e7f5eb]">
-              {suggestion.label} →
-            </button>
-          ))}
-        </div>
-      )}
       <p className="mt-3 text-[11px] text-[#8b958e]">Start without signing up. Register only when you want the agent to remember, save or monitor something.</p>
       </div>
     </section>
