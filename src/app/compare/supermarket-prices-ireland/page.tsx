@@ -145,6 +145,11 @@ export default async function ComparePage() {
             title="Tell us what your household actually needs"
             description="A useful shop depends on pack sizes, preferences, meals, budget and what is worth buying where. Start with your real request and let the agent use the price data in context."
             prompt="Help me prepare this week’s household shop"
+            suggestions={[
+              { label: 'Plan my weekly shop', prompt: 'Help me prepare this week’s household shop' },
+              { label: 'Shop to a budget', prompt: 'Help me plan a weekly household shop within my budget' },
+              { label: 'Plan a few dinners', prompt: 'Help me plan four dinners and the ingredients for my shop' },
+            ]}
           />
         </div>
 

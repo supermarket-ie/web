@@ -2006,3 +2006,21 @@ marked homepage returns HTTP 200, and `/contact-us` returns HTTP 200 with its
 canonical and footer link. Keep the redirect reversible and compare those
 landing sessions with agent starts and verified registrations before treating
 the traffic as qualified demand.
+
+## 65. Immediate acquisition and signup improvements — 26 September 2026 (pending release)
+
+The 14-day GA4 increase of 573 sessions included 536 additional `/contact`
+landings compared with the preceding 14 days. Excluding that page leaves 703
+sessions versus 666, about 5.6% growth. The next decision needs an organic
+source-to-landing breakdown and a report on events for sessions redirected
+from `/contact` to `/?entry=contact`. Extend only the private on-demand report
+with these aggregate dimensions; the redirect report includes the partial
+current day and must not be compared directly with complete-day totals.
+
+The comparison landing page is a meaningful existing shopper entrance. Offer
+one-tap weekly-shop, budget and dinner tasks alongside its free-form agent
+request, measuring the selected action in `landing_agent_started`. Keep the
+visitor's first agent answer available before the email gate. For signup
+emails, distinguish the subject and message from ordinary sign-in, making the
+saved conversation and next step explicit. Observe subsequent prompt-to-email,
+email-to-verification and verified-subscriber counts before claiming uplift.
