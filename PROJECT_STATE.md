@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 20 September 2026
+**Last updated:** 26 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -2047,3 +2047,80 @@ still need measurement before claiming an uplift. PR #226 merged as `aca3676`
 after CI and preview passed. The production deployment reached READY, and
 `/browse/chicken-mince` rendered the three tasks and a price-panel link whose
 agent prompt includes `Chicken Mince` and the product landing path.
+
+## 67. Growth shortcut rollback — 26 September 2026
+
+At the owner's request, PR #228 reverted PRs #225 and #226. Main and the READY
+production deployment were verified at `c1fb33b` before this work. The added
+comparison/product shortcut buttons, product price-panel handoff, signup copy
+and extra analytics report dimensions were removed. Sections 65–66 describe
+historical work, not the current interface. Registration reliability work in
+PR #221 and the `/contact` redirect in PR #223 remain deployed. No conversion
+uplift was established for the reverted shortcuts.
+
+## 68. Useful weekly-shop landing page — 26 September 2026
+
+The owner approved improving `/cost-of-weekly-shop-ireland` while retaining its
+search intent, public answer and canonical URL. The old page returned HTTP 200
+with a zero-item basket, three €0.00 totals and a false Tesco cheapest label.
+Its shared `getAllLatestPrices()` helper performed one unpaginated PostgREST
+read: the live REST response returned only 1,000 of 2,480 trusted price rows.
+Filtering those truncated rows to products present at all three main retailers
+left none of the fixed 53 basket items. A complete read still would not price
+all 53 products; pagination and honest coverage are separate requirements.
+
+The shared reader now follows deterministically ordered pages until exhausted,
+deduplicates by canonical ID/store, and publishes/caches a result only after
+all pages succeed. Existing dependency retries and the bounded last-known-good
+fallback remain; raw observations are never a fallback. Regression tests cover
+the API cap, shorter server caps, equal names with different IDs and failure
+of a later page.
+
+The landing page retains its URL, weekly-cost title/H1, canonical, crawlable
+content and related links. It now renders a 17-product example with explicit
+quantities, observation dates and actual retailer product names. Quantities can
+be changed or set to zero; displayed subtotals and coverage recalculate in cents.
+Missing prices are not zero, incomplete totals are null, and no blanket cheapest
+retailer claim is made. The example is explicitly not an average household
+spend or a complete weekly meal plan. Some catalogue matches differ in brand or
+specification; their retailer names are exposed rather than advertised as
+identical products. Known ambiguous pack examples such as loose bananas and
+mixed peppers were not chosen for this reference basket. No mappings, prices
+or retailer jobs were mutated by this work.
+
+A household form collects adults, children, optional budget and shopping needs,
+and optionally includes the selected example lines. It enters the existing Eve
+flow, which grounds proposed prices and supports registration to save the shop.
+There is no new planner/model path. A single-use, 30-minute session-storage
+handoff keeps household text out of query strings/referrers/GA page URLs; only
+aggregate entry metadata is tracked. Existing URL-based entry paths remain
+compatible. The page revalidates every 30 minutes rather than 12 hours; each
+render also excludes example observations outside the seven-day boundary.
+
+The available tools do not expose the site's Search Console property or query
+performance. Do not claim a measured ranking baseline or guaranteed SEO uplift.
+The pre-release HTML/metadata and the dated GA4 observations in sections 62–66
+are the available baseline. Search Console query, click and position comparisons
+remain unverified. Track subsequent `landing_agent_started` and `agent_started`
+with this landing path, then server-confirmed registrations in `agent_events`;
+GA4's completion-event limitation remains as recorded in section 63.
+
+PR #229's initial commit `77c5595` passed release CI (build, tests, behavioural
+gate and lint), and its Vercel preview reached READY. TypeScript also passed
+locally. Preview HTTP 200 and server HTML contained the public prices, coverage,
+editable quantities and guide. Default subtotals were Tesco €16.79 (8/17),
+Dunnes €33.97 (11/17) and SuperValu €41.52 (14/17). Browser quantity/removal
+changes recalculated correctly. A 2-adult/1-child/€100 request preserved the
+selected quantities and existing-supplies notes, cleared the handoff URL,
+produced structured household shops and reached the existing save/signup form.
+The server recorded `agent_started` against this landing path. No signup email
+was sent and no new registration was created during this check.
+
+The completed agent response took several minutes. It also exposed pre-existing
+catalogue/agent quality issues: a fresh-banana request matched a baby snack,
+the prose flagged that mismatch while the structured proposal still included
+it, and two successive proposal versions remained visible. These are separate
+follow-ups; this page fix does not claim to repair catalogue matching or agent
+response speed. The visible handoff text now uses product names and quantities
+without exposing internal catalogue IDs. Production verification remains a
+release gate; a READY preview alone is not proof of a successful release.

@@ -71,7 +71,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: BASE_URL, changeFrequency: 'weekly', priority: 1.0 },
     { url: `${BASE_URL}/compare/supermarket-prices-ireland`, lastModified: DATA_FRESHNESS, changeFrequency: 'weekly', priority: 0.9 },
     { url: `${BASE_URL}/deals`, lastModified: DATA_FRESHNESS, changeFrequency: 'weekly', priority: 0.9 },
-    { url: `${BASE_URL}/cost-of-weekly-shop-ireland`, lastModified: DATA_FRESHNESS, changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${BASE_URL}/cost-of-weekly-shop-ireland`, lastModified: new Date('2026-09-26'), changeFrequency: 'weekly', priority: 0.9 },
 
     ...MATCHUP_SLUGS.map(slug => ({
       url: `${BASE_URL}/compare/${slug}`,
