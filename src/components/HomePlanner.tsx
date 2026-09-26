@@ -251,7 +251,8 @@ function InlineEmailSignup({
     return (
       <div>
         <p className="text-sm font-bold text-[#17452a]">Check your email</p>
-        <p className="mt-1 text-xs leading-5 text-[#52705d]">Open the secure link we sent to confirm your email and continue this conversation. It is valid for 15 minutes.</p>
+        <p className="mt-1 text-xs leading-5 text-[#52705d]">Open the secure link we sent to {email.trim()} to continue this conversation. It is valid for 30 minutes. Check your Updates or spam folder if you cannot see it.</p>
+        <button type="button" onClick={() => setStatus('idle')} className="mt-3 text-xs font-semibold text-[#17452a] underline underline-offset-2">Wrong address or no email? Try again</button>
       </div>
     );
   }

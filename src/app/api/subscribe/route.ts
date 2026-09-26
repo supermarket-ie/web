@@ -59,7 +59,7 @@ async function recordEmailFailure(sessionId: string | null, source: 'signup' | '
 function verificationEmail(verificationUrl: string) {
   return {
     subject: 'Confirm your email for Supermarket.ie',
-    text: `Confirm your email to continue with Supermarket.ie:\n\n${verificationUrl}\n\nThis link is valid for 15 minutes. If you did not request it, you can ignore this email.\n\n— supermarket.ie`,
+    text: `Confirm your email to continue with Supermarket.ie:\n\n${verificationUrl}\n\nThis link is valid for 30 minutes. If you did not request it, you can ignore this email.\n\n— supermarket.ie`,
     html: `<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#F6F2EA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#183126;">
@@ -74,7 +74,7 @@ function verificationEmail(verificationUrl: string) {
         </td></tr>
         <tr><td style="background:#FFFFFF;border:1px solid #E8E2D8;border-top:0;border-radius:0 0 22px 22px;padding:30px 32px;">
           <a href="${verificationUrl}" style="display:inline-block;background:#13271D;color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:800;padding:14px 22px;border-radius:999px;">Confirm and continue →</a>
-          <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#8A918C;">This link is valid for 15 minutes. If you did not request it, you can ignore this email.</p>
+          <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#8A918C;">This link is valid for 30 minutes. If you did not request it, you can ignore this email.</p>
         </td></tr>
       </table>
     </td></tr>
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         source,
       },
       SECRET!,
-      { expiresIn: '15m' },
+      { expiresIn: '30m' },
     );
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;

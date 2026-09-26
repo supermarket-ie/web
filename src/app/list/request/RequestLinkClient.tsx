@@ -66,7 +66,8 @@ export default function RequestLinkPage({ expired = false }: { expired?: boolean
           {status === "sent" ? (
             <div className="rounded-xl border border-[#cfe3d5] bg-[#f3faf5] px-4 py-4 text-sm text-[#17452a]">
               <p className="font-bold">Check your email</p>
-              <p className="mt-1 leading-6">Open the secure link we sent to confirm your email and continue. It is valid for 15 minutes.</p>
+              <p className="mt-1 leading-6">Open the secure link we sent to {email.trim()} to continue. It is valid for 30 minutes. Check your Updates or spam folder if you cannot see it.</p>
+              <button type="button" onClick={() => setStatus('idle')} className="mt-3 font-semibold underline underline-offset-2">Wrong address or no email? Try again</button>
             </div>
           ) : <form onSubmit={handleSubmit} className="space-y-4">
             <div>

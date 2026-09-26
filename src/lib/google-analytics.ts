@@ -17,6 +17,9 @@ type AnalyticsReportRequest = {
     dimension?: { dimensionName: string };
     metric?: { metricName: string };
   }>;
+  dimensionFilter?: {
+    filter: { fieldName: string; stringFilter: { matchType: 'EXACT'; value: string } };
+  };
 };
 
 type AnalyticsReport = {
