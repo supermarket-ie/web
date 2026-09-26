@@ -56,11 +56,10 @@ async function recordEmailFailure(sessionId: string | null, source: 'signup' | '
   if (error) console.error('[subscribe] failure analytics insert failed:', error);
 }
 
-function verificationEmail(verificationUrl: string, source: 'signup' | 'sign_in') {
-  const signup = source === 'signup';
+function verificationEmail(verificationUrl: string) {
   return {
-    subject: signup ? 'Continue your Supermarket.ie shop' : 'Your Supermarket.ie sign-in link',
-    text: `${signup ? 'Confirm your email to save this conversation and continue with your household shopping agent.' : 'Use this secure link to sign in to Supermarket.ie.'}\n\n${verificationUrl}\n\nThis link is valid for 30 minutes. If you did not request it, you can ignore this email.\n\n— supermarket.ie`,
+    subject: 'Confirm your email for Supermarket.ie',
+    text: `Confirm your email to continue with Supermarket.ie:\n\n${verificationUrl}\n\nThis link is valid for 30 minutes. If you did not request it, you can ignore this email.\n\n— supermarket.ie`,
     html: `<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#F6F2EA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#183126;">
@@ -70,11 +69,11 @@ function verificationEmail(verificationUrl: string, source: 'signup' | 'sign_in'
         <tr><td style="padding:0 4px 18px;font-size:22px;font-weight:800;color:#173827;">supermarket<span style="color:#0A7A3E;">.ie</span></td></tr>
         <tr><td style="background:#0F6B3B;border-radius:22px 22px 0 0;padding:34px 32px;color:#FFFFFF;">
           <div style="font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#D9F0DE;margin-bottom:10px;">Ireland’s household shopping agent</div>
-          <div style="font-size:30px;line-height:1.15;font-weight:800;">${signup ? 'Keep your household shop' : 'Sign in to Supermarket.ie'}</div>
-          <div style="font-size:16px;line-height:1.6;color:#E7F4EA;margin-top:14px;">${signup ? 'Confirm your email to save this conversation and continue with your shopping agent.' : 'Use the secure link below to access your account.'}</div>
+          <div style="font-size:30px;line-height:1.15;font-weight:800;">Confirm your email</div>
+          <div style="font-size:16px;line-height:1.6;color:#E7F4EA;margin-top:14px;">Use the secure link below to continue and protect your household information.</div>
         </td></tr>
         <tr><td style="background:#FFFFFF;border:1px solid #E8E2D8;border-top:0;border-radius:0 0 22px 22px;padding:30px 32px;">
-          <a href="${verificationUrl}" style="display:inline-block;background:#13271D;color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:800;padding:14px 22px;border-radius:999px;">${signup ? 'Save and continue' : 'Sign in'} →</a>
+          <a href="${verificationUrl}" style="display:inline-block;background:#13271D;color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:800;padding:14px 22px;border-radius:999px;">Confirm and continue →</a>
           <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#8A918C;">This link is valid for 30 minutes. If you did not request it, you can ignore this email.</p>
         </td></tr>
       </table>
@@ -133,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
     const verificationUrl = `${siteUrl}/api/auth/complete-registration?token=${encodeURIComponent(verificationToken)}`;
-    const email = verificationEmail(verificationUrl, source);
+    const email = verificationEmail(verificationUrl);
     const { error } = await resend.emails.send({
       from: 'supermarket.ie <hello@mail.supermarket.ie>',
       to: normalizedEmail,
