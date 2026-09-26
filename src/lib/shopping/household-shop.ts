@@ -8,6 +8,7 @@ import {
   type TrustedCatalogueProduct,
   type TrustedHouseholdShopOfferRow,
 } from './household-shop-contract';
+import { hasConfirmedRequestedPack, hasProductIdentityConflict } from './product-identity';
 
 export type GroundHouseholdShopInput = {
   proposal: unknown;
@@ -34,6 +35,7 @@ function trustedOffer(row: TrustedHouseholdShopOfferRow): HouseholdShopOffer | n
     || price <= 0
     || row.relationship_type !== 'exact'
     || row.freshness_state !== 'fresh'
+    || hasProductIdentityConflict(row.canonical_name, row.store_product_name, row.category)
   ) return null;
 
   const rawWasPrice = row.was_price == null ? null : Number(row.was_price);
@@ -111,6 +113,8 @@ export function groundHouseholdShop(input: GroundHouseholdShopInput): HouseholdS
     const product = item.canonical_product_id ? catalogue.get(item.canonical_product_id) : undefined;
     const offers = product
       ? [...(offersByProduct.get(product.canonical_product_id) ?? [])]
+        .filter(offer => !hasProductIdentityConflict(`${item.display_label} ${item.unit_or_pack_expectation}`, offer.retailer_product_name))
+        .filter(offer => hasConfirmedRequestedPack(`${item.display_label} ${item.unit_or_pack_expectation}`, [product.canonical_name, offer.retailer_product_name]))
         .sort((a, b) => a.current_price - b.current_price)
       : [];
     const selectedOffer = chooseOffer(offers, item.preferred_retailer);

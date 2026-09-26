@@ -39,6 +39,25 @@ const priceRow = (id: string, name: string, price = 2): CataloguePriceRow => ({
 });
 
 describe('resolveHouseholdShopProposal', () => {
+  it('resolves named staple packs without sending each line back to the model', () => {
+    const input = proposal([
+      item('carrots', 'Carrots', '1kg bag'),
+      item('onions', 'Onions', '1kg bag'),
+      item('eggs', 'Free range eggs', 'dozen'),
+    ]);
+    const products = ['Carrots 1kg', 'Onions 1kg', 'Free Range Eggs 12'].map((name, index) => ({
+      canonical_product_id: `product-${index}`, canonical_name: name, category: 'Food',
+    }));
+    const resolved = resolveHouseholdShopProposal(input, products, []);
+    expect(resolved.items.map(row => row.canonical_product_id)).toEqual(['product-0', 'product-1', 'product-2']);
+  });
+
+  it('does not use a display-name match or supplied ID to override the requested pack', () => {
+    const input = proposal([item('carrots', 'Carrots', '500g bag', 'carrots-id')]);
+    const products = [{ canonical_product_id: 'carrots-id', canonical_name: 'Carrots 1kg', category: 'Vegetables' }];
+    expect(resolveHouseholdShopProposal(input, products, [priceRow('carrots-id', 'Carrots 1kg')]).items[0].canonical_product_id).toBeNull();
+  });
+
   it('batch-resolves exact catalogue names even without a live offer', () => {
     const input = proposal([
       item('pitta', 'Pitta Bread 6 Pack', '6-pack'),

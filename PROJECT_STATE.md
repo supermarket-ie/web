@@ -2124,3 +2124,100 @@ follow-ups; this page fix does not claim to repair catalogue matching or agent
 response speed. The visible handoff text now uses product names and quantities
 without exposing internal catalogue IDs. Production verification remains a
 release gate; a READY preview alone is not proof of a successful release.
+
+PR #229 merged as `bf02e779`. Production deployment
+`dpl_DnEQJheu8PgzMRkCqUcJbZC7386X` reached READY on that commit; live HTML and
+browser checks confirmed the public example, editable quantities, coverage and
+household form. The catalogue and agent follow-ups below are separately scoped.
+
+## 69. Household-shop response and product identity — 26 September 2026
+
+The owner approved the follow-up after the weekly-shop journey exposed slow
+responses, a banana/snack mismatch and duplicate proposal cards. Baseline main
+and production were verified at `bf02e779`; Supabase had 2,480 trusted prices
+(Tesco 539, Dunnes 920, SuperValu 1,021). The previous diagnostic guest session
+for two adults and a €100 weekly budget took 121.496 seconds. It made two
+`present_household_shop` calls and 20 individual `resolve_product` calls,
+exhausting the ten-call expensive-tool budget. The two proposals had 9/29 and
+19/29 priced lines. Tool execution itself was under two seconds per proposal;
+five model steps consumed 158,463 cumulative input tokens. The repeated full
+tool results and unnecessary second resolution pass were the main observed
+amplifiers, rather than evidence of a slow database.
+
+Keep the existing Eve runtime and batch resolver. Normalise ordinary pack
+wording (`1kg bag`, `dozen`, `sliced pan`) and prefer clear pack-aware matches
+without relaxing the minimum score or ambiguity gap. Explicit product-type,
+measure, pack and variant contradictions are rejected in catalogue resolution
+and household grounding. These checks catch known material conflicts; their
+absence is not proof that every catalogue mapping is correct. Ambiguous needs
+remain unresolved, missing prices stay missing, and incomplete basket totals
+remain null. The model receives a compact coverage summary through Eve's
+`toModelOutput`; the durable tool result still contains the complete native
+shopping card. Instructions finish after presentation instead of doing one
+lookup per missing line or repeating the basket in prose.
+
+Only the latest completed proposal within each user turn is displayed. Earlier
+turns remain in conversation history, partial/invalid revisions are ignored,
+and autosave waits until the turn finishes. Memoising parsed proposals prevents
+unrelated React renders from aborting/restarting persistence. The registration
+invitation also waits for the completed first answer.
+
+Two exact stored mappings were confirmed wrong: SuperValu SKU `1709524003`
+mapped fresh `Mini Bananas` to Ella's Kitchen banana mini puffs, and Dunnes SKU
+`100750899` mapped `Bananas Loose` to a five-banana organic pack. The guarded,
+reversible SQL in `supabase/operations/2026-09-26-quarantine-banana-mappings.sql`
+preserves each prior mapping in the existing private audit table and invalidates
+only the unchanged erroneous mapping. A transaction dry run returned exactly
+those two rows, both excluded from `latest_prices`, and was rolled back.
+The same transaction was then committed and independently checked: both
+erroneous mappings are absent from `latest_prices`. Trusted row counts are now
+Tesco 539, Dunnes 919 and SuperValu 1,020 (2,478 total). No observation or prior
+mapping was deleted, and no retailer refresh or paid retrieval was triggered.
+
+Local validation passed 288 tests across 44 files, TypeScript and lint. New
+regressions cover banana/snack and pack conflicts, ordinary pack wording,
+latest-proposal selection and compact model output. Preview latency, final
+release checks and production verification remain pending;
+do not claim a measured speed improvement or conversion uplift yet.
+
+PR #230's first preview exposed an additional lifecycle defect: capability
+instructions were selected from `ctx.messages` at Eve `turn.started`, before
+the current delivery entered history. The first request therefore received
+only the fallback product module, and the repeat-lookup loop persisted despite
+the new household guidance. Eve 0.39.0 documents this ordering. Capability
+selection now runs in the supported HTTP channel `onMessage` hook against the
+actual incoming text/parts, returning application-owned guidance as request
+context and preserving `defaultEveAuth`. The stable core and protected-tool
+checks are unchanged. Instructions remain modular; historical instructions
+are no longer mistakenly treated as the current turn's intent. Regression
+checks cover the first weekly-shop delivery and structured text input.
+
+The next preview (`57d9f3e`) finished the same request in 79.238 seconds, with
+one household-shop call and no individual product lookups (three model steps,
+41,818 cumulative input tokens). It proposed 30 lines with 18 priced; this is
+a single diagnostic comparison, not a latency SLA or conversion result.
+It also exposed an unconfirmed six-pack being assigned a single-item price.
+Grounding now requires positive evidence for a requested pack count/measure,
+rejects multipack-versus-loose contradictions in both directions and recognises
+bare egg counts. Unknown packs stay unpriced. The input schema explains the
+required unresolved-need field and distinguishes purchase quantity from the
+contents of one unit. Compact output labels incomplete budget assessments as
+unconfirmed. The four-item browser check reached one native card and the
+registration invitation; no signup email or account was created.
+
+The final pack regressions bring local validation to 294 tests across 44 files;
+TypeScript and lint pass. Final preview and production checks remain release
+gates. Signed-in autosave selection is covered by regression tests; the live
+checks use guest sessions and do not create an account solely for testing.
+
+Commit `c3472de` passed release CI and reached a READY preview. The final
+diagnostic asked one permitted dietary clarification, then completed the shop
+in 75.056 seconds after the answer: one `present_household_shop` call, no
+individual lookups, 36 proposed lines, 16 priced and €45.67 explicitly described
+as a partial subtotal. Bananas were six individual units; unconfirmed salmon
+packs remained unpriced. This is not directly comparable to the one-turn
+baseline because it used a clarification. Validation also exposed the wording
+`one 2L bottle` against a six-bottle offer; the final guard recognises explicit
+single containers and written units such as `2 litre`, with regression cases.
+Production verification remains a release gate and will be recorded on PR #230.
+Final local validation passes 296 tests, TypeScript and lint.

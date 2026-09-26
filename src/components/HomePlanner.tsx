@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, type ComponentType } from 'react';
-import { useEveAgent, type EveMessage } from 'eve/react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEveAgent } from 'eve/react';
 import {
   ArrowUp,
   Bell,
@@ -28,7 +28,8 @@ import {
   type SignupPrompt,
 } from '@/lib/agent-suggestions';
 import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
-import { HouseholdShopCard, householdShopFromPart } from '@/components/HouseholdShopCard';
+import { HouseholdShopCard } from '@/components/HouseholdShopCard';
+import { visibleHouseholdShops } from '@/lib/household-shop-messages';
 import { archivedConversationResumePrompt } from '@/lib/conversation-migration';
 import { takeAgentLandingHandoff } from '@/lib/agent-landing-handoff';
 import { agentMessageBlocks } from '@/lib/agent-message-format';
@@ -126,13 +127,6 @@ function messageText(message: { parts?: readonly { type: string; text?: string }
     .filter(part => part.type === 'text' && typeof part.text === 'string')
     .map(part => part.text ?? '')
     .join('');
-}
-
-function householdShops(message: EveMessage) {
-  return message.parts.flatMap(part => {
-    const shop = householdShopFromPart(part);
-    return shop ? [shop] : [];
-  });
 }
 
 function FormattedAgentText({ text }: { text: string }) {
@@ -411,7 +405,8 @@ function ShoppingAgentInner({
       return content ? [{ role: message.role, content }] : [];
     });
   }, [messages]);
-  const latestStructuredShop = [...messages].reverse().flatMap(householdShops)[0] ?? null;
+  const displayedShops = useMemo(() => visibleHouseholdShops(messages), [messages]);
+  const latestStructuredShop = [...displayedShops.values()].at(-1) ?? null;
   const guestTurns = messages.filter(message => message.role === 'user').length;
   const showGuestGate = isGuest && (guestTurns >= 2 || messages.some(message =>
     message.role === 'user' && isPersistentGuestRequest(messageText(message))
@@ -422,7 +417,7 @@ function ShoppingAgentInner({
   const firstRequestText = firstUserRequest ? messageText(firstUserRequest) : '';
   const firstRequestIntent = inferSuggestionIntent(firstRequestText);
   const signupPrompt = signupPromptFor(firstRequestText);
-  const hasVisibleAnswer = messages.some(message =>
+  const hasVisibleAnswer = Boolean(latestStructuredShop) || messages.some(message =>
     message.role === 'assistant' && Boolean(visibleAgentText(messageText(message)))
   );
   const lastAssistantMessage = [...messages].reverse().find(message => message.role === 'assistant');
@@ -432,7 +427,7 @@ function ShoppingAgentInner({
     && lastAssistantMessage
     && isGuestClarification(messageText(lastAssistantMessage))
   );
-  const showSignupPrompt = isGuest && guestTurns === 1 && hasVisibleAnswer && !awaitingGuestClarification && !showGuestGate;
+  const showSignupPrompt = isGuest && !busy && guestTurns === 1 && hasVisibleAnswer && !awaitingGuestClarification && !showGuestGate;
   const liveSuggestions = input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
@@ -536,7 +531,7 @@ function ShoppingAgentInner({
   }, [firstRequestIntent, showGuestGate, showSignupPrompt]);
 
   useEffect(() => {
-    if (isGuest || !latestStructuredShop) return;
+    if (isGuest || busy || !latestStructuredShop) return;
     const saveKey = `sm_saved_household_shop:${latestStructuredShop.provenance.generated_at}`;
     if (localStorage.getItem(saveKey)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reflect the external persistence marker
@@ -560,7 +555,7 @@ function ShoppingAgentInner({
       if (!(error instanceof DOMException && error.name === 'AbortError')) setStructuredSave('error');
     });
     return () => controller.abort();
-  }, [isGuest, latestStructuredShop]);
+  }, [isGuest, busy, latestStructuredShop]);
 
   async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
@@ -695,7 +690,8 @@ function ShoppingAgentInner({
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
         {messages.map(message => {
           const text = messageText(message);
-          const shops = householdShops(message);
+          const currentShop = displayedShops.get(message.id);
+          const shops = currentShop ? [currentShop] : [];
           if (!text && shops.length === 0) return null;
           const isUser = message.role === 'user';
           return (

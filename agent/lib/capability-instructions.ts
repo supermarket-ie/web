@@ -1,5 +1,4 @@
-import { defineDynamic, defineInstructions } from 'eve/instructions';
-import { messageText, selectEveCapabilities, type EveCapability } from '../lib/instruction-routing';
+import { messageText, selectEveCapabilities, type EveCapability } from './instruction-routing';
 
 const CAPABILITY_INSTRUCTIONS: Record<EveCapability, string> = {
   household_shop: `HOUSEHOLD-SHOP PLANNING
@@ -7,6 +6,9 @@ const CAPABILITY_INSTRUCTIONS: Record<EveCapability, string> = {
 - A complete shop needs coherent household/time-period assumptions, practical quantities, meals and staples, plus relevant household consumables. Promotions support the plan; they do not define it.
 - Keep internal mechanics private. Never mention tool limits, lookup budgets or exhausted calls; describe products without confirmed current matches simply as items still to check.
 - Use present_household_shop for a complete/weekly/value-led outcome when exposed. Submit the complete proposed shop directly; its server-side batch resolver owns ordinary product matching. Do not spend individual resolve_product or get_current_price calls on every shop line. Use an individual lookup only for a standalone product question or when one genuinely ambiguous item must be clarified before presentation. Never invent an ID. The tool result owns items, validated prices, promotion truth, totals and coverage; introduce it briefly without duplicating it in prose. It is proposed until a separate save succeeds.
+- Name the product variant and pack you are proposing clearly (for example whole milk 2L rather than milk). State reasonable choices as assumptions when the shopper has not specified them; preserve explicit shopper preferences.
+- Quantity counts packs or individual units. Describe one pack or one unit in unit_or_pack_expectation: six loose bananas means quantity 6 and pack expectation one loose banana. For an unknown catalogue ID, set unresolved_need to the product description.
+- After a successful present_household_shop result, finish this turn with at most three short sentences. The card already shows every line and all price gaps. Do not retry its unresolved lines with individual product lookups, re-present the same shop, or write a second price table. Invite the shopper to refine the draft if needed. Revise it on their next request. Missing prices are excluded from the subtotal, so never call that subtotal the complete cost or declare an incomplete shop within budget.
 - For “usual shop”, use prepare_usual_shop when exposed. Included items are reversible draft actions; suggestions require approval; not_added provenance explains omissions. Guests must receive a labelled sample rather than an invented personal history.`,
   product: `PRODUCT DISCOVERY
 - Generic searches such as milk, bread, butter or toilet roll mean the ordinary staple family. Lead with normal household variants; specialist/flavoured compounds must not outrank them merely because they are cheap or promoted.
@@ -45,12 +47,8 @@ export function instructionsForTurn(text: string) {
   return { selected, content: selected.map(capability => CAPABILITY_INSTRUCTIONS[capability]).join('\n\n') };
 }
 
-export default defineDynamic({
-  events: {
-    'turn.started': (_event, ctx) => {
-      const text = ctx.messages.filter(message => message.role === 'user').slice(-4).map(message => messageText(message.content)).join('\n');
-      const { content } = instructionsForTurn(text);
-      return defineInstructions({ content });
-    },
-  },
-});
+/** Resolve against the incoming delivery. Eve turn.started instruction snapshots
+ * precede that delivery, so history-based routing misses a first user's intent. */
+export function capabilityContextForMessage(message: unknown) {
+  return [instructionsForTurn(messageText(message)).content];
+}

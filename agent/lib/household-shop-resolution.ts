@@ -8,15 +8,29 @@ import type {
   HouseholdShopProposal,
   TrustedCatalogueProduct,
 } from '../../src/lib/shopping/household-shop-contract';
+import { hasProductIdentityConflict } from '../../src/lib/shopping/product-identity';
 
 const MIN_CLEAR_MATCH_SCORE = 18;
 
+export function normaliseHouseholdProductQuery(value: string) {
+  return value.toLowerCase()
+    .replace(/\bdozen\b/g, '12 pack')
+    .replace(/\beggs (\d+)$/g, 'eggs $1 pack')
+    .replace(/\bbeef mince\b/g, 'minced beef')
+    .replace(/\bsliced pan\b/g, 'sliced bread')
+    .replace(/\b(?:bag|pack) of (\d+)\b/g, '$1 pack')
+    .replace(/\b(?:litres?|liters?)\b/g, 'l')
+    .replace(/\b(?:kilograms?)\b/g, 'kg')
+    .replace(/\b(?:grams?)\b/g, 'g')
+    .replace(/\b(\d+(?:\.\d+)?)\s+(kg|g|ml|l)\b/g, '$1$2')
+    .replace(/\b(?:bag|net|bottle|carton|loaf|tin|tub|block)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
 function itemQueries(item: HouseholdShopProposal['items'][number]) {
-  const display = item.display_label.trim();
-  const withPack = `${display} ${item.unit_or_pack_expectation}`.trim();
-  return normaliseCatalogueText(display) === normaliseCatalogueText(withPack)
-    ? [display]
-    : [display, withPack];
+  const display = normaliseHouseholdProductQuery(item.display_label);
+  const withPack = normaliseHouseholdProductQuery(`${item.display_label} ${item.unit_or_pack_expectation}`);
+  return [...new Set([withPack, display])];
 }
 
 function clearResolvedId(query: string, rows: CataloguePriceRow[]) {
@@ -45,7 +59,7 @@ export function resolveHouseholdShopProposal(
   const exactNames = new Map<string, TrustedCatalogueProduct[]>();
 
   for (const product of catalogueProducts) {
-    const key = normaliseCatalogueText(product.canonical_name);
+    const key = normaliseCatalogueText(normaliseHouseholdProductQuery(product.canonical_name));
     const matches = exactNames.get(key) ?? [];
     matches.push(product);
     exactNames.set(key, matches);
@@ -54,13 +68,15 @@ export function resolveHouseholdShopProposal(
   return {
     ...proposal,
     items: proposal.items.map(item => {
-      if (item.canonical_product_id && productsById.has(item.canonical_product_id)) return item;
+      const supplied = item.canonical_product_id ? productsById.get(item.canonical_product_id) : null;
+      if (supplied && !hasProductIdentityConflict(`${item.display_label} ${item.unit_or_pack_expectation}`, supplied.canonical_name)) return item;
 
       const queries = itemQueries(item);
       let resolvedId: string | null = null;
 
       for (const query of queries) {
-        const exact = exactNames.get(normaliseCatalogueText(query)) ?? [];
+        const exact = (exactNames.get(normaliseCatalogueText(query)) ?? []).filter(product =>
+          !hasProductIdentityConflict(`${item.display_label} ${item.unit_or_pack_expectation}`, product.canonical_name));
         if (exact.length === 1) {
           resolvedId = exact[0].canonical_product_id;
           break;
@@ -69,7 +85,8 @@ export function resolveHouseholdShopProposal(
 
       if (!resolvedId) {
         for (const query of queries) {
-          resolvedId = clearResolvedId(query, priceRows);
+          resolvedId = clearResolvedId(query, priceRows.filter(row =>
+            !hasProductIdentityConflict(`${item.display_label} ${item.unit_or_pack_expectation}`, row.canonical_name)));
           if (resolvedId) break;
         }
       }
