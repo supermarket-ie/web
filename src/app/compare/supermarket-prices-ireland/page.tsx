@@ -2,10 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
-import { AgentLandingCTA } from '@/components/AgentLandingCTA';
+import { ShopBuilder } from '@/components/ShopBuilder';
 import { getAllLatestPrices } from '@/lib/price-data';
+import { buildShopCatalogue } from '@/lib/shop-builder-catalogue';
+import { EXAMPLE_WEEKLY_ITEMS } from '@/lib/weekly-shop';
 
-export const revalidate = 43200; // Revalidate every 12 hours
+export const revalidate = 1800;
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
@@ -50,14 +52,13 @@ async function getComparisonData() {
   // paginated the full observation history during static generation and could
   // push Vercel builds over the 60-second page timeout.
   const priceRows = await getAllLatestPrices();
-  if (!priceRows.length) return null;
+  const catalogue = buildShopCatalogue(priceRows);
+  const catalogueById = new Map(catalogue.map(product => [product.id, product]));
+  const suggestions = [0, 3, 6, 10, 11, 16].map(index => catalogueById.get(EXAMPLE_WEEKLY_ITEMS[index].id)).filter(product => product !== undefined);
 
   const byProduct = new Map<string, { category: string; stores: Map<string, number> }>();
-  for (const row of priceRows) {
-    if (!byProduct.has(row.canonical_name)) {
-      byProduct.set(row.canonical_name, { category: row.category ?? 'Other', stores: new Map() });
-    }
-    byProduct.get(row.canonical_name)!.stores.set(row.store, Number(row.price));
+  for (const product of catalogue) {
+    byProduct.set(product.id, { category: product.category, stores: new Map(Object.entries(product.offers).map(([store, offer]) => [store, offer.price])) });
   }
 
   const MAIN_3: StoreKey[] = ['tesco', 'dunnes', 'supervalu'];
@@ -68,9 +69,9 @@ async function getComparisonData() {
 
   const activeStores = MAIN_3;
   const products: EvidenceProduct[] = [];
-  for (const [name, { category, stores }] of byProduct) {
+  for (const [id, { category, stores }] of byProduct) {
     if (!EVIDENCE_CATEGORIES.includes(category)) continue;
-    products.push({ name, category, prices: Object.fromEntries(stores) });
+    products.push({ name: catalogueById.get(id)!.name, category, prices: Object.fromEntries(stores) });
   }
 
   const staplePattern = /milk|bread|butter|egg|chicken|beef|banana|apple|potato|pasta|rice|coffee|tea/i;
@@ -108,14 +109,13 @@ async function getComparisonData() {
     return latest;
   }, null);
 
-  return { featured, moreEvidence, activeStores, latestObservation };
+  return { featured, moreEvidence, activeStores, latestObservation, suggestions };
 }
 
 export default async function ComparePage() {
   const data = await getComparisonData();
-  if (!data) return <div>Loading...</div>;
 
-  const { featured, moreEvidence, activeStores, latestObservation } = data;
+  const { featured, moreEvidence, activeStores, latestObservation, suggestions } = data;
 
   const updatedLabel = latestObservation
     ? new Date(latestObservation).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -128,28 +128,26 @@ export default async function ComparePage() {
       <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
-        <div className="pt-12 pb-9 sm:pt-16">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#e5f7eb] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#397250]">Live Irish supermarket intelligence</div>
-          <h1 className="mb-5 max-w-4xl text-balance text-[clamp(2.4rem,5vw,4.25rem)] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#152219]">
+        <div className="pt-8 pb-7 sm:pt-10">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[#e5f7eb] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#397250]">Irish supermarket prices, shaped around your shop</div>
+          <h1 className="mb-4 max-w-4xl text-balance text-[clamp(2rem,4vw,3.25rem)] font-extrabold leading-[1.06] tracking-[-0.045em] text-[#152219]">
             Your supermarket shopping agent for Ireland
           </h1>
           <p className="max-w-2xl text-base leading-7 text-[#667169] sm:text-lg">
-            Ask for a product, meal, household shop or budget. Supermarket.ie uses current evidence from {storeNames} to work out what is useful for you—not just which single price is lowest.
+            Build your own shopping list using current matched prices from {storeNames}. Your agent can turn it into a household shop with your quantities, budget and preferences.
           </p>
           <p className="mt-3 text-xs font-medium text-[#8b958e]">Current price observations across {storeNames} · Updated {updatedLabel}</p>
         </div>
 
         <div className="mb-10">
-          <AgentLandingCTA
-            context="comparison"
-            title="Tell us what your household actually needs"
-            description="A useful shop depends on pack sizes, preferences, meals, budget and what is worth buying where. Start with your real request and let the agent use the price data in context."
-            prompt="Help me prepare this week’s household shop"
-          />
+          <ShopBuilder suggestions={suggestions} />
         </div>
 
         <section className="mb-10 border-t border-[#e3e8e4] pt-9" aria-label="Current supermarket price evidence">
         <p className="mb-5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
+        <h2 className="mb-3 text-2xl font-semibold tracking-tight text-[#173525]">Supermarket price comparison in Ireland</h2>
+        <p className="mb-5 max-w-3xl text-sm leading-6 text-[#607065]">These currently matched products have prices at all three supermarkets. Your own shop may have different coverage. Compare the exact retailer product, pack size and date before deciding what works for you.</p>
+        {!featured.length && <p className="mb-5 text-sm text-[#607065]">There are no current three-store examples to display. You can still describe your shopping needs above.</p>}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {featured.map(product => (
             <article key={product.name} className="rounded-[1.25rem] border border-[#e3e8e4] bg-white p-4 shadow-[0_10px_35px_rgba(25,57,38,0.035)]">
@@ -194,17 +192,29 @@ export default async function ComparePage() {
         <p className="mt-3 text-xs text-[#8b958e]">Latest catalogue observation: {updatedLabel}. Prices can change; the agent checks current evidence when helping with a shop.</p>
         </section>
 
+        <section aria-labelledby="comparison-guide-title" className="mb-10 grid gap-6 border-t border-[#e3e8e4] pt-8 sm:grid-cols-2">
+          <div>
+            <h2 id="comparison-guide-title" className="text-xl font-semibold text-[#173525]">Which supermarket is cheapest for your shop?</h2>
+            <p className="mt-3 text-sm leading-6 text-[#607065]">It depends on the products and quantities you buy. Build your list above to see each retailer’s coverage and subtotal. A total is only complete when every selected product has a current matched price; partial subtotals cannot establish the cheapest complete shop.</p>
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-[#173525]">What is included in these prices?</h2>
+            <p className="mt-3 text-sm leading-6 text-[#607065]">We display tracked Tesco, Dunnes Stores and SuperValu prices with the retailer product names and observation dates. Missing prices do not mean a product is out of stock. Delivery fees, vouchers and unverified loyalty discounts are excluded; confirm the final price with the retailer.</p>
+          </div>
+          <p className="text-sm text-[#397250] sm:col-span-2">Planning a full week? Explore the <Link href="/cost-of-weekly-shop-ireland" className="font-semibold underline underline-offset-4">weekly-shop cost guide and editable example</Link>, or browse <Link href="/shop" className="font-semibold underline underline-offset-4">household products</Link>.</p>
+        </section>
+
         <div className="rounded-[1.75rem] bg-[#0e0e0e] p-8 text-center text-white">
           <div className="text-3xl mb-3">🛒</div>
           <h2 className="mb-2 text-xl font-bold">Make Supermarket.ie your household agent</h2>
           <p className="mx-auto mb-5 max-w-md text-white/65">
             Ask it to prepare a shop, remember what matters to your household, save a list or monitor a product for a useful change.
           </p>
-          <Link href="/"
+          <a href="#build-your-shop"
             className="inline-block px-8 py-3.5 rounded-full font-semibold text-base transition text-[#004a23]"
             style={{ background: 'linear-gradient(135deg, #006A35, #6BFE9C)' }}>
-            Start with the agent →
-          </Link>
+            Build my household shop ↑
+          </a>
           <p className="mt-3 text-xs text-white/40">No signup required to get started</p>
         </div>
 
