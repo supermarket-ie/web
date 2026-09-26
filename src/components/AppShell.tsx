@@ -216,7 +216,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <nav className="flex gap-6 text-sm" style={{ color: 'rgba(249,246,245,0.5)' }}>
               <Link href="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</Link>
               <Link href="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms</Link>
-              <Link href="/contact" style={{ color: 'inherit', textDecoration: 'none' }}>Contact</Link>
+              <Link href="/contact-us" style={{ color: 'inherit', textDecoration: 'none' }}>Contact</Link>
               <Link href="/vendor" style={{ color: 'inherit', textDecoration: 'none' }}>For vendors</Link>
             </nav>
           </div>
