@@ -21,6 +21,7 @@ const ALLOWED_EVENT_TYPES = new Set([
   'signup_cta_clicked',
   'landing_agent_started',
   'shop_builder_edited',
+  'product_added_to_shop',
   'agent_started',
   'dashboard_visit',
   'conversation_started',

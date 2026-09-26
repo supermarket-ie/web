@@ -2,80 +2,45 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { CATALOGUE_CATEGORIES } from '@/lib/catalogue-categories';
+import { getProductCatalogue } from '@/lib/product-catalogue-data';
+import { SHOP_BUILDER_PATH } from '@/lib/shop-builder';
 
+export const revalidate = 1800;
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
-
 export const metadata: Metadata = {
-  title: 'Shop by Category — Grocery Prices Ireland | supermarket.ie',
-  description: 'Browse live grocery prices by category across Tesco, Dunnes Stores and SuperValu in Ireland. Updated twice weekly.',
+  title: 'Shop by Category — Grocery Prices Ireland',
+  description: 'Browse food and household essentials with current matched prices from Irish supermarkets. Check product and pack details, then build your household shop.',
   alternates: { canonical: `${BASE_URL}/shop` },
 };
 
-const CATEGORIES = [
-  { slug: 'dairy',              emoji: '🥛', name: 'Dairy',              desc: 'Milk, cheese, butter, cream' },
-  { slug: 'meat',               emoji: '🥩', name: 'Meat',               desc: 'Chicken, beef, pork, lamb' },
-  { slug: 'vegetables',         emoji: '🥦', name: 'Vegetables',         desc: 'Fresh veg & salad' },
-  { slug: 'fruit',              emoji: '🍎', name: 'Fruit',              desc: 'Fresh & seasonal fruit' },
-  { slug: 'bakery',             emoji: '🍞', name: 'Bakery',             desc: 'Bread, rolls, wraps' },
-  { slug: 'breakfast',          emoji: '🥣', name: 'Breakfast',          desc: 'Cereal, oats, granola' },
-  { slug: 'pasta-&-rice',       emoji: '🍝', name: 'Pasta & Rice',       desc: 'Pasta, rice, noodles' },
-  { slug: 'tinned',             emoji: '🥫', name: 'Tinned',             desc: 'Tomatoes, beans, tuna' },
-  { slug: 'condiments',         emoji: '🧴', name: 'Condiments',         desc: 'Sauces, ketchup, mayo' },
-  { slug: 'beverages',          emoji: '🧃', name: 'Beverages',          desc: 'Juice, water, squash' },
-  { slug: 'snacks',             emoji: '🍿', name: 'Snacks',             desc: 'Crisps, biscuits, popcorn' },
-  { slug: 'frozen',             emoji: '🧊', name: 'Frozen',             desc: 'Frozen meals & veg' },
-  { slug: 'dairy-alternatives', emoji: '🌾', name: 'Dairy Alternatives', desc: 'Oat, almond, soy milk' },
-  { slug: 'household',          emoji: '🧹', name: 'Household',          desc: 'Cleaning, toilet roll' },
-  { slug: 'personal-care',      emoji: '🪥', name: 'Personal Care',      desc: 'Shampoo, shower gel' },
-  { slug: 'baking',             emoji: '🧁', name: 'Baking',             desc: 'Flour, sugar, baking' },
-  { slug: 'spreads',            emoji: '🫙', name: 'Spreads',            desc: 'Jam, honey, peanut butter' },
-  { slug: 'fish',               emoji: '🐟', name: 'Fish',               desc: 'Fresh & tinned fish' },
-];
-
-export default function ShopPage() {
-  return (
-    <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
-      <SiteHeader />
-
-      <main className="max-w-6xl mx-auto px-6 pb-20">
-        <div className="pt-8 pb-8">
-          <div className="rounded-3xl px-6 py-6 sm:px-8 sm:py-7" style={{ background: 'linear-gradient(135deg, #006A35 0%, #00944A 62%, #00a854 100%)' }}>
-            <p className="type-label mb-2" style={{ color: 'rgba(255,255,255,0.72)' }}>Explore the catalogue</p>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-[-0.03em] text-white">Browse supermarket products</h1>
-            <p className="mt-2 text-sm sm:text-base leading-6" style={{ color: 'rgba(255,255,255,0.78)' }}>
-              Current matched prices across Tesco, Dunnes Stores and SuperValu, organised around what your household needs.
-            </p>
-          </div>
-        </div>
-
-        {/* Category grid — cards on surface-container-lowest, section on surface */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {CATEGORIES.map(cat => (
-            <Link key={cat.slug} href={`/browse?category=${encodeURIComponent(cat.name)}`}
-              className="rounded-2xl p-4 transition-all group hover:-translate-y-0.5"
-              style={{ background: 'var(--surface-container-lowest)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-              <div className="text-3xl mb-3">{cat.emoji}</div>
-              <div className="font-semibold text-sm transition-colors group-hover:text-primary" style={{ color: 'var(--on-background)' }}>
-                {cat.name}
-              </div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>{cat.desc}</div>
-            </Link>
-          ))}
-        </div>
-
-        {/* CTA strip */}
-        <div className="mt-12 rounded-2xl p-8 text-center" style={{ background: 'var(--surface-container)' }}>
-          <h2 className="type-title-lg text-on-background mb-2">Want help building the whole shop?</h2>
-          <p className="text-sm mb-6" style={{ color: 'var(--on-surface)' }}>
-            Ask your supermarket agent to combine food, meals and household essentials into one practical shop.
-          </p>
-          <Link href="/" className="btn-primary inline-flex px-6 py-3 text-sm">
-            Plan with your agent →
-          </Link>
-        </div>
-      </main>
-
-      <SiteFooter />
-    </div>
-  );
+export default async function ShopPage() {
+  const products = (await getProductCatalogue()).filter(product => product.updatedAt);
+  const counts = new Map<string, number>();
+  for (const product of products) counts.set(product.category, (counts.get(product.category) ?? 0) + 1);
+  return <>
+    <SiteHeader />
+    <main className="mx-auto max-w-6xl px-4 pb-16">
+      <header className="my-8 rounded-3xl bg-[#21603b] px-6 py-8 text-white">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#c9e4d1]">Explore the catalogue</p>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Browse supermarket products</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#dbede0]">{products.length} products with current matched prices. Explore food and household essentials, check retailer packs and add what you need to your shop.</p>
+        <Link href="/browse" className="mt-4 inline-block text-sm font-semibold underline underline-offset-4">Find a product →</Link>
+      </header>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+        {CATALOGUE_CATEGORIES.map(category => <Link key={category.slug} href={`/shop/${category.slug}`} className="rounded-2xl border border-[#dce6de] bg-white p-4 transition-colors hover:bg-[#f1f8f3]">
+          <span className="text-3xl" aria-hidden="true">{category.emoji}</span>
+          <h2 className="mt-3 text-sm font-semibold text-[#173525]">{category.name}</h2>
+          <p className="mt-1 text-xs leading-5 text-[#607065]">{category.description}</p>
+          <p className="mt-2 text-xs font-semibold text-[#397250]">{counts.get(category.name) ?? 0} products with prices</p>
+        </Link>)}
+      </div>
+      <section className="mt-10 rounded-2xl bg-[#edf7ef] p-6">
+        <h2 className="text-xl font-semibold text-[#173525]">Build a shop around your household</h2>
+        <p className="mt-2 text-sm leading-6 text-[#526c5b]">Add products, set quantities and review your list with your agent. Register when you’re ready to save it.</p>
+        <Link href={`${SHOP_BUILDER_PATH}#build-your-shop`} className="mt-4 inline-block rounded-xl bg-[#21603b] px-5 py-3 text-sm font-semibold text-white">Build my shop →</Link>
+      </section>
+    </main>
+    <SiteFooter />
+  </>;
 }
