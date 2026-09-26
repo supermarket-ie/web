@@ -2024,3 +2024,17 @@ visitor's first agent answer available before the email gate. For signup
 emails, distinguish the subject and message from ordinary sign-in, making the
 saved conversation and next step explicit. Observe subsequent prompt-to-email,
 email-to-verification and verified-subscriber counts before claiming uplift.
+
+## 66. Product search handoff — 26 September 2026 (pending release)
+
+The expanded private GA4 report ran successfully after PR #225 as dispatch
+`987c7be5-a7c5-4bb2-b9ca-5e7b9d3cddbf`. In the last 14 completed days,
+126 of 409 Google organic sessions landed on the main comparison page; the
+homepage received 40, then product pages formed a long tail, led by chicken
+mince with 14. The comparison-page one-tap tasks target the largest existing
+organic entrance. The product template's price-panel CTA currently links to
+the plain homepage, losing the viewed product. Carry the product and its
+landing path into the agent prompt, and offer one-tap add, alternative and
+watch tasks in the existing product agent card. This changes the journey for
+existing indexed product pages; subsequent agent starts and verified signups
+still need measurement before claiming an uplift.
