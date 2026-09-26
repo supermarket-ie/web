@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasProductIdentityConflict } from '../product-identity';
+import { hasConfirmedRequestedPack, hasProductIdentityConflict } from '../product-identity';
 import { resolveCatalogueRows } from '../catalogue-core';
 
 describe('material product identity contradictions', () => {
@@ -7,6 +7,8 @@ describe('material product identity contradictions', () => {
     ['Mini Bananas', "Ella's Kitchen Strawberry & Banana Mini Puffs 10+ Months 4 Pack (8 g)", 'Fruit'],
     ['Onions 1kg', 'Breaded Onion Rings 1kg', 'Vegetables'],
     ['Bananas Loose', 'Fyffes 5 Organic Fairtrade Bananas', 'Fruit'],
+    ['Bananas 6 pack', 'SuperValu Single Loose Banana (1 kg)', 'Fruit'],
+    ['Free Range Eggs 12', 'Free Range Eggs 6 Pack', 'Dairy'],
     ['Mushrooms 250g', 'Closed Cup Mushrooms 300g', 'Vegetables'],
     ['Chicken Breast Fillets ~500g-1kg pack', 'Chicken Breast Fillets 291g', 'Meat'],
     ['Butter 200-250g', 'Butter 400g', 'Dairy'],
@@ -23,6 +25,13 @@ describe('material product identity contradictions', () => {
     ["Ella's Kitchen Strawberry & Banana Mini Puffs 4 Pack", "Ella's Kitchen Strawberry & Banana Mini Puffs 4 x 8g", 'Baby'],
   ])('retains compatible %s', (expected, actual, category) => {
     expect(hasProductIdentityConflict(expected, actual, category)).toBe(false);
+  });
+
+  it('requires positive evidence for a requested pack count', () => {
+    expect(hasConfirmedRequestedPack('Cereal bars 6 pack', ['Cereal Bar 20g', 'Kelloggs Rice Krispies Cereal Bar'])).toBe(false);
+    expect(hasConfirmedRequestedPack('Salmon fillets 2 pack', ['Salmon Fillets', 'Skin On Salmon Darnes 190gm'])).toBe(false);
+    expect(hasConfirmedRequestedPack('Free range eggs dozen', ['Free Range Eggs 12', 'Irish Free Range Eggs'])).toBe(true);
+    expect(hasConfirmedRequestedPack('Whole milk 2L', ['Whole Milk 2L', 'Irish Whole Milk'])).toBe(true);
   });
 
   it('does not offer a baby snack through a corrupted fruit mapping', () => {

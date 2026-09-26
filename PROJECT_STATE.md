@@ -2191,3 +2191,21 @@ context and preserving `defaultEveAuth`. The stable core and protected-tool
 checks are unchanged. Instructions remain modular; historical instructions
 are no longer mistakenly treated as the current turn's intent. Regression
 checks cover the first weekly-shop delivery and structured text input.
+
+The next preview (`57d9f3e`) finished the same request in 79.238 seconds, with
+one household-shop call and no individual product lookups (three model steps,
+41,818 cumulative input tokens). It proposed 30 lines with 18 priced; this is
+a single diagnostic comparison, not a latency SLA or conversion result.
+It also exposed an unconfirmed six-pack being assigned a single-item price.
+Grounding now requires positive evidence for a requested pack count/measure,
+rejects multipack-versus-loose contradictions in both directions and recognises
+bare egg counts. Unknown packs stay unpriced. The input schema explains the
+required unresolved-need field and distinguishes purchase quantity from the
+contents of one unit. Compact output labels incomplete budget assessments as
+unconfirmed. The four-item browser check reached one native card and the
+registration invitation; no signup email or account was created.
+
+The final pack regressions bring local validation to 294 tests across 44 files;
+TypeScript and lint pass. Final preview and production checks remain release
+gates. Signed-in autosave selection is covered by regression tests; the live
+checks use guest sessions and do not create an account solely for testing.

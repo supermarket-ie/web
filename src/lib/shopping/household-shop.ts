@@ -8,7 +8,7 @@ import {
   type TrustedCatalogueProduct,
   type TrustedHouseholdShopOfferRow,
 } from './household-shop-contract';
-import { hasProductIdentityConflict } from './product-identity';
+import { hasConfirmedRequestedPack, hasProductIdentityConflict } from './product-identity';
 
 export type GroundHouseholdShopInput = {
   proposal: unknown;
@@ -114,6 +114,7 @@ export function groundHouseholdShop(input: GroundHouseholdShopInput): HouseholdS
     const offers = product
       ? [...(offersByProduct.get(product.canonical_product_id) ?? [])]
         .filter(offer => !hasProductIdentityConflict(`${item.display_label} ${item.unit_or_pack_expectation}`, offer.retailer_product_name))
+        .filter(offer => hasConfirmedRequestedPack(`${item.display_label} ${item.unit_or_pack_expectation}`, [product.canonical_name, offer.retailer_product_name]))
         .sort((a, b) => a.current_price - b.current_price)
       : [];
     const selectedOffer = chooseOffer(offers, item.preferred_retailer);

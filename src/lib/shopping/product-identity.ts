@@ -8,6 +8,22 @@ function amount(value: string, unit: string) {
   return Number(value) * (unit === 'kg' || unit === 'l' ? 1000 : unit === 'cl' ? 10 : 1);
 }
 
+function packSignature(value: string) {
+  const normalized = text(value).replace(/\bdozen\b/g, '12 pack').replace(/(\d+)-(pack|pk|rolls?)\b/g, '$1 $2').replace(/\b(\d+(?:\.\d+)?)\s*gm\b/g, '$1g');
+  const pack = dunnesPackSignature(normalized);
+  const trailingCount = normalized.match(/\b(?:eggs?|bananas?|apples?|peppers?|fillets?)\s+(\d+)\b/);
+  const leadingCount = normalized.match(/\b(\d+)\s+(?:[a-z]+\s+){0,4}(?:eggs?|bananas?|apples?|peppers?|fillets?)\b/);
+  return { ...pack, count: pack.count ?? (trailingCount ? Number(trailingCount[1]) : leadingCount ? Number(leadingCount[1]) : null) };
+}
+
+/** A requested measure/count needs positive pack evidence before pricing. */
+export function hasConfirmedRequestedPack(expectedName: string, evidence: string[]) {
+  const requested = packSignature(expectedName);
+  const packs = evidence.map(packSignature);
+  return (requested.amount === null || packs.some(pack => pack.amount !== null)) &&
+    (requested.count === null || packs.some(pack => pack.count === requested.count));
+}
+
 /** Reject explicit contradictions; absence of a conflict does not prove a match. */
 export function hasProductIdentityConflict(expectedName: string, actualName: string, category?: string | null) {
   const expected = text(expectedName);
@@ -18,8 +34,8 @@ export function hasProductIdentityConflict(expectedName: string, actualName: str
   if (freshProduce && produce && !actual.includes(produce)) return true;
   if (/\beggs?\b/.test(expected) && !/\bnoodles?\b/.test(expected) && /\bnoodles?\b/.test(actual)) return true;
 
-  const expectedPack = dunnesPackSignature(expected);
-  const actualPack = dunnesPackSignature(actual);
+  const expectedPack = packSignature(expected);
+  const actualPack = packSignature(actual);
   const range = expected.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)?\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
   if (range && actualPack.amount !== null) {
     const unit = range[4];
@@ -29,6 +45,7 @@ export function hasProductIdentityConflict(expectedName: string, actualName: str
     (expectedPack.unit !== actualPack.unit || expectedPack.amount !== actualPack.amount)) return true;
 
   if (!/\d\s*(?:-|–|to)\s*\d/.test(expected) && expectedPack.count !== null && actualPack.count !== null && expectedPack.count !== actualPack.count) return true;
+  if ((expectedPack.count ?? 1) > 1 && /\b(?:single|loose)\b/.test(actual)) return true;
   if (/\bloose\b/.test(expected) && (actualPack.multipack || (actualPack.count ?? 1) > 1 ||
     /\b[2-9]\d*\s+(?:\w+\s+){0,4}(?:bananas?|apples?|peppers?)\b/.test(actual))) return true;
 

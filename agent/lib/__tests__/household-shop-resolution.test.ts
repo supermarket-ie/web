@@ -45,7 +45,7 @@ describe('resolveHouseholdShopProposal', () => {
       item('onions', 'Onions', '1kg bag'),
       item('eggs', 'Free range eggs', 'dozen'),
     ]);
-    const products = ['Carrots 1kg', 'Onions 1kg', 'Free Range Eggs 12 Pack'].map((name, index) => ({
+    const products = ['Carrots 1kg', 'Onions 1kg', 'Free Range Eggs 12'].map((name, index) => ({
       canonical_product_id: `product-${index}`, canonical_name: name, category: 'Food',
     }));
     const resolved = resolveHouseholdShopProposal(input, products, []);

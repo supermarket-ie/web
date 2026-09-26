@@ -15,6 +15,7 @@ const MIN_CLEAR_MATCH_SCORE = 18;
 export function normaliseHouseholdProductQuery(value: string) {
   return value.toLowerCase()
     .replace(/\bdozen\b/g, '12 pack')
+    .replace(/\beggs (\d+)$/g, 'eggs $1 pack')
     .replace(/\bbeef mince\b/g, 'minced beef')
     .replace(/\bsliced pan\b/g, 'sliced bread')
     .replace(/\b(?:bag|pack) of (\d+)\b/g, '$1 pack')
@@ -22,7 +23,7 @@ export function normaliseHouseholdProductQuery(value: string) {
     .replace(/\b(?:kilograms?)\b/g, 'kg')
     .replace(/\b(?:grams?)\b/g, 'g')
     .replace(/\b(\d+(?:\.\d+)?)\s+(kg|g|ml|l)\b/g, '$1$2')
-    .replace(/\b(?:bag|bottle|carton|loaf|tin|tub|block)\b/g, ' ')
+    .replace(/\b(?:bag|net|bottle|carton|loaf|tin|tub|block)\b/g, ' ')
     .replace(/\s+/g, ' ').trim();
 }
 
