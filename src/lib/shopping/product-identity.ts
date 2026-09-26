@@ -11,7 +11,8 @@ function amount(value: string, unit: string) {
 }
 
 function packSignature(value: string) {
-  const normalized = text(value).replace(/\bdozen\b/g, '12 pack').replace(/(\d+)-(pack|pk|rolls?)\b/g, '$1 $2').replace(/\b(\d+(?:\.\d+)?)\s*gm\b/g, '$1g');
+  const normalized = text(value).replace(/\bdozen\b/g, '12 pack').replace(/(\d+)-(pack|pk|rolls?)\b/g, '$1 $2').replace(/\b(\d+(?:\.\d+)?)\s*gm\b/g, '$1g')
+    .replace(/\b(\d+(?:\.\d+)?)\s+(kg|g|ml|l)\b/g, '$1$2');
   const pack = dunnesPackSignature(normalized);
   const trailingCount = normalized.match(/\b(?:eggs?|bananas?|apples?|peppers?|fillets?)\s+(\d+)\b/);
   const leadingCount = normalized.match(/\b(\d+)\s+(?:[a-z]+\s+){0,4}(?:eggs?|bananas?|apples?|peppers?|fillets?)\b/);

@@ -73,6 +73,15 @@ const proposal = {
 };
 
 describe('groundHouseholdShop', () => {
+  it('prices a 2 litre bottle as one bottle, not a two-bottle pack', () => {
+    const result = groundHouseholdShop({
+      proposal: { ...proposal, items: [{ ...proposal.items[0], quantity: 1, unit_or_pack_expectation: '2 litre bottle' }] },
+      catalogue_products: catalogue,
+      latest_prices: [row('milk-id', 'dunnes', 2.25)],
+    });
+    expect(result.totals.priced_lines).toBe(1);
+    expect(result.totals.selected_total).toBe(2.25);
+  });
   it('does not price a requested multipack using an unconfirmed single-product offer', () => {
     const product = { canonical_product_id: 'bar-id', canonical_name: 'Cereal Bar 20g', category: 'Breakfast' };
     const result = groundHouseholdShop({

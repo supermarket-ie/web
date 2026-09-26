@@ -2221,3 +2221,21 @@ baseline because it used a clarification. Validation also exposed the wording
 single containers and written units such as `2 litre`, with regression cases.
 Production verification remains a release gate and will be recorded on PR #230.
 Final local validation passes 296 tests, TypeScript and lint.
+
+PR #230 merged as `a6349a8`; production deployment
+`dpl_FrVahwWvjvaRDfiBKuHbzAqSf1xa` reached READY with both public domain aliases.
+The weekly-shop landing returned HTTP 200 with its existing canonical and public
+example. Both quarantined mappings remained outside trusted prices.
+The production five-item check displayed one card, six individual bananas, an
+explicitly incomplete subtotal and the registration form; no email was sent.
+
+## 70. Spaced unit parsing follow-up — 26 September 2026
+
+That production check also exposed a false negative: after converting `2 litre`
+to `2 l`, the existing retailer pack parser interpreted `2 l bottle` as two
+bottles. Join numeric measures to their units before pack-count parsing so a
+valid 2L milk offer remains eligible. This does not relax differing measures
+or single-versus-multipack conflicts. A grounding regression verifies one
+`2 litre bottle` at the trusted €2.25 price. The fix is separately gated through
+CI and production verification; the earlier production result is not treated
+as final success while this known regression remains.
