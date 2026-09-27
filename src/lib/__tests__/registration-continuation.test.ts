@@ -29,6 +29,21 @@ describe('guest registration continuation', () => {
     expect(carried.familySize).toBeUndefined();
   });
 
+  it('restores the latest guest revision rather than the first proposal', () => {
+    const first = guestShopFixture();
+    const revision = guestShopFixture('revision-turn');
+    revision.shop.items[0].quantity = 2;
+    revision.shop.household.budget = 30;
+    const revisedEvents = revision.events.map(event => ({ ...event, data: { ...event.data, sequence: 2, turnId: 'revision-turn' } }));
+    const carried = registrationContinuation({ events: [...first.events, ...revisedEvents] });
+    const reducer = defaultMessageReducer();
+    const restored = carried.profile.eve_state.events.reduce(reducer.reduce, reducer.initial());
+    const shops = [...visibleHouseholdShops(restored.messages).values()];
+    expect(shops).toHaveLength(2);
+    expect(shops.at(-1)?.items[0].quantity).toBe(2);
+    expect(JSON.parse(carried.profile.eve_state.resumeContext)).toMatchObject({ household: { budget: 30 }, items: [{ quantity: 2 }] });
+  });
+
   it('rejects missing, malformed or excessive state before an email can promise continuity', () => {
     for (const value of [null, {}, { events: [] }, { events: [null] }, { events: [{ type: 'message.received', data: null }] }, { events: [{ type: 'message.received', data: { message: 'x'.repeat(MAX_CONTINUATION_BYTES + 1) } }] }]) {
       expect(() => registrationContinuation(value)).toThrow();

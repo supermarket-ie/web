@@ -36,7 +36,7 @@ export function GuestShopReceipt({ shop, previous, busy, error, revisionAvailabl
             <h2 className="font-bold tracking-[-0.035em] text-[#1d2921] lg:mt-1 lg:text-xl">Your shop</h2>
           </div>
           <ReceiptText aria-hidden="true" className="hidden size-5 text-[#839087] lg:block" />
-          <button type="button" aria-expanded={expanded} aria-controls="guest-shop-details" onClick={() => setExpanded(value => !value)} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-[#346046] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#168049] lg:hidden">
+          <button type="button" aria-expanded={expanded} aria-controls="guest-shop-details" onClick={() => { setExpanded(value => !value); setSaveExpanded(false); }} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-[#346046] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#168049] lg:hidden">
             {expanded ? 'Hide shop' : 'View shop'} <ChevronDown aria-hidden="true" className={`size-4 ${expanded ? 'rotate-180' : ''}`} />
           </button>
         </div>
@@ -61,7 +61,7 @@ export function GuestShopReceipt({ shop, previous, busy, error, revisionAvailabl
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold leading-5 text-[#263229]">{item.display_label}</p>
                   <p className="text-[11px] leading-4 text-[#718076]">{item.quantity} × {item.unit_or_pack_expectation}</p>
-                  {!item.selected_offer && <p className="mt-1 text-[11px] text-[#94662b]">{item.coverage_note || 'Price still needs checking'}</p>}
+                  {!item.selected_offer && <p className="mt-1 text-[11px] text-[#94662b]">{item.canonical_product_id ? 'No current price confirmed' : 'Still needs a product match'}</p>}
                 </div>
                 {item.selected_offer && item.line_total != null && <div className="shrink-0 text-right"><p className="font-mono text-xs font-semibold">{euro(item.line_total)}</p><p className="mt-1 text-[10px] text-[#718076]">{storeName(item.selected_offer.retailer)}</p></div>}
               </div>)}
@@ -82,7 +82,7 @@ export function GuestShopReceipt({ shop, previous, busy, error, revisionAvailabl
       </div>
       {shop && <div className="shrink-0 border-t border-dashed border-[#cfd6d0] px-4 py-3 lg:px-5 lg:py-4">
         {revisionAvailable && <p className="mb-3 hidden lg:block text-xs leading-5 text-[#526b5c]">Try a change with your agent, or save this shop to keep working on it.</p>}
-        <button type="button" aria-expanded={saveExpanded} aria-controls="guest-shop-signup" onClick={() => setSaveExpanded(value => !value)} className="min-h-11 w-full rounded-xl bg-[#122018] px-4 py-3 text-xs font-bold text-white lg:hidden">{saveExpanded ? 'Close save form' : 'Save this shop — free account'}</button>
+        <button type="button" aria-expanded={saveExpanded} aria-controls="guest-shop-signup" onClick={() => { setSaveExpanded(value => !value); setExpanded(false); }} className="min-h-11 w-full rounded-xl bg-[#122018] px-4 py-3 text-xs font-bold text-white lg:hidden">{saveExpanded ? 'Close save form' : 'Save this shop — free account'}</button>
         <div id="guest-shop-signup" className={`${saveExpanded ? 'mt-3 block' : 'hidden'} lg:mt-0 lg:block`}>{signup}</div>
       </div>}
     </ShopReceiptFrame>

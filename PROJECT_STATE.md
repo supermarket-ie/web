@@ -2610,6 +2610,24 @@ handover. Existing registration analytics remain in use.
 
 A preview-only `/preview/guest-shop` viewport harness embeds the real homepage at
 390 × 844 for mobile checks. It returns not-found in production, uses no synthetic
-auth or shopping state and is marked noindex. Local validation passes 338 tests
+auth or shopping state and is marked noindex. Local validation passes 339 tests
 across 51 files. Release CI, real preview interaction, responsive inspection and
 production evidence will be recorded on the PR before this release is complete.
+
+
+The first READY preview (`ba0e6eb1`, PR #238) completed a real three-turn guest
+journey: clarification, a seven-line top-up shop with one unpriced product, then
+an explicit revision changing milk quantity and removing that product. The
+receipt retained the €12.64 incomplete proposal during revision, then showed the
+€14.89 selected total and “1 removed · 1 updated”. The mixed-retailer label and
+missing-price warning were correct. The existing model prose still occasionally
+attributes the selected subtotal to one retailer or calls an incomplete proposal
+within budget; deterministic receipt truth does not fix that separate agent
+narrative issue recorded in §75.
+
+The 390px preview confirmed a compact summary above the composer and expandable
+product details. Follow-up polish makes mobile product and save disclosures
+mutually exclusive, uses plain missing-price wording, and suppresses an early
+registration prompt while the initial proposal is still processing. A further
+isolated regression confirms the latest revision, quantities and budget survive
+email continuation. No live verification email or test account was created.

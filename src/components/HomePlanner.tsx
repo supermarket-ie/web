@@ -580,14 +580,14 @@ function ShoppingAgentInner({
   }, [messages, busy, showGuestGate]);
 
   useEffect(() => {
-    if (!showSignupPrompt && !showGuestGate) return;
+    if (busy || (!showSignupPrompt && !showGuestGate)) return;
     trackEventOnce('signup_prompt_viewed', {
       entry_path: window.location.pathname,
       intent: firstRequestIntent,
       placement: showGuestGate ? 'guest_gate' : 'first_answer',
       flow: 'inline_agent_continuation',
     });
-  }, [firstRequestIntent, showGuestGate, showSignupPrompt]);
+  }, [busy, firstRequestIntent, showGuestGate, showSignupPrompt]);
 
   useEffect(() => {
     if (isGuest || busy || !latestStructuredShop) return;
@@ -798,7 +798,7 @@ function ShoppingAgentInner({
 
         {error && <div className="ml-9 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-800">{error}</div>}
 
-        {showGuestGate && !(showGuestReceipt && latestStructuredShop) && (
+        {showGuestGate && !busy && !(showGuestReceipt && latestStructuredShop) && (
           <div className="ml-9 rounded-2xl border border-[#cce6d5] bg-[#f0faf3] px-5 py-5">
             <div className="flex items-start gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#d9f2e1] text-[#0a773a]"><Bell className="size-4" /></span>
