@@ -446,7 +446,7 @@ function ShoppingAgentInner({
     && isGuestClarification(messageText(lastAssistantMessage))
   );
   const showSignupPrompt = isGuest && !busy && guestTurns === 1 && hasVisibleAnswer && !awaitingGuestClarification && !showGuestGate;
-  const liveSuggestions = input.trim().length >= 2
+  const liveSuggestions = !input.includes('\n') && input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
   const hasConversation = messages.some(message => message.role === 'user');

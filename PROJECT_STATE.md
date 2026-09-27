@@ -2531,3 +2531,10 @@ Local validation passes 331 tests across 50 files, TypeScript, changed-file lint
 and diff checks. Eight new regressions cover cents/quantities, one-store coverage
 selection, partial/no-data states, freshness/pack/identity exclusions, intent-only
 handoff and existing-draft/busy/gated protection.
+
+The initial READY preview confirmed actual retailer prices and preserved a typed
+request through the keep/replace choice. Its mushrooms had no current offer at
+the selected retailer, so the authored example was changed to the already-priced
+broccoli identity; this changes the example list only, not catalogue mappings or
+the missing-price safeguards. Multiline example requests suppress the existing
+predictive-search suggestions to keep the editable request clear.

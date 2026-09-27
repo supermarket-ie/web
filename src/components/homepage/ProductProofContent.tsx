@@ -33,7 +33,7 @@ export function ProductProofContent({ example, loading = false }: { example: Hom
       setNotice('Finish your current agent request, or sign in if your free preview has ended, then try again.');
       return;
     }
-    setNotice('Your request is ready to edit above. Nothing has been sent yet.');
+    setNotice('Review your request above. Nothing has been sent yet.');
     trackEvent('homepage_example_selected', { example_id: HOMEPAGE_EXAMPLE_ID });
     document.getElementById('grocery-agent')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }

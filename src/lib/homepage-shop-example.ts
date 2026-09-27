@@ -16,7 +16,7 @@ export const HOMEPAGE_EXAMPLE_ITEMS = [
   { id: '5eeaa467-d7ca-45b1-993c-f50da50fa615', name: 'Kilmeaden Fully Mature White Cheddar 200g', quantity: 1 },
   { id: 'a9c3e972-f9bb-4752-9ff9-aeb27b4c170c', name: 'Weetabix 24 Pack', quantity: 1 },
   { id: 'd29cb96a-a7a9-4804-b898-4d03428a6cfe', name: 'Onions 1kg', quantity: 1 },
-  { id: 'd63fc419-84f3-4527-8d3e-2b5a79171246', name: 'Closed Cup Mushrooms 250g', quantity: 1 },
+  { id: '0d9e4009-150e-48eb-aa6d-e1f800692b4f', name: 'Broccoli', quantity: 1 },
   { id: '92a236f1-40b9-4f42-8718-a003556df16a', name: 'Chopped Tomatoes 400g', quantity: 2 },
 ];
 
