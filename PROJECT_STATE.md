@@ -2699,3 +2699,40 @@ competed with the meaningful “Make this shop yours” action. Remove that visi
 self-link and its unused import. Keep the sample-shop anchor for existing
 inbound links, the example content, prefill behaviour and registration flow.
 This is a presentation-only cleanup; release verification is recorded on its PR.
+
+## 81. Homepage starter and deal-chip audit (27 September 2026)
+
+The user asked whether the homepage starter prompts are dynamic/useful and why
+the Instant Coffee banner never changes. Inspection of production at main
+b15b9942b0f61757b201be1508515657a9e69ffa confirms the following findings.
+
+Market starters use fixed templates filled from latest_prices, with deterministic
+ten-minute rotation among up to twelve top-ranked candidates. They are shared
+guest suggestions, not AI-written or household-personalised recommendations.
+Meal/household candidates rank by percentage saving; comparisons rank by raw
+price spread under the same canonical name, without pack/unit normalisation.
+The starter analytics record prompt_source=starter but no individual starter
+identity, so these events cannot attribute registration to a particular prompt.
+
+The separate LiveDealChip is not hardcoded. Its API selects the twenty largest
+absolute savings, omits category from the response, then the client filters by
+grocery keywords and picks up to five for five-second rotation. The actual
+/api/promotions response had twenty rows but only one surviving grocery deal:
+Instant Coffee 100g at Dunnes, €6 versus €9.80 (39% rounded saving). Therefore
+its rotation is disabled by the one-item pool. The underlying retailer product
+is L'OR Classique Instant Coffee 100g; the canonical label drops its brand.
+
+The cited haddock starter is not a like-for-like comparison: Dunnes Stores
+Breaded Irish Haddock Fillets 250g at €4 and SuperValu Loose Haddock Fillets
+(1 kg) at €21.99 share the canonical name Haddock Fillets. Do not promote the
+raw spread as evidence of better value. No product mapping was changed in this
+audit; any mapping repair needs the established identity validation workflow.
+
+The cited Philadelphia offer (€1.32 versus €2.65), Colgate offer (€4 versus €8)
+and coffee offer were last observed on 24 September. “Today” and “this week”
+are fixed wording, not derived from check dates or confirmed promotion periods.
+The shop starter also exposes an offer count despite the user's preference to
+avoid catalogue/coverage counts. Recommended next work: prioritise useful shop
+outcomes, validate comparison eligibility, use honest freshness copy, remove
+the redundant deal chip/count emphasis, and measure individual starter outcomes.
+These are findings and recommendations only; this audit changes no live UI/data.
