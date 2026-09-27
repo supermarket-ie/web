@@ -1,6 +1,6 @@
 import { groundHouseholdShop } from '../../shopping/household-shop';
 
-export function guestShopFixture() {
+export function guestShopFixture(turnId = 'guest-turn') {
   const shop = groundHouseholdShop({
     proposal: {
       schema_version: 'household_shop.v1',
@@ -9,11 +9,12 @@ export function guestShopFixture() {
       items: [{ line_id: 'milk', section_id: 'food', unresolved_need: 'Milk', display_label: 'Milk', quantity: 3, unit_or_pack_expectation: '2L', reason: 'Breakfast' }],
     }, catalogue_products: [], latest_prices: [],
   });
-  const turn = { sequence: 1, turnId: 'guest-turn', stepIndex: 0 };
+  const turn = { sequence: 1, turnId, stepIndex: 0 };
+  const callId = `${turnId}:shop`;
   const events = [
     { type: 'message.received', data: { ...turn, message: 'Keep three 2L milks for two adults and one child, vegetarian, budget €25. Only these products.' } },
-    { type: 'actions.requested', data: { ...turn, actions: [{ kind: 'tool-call', callId: 'shop', toolName: 'present_household_shop', input: {} }] } },
-    { type: 'action.result', data: { ...turn, status: 'completed', result: { kind: 'tool-result', callId: 'shop', toolName: 'present_household_shop', output: { kind: 'household_shop', shop } } } },
+    { type: 'actions.requested', data: { ...turn, actions: [{ kind: 'tool-call', callId, toolName: 'present_household_shop', input: {} }] } },
+    { type: 'action.result', data: { ...turn, status: 'completed', result: { kind: 'tool-result', callId, toolName: 'present_household_shop', output: { kind: 'household_shop', shop } } } },
     { type: 'message.completed', data: { ...turn, finishReason: 'stop', message: 'Your selected shop is ready to review.' } },
   ];
   return { events, shop };

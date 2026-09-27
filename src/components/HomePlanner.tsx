@@ -29,6 +29,8 @@ import {
 } from '@/lib/agent-suggestions';
 import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
 import { HouseholdShopCard } from '@/components/HouseholdShopCard';
+import { GuestShopReceipt } from '@/components/GuestShopReceipt';
+import { guestShopJourney } from '@/lib/guest-shop-journey';
 import { visibleHouseholdShops } from '@/lib/household-shop-messages';
 import { archivedConversationResumePrompt } from '@/lib/conversation-migration';
 import { takeAgentLandingHandoff } from '@/lib/agent-landing-handoff';
@@ -181,12 +183,14 @@ function InlineEmailSignup({
   intent,
   continuation,
   busy,
+  compact = false,
 }: {
   prompt: SignupPrompt;
   placement: SignupPlacement;
   intent: ReturnType<typeof inferSuggestionIntent>;
   continuation: Pick<SavedEveChat, 'events'>;
   busy: boolean;
+  compact?: boolean;
 }) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
@@ -266,7 +270,7 @@ function InlineEmailSignup({
     <div>
       <p className="text-sm font-bold text-[#17452a]">{prompt.title}</p>
       <p className="mt-1 text-xs leading-5 text-[#52705d]">{prompt.description}</p>
-      <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2 sm:flex-row">
+      <form onSubmit={handleSubmit} className={`mt-3 flex flex-col gap-2 ${compact ? '' : 'sm:flex-row'}`}>
         <input
           type="email"
           aria-label="Email address to save your conversation"
@@ -337,6 +341,7 @@ function ShoppingAgentInner({
   onJourneyStateChange,
   initialConversationId,
   onNewChat,
+  guestReceipt,
 }: {
   saved: SavedEveChat;
   storageKey: string | null;
@@ -346,6 +351,7 @@ function ShoppingAgentInner({
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
   initialConversationId?: string | null;
   onNewChat?: () => void;
+  guestReceipt: boolean;
 }) {
   const [input, setInput] = useState('');
   const [pendingExample, setPendingExample] = useState<string | null>(null);
@@ -423,7 +429,9 @@ function ShoppingAgentInner({
   const displayedShops = useMemo(() => visibleHouseholdShops(messages), [messages]);
   const latestStructuredShop = [...displayedShops.values()].at(-1) ?? null;
   const guestTurns = messages.filter(message => message.role === 'user').length;
-  const showGuestGate = isGuest && (guestTurns >= 2 || messages.some(message =>
+  const guestJourney = useMemo(() => guestShopJourney(messages), [messages]);
+  const showGuestReceipt = isGuest && guestReceipt && guestJourney.shopping;
+  const showGuestGate = isGuest && (guestReceipt ? guestJourney.gated : guestTurns >= 2 || messages.some(message =>
     message.role === 'user' && isPersistentGuestRequest(messageText(message))
   ));
   const starters = isGuest ? (marketStarters ?? GUEST_STARTERS) : HOUSEHOLD_STARTERS;
@@ -432,8 +440,8 @@ function ShoppingAgentInner({
   const firstRequestText = firstUserRequest ? messageText(firstUserRequest) : '';
   const firstRequestIntent = inferSuggestionIntent(firstRequestText);
   const signupPrompt = latestStructuredShop ? {
-    title: 'Save this household shop',
-    description: 'Keep your products, quantities and household needs together. Create a free account to return to this shop and adjust it with your agent.',
+    title: 'Create a free account to save this shop',
+    description: 'Keep your products, quantities and conversation together. Pick up here whenever you return.',
   } : signupPromptFor(firstRequestText);
   const hasVisibleAnswer = Boolean(latestStructuredShop) || messages.some(message =>
     message.role === 'assistant' && Boolean(visibleAgentText(messageText(message)))
@@ -445,7 +453,7 @@ function ShoppingAgentInner({
     && lastAssistantMessage
     && isGuestClarification(messageText(lastAssistantMessage))
   );
-  const showSignupPrompt = isGuest && !busy && guestTurns === 1 && hasVisibleAnswer && !awaitingGuestClarification && !showGuestGate;
+  const showSignupPrompt = isGuest && !busy && (guestTurns === 1 || (showGuestReceipt && Boolean(latestStructuredShop))) && hasVisibleAnswer && !awaitingGuestClarification && !showGuestGate;
   const liveSuggestions = !input.includes('\n') && input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
@@ -572,14 +580,14 @@ function ShoppingAgentInner({
   }, [messages, busy, showGuestGate]);
 
   useEffect(() => {
-    if (!showSignupPrompt && !showGuestGate) return;
+    if (busy || (!showSignupPrompt && !showGuestGate)) return;
     trackEventOnce('signup_prompt_viewed', {
       entry_path: window.location.pathname,
       intent: firstRequestIntent,
       placement: showGuestGate ? 'guest_gate' : 'first_answer',
       flow: 'inline_agent_continuation',
     });
-  }, [firstRequestIntent, showGuestGate, showSignupPrompt]);
+  }, [busy, firstRequestIntent, showGuestGate, showSignupPrompt]);
 
   useEffect(() => {
     if (isGuest || busy || !latestStructuredShop) return;
@@ -740,7 +748,7 @@ function ShoppingAgentInner({
   }
 
   return (
-    <div className={`flex max-h-[68vh] flex-col bg-white/88 backdrop-blur-[2px] ${primaryHeading ? 'min-h-[590px]' : 'min-h-[470px]'}`}>
+    <div data-guest-shop-workspace={showGuestReceipt ? 'true' : undefined} className={showGuestReceipt ? 'grid h-[82svh] min-h-[560px] grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto_auto] bg-white lg:max-h-[850px] lg:grid-cols-[minmax(0,1.65fr)_minmax(310px,0.8fr)] lg:grid-rows-[minmax(0,1fr)_auto]' : `flex max-h-[68vh] flex-col bg-white/88 backdrop-blur-[2px] ${primaryHeading ? 'min-h-[590px]' : 'min-h-[470px]'}`}>
       {primaryHeading && <h1 className="sr-only">Your agent</h1>}
       {!isGuest && onNewChat && (
         <div className="flex justify-end border-b border-[#edf0ed] px-4 py-2">
@@ -749,12 +757,13 @@ function ShoppingAgentInner({
           </button>
         </div>
       )}
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
+      <div ref={scrollRef} className={`min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-6 sm:px-7 ${showGuestReceipt ? 'lg:col-start-1 lg:row-start-1' : ''}`}>
         {messages.map(message => {
           const text = messageText(message);
           const currentShop = displayedShops.get(message.id);
-          const shops = currentShop ? [currentShop] : [];
-          if (!text && shops.length === 0) return null;
+          const shops = currentShop && !showGuestReceipt ? [currentShop] : [];
+          const receiptNotice = showGuestReceipt && currentShop;
+          if (!text && shops.length === 0 && !receiptNotice) return null;
           const isUser = message.role === 'user';
           return (
             <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${shops.length > 0 ? 'items-start' : ''}`}>
@@ -765,13 +774,14 @@ function ShoppingAgentInner({
                     {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <FormattedAgentText text={text} />}
                   </div>
                 )}
+                {receiptNotice && <p className="mt-2 text-xs font-medium text-[#397250]">{currentShop === latestStructuredShop ? 'Your checked proposal is in Your shop.' : 'Earlier proposal — Your shop shows the latest version.'}</p>}
                 {shops.map((shop, index) => <HouseholdShopCard key={`${message.id}:shop:${index}`} shop={shop} />)}
               </div>
             </div>
           );
         })}
 
-        {showSignupPrompt && (
+        {showSignupPrompt && !(showGuestReceipt && latestStructuredShop) && (
           <div className="ml-9 rounded-2xl border border-[#dbe9df] bg-[#f5faf6] px-4 py-4 sm:px-5">
             <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} continuation={{ events: agent.events }} busy={busy} />
           </div>
@@ -788,7 +798,7 @@ function ShoppingAgentInner({
 
         {error && <div className="ml-9 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-800">{error}</div>}
 
-        {showGuestGate && (
+        {showGuestGate && !busy && !(showGuestReceipt && latestStructuredShop) && (
           <div className="ml-9 rounded-2xl border border-[#cce6d5] bg-[#f0faf3] px-5 py-5">
             <div className="flex items-start gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#d9f2e1] text-[#0a773a]"><Bell className="size-4" /></span>
@@ -809,6 +819,16 @@ function ShoppingAgentInner({
         )}
       </div>
 
+      {showGuestReceipt && <GuestShopReceipt
+        shop={latestStructuredShop}
+        previous={[...displayedShops.values()].at(-2) ?? null}
+        busy={busy}
+        error={Boolean(error)}
+        revisionAvailable={guestJourney.revisionAvailable}
+        signup={<InlineEmailSignup compact prompt={signupPrompt} placement={showGuestGate ? 'guest_gate' : 'first_answer'} intent={firstRequestIntent} continuation={{ events: agent.events }} busy={busy} />}
+      />}
+
+      <div className={showGuestReceipt ? 'min-w-0 lg:col-start-1 lg:row-start-2' : 'shrink-0'}>
       {busy && (
         <div role="status" aria-live="polite" className="flex shrink-0 items-center gap-2 border-t border-[#edf0ed] bg-[#f7faf7] px-5 py-2 text-xs font-medium text-[#5f6e63] sm:px-7">
           <span className="flex gap-1" aria-hidden="true">
@@ -831,6 +851,7 @@ function ShoppingAgentInner({
             : 'Ask Supermarket.ie what your household needs…'}
         />
       </div>
+      </div>
     </div>
   );
 }
@@ -844,8 +865,10 @@ export function HomePlanner({
   onJourneyStateChange,
   primaryHeading = false,
   signedInEmptyState,
+  guestReceipt = false,
 }: {
   onJourneyStateChange?: (state: HomePlannerJourneyState) => void;
+  guestReceipt?: boolean;
   primaryHeading?: boolean;
   signedInEmptyState?: { eyebrow: string; title: string; description: string };
 } = {}) {
@@ -913,6 +936,7 @@ export function HomePlanner({
       saved={loaded.saved}
       storageKey={loaded.storageKey}
       isGuest={isGuest}
+      guestReceipt={guestReceipt}
       primaryHeading={primaryHeading}
       signedInEmptyState={signedInEmptyState}
       onJourneyStateChange={onJourneyStateChange}
