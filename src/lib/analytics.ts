@@ -88,7 +88,10 @@ export function trackEventOnce(
   const placementSuffix = eventType === 'signup_prompt_viewed' && typeof metadata?.placement === 'string'
     ? `:${metadata.placement}`
     : '';
-  const key = `smi_event_once:${eventType}${placementSuffix}`;
+  const starterSuffix = eventType === 'starter_prompt_viewed' && typeof metadata?.starter_id === 'string'
+    ? `:${metadata.starter_version}:${metadata.starter_id}`
+    : '';
+  const key = `smi_event_once:${eventType}${placementSuffix}${starterSuffix}`;
   try {
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, '1');

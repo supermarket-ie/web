@@ -2736,3 +2736,49 @@ avoid catalogue/coverage counts. Recommended next work: prioritise useful shop
 outcomes, validate comparison eligibility, use honest freshness copy, remove
 the redundant deal chip/count emphasis, and measure individual starter outcomes.
 These are findings and recommendations only; this audit changes no live UI/data.
+
+## 82. Homepage starter usefulness and attribution (28 September 2026)
+
+User approved the §81 recommendations. The first starter now prepares a household
+shop after asking for household/budget/existing-stock context. Meal and household
+starters rotate within their own eligible categories, interleaving categories so
+one heavily discounted category does not fill the candidate pool. They use actual
+retailer names, preserving brand/pack details, and show observed check dates rather
+than fixed “today/this week”. Meal prompts offer a contextual next step to build a
+shop; household offers ask about value without assuming bulk buying is useful.
+The fourth slot only promotes a product comparison when actual retailer names
+(including brand/variant) and explicit pack evidence agree under the same canonical
+ID. Loose/variable-weight products, missing evidence and conflicting packs/brands
+fall back to a useful comparison capability prompt. This is deliberately stricter
+than trusting the canonical mapping alone. No mapping or retailer feed changed.
+The offer-count starter and separate LiveDealChip banner are removed. The remaining
+promotions endpoint is unchanged. Stable fallback prompts share one client-safe
+module, and price-check detail wraps rather than truncating on small screens.
+
+Analytics add starter_prompt_viewed (half of the individual button visible, once
+per starter/version/browser session), starter_prompt_selected (accepted tap), and
+guest_shop_prepared (first newly completed validated guest shop in the session).
+Starter ID, kind, position and version accompany starter events and agent_started;
+no shopper prompt/email is added to these events. Existing session_id propagation
+through the signed verification token already joins the normal email-verification
+flow to server-recorded signup_completed, including opening that link on another
+device. Authentication, signup limits and continuation payloads are unchanged.
+The regression checks assert this correlation without real emails/accounts.
+
+The read-only report docs/analytics/homepage-starters.sql gives per-starter visible
+sessions, first selections, prepared shops and verified registrations with a
+seven-day outcome window. This is observational first-selection attribution, not
+proof of a conversion lift. Analytics blocking/storage loss and resending a link
+from a different browser can cause gaps; existing-account sign-ins are excluded.
+Wait for real cohorts to mature before judging winners. Template version is 2.
+
+Validation/release evidence is recorded in PR #241. A merged PR is not itself a
+production verification; the final deployed commit and live checks must be noted
+in that PR before reporting the release complete.
+
+Local verification for this implementation: all 359 tests across 51 files pass,
+including 17 starter-selection/identity cases, analytics de-duplication and the
+isolated email continuation flow. The production build passes with normal TLS
+certificate verification enabled. Lint has no errors (22 existing warnings;
+changed files have none). The read-only report executes successfully against the
+current schema and initially returns no v2 rows, as expected before release.
