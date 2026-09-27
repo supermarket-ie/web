@@ -1,7 +1,6 @@
 import { HomePlanner } from '@/components/HomePlanner';
 import { PlannerSSRShell } from '@/components/PlannerSSRShell';
 import { HideAfterHydration } from '@/components/HideAfterHydration';
-import { LiveDealChip } from '@/components/LiveDealChip';
 
 export function HeroSection() {
   return (
@@ -20,10 +19,6 @@ export function HeroSection() {
             </HideAfterHydration>
             <HomePlanner guestReceipt />
           </div>
-        </div>
-
-        <div className="relative mx-auto mt-5 h-10 max-w-xl overflow-hidden opacity-90">
-          <LiveDealChip />
         </div>
 
         <div className="mt-7 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-xs font-medium text-[#7c867f]">

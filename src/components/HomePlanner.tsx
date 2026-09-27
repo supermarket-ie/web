@@ -13,7 +13,6 @@ import {
   ShoppingBasket,
   Sparkles,
   Utensils,
-  WalletCards,
 } from 'lucide-react';
 import { loadSession } from '@/lib/session';
 import { getAnalyticsSessionId, trackEvent, trackEventOnce } from '@/lib/analytics';
@@ -27,7 +26,7 @@ import {
   type CatalogueSuggestionProduct,
   type SignupPrompt,
 } from '@/lib/agent-suggestions';
-import type { MarketStarter, MarketStarterIcon } from '@/lib/market-starters';
+import { fallbackStarters, MARKET_STARTER_VERSION, type MarketStarter, type MarketStarterIcon } from '@/lib/market-starter-options';
 import { HouseholdShopCard } from '@/components/HouseholdShopCard';
 import { GuestShopReceipt } from '@/components/GuestShopReceipt';
 import { guestShopJourney } from '@/lib/guest-shop-journey';
@@ -58,14 +57,8 @@ type Starter = {
   detail: string;
   prompt: string;
   icon: ComponentType<{ className?: string }>;
+  tracking?: { starter_id: string; starter_kind: MarketStarterIcon; starter_version: number; starter_position: number };
 };
-
-const GUEST_STARTERS: Starter[] = [
-  { label: 'What offers are genuinely useful today?', detail: 'Check verified current promotions across Irish supermarkets', prompt: 'Show me the most useful current supermarket offers for a household shop', icon: Flame },
-  { label: 'Where are everyday essentials best value?', detail: 'Compare current matched products across stores', prompt: 'Compare current prices for useful everyday household essentials', icon: Search },
-  { label: 'Plan dinners around current value', detail: 'Use available products and practical reusable ingredients', prompt: 'Plan four practical dinners around products that are good value now', icon: Utensils },
-  { label: 'Build a complete value-led shop', detail: 'Balance food, cleaning and toiletries in one shop', prompt: 'Build a sensible complete household shop using current supermarket value', icon: WalletCards },
-];
 
 const MARKET_STARTER_ICONS: Record<MarketStarterIcon, Starter['icon']> = {
   offer: Flame,
@@ -75,13 +68,16 @@ const MARKET_STARTER_ICONS: Record<MarketStarterIcon, Starter['icon']> = {
 };
 
 function asStarters(items: MarketStarter[]): Starter[] {
-  return items.map(item => ({
+  return items.map((item, index) => ({
     label: item.label,
     detail: item.detail,
     prompt: item.prompt,
     icon: MARKET_STARTER_ICONS[item.icon],
+    tracking: { starter_id: item.id, starter_kind: item.icon, starter_version: MARKET_STARTER_VERSION, starter_position: index + 1 },
   }));
 }
+
+const GUEST_STARTERS = asStarters(fallbackStarters());
 
 const HOUSEHOLD_STARTERS: Starter[] = [
   { label: 'Prepare my usual shop', detail: 'Use what your household is likely to need now', prompt: 'Prepare my usual shop', icon: ShoppingBasket },
@@ -365,6 +361,7 @@ function ShoppingAgentInner({
   const [structuredSave, setStructuredSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveAttempt, setSaveAttempt] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const starterGridRef = useRef<HTMLDivElement>(null);
   const landingPromptHandled = useRef(false);
   const conversationIdRef = useRef<string | null>(initialConversationId ?? null);
   const transcriptRef = useRef<Array<{ role: string; content: string }>>([]);
@@ -430,6 +427,7 @@ function ShoppingAgentInner({
   }, [messages]);
   const displayedShops = useMemo(() => visibleHouseholdShops(messages), [messages]);
   const latestStructuredShop = [...displayedShops.values()].at(-1) ?? null;
+  const initialShopGeneratedAt = useRef(latestStructuredShop?.provenance.generated_at);
   const guestTurns = messages.filter(message => message.role === 'user').length;
   const guestJourney = useMemo(() => guestShopJourney(messages), [messages]);
   const showGuestReceipt = isGuest && guestReceipt && guestJourney.shopping;
@@ -465,6 +463,28 @@ function ShoppingAgentInner({
     : [];
   const hasConversation = messages.some(message => message.role === 'user');
   const hasProposedShop = Boolean(latestStructuredShop);
+
+  useEffect(() => {
+    if (!isGuest || !isEmpty || !marketStarters || liveSuggestions.length > 0 || !starterGridRef.current) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.5) continue;
+        const id = (entry.target as HTMLElement).dataset.starterId;
+        const tracking = marketStarters.find(starter => starter.tracking?.starter_id === id)?.tracking;
+        if (tracking) trackEventOnce('starter_prompt_viewed', { ...tracking, deployment_host: window.location.hostname });
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: 0.5 });
+    starterGridRef.current.querySelectorAll('[data-starter-id]').forEach(button => observer.observe(button));
+    return () => observer.disconnect();
+  }, [isGuest, isEmpty, marketStarters, liveSuggestions.length]);
+
+  useEffect(() => {
+    if (isGuest && !busy && latestStructuredShop && latestStructuredShop.provenance.generated_at !== initialShopGeneratedAt.current) {
+      trackEventOnce('guest_shop_prepared', { entry_path: window.location.pathname, deployment_host: window.location.hostname });
+    }
+  }, [isGuest, busy, latestStructuredShop]);
 
   useEffect(() => {
     function prefillExample(event: Event) {
@@ -528,8 +548,11 @@ function ShoppingAgentInner({
       fetch(`/api/agent/starter-prompts?window=${rotationWindow}`, { signal: controller.signal })
         .then(response => response.ok ? response.json() : Promise.reject(new Error('Starter prompt request failed')))
         .then((data: { starters?: MarketStarter[] }) => {
-          if (Array.isArray(data.starters) && data.starters.length > 0) {
+          if (Array.isArray(data.starters) && data.starters.length > 0
+            && data.starters.every(item => typeof item.id === 'string' && item.icon in MARKET_STARTER_ICONS)) {
             setMarketStarters(asStarters(data.starters));
+          } else {
+            setMarketStarters(GUEST_STARTERS);
           }
         })
         .catch(nextError => {
@@ -625,14 +648,23 @@ function ShoppingAgentInner({
     return () => controller.abort();
   }, [isGuest, busy, latestStructuredShop, storageKey, saveAttempt]);
 
-  async function send(text: string, source: AgentStartSource) {
+  async function send(text: string, source: AgentStartSource, starterTracking?: Starter['tracking']) {
     const message = text.trim();
     if (!message || busy || showGuestGate) return;
     const fromExample = exampleReady && source === 'typed';
+    const selectionMetadata = isGuest && source === 'starter' && starterTracking
+      ? { ...starterTracking, deployment_host: window.location.hostname }
+      : undefined;
+    if (selectionMetadata) {
+      // A quick tap can precede the observer callback; it is also evidence of visibility.
+      trackEventOnce('starter_prompt_viewed', selectionMetadata);
+      trackEvent('starter_prompt_selected', selectionMetadata);
+    }
     trackEventOnce('agent_started', {
       auth_state: isGuest ? 'guest' : 'signed_in',
       entry_path: window.location.pathname,
       prompt_source: fromExample ? 'homepage_example' : source,
+      ...selectionMetadata,
     });
     if (fromExample) {
       exampleResultPending.current = { previousShop: latestStructuredShop?.provenance.generated_at ?? null };
@@ -727,18 +759,18 @@ function ShoppingAgentInner({
             <div className="mt-4">
               {isGuest && marketStarters && (
                 <p className="mb-1.5 px-3.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#6e7d73]">
-                  Shaped by today&apos;s verified prices and offers
+                  Ideas for your household shop
                 </p>
               )}
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div ref={starterGridRef} className="grid gap-2 sm:grid-cols-2">
                 {starters.map(starter => {
                   const Icon = starter.icon;
                   return (
-                    <button key={starter.prompt} type="button" onClick={() => void send(starter.prompt, 'starter')} className="group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors hover:bg-[#f5f8f5]">
+                    <button key={starter.tracking?.starter_id ?? starter.prompt} data-starter-id={starter.tracking?.starter_id} type="button" onClick={() => void send(starter.prompt, 'starter', starter.tracking)} className="group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors hover:bg-[#f5f8f5]">
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e5eae6] bg-white text-[#176b3a] shadow-sm"><Icon className="size-4" /></span>
                       <span className="min-w-0">
                         <span className="block text-sm font-semibold text-[#26342b]">{starter.label}</span>
-                        <span className="mt-0.5 block truncate text-[11px] text-[#879089]">{starter.detail}</span>
+                        <span className="mt-0.5 block text-[11px] leading-4 text-[#879089]">{starter.detail}</span>
                       </span>
                     </button>
                   );

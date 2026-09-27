@@ -93,6 +93,7 @@ describe('verified email shop continuation routes', () => {
     expect(mail.subject).toContain('Save your household shop');
     const claims = jwt.verify(new URL(url).searchParams.get('token')!, secret) as jwt.JwtPayload;
     expect(claims.continuationId).toBeTruthy();
+    expect(claims.analyticsSessionId).toBe('isolated-browser');
     expect(claims).not.toHaveProperty('events');
     expect(claims).not.toHaveProperty('household');
     expect(fixture.tables.subscribers).toBeUndefined();
@@ -126,6 +127,12 @@ describe('verified email shop continuation routes', () => {
     expect((fixture.tables.saved_lists[0].items as Array<{ quantity: number }>)[0].quantity).toBe(3);
     expect(fixture.tables.agent_events.filter(row => row.event_type === 'registration_shop_saved')).toHaveLength(1);
     expect(fixture.tables.agent_events.filter(row => row.event_type === 'signup_completed')).toHaveLength(1);
+    // Verification can run without the original browser's storage. The signed
+    // session ID still joins the verified signup to that browser's starter events.
+    expect(fixture.tables.agent_events.find(row => row.event_type === 'signup_completed')).toMatchObject({
+      session_id: 'isolated-browser',
+      metadata: expect.objectContaining({ verified: true }),
+    });
   });
 
   it('preserves an existing household size and directs them to the new guest conversation', async () => {

@@ -2699,3 +2699,102 @@ competed with the meaningful “Make this shop yours” action. Remove that visi
 self-link and its unused import. Keep the sample-shop anchor for existing
 inbound links, the example content, prefill behaviour and registration flow.
 This is a presentation-only cleanup; release verification is recorded on its PR.
+
+## 81. Homepage starter and deal-chip audit (27 September 2026)
+
+The user asked whether the homepage starter prompts are dynamic/useful and why
+the Instant Coffee banner never changes. Inspection of production at main
+b15b9942b0f61757b201be1508515657a9e69ffa confirms the following findings.
+
+Market starters use fixed templates filled from latest_prices, with deterministic
+ten-minute rotation among up to twelve top-ranked candidates. They are shared
+guest suggestions, not AI-written or household-personalised recommendations.
+Meal/household candidates rank by percentage saving; comparisons rank by raw
+price spread under the same canonical name, without pack/unit normalisation.
+The starter analytics record prompt_source=starter but no individual starter
+identity, so these events cannot attribute registration to a particular prompt.
+
+The separate LiveDealChip is not hardcoded. Its API selects the twenty largest
+absolute savings, omits category from the response, then the client filters by
+grocery keywords and picks up to five for five-second rotation. The actual
+/api/promotions response had twenty rows but only one surviving grocery deal:
+Instant Coffee 100g at Dunnes, €6 versus €9.80 (39% rounded saving). Therefore
+its rotation is disabled by the one-item pool. The underlying retailer product
+is L'OR Classique Instant Coffee 100g; the canonical label drops its brand.
+
+The cited haddock starter is not a like-for-like comparison: Dunnes Stores
+Breaded Irish Haddock Fillets 250g at €4 and SuperValu Loose Haddock Fillets
+(1 kg) at €21.99 share the canonical name Haddock Fillets. Do not promote the
+raw spread as evidence of better value. No product mapping was changed in this
+audit; any mapping repair needs the established identity validation workflow.
+
+The cited Philadelphia offer (€1.32 versus €2.65), Colgate offer (€4 versus €8)
+and coffee offer were last observed on 24 September. “Today” and “this week”
+are fixed wording, not derived from check dates or confirmed promotion periods.
+The shop starter also exposes an offer count despite the user's preference to
+avoid catalogue/coverage counts. Recommended next work: prioritise useful shop
+outcomes, validate comparison eligibility, use honest freshness copy, remove
+the redundant deal chip/count emphasis, and measure individual starter outcomes.
+These are findings and recommendations only; this audit changes no live UI/data.
+
+## 82. Homepage starter usefulness and attribution (27 September 2026)
+
+User approved the §81 recommendations. The first starter now prepares a household
+shop after asking for household/budget/existing-stock context. Meal and household
+starters rotate within their own eligible categories, interleaving categories so
+one heavily discounted category does not fill the candidate pool. They use actual
+retailer names, preserving brand/pack details, and show observed check dates rather
+than fixed “today/this week”. Meal prompts offer a contextual next step to build a
+shop; household offers ask about value without assuming bulk buying is useful.
+Preview exposed Club Lemon cans categorised under Fruit, so meal candidates also
+require a recognisable ingredient in the actual retailer name and exclude drinks
+and confectionery. Duplicate retailer products do not consume extra rotation slots.
+Exploratory meal prompt wording is checked against the guest journey classifier so
+it does not open an empty receipt before the visitor asks for a shop.
+The fourth slot only promotes a product comparison when actual retailer names
+(including brand/variant) and explicit pack evidence agree under the same canonical
+ID. Loose/variable-weight products, missing evidence and conflicting packs/brands
+fall back to a useful comparison capability prompt. This is deliberately stricter
+than trusting the canonical mapping alone. No mapping or retailer feed changed.
+The offer-count starter and separate LiveDealChip banner are removed. The remaining
+promotions endpoint is unchanged. Stable fallback prompts share one client-safe
+module, and price-check detail wraps rather than truncating on small screens.
+
+Analytics add starter_prompt_viewed (half of the individual button visible, once
+per starter/version/browser session), starter_prompt_selected (accepted tap), and
+guest_shop_prepared (first newly completed validated guest shop in the session).
+Starter ID, kind, position and version accompany starter events and agent_started;
+deployment hostname lets the report exclude all preview/QA events from production.
+no shopper prompt/email is added to these events. Existing session_id propagation
+through the signed verification token already joins the normal email-verification
+flow to server-recorded signup_completed, including opening that link on another
+device. Authentication, signup limits and continuation payloads are unchanged.
+The regression checks assert this correlation without real emails/accounts.
+
+The read-only report docs/analytics/homepage-starters.sql gives per-starter visible
+sessions, first selections, prepared shops and verified registrations with a
+seven-day outcome window. This is observational first-selection attribution, not
+proof of a conversion lift. Analytics blocking/storage loss and resending a link
+from a different browser can cause gaps; existing-account sign-ins are excluded.
+Wait for real cohorts to mature before judging winners. Template version is 2.
+
+Validation/release evidence is recorded in PR #241. A merged PR is not itself a
+production verification; the final deployed commit and live checks must be noted
+in that PR before reporting the release complete.
+
+Local verification for this implementation: all 359 tests across 51 files pass,
+including the initial 17 starter-selection/identity cases, analytics de-duplication and the
+isolated email continuation flow. The production build passes with normal TLS
+certificate verification enabled. Lint has no errors (22 existing warnings;
+changed files have none). The read-only report executes successfully against the
+current schema and initially returns no v2 rows, as expected before release.
+
+Three additional ingredient-filter cases pass (20 starter tests, 362 total after
+the added cases). Preview desktop and 390px mobile checks show dated dynamic
+starters with no separate deal banner. A household starter gathered context,
+produced a receipt with explicit missing prices, and completed its permitted
+revision to a fully priced €6.89 draft. The composer then gated registration.
+The final selection logic's mobile tuna starter produced useful meal ideas,
+an enabled follow-up composer and the quiet optional save link without an empty
+receipt. Internal events recorded individual impressions/selections and the
+prepared shop; the report's production-host filter excludes this QA traffic.

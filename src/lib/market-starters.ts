@@ -1,168 +1,149 @@
 import type { ProductPrice } from '@/lib/price-data';
 import { storeDisplayName } from '@/lib/store-utils';
-
-export type MarketStarterIcon = 'offer' | 'compare' | 'meal' | 'shop';
-
-export type MarketStarter = {
-  label: string;
-  detail: string;
-  prompt: string;
-  icon: MarketStarterIcon;
-  signal: 'live_offer' | 'store_comparison' | 'meal_opportunity' | 'market_overview';
-};
+import { dunnesPackSignature } from '@/lib/dunnes-discovery';
+import { fallbackStarters, type MarketStarter } from '@/lib/market-starter-options';
 
 const MEAL_CATEGORIES = new Set([
   'bakery', 'chilled', 'dairy', 'fish', 'frozen', 'meat', 'pasta & rice',
   'vegetables', 'fruit', 'tinned',
 ]);
-
 const HOUSEHOLD_CATEGORIES = new Set([
   'baby', 'household', 'household essentials', 'laundry', 'cleaning',
   'personal care', 'pet care', 'toiletries',
 ]);
+const euro = (value: number) => `€${value.toFixed(2)}`;
+const productName = (row: ProductPrice) => row.store_product_name.replace(/\s+/g, ' ').trim();
+const checkedDate = (date: string) => new Intl.DateTimeFormat('en-IE', {
+  day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Dublin',
+}).format(new Date(date));
 
-function euro(value: number) {
-  return `€${value.toFixed(2)}`;
+function usablePrice(row: ProductPrice) {
+  return Number.isFinite(row.price) && row.price > 0
+    && Boolean(row.store_product_name?.trim())
+    && Number.isFinite(Date.parse(row.observed_at));
 }
 
-function cleanProductName(value: string) {
-  const cleaned = value
-    .replace(/^(?:Dunnes Stores|SuperValu|Tesco|Aldi)\s+/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (cleaned.length <= 46) return cleaned;
-  const shortened = cleaned.slice(0, 43).replace(/\s+\S*$/, '');
-  return `${shortened || cleaned.slice(0, 43)}…`;
+function isMealIngredient(row: ProductPrice) {
+  if (!MEAL_CATEGORIES.has(row.category.toLowerCase())) return false;
+  const name = productName(row).toLowerCase();
+  // Category mappings can be broad or wrong (e.g. a lemon drink under Fruit).
+  // Require an ingredient signal in the actual retailer name as well.
+  if (/\b(?:desserts?|cakes?|bakewells?|chocolate|sweets?|crisps?|ice cream|juice|lemonade|cola|soft drink|baby formula)\b/.test(name)) return false;
+  if (/\d\s*(?:ml|cl|l)\b/.test(name) && !/\b(?:milk|cream|yoghur?t|kefir|stock|broth|soup|passata|oil|vinegar|sauce)\b/.test(name)) return false;
+  return /\b(?:chicken|beef|pork|lamb|turkey|sausages?|bacon|ham|fish|haddock|cod|salmon|tuna|prawns?|mussels?|eggs?|cheese|cheddar|butter|milk|cream|yoghur?t|kefir|rice|pasta|fusilli|penne|spaghetti|noodles?|lentils?|beans?|chickpeas?|flour|bread|wraps?|tortillas?|potatoes?|chips|fries|wedges|onions?|peppers?|tomato(?:es)?|carrots?|broccoli|spinach|peas|petits pois|mushrooms?|courgettes?|cabbage|lettuce|avocados?|apples?|bananas?|berries|strawberries|raspberries|lemons?|oranges?|vegetables?|soup|passata|sauce)\b/.test(name);
 }
 
-function dealSaving(row: ProductPrice) {
-  return row.was_price != null && row.was_price > row.price
-    ? row.was_price - row.price
-    : 0;
-}
-
-function dealPercentage(row: ProductPrice) {
-  return row.was_price != null && row.was_price > row.price
-    ? Math.round((dealSaving(row) / row.was_price) * 100)
-    : 0;
-}
-
-function currentDeals(prices: ProductPrice[]) {
-  const seen = new Set<string>();
-  return prices
-    .filter(row => row.on_promotion && row.was_price != null && row.was_price > row.price)
-    .sort((a, b) => dealPercentage(b) - dealPercentage(a) || dealSaving(b) - dealSaving(a))
-    .filter(row => {
-      const key = row.canonical_name.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+// A shared canonical mapping is not enough evidence for a homepage comparison.
+// Preserve every brand/variant word and require explicit matching pack evidence.
+// Deliberately prefer a capability prompt when the retailer names are uncertain.
+function comparisonKey(row: ProductPrice): string | null {
+  if (!usablePrice(row) || row.relationship_type !== 'exact') return null;
+  const name = productName(row).toLowerCase().replace(/×/g, 'x');
+  if (/\b(?:loose|per\s*(?:kg|kilo)|variable\s*weight)\b|\/\s*kg\b/.test(name)) return null;
+  const pack = dunnesPackSignature(name);
+  if (!(pack.amount && pack.amount > 0) && !(pack.count && pack.count > 0)) return null;
+  const identity = name
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/g, (_, amount, unit) => {
+      const factor = unit === 'kg' || unit === 'l' ? 1000 : unit === 'cl' ? 10 : 1;
+      return `${Number(amount) * factor}${unit === 'kg' || unit === 'g' ? 'g' : 'ml'}`;
+    })
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+  return `${row.canonical_product_id}:${identity}:${JSON.stringify(pack)}`;
 }
 
 function comparisonCandidates(prices: ProductPrice[]) {
   const grouped = new Map<string, ProductPrice[]>();
   for (const row of prices) {
-    const rows = grouped.get(row.canonical_name) ?? [];
+    const key = comparisonKey(row);
+    if (!key) continue;
+    const rows = grouped.get(key) ?? [];
     rows.push(row);
-    grouped.set(row.canonical_name, rows);
+    grouped.set(key, rows);
   }
-
   return [...grouped.values()]
     .filter(rows => new Set(rows.map(row => row.store)).size >= 2)
     .map(rows => {
-      const ordered = [...rows].sort((a, b) => a.price - b.price);
-      return {
-        rows: ordered,
-        spread: ordered.at(-1)!.price - ordered[0].price,
-      };
+      const ordered = [...rows].sort((a, b) => a.price - b.price || a.store.localeCompare(b.store));
+      return { rows: ordered, spread: ordered.at(-1)!.price - ordered[0].price };
     })
     .filter(candidate => candidate.spread >= 0.2)
-    .sort((a, b) => b.spread - a.spread);
+    .sort((a, b) => b.spread - a.spread || productName(a.rows[0]).localeCompare(productName(b.rows[0])));
 }
 
-function rotatingPick<T>(items: T[], window: number, offset = 0, poolSize = 12): T | undefined {
-  const pool = items.slice(0, poolSize);
-  if (pool.length === 0) return undefined;
-  return pool[(window + offset) % pool.length];
+function currentDeals(prices: ProductPrice[]) {
+  const seen = new Set<string>();
+  const retailerProducts = new Set<string>();
+  const ranked = prices
+    .filter(row => usablePrice(row) && row.on_promotion && row.was_price != null && row.was_price > row.price)
+    .sort((a, b) => (1 - b.price / b.was_price!) - (1 - a.price / a.was_price!)
+      || (b.was_price! - b.price) - (a.was_price! - a.price)
+      || productName(a).localeCompare(productName(b)));
+  return ranked.filter(row => {
+    const retailerProduct = `${row.store}:${productName(row).toLowerCase()}`;
+    if (seen.has(row.canonical_product_id) || retailerProducts.has(retailerProduct)) return false;
+    seen.add(row.canonical_product_id);
+    retailerProducts.add(retailerProduct);
+    return true;
+  });
 }
 
-function fallbackStarters(): MarketStarter[] {
-  return [
-    { label: 'What offers are genuinely useful today?', detail: 'Check verified current promotions across Irish supermarkets', prompt: 'Show me the most useful current supermarket offers for a household shop', icon: 'offer', signal: 'market_overview' },
-    { label: 'Where are everyday essentials best value?', detail: 'Compare current matched products across stores', prompt: 'Compare current prices for useful everyday household essentials', icon: 'compare', signal: 'store_comparison' },
-    { label: 'Plan dinners around current value', detail: 'Use available products and practical reusable ingredients', prompt: 'Plan four practical dinners around products that are good value now', icon: 'meal', signal: 'meal_opportunity' },
-    { label: 'Build a complete value-led shop', detail: 'Balance food, cleaning and toiletries in one shop', prompt: 'Build a sensible complete household shop using current supermarket value', icon: 'shop', signal: 'market_overview' },
-  ];
+// Interleave categories so one heavily discounted category cannot fill the pool.
+function diverseDeals(rows: ProductPrice[]) {
+  const categories = new Map<string, ProductPrice[]>();
+  for (const row of rows) {
+    const key = row.category.toLowerCase();
+    const bucket = categories.get(key) ?? [];
+    bucket.push(row);
+    categories.set(key, bucket);
+  }
+  const result: ProductPrice[] = [];
+  for (let index = 0; result.length < rows.length; index++) {
+    for (const bucket of categories.values()) if (bucket[index]) result.push(bucket[index]);
+  }
+  return result;
+}
+
+function rotatingPick<T>(items: T[], window: number, offset = 0): T | undefined {
+  const pool = items.slice(0, 12);
+  return pool.length ? pool[((Math.max(0, Math.floor(window)) || 0) + offset) % pool.length] : undefined;
+}
+
+function offerDetail(row: ProductPrice) {
+  return `${euro(row.price)} at ${storeDisplayName(row.store)} · checked ${checkedDate(row.observed_at)}`;
 }
 
 export function buildMarketStarters(prices: ProductPrice[], rotationWindow = 0): MarketStarter[] {
-  if (prices.length === 0) return fallbackStarters();
-
+  const starters = fallbackStarters();
   const deals = currentDeals(prices);
-  const mealDeals = deals.filter(row => MEAL_CATEGORIES.has(row.category.toLowerCase()));
-  const householdDeals = deals.filter(row => HOUSEHOLD_CATEGORIES.has(row.category.toLowerCase()));
-  const mealDeal = rotatingPick(mealDeals.length > 0 ? mealDeals : deals, rotationWindow, 0);
-  const householdDeal = rotatingPick(
-    householdDeals.filter(row => row.canonical_name !== mealDeal?.canonical_name),
-    rotationWindow,
-    3,
-  ) ?? rotatingPick(deals.filter(row => row.canonical_name !== mealDeal?.canonical_name), rotationWindow, 3);
+  const meal = rotatingPick(diverseDeals(deals.filter(isMealIngredient)), rotationWindow);
+  const household = rotatingPick(diverseDeals(deals.filter(row => HOUSEHOLD_CATEGORIES.has(row.category.toLowerCase()))), rotationWindow, 3);
   const comparison = rotatingPick(comparisonCandidates(prices), rotationWindow, 7);
-  const starters: MarketStarter[] = [];
 
-  if (mealDeal) {
-    const name = cleanProductName(mealDeal.canonical_name);
-    starters.push({
-      label: `What could I make with ${name}?`,
-      detail: `${dealPercentage(mealDeal)}% off at ${storeDisplayName(mealDeal.store)} today`,
-      prompt: `Suggest a practical meal, snack or recipe idea using ${mealDeal.canonical_name}, which is currently on offer at ${storeDisplayName(mealDeal.store)}`,
-      icon: 'meal',
-      signal: 'meal_opportunity',
-    });
-  }
-
-  if (householdDeal) {
-    const name = cleanProductName(householdDeal.canonical_name);
-    starters.push({
-      label: `Is ${name} worth stocking up on?`,
-      detail: `Now ${euro(householdDeal.price)} at ${storeDisplayName(householdDeal.store)} · save ${euro(dealSaving(householdDeal))}`,
-      prompt: `Is ${householdDeal.canonical_name} worth stocking up on at its current ${storeDisplayName(householdDeal.store)} offer price?`,
-      icon: 'offer',
-      signal: 'live_offer',
-    });
-  }
-
+  if (meal) starters[1] = {
+    id: `meal:${meal.canonical_product_id}:${meal.store}`,
+    label: `What could I make with ${productName(meal)}?`,
+    detail: offerDetail(meal),
+    prompt: `Suggest a few practical meal or snack ideas using ${productName(meal)}. Its price was checked at ${euro(meal.price)} at ${storeDisplayName(meal.store)} on ${checkedDate(meal.observed_at)}. Help me reuse the ingredients, then ask which ideas I'd like to try and offer to help with the ingredients I need. Recheck any prices before costing the ingredients.`,
+    icon: 'meal',
+  };
+  if (household) starters[2] = {
+    id: `offer:${household.canonical_product_id}:${household.store}`,
+    label: `Is ${productName(household)} good value?`,
+    detail: offerDetail(household),
+    prompt: `Help me decide whether ${productName(household)} is a useful purchase for my household. Its price was checked at ${euro(household.price)} at ${storeDisplayName(household.store)} on ${checkedDate(household.observed_at)}. Check pack size, unit price and suitable alternatives; don't recommend stocking up just because it is discounted.`,
+    icon: 'offer',
+  };
   if (comparison) {
     const cheapest = comparison.rows[0];
-    const name = cleanProductName(cheapest.canonical_name);
-    const storeCount = new Set(comparison.rows.map(row => row.store)).size;
-    starters.push({
-      label: `Where is ${name} best value?`,
-      detail: `${storeCount} stores compared · from ${euro(cheapest.price)}`,
-      prompt: `Compare current prices for ${cheapest.canonical_name} and explain which option is best value`,
+    const oldestCheck = comparison.rows.reduce((oldest, row) => Date.parse(row.observed_at) < Date.parse(oldest) ? row.observed_at : oldest, cheapest.observed_at);
+    starters[3] = {
+      id: `compare:${cheapest.canonical_product_id}`,
+      label: `Compare ${productName(cheapest)} prices`,
+      detail: `From ${euro(cheapest.price)} · checked ${checkedDate(oldestCheck)}`,
+      prompt: `Compare checked prices for ${productName(cheapest)}. Only compare the same brand, variant and pack size, show the check dates, and explain whether the difference is useful for my shop.`,
       icon: 'compare',
-      signal: 'store_comparison',
-    });
+    };
   }
-
-  const stores = new Set(deals.map(row => storeDisplayName(row.store))).size;
-  if (deals.length > 0) {
-    starters.push({
-      label: `Plan a shop around ${deals.length} current offers`,
-      detail: `Verified promotions across ${stores} retailer${stores === 1 ? '' : 's'}`,
-      prompt: 'Plan a sensible complete household shop around the most useful verified supermarket offers available now',
-      icon: 'shop',
-      signal: 'market_overview',
-    });
-  }
-
-  const combined = [...starters, ...fallbackStarters()];
-  const seen = new Set<string>();
-  return combined.filter(starter => {
-    const key = starter.label.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 4);
+  return starters;
 }
