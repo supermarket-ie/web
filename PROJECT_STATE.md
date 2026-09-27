@@ -2538,3 +2538,38 @@ the selected retailer, so the authored example was changed to the already-priced
 broccoli identity; this changes the example list only, not catalogue mappings or
 the missing-price safeguards. Multiline example requests suppress the existing
 predictive-search suggestions to keep the editable request clear.
+
+PR #236 merged as `67ea37b5`; production `dpl_CAqVZi1uE3Cd9UdHNDfBPrrTZDkr`
+reached READY with both public aliases. The public example showed a complete
+€36.02 SuperValu basket and an editable, non-submitting handoff. Preview changes
+to an €80 budget and three milk units survived into the native card and save
+invitation. All four example funnel stages were observed. No email/account or
+promotion was created. A separate existing-agent issue remains: generated prose
+called the €35.21 selected mixed-store subtotal a SuperValu total, while the
+validated card correctly showed the €38.27 complete SuperValu basket. The
+homepage's deterministic one-store calculation was not affected.
+
+## 76. Image-free homepage example visual refinement — 27 September 2026
+
+Paul approved restoring visual polish without relying on product photography.
+Baseline main and READY production were `67ea37b5`; a read-only database check
+returned 2,459 trusted offers. This is a presentation-only follow-up to sprint 5,
+not a replacement shopping flow or a claim about improved conversion.
+
+The existing example uses a compact editorial split: household introduction and
+the editable-shop action on the left, a cream receipt with a pale-green total
+on the right. On narrow screens the introduction, receipt and action stack in
+that order. Bundled decorative line icons provide visual anchors without remote
+images, missing-image placeholders or invented product photography. Clearer type
+hierarchy, quieter borders, consistent spacing, tabular prices, visible keyboard
+focus, adequate touch targets and reduced-motion support preserve usability.
+
+The authored basket, trusted reader, freshness/identity checks, totals, disclosure,
+event names and existing-draft/busy/gated handoff protection are unchanged. Actual
+retailer names, individual checked dates, missing prices and total exclusions
+remain visible. No schema, mappings, retailer work, agent narrative, registration
+or email changes are included. Tests, preview checks and final production evidence
+are recorded on the release PR; the separate agent-prose issue above remains open.
+
+Local validation passes all 331 tests across 50 files, TypeScript, changed-file
+lint and whitespace checks. No dependencies or remote image hosts were added.
