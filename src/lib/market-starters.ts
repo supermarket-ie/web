@@ -23,6 +23,16 @@ function usablePrice(row: ProductPrice) {
     && Number.isFinite(Date.parse(row.observed_at));
 }
 
+function isMealIngredient(row: ProductPrice) {
+  if (!MEAL_CATEGORIES.has(row.category.toLowerCase())) return false;
+  const name = productName(row).toLowerCase();
+  // Category mappings can be broad or wrong (e.g. a lemon drink under Fruit).
+  // Require an ingredient signal in the actual retailer name as well.
+  if (/\b(?:desserts?|cakes?|bakewells?|chocolate|sweets?|crisps?|ice cream|juice|lemonade|cola|soft drink|baby formula)\b/.test(name)) return false;
+  if (/\d\s*(?:ml|cl|l)\b/.test(name) && !/\b(?:milk|cream|yoghur?t|kefir|stock|broth|soup|passata|oil|vinegar|sauce)\b/.test(name)) return false;
+  return /\b(?:chicken|beef|pork|lamb|turkey|sausages?|bacon|ham|fish|haddock|cod|salmon|tuna|prawns?|mussels?|eggs?|cheese|cheddar|butter|milk|cream|yoghur?t|kefir|rice|pasta|fusilli|penne|spaghetti|noodles?|lentils?|beans?|chickpeas?|flour|bread|wraps?|tortillas?|potatoes?|chips|fries|wedges|onions?|peppers?|tomato(?:es)?|carrots?|broccoli|spinach|peas|petits pois|mushrooms?|courgettes?|cabbage|lettuce|avocados?|apples?|bananas?|berries|strawberries|raspberries|lemons?|oranges?|vegetables?|soup|passata|sauce)\b/.test(name);
+}
+
 // A shared canonical mapping is not enough evidence for a homepage comparison.
 // Preserve every brand/variant word and require explicit matching pack evidence.
 // Deliberately prefer a capability prompt when the retailer names are uncertain.
@@ -63,14 +73,17 @@ function comparisonCandidates(prices: ProductPrice[]) {
 
 function currentDeals(prices: ProductPrice[]) {
   const seen = new Set<string>();
+  const retailerProducts = new Set<string>();
   const ranked = prices
     .filter(row => usablePrice(row) && row.on_promotion && row.was_price != null && row.was_price > row.price)
     .sort((a, b) => (1 - b.price / b.was_price!) - (1 - a.price / a.was_price!)
       || (b.was_price! - b.price) - (a.was_price! - a.price)
       || productName(a).localeCompare(productName(b)));
   return ranked.filter(row => {
-    if (seen.has(row.canonical_product_id)) return false;
+    const retailerProduct = `${row.store}:${productName(row).toLowerCase()}`;
+    if (seen.has(row.canonical_product_id) || retailerProducts.has(retailerProduct)) return false;
     seen.add(row.canonical_product_id);
+    retailerProducts.add(retailerProduct);
     return true;
   });
 }
@@ -103,7 +116,7 @@ function offerDetail(row: ProductPrice) {
 export function buildMarketStarters(prices: ProductPrice[], rotationWindow = 0): MarketStarter[] {
   const starters = fallbackStarters();
   const deals = currentDeals(prices);
-  const meal = rotatingPick(diverseDeals(deals.filter(row => MEAL_CATEGORIES.has(row.category.toLowerCase()))), rotationWindow);
+  const meal = rotatingPick(diverseDeals(deals.filter(isMealIngredient)), rotationWindow);
   const household = rotatingPick(diverseDeals(deals.filter(row => HOUSEHOLD_CATEGORIES.has(row.category.toLowerCase()))), rotationWindow, 3);
   const comparison = rotatingPick(comparisonCandidates(prices), rotationWindow, 7);
 

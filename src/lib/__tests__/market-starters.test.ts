@@ -67,6 +67,14 @@ describe('buildMarketStarters', () => {
   });
 
   it.each([
+    ['Club Lemon Can 4 Pack (330 ml)', 'Fruit'],
+    ['Mr Kipling Cherry Bakewells 6 Pack (318 g)', 'Bakery'],
+    ['Chocolate Milk 1L', 'Dairy'],
+  ])('does not build a meal prompt around %s just because of its category', (name, category) => {
+    expect(buildMarketStarters([price({ store_product_name: name, category })])[1].id).toBe('meal:fallback');
+  });
+
+  it.each([
     ['Dunnes Stores Breaded Irish Haddock Fillets 250g', 'Loose Haddock Fillets (1 kg)'],
     ['Haddock Fillets 250g', 'Breaded Haddock Fillets 250g'],
     ["L'OR Classique Instant Coffee 100g", 'Kenco Instant Coffee 100g'],

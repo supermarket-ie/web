@@ -2746,6 +2746,11 @@ one heavily discounted category does not fill the candidate pool. They use actua
 retailer names, preserving brand/pack details, and show observed check dates rather
 than fixed “today/this week”. Meal prompts offer a contextual next step to build a
 shop; household offers ask about value without assuming bulk buying is useful.
+Preview exposed Club Lemon cans categorised under Fruit, so meal candidates also
+require a recognisable ingredient in the actual retailer name and exclude drinks
+and confectionery. Duplicate retailer products do not consume extra rotation slots.
+Exploratory meal prompt wording is checked against the guest journey classifier so
+it does not open an empty receipt before the visitor asks for a shop.
 The fourth slot only promotes a product comparison when actual retailer names
 (including brand/variant) and explicit pack evidence agree under the same canonical
 ID. Loose/variable-weight products, missing evidence and conflicting packs/brands
