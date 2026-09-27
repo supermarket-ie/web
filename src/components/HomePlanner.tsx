@@ -33,6 +33,7 @@ import { visibleHouseholdShops } from '@/lib/household-shop-messages';
 import { archivedConversationResumePrompt } from '@/lib/conversation-migration';
 import { takeAgentLandingHandoff } from '@/lib/agent-landing-handoff';
 import { agentMessageBlocks } from '@/lib/agent-message-format';
+import { examplePrefillAction, EXAMPLE_PREFILL_EVENT, HOMEPAGE_EXAMPLE_ID } from '@/lib/homepage-example-handoff';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 const GUEST_EVE_CHAT_KEY = `${LEGACY_EVE_CHAT_KEY}:guest`;
@@ -310,7 +311,7 @@ function AgentComposer({ input, setInput, send, busy, gated, placeholder, promin
             void send(input, 'typed');
           }
         }}
-        rows={prominent ? 2 : 1}
+        rows={input.includes('\n') ? Math.min(10, input.split('\n').length) : prominent ? 2 : 1}
         disabled={busy || gated}
         placeholder={gated ? 'Sign in to keep working with your agent…' : placeholder}
         className={`w-full resize-none bg-transparent pl-5 pr-16 text-[15px] text-on-background outline-none placeholder:text-[#8d948f] disabled:opacity-60 ${prominent ? 'py-5' : 'py-4'}`}
@@ -347,6 +348,9 @@ function ShoppingAgentInner({
   onNewChat?: () => void;
 }) {
   const [input, setInput] = useState('');
+  const [pendingExample, setPendingExample] = useState<string | null>(null);
+  const [exampleReady, setExampleReady] = useState(false);
+  const exampleResultPending = useRef<{ previousShop: string | null } | null>(null);
   const [error, setError] = useState('');
   const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
   const [marketStarters, setMarketStarters] = useState<Starter[] | null>(null);
@@ -442,11 +446,44 @@ function ShoppingAgentInner({
     && isGuestClarification(messageText(lastAssistantMessage))
   );
   const showSignupPrompt = isGuest && !busy && guestTurns === 1 && hasVisibleAnswer && !awaitingGuestClarification && !showGuestGate;
-  const liveSuggestions = input.trim().length >= 2
+  const liveSuggestions = !input.includes('\n') && input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
   const hasConversation = messages.some(message => message.role === 'user');
   const hasProposedShop = Boolean(latestStructuredShop);
+
+  useEffect(() => {
+    function prefillExample(event: Event) {
+      if (!isGuest) return;
+      const prompt = (event as CustomEvent<unknown>).detail;
+      if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 12000) return;
+      const action = examplePrefillAction(input, busy, showGuestGate);
+      if (action === 'unavailable') return;
+      event.preventDefault();
+      if (action === 'confirm') setPendingExample(prompt);
+      else { setInput(prompt); setExampleReady(true); }
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#grocery-agent textarea')?.focus({ preventScroll: true }));
+    }
+    window.addEventListener(EXAMPLE_PREFILL_EVENT, prefillExample);
+    return () => window.removeEventListener(EXAMPLE_PREFILL_EVENT, prefillExample);
+  }, [input, busy, showGuestGate, isGuest]);
+
+  useEffect(() => {
+    if (busy || !latestStructuredShop || !exampleResultPending.current ||
+        latestStructuredShop.provenance.generated_at === exampleResultPending.current.previousShop) return;
+    exampleResultPending.current = null;
+    trackEvent('homepage_example_result', { example_id: HOMEPAGE_EXAMPLE_ID });
+  }, [busy, latestStructuredShop]);
+
+  const exampleNotice = pendingExample ? (
+    <div role="status" className="mb-3 rounded-xl border border-[#c9dece] bg-[#f2f8f3] p-4 text-sm text-[#254b33]">
+      <p>You’ve already started a request. Keep it or replace it with the example?</p>
+      <div className="mt-3 flex flex-wrap gap-4">
+        <button type="button" className="font-semibold underline" onClick={() => setPendingExample(null)}>Keep my request</button>
+        <button type="button" disabled={busy || showGuestGate} className="font-semibold underline disabled:opacity-50" onClick={() => { setInput(pendingExample); setPendingExample(null); setExampleReady(true); }}>Use example instead</button>
+      </div>
+    </div>
+  ) : exampleReady ? <p role="status" className="mb-3 text-sm text-[#397250]">Your example is ready to edit. Change anything below, then press send.</p> : null;
 
   useEffect(() => {
     function prefill(event: Event) {
@@ -577,11 +614,18 @@ function ShoppingAgentInner({
   async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
     if (!message || busy || showGuestGate) return;
+    const fromExample = exampleReady && source === 'typed';
     trackEventOnce('agent_started', {
       auth_state: isGuest ? 'guest' : 'signed_in',
       entry_path: window.location.pathname,
-      prompt_source: source,
+      prompt_source: fromExample ? 'homepage_example' : source,
     });
+    if (fromExample) {
+      exampleResultPending.current = { previousShop: latestStructuredShop?.provenance.generated_at ?? null };
+      trackEvent('homepage_example_started', { example_id: HOMEPAGE_EXAMPLE_ID });
+    }
+    setExampleReady(false);
+    setPendingExample(null);
     setInput('');
     setError('');
     if (!isGuest) await ensureConversation(message);
@@ -635,6 +679,7 @@ function ShoppingAgentInner({
             </p>
           </div>
 
+          {exampleNotice}
           <AgentComposer
             input={input}
             setInput={setInput}
@@ -774,6 +819,7 @@ function ShoppingAgentInner({
       )}
 
       <div className="border-t border-[#edf0ed] bg-white p-3 sm:p-4">
+        {exampleNotice}
         <AgentComposer
           input={input}
           setInput={setInput}

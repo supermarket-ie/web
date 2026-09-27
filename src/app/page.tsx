@@ -12,6 +12,8 @@ import {
 } from '@/components/homepage';
 import { CookieBanner } from '@/components/homepage/CookieBanner';
 import { faqs } from '@/components/homepage/FAQSection';
+import { Suspense } from 'react';
+import { ProductProofLoading } from '@/components/homepage/ProductProofSection';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
@@ -55,7 +57,9 @@ export default async function Home({
       <div id="homepage-marketing" style={{ display: 'var(--hide-marketing, block)' }}>
         <HeroSection />
         <StoreLogosBar />
-        <ProductProofSection />
+        <Suspense fallback={<ProductProofLoading />}>
+          <ProductProofSection />
+        </Suspense>
         <HowItWorksSection />
         <BenefitsSection />
         <FAQSection />
