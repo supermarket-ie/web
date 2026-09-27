@@ -36,7 +36,6 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
         <p className="mb-3 text-3xl" aria-hidden="true">{category.emoji}</p>
         <h1 className="text-3xl font-bold tracking-tight text-[#173525]">{category.name} for your household shop</h1>
         <p className="mt-3 text-sm leading-6 text-[#526c5b]">{category.description}. Open a product to see matched prices, retailer pack details and when each price was checked.</p>
-        <p className="mt-2 text-sm text-[#607065]">{products.length} products with current prices. Coverage varies by product; missing prices are shown clearly.</p>
       </header>
       {products.length ? <>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(catalogueItemList(products, `${category.name} products`, `/shop/${category.slug}`, BASE_URL)).replace(/</g, '\\u003c') }} />

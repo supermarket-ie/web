@@ -54,7 +54,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Promi
         <button className="rounded-xl bg-[#21603b] px-5 py-3 text-base font-semibold text-white">Search</button>
       </form>
       <div className="mb-4 flex flex-wrap justify-between gap-2 text-sm text-[#607065]">
-        <p>{products.length} {query ? 'matching' : ''} products with current prices{pages > 1 ? ` · Page ${page} of ${pages}` : ''}</p>
+        <p>{query ? 'Search results' : 'Explore products'}{pages > 1 ? ` · Page ${page}` : ''}</p>
         <Link href="/shop" className="font-semibold text-[#21603b] underline underline-offset-2">Browse by category →</Link>
       </div>
       {shown.length ? <ProductCatalogueList products={shown} /> : <p className="rounded-2xl border border-[#dce6de] bg-white p-6 text-[#607065]">No current matched prices found for this search. Try a shorter product name or browse a category.</p>}

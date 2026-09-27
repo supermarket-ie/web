@@ -2377,3 +2377,34 @@ Preview interaction, release CI and READY production verification remain gates;
 final deployment and live evidence will be recorded on this sprint's PR. Search
 Console query/position access remains unavailable: no indexing, ranking, traffic
 or registration uplift is claimed from publishing more eligible pages alone.
+
+PR #233 merged as `968d2304`; production deployment
+`dpl_MaoG8VGucQWUVB1aJKYhKBq7MysC` reached READY with both public aliases.
+Preview and production confirmed the catalogue/category/product routes, the
+expanded sitemap, stable existing URLs and product quantity handoff. Preview
+also confirmed preservation of an existing household draft through one completed
+agent shop and the registration invitation. CI passed all 314 tests. Sprint 3 is
+complete; email-verification continuation remains sprint 4.
+
+## 73. Catalogue copy should sell usefulness, not catalogue size — 27 September 2026
+
+Paul explicitly asked not to highlight the number of products to visitors: the
+current catalogue size is not a selling point and may discourage registration.
+This is a durable copy preference for public catalogue and category discovery.
+
+The catalogue hero now focuses on finding food and household essentials, checking
+prices and pack sizes, and adding what the household needs. Category cards and
+category introductions no longer advertise product totals. The introductory
+coverage disclaimer is removed; each product still shows its actual retailer
+prices, checked dates and missing-price states where those help a shopping
+decision. Search and browse results use neutral labels without product totals;
+pagination retains the current page and Previous/Next links without a total.
+URLs, headings, metadata, category descriptions, crawlable links, sitemap and
+accurate structured data are preserved. The category directory no longer reads
+the complete priced catalogue merely to calculate presentation counts.
+
+Before this follow-up, GitHub main and READY production both remained `968d2304`.
+A read-only Supabase check returned 2,476 trusted price rows for 1,248 canonical
+products. No database, retailer refresh, matching, registration or agent-flow
+changes are part of this copy update. Release checks and live confirmation will
+be recorded on the PR.
