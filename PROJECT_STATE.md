@@ -2573,3 +2573,43 @@ are recorded on the release PR; the separate agent-prose issue above remains ope
 
 Local validation passes all 331 tests across 50 files, TypeScript, changed-file
 lint and whitespace checks. No dependencies or remote image hosts were added.
+
+## 77. Guest living receipt alongside the homepage agent — 27 September 2026
+
+Paul approved adapting the signed-in right-hand basket for the pre-login shop
+experience, keeping the polished `#sample-shop` example as marketing proof.
+Baseline main and READY production were `8c1d80b3`; a read-only Supabase check
+returned 2,383 trusted offers. No retailer refresh, schema or email change is
+required.
+
+The guest homepage opens a receipt when a shopping conversation starts. Desktop
+places it beside the agent; smaller screens use an expandable summary immediately
+above the composer and a compact save action. The shared receipt surface preserves
+the signed-in visual language, while its data comes directly from completed,
+validated `present_household_shop` results in the existing Eve conversation.
+It never calls the private weekly-plan endpoint. Partial/invalid tool results
+cannot replace the last completed proposal. Chat retains concise proposal markers
+instead of repeating full shop cards. Product-only queries keep the existing flow.
+
+The receipt uses server-calculated line totals, selected subtotal and one-store
+coverage. No priced lines means no numeric total; incomplete shops cannot claim
+to be within budget. Mixed-store prices are explicitly identified, and incomplete
+retailer baskets have no complete total. Household details and assumptions remain
+inspectable. A deterministic revision summary describes additions, removals and
+updates without claiming savings from changing coverage.
+
+The homepage guest UX permits one revision after the first completed proposal,
+including when one initial clarification was needed, with a hard maximum of three
+user messages. Without a proposal the existing two-message bound remains; watches
+and other persistent requests still lead to sign-in. Authenticated tools retain
+their server access controls. This UX limit is not a security or rate-limit claim.
+The existing email continuation carries the same Eve events and latest proposal
+through verification, then revalidates prices and saves using the existing path.
+No new account or email is needed for testing; isolated route tests cover that
+handover. Existing registration analytics remain in use.
+
+A preview-only `/preview/guest-shop` viewport harness embeds the real homepage at
+390 × 844 for mobile checks. It returns not-found in production, uses no synthetic
+auth or shopping state and is marked noindex. Local validation passes 338 tests
+across 51 files. Release CI, real preview interaction, responsive inspection and
+production evidence will be recorded on the PR before this release is complete.

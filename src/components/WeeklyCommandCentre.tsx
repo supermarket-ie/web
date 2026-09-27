@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowUpRight, Check, CircleAlert, Clock3, Eye, Pencil, Plus, ReceiptText, ShoppingBasket, Sparkles } from 'lucide-react';
 import { loadSession } from '@/lib/session';
 import { trackEvent, trackEventOnce } from '@/lib/analytics';
+import { ShopReceiptFrame } from '@/components/ShopReceiptFrame';
 import { HomePlanner, type HomePlannerJourneyState } from '@/components/HomePlanner';
 import type { WeeklyPlanState } from '@/app/api/plan/weekly/route';
 import type { CurrentShopLine } from '@/lib/shopping/current-shop-summary';
@@ -122,7 +123,7 @@ function LivingReceipt({ plan, state, token, watches, onBudgetUpdated }: { plan:
   }
 
   return (
-    <aside className="overflow-hidden rounded-[1.75rem] border border-[#d9dfda] bg-[#fffefa] shadow-[0_24px_70px_rgba(42,53,45,0.10)]">
+    <ShopReceiptFrame>
       <div className="border-b border-dashed border-[#cfd6d0] px-5 py-5 sm:px-6">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -181,7 +182,7 @@ function LivingReceipt({ plan, state, token, watches, onBudgetUpdated }: { plan:
         )}
         {activeShop && shop && <p className="mt-3 text-center font-mono text-[10px] text-[#9aa19c]">{formatUpdated(shop.generatedAt)}</p>}
       </div>
-    </aside>
+    </ShopReceiptFrame>
   );
 }
 
