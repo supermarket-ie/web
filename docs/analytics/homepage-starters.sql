@@ -1,4 +1,5 @@
 -- Homepage starter cohort, v2, trailing 30 days.
+-- Only the public production hostnames count; preview/QA traffic is excluded.
 -- One visible impression per starter/version/session; at least half the button
 -- must enter the viewport (a tap also proves visibility). Selections are taps.
 -- Attribute downstream outcomes to the FIRST selected starter in a session.
@@ -13,6 +14,7 @@ with impressions as (
          count(distinct session_id) as viewed_sessions
   from agent_events
   where event_type = 'starter_prompt_viewed'
+    and metadata->>'deployment_host' in ('www.supermarket.ie', 'supermarket.ie')
     and metadata->>'starter_version' = '2'
     and created_at >= now() - interval '30 days'
     and nullif(session_id, '') is not null
@@ -23,6 +25,7 @@ with impressions as (
          metadata->>'starter_kind' as starter_kind
   from agent_events
   where event_type = 'starter_prompt_selected'
+    and metadata->>'deployment_host' in ('www.supermarket.ie', 'supermarket.ie')
     and metadata->>'starter_version' = '2'
     and created_at >= now() - interval '30 days'
     and nullif(session_id, '') is not null

@@ -472,7 +472,7 @@ function ShoppingAgentInner({
         if (!entry.isIntersecting || entry.intersectionRatio < 0.5) continue;
         const id = (entry.target as HTMLElement).dataset.starterId;
         const tracking = marketStarters.find(starter => starter.tracking?.starter_id === id)?.tracking;
-        if (tracking) trackEventOnce('starter_prompt_viewed', tracking);
+        if (tracking) trackEventOnce('starter_prompt_viewed', { ...tracking, deployment_host: window.location.hostname });
         observer.unobserve(entry.target);
       }
     }, { threshold: 0.5 });
@@ -482,7 +482,7 @@ function ShoppingAgentInner({
 
   useEffect(() => {
     if (isGuest && !busy && latestStructuredShop && latestStructuredShop.provenance.generated_at !== initialShopGeneratedAt.current) {
-      trackEventOnce('guest_shop_prepared', { entry_path: window.location.pathname });
+      trackEventOnce('guest_shop_prepared', { entry_path: window.location.pathname, deployment_host: window.location.hostname });
     }
   }, [isGuest, busy, latestStructuredShop]);
 
@@ -652,16 +652,19 @@ function ShoppingAgentInner({
     const message = text.trim();
     if (!message || busy || showGuestGate) return;
     const fromExample = exampleReady && source === 'typed';
-    if (isGuest && source === 'starter' && starterTracking) {
+    const selectionMetadata = isGuest && source === 'starter' && starterTracking
+      ? { ...starterTracking, deployment_host: window.location.hostname }
+      : undefined;
+    if (selectionMetadata) {
       // A quick tap can precede the observer callback; it is also evidence of visibility.
-      trackEventOnce('starter_prompt_viewed', starterTracking);
-      trackEvent('starter_prompt_selected', starterTracking);
+      trackEventOnce('starter_prompt_viewed', selectionMetadata);
+      trackEvent('starter_prompt_selected', selectionMetadata);
     }
     trackEventOnce('agent_started', {
       auth_state: isGuest ? 'guest' : 'signed_in',
       entry_path: window.location.pathname,
       prompt_source: fromExample ? 'homepage_example' : source,
-      ...(isGuest && source === 'starter' ? starterTracking : {}),
+      ...selectionMetadata,
     });
     if (fromExample) {
       exampleResultPending.current = { previousShop: latestStructuredShop?.provenance.generated_at ?? null };

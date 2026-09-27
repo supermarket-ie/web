@@ -2764,6 +2764,7 @@ Analytics add starter_prompt_viewed (half of the individual button visible, once
 per starter/version/browser session), starter_prompt_selected (accepted tap), and
 guest_shop_prepared (first newly completed validated guest shop in the session).
 Starter ID, kind, position and version accompany starter events and agent_started;
+deployment hostname lets the report exclude all preview/QA events from production.
 no shopper prompt/email is added to these events. Existing session_id propagation
 through the signed verification token already joins the normal email-verification
 flow to server-recorded signup_completed, including opening that link on another
@@ -2782,8 +2783,18 @@ production verification; the final deployed commit and live checks must be noted
 in that PR before reporting the release complete.
 
 Local verification for this implementation: all 359 tests across 51 files pass,
-including 17 starter-selection/identity cases, analytics de-duplication and the
+including the initial 17 starter-selection/identity cases, analytics de-duplication and the
 isolated email continuation flow. The production build passes with normal TLS
 certificate verification enabled. Lint has no errors (22 existing warnings;
 changed files have none). The read-only report executes successfully against the
 current schema and initially returns no v2 rows, as expected before release.
+
+Three additional ingredient-filter cases pass (20 starter tests, 362 total after
+the added cases). Preview desktop and 390px mobile checks show dated dynamic
+starters with no separate deal banner. A household starter gathered context,
+produced a receipt with explicit missing prices, and completed its permitted
+revision to a fully priced €6.89 draft. The composer then gated registration.
+The final selection logic's mobile tuna starter produced useful meal ideas,
+an enabled follow-up composer and the quiet optional save link without an empty
+receipt. Internal events recorded individual impressions/selections and the
+prepared shop; the report's production-host filter excludes this QA traffic.
