@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { ArrowRight, Carrot, Check, ChevronDown, Layers, Milk, Package, ShoppingBasket, Smile, Sparkles, Wheat } from 'lucide-react';
 import type { HomepageShopExample } from '@/lib/homepage-shop-example';
 import { EXAMPLE_PREFILL_EVENT, HOMEPAGE_EXAMPLE_ID } from '@/lib/homepage-example-handoff';
@@ -103,7 +102,6 @@ export function ProductProofContent({ example, loading = false }: { example: Hom
         <button type="button" onClick={makeYours} disabled={loading} className="group flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl bg-primary-container px-5 py-4 text-left font-bold text-on-primary-container shadow-[0_6px_24px_rgba(107,254,156,0.08)] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-container disabled:cursor-wait disabled:opacity-50 sm:max-w-md">Make this shop yours<ArrowRight aria-hidden="true" className="size-5 shrink-0 transition-transform group-hover:translate-x-1 motion-reduce:transition-none" /></button>
         <p className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#bdc9c0]"><Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[#b9e5b5]" />Edit first. Nothing sent or ordered automatically.</p>
         <p role="status" className={notice ? 'mt-3 text-sm leading-6 text-primary-container' : 'sr-only'}>{notice}</p>
-        <Link href="/#sample-shop" className="mt-4 inline-flex min-h-11 items-center text-xs text-[#bdc9c0] underline decoration-white/25 underline-offset-4 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-container">Link to this example</Link>
       </div>
     </div>
   </section>;
