@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from '@/lib/supabase';
+import { isContinuationId } from '@/lib/registration-continuation';
 
 const SECRET = process.env.MAGIC_LINK_SECRET;
 if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
@@ -12,6 +13,7 @@ type VerificationPayload = {
   familySize?: string;
   analyticsSessionId?: string | null;
   source?: 'signup' | 'sign_in';
+  continuationId?: string;
 };
 
 async function notifyTelegram(text: string) {
@@ -33,8 +35,12 @@ async function notifyTelegram(text: string) {
   }
 }
 
-function failed(request: NextRequest) {
-  return NextResponse.redirect(new URL('/list/request?error=expired', request.url));
+function failed(request: NextRequest, continuationId?: string) {
+  const target = new URL('/list/request?error=expired', request.url);
+  if (isContinuationId(continuationId)) target.searchParams.set('continuation', continuationId);
+  const response = NextResponse.redirect(target);
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
 }
 
 export async function GET(request: NextRequest) {
@@ -44,7 +50,18 @@ export async function GET(request: NextRequest) {
   let verification: VerificationPayload;
   try {
     verification = jwt.verify(verificationToken, SECRET!) as VerificationPayload;
-  } catch {
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      // Rechecking the signature allows a new email request for the same draft;
+      // the expired token itself never authenticates or restores anything.
+      try {
+        const expired = jwt.verify(verificationToken, SECRET!, { ignoreExpiration: true }) as VerificationPayload;
+        if (expired.purpose === 'registration_verification') {
+          await supabaseAdmin.from('agent_events').insert({ event_type: 'verification_link_expired', session_id: expired.analyticsSessionId ?? null, metadata: { flow: 'verified_email_continuation' } });
+          return failed(request, expired.continuationId);
+        }
+      } catch {}
+    }
     return failed(request);
   }
 
@@ -53,7 +70,7 @@ export async function GET(request: NextRequest) {
   }
 
   const email = verification.email.toLowerCase().trim();
-  const familySize = verification.familySize || '2';
+  let familySize = verification.familySize || '2';
   const source = verification.source === 'sign_in' ? 'sign_in' : 'signup';
   const acquisitionSource = source === 'sign_in' ? 'direct_account' : 'inline_agent_continuation';
   const unsubscribeToken = crypto.randomBytes(32).toString('hex');
@@ -77,12 +94,14 @@ export async function GET(request: NextRequest) {
   }
 
   let subscriberId: string;
+  let newlyCreated = false;
   if (existing) {
+    // Signing in must not overwrite an existing household with the form's default.
+    familySize = existing.family_size || familySize;
     const { error } = await supabaseAdmin
       .from('subscribers')
       .update({
         subscribed: true,
-        family_size: familySize || existing.family_size || null,
         unsubscribe_token: unsubscribeToken,
         updated_at: new Date().toISOString(),
       })
@@ -98,11 +117,18 @@ export async function GET(request: NextRequest) {
       .insert({ email, family_size: familySize, unsubscribe_token: unsubscribeToken, subscribed: true })
       .select('id')
       .single();
-    if (error || !data) {
+    if (error?.code === '23505') {
+      const { data: concurrent } = await supabaseAdmin.from('subscribers').select('id,family_size').eq('email', email).maybeSingle();
+      if (!concurrent) return failed(request, verification.continuationId);
+      subscriberId = concurrent.id;
+      familySize = concurrent.family_size || familySize;
+    } else if (error || !data) {
       console.error('[complete-registration] insert failed:', error);
       return failed(request);
+    } else {
+      subscriberId = data.id;
+      newlyCreated = true;
     }
-    subscriberId = data.id;
   }
 
   const sessionToken = jwt.sign(
@@ -111,7 +137,7 @@ export async function GET(request: NextRequest) {
     { expiresIn: '7d' },
   );
 
-  if (!existing) {
+  if (newlyCreated) {
     const { error } = await supabaseAdmin.from('agent_events').insert({
       event_type: 'signup_completed',
       session_id: verification.analyticsSessionId ?? null,
@@ -142,7 +168,8 @@ export async function GET(request: NextRequest) {
   }
 
   const target = new URL('/auth/complete', request.url);
-  target.searchParams.set('new', existing ? '0' : '1');
+  target.searchParams.set('new', newlyCreated ? '1' : '0');
+  if (isContinuationId(verification.continuationId)) target.searchParams.set('continuation', verification.continuationId);
   const response = NextResponse.redirect(target);
   response.cookies.set({
     name: 'sm_session',

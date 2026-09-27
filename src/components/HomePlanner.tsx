@@ -41,6 +41,7 @@ type EveAgentOptions = NonNullable<Parameters<typeof useEveAgent>[0]>;
 type SavedEveChat = {
   events?: EveAgentOptions['initialEvents'];
   session?: EveAgentOptions['initialSession'];
+  resumeContext?: string;
 };
 
 type LoadedEveChat = {
@@ -177,13 +178,18 @@ function InlineEmailSignup({
   prompt,
   placement,
   intent,
+  continuation,
+  busy,
 }: {
   prompt: SignupPrompt;
   placement: SignupPlacement;
   intent: ReturnType<typeof inferSuggestionIntent>;
+  continuation: Pick<SavedEveChat, 'events'>;
+  busy: boolean;
 }) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
+  const [failureMessage, setFailureMessage] = useState('');
   const engaged = useRef(false);
   const submitted = useRef(false);
 
@@ -201,7 +207,7 @@ function InlineEmailSignup({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || status === 'submitting') return;
+    if (!normalizedEmail || busy || status === 'submitting') return;
 
     if (!submitted.current) {
       submitted.current = true;
@@ -226,17 +232,20 @@ function InlineEmailSignup({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: normalizedEmail,
-          familySize: '2',
           sessionId: getAnalyticsSessionId(),
+          continuation,
         }),
       });
       if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        setFailureMessage(result.error || 'We couldn’t send the confirmation email. Please check the address and try again.');
         setStatus('error');
         submitted.current = false;
         return;
       }
       setStatus('sent');
     } catch {
+      setFailureMessage('We couldn’t send the confirmation email. Please try again. Your conversation is still here.');
       setStatus('error');
       submitted.current = false;
     }
@@ -245,8 +254,8 @@ function InlineEmailSignup({
   if (status === 'sent') {
     return (
       <div>
-        <p className="text-sm font-bold text-[#17452a]">Check your email</p>
-        <p className="mt-1 text-xs leading-5 text-[#52705d]">Open the secure link we sent to {email.trim()} to continue this conversation. It is valid for 30 minutes. Check your Updates or spam folder if you cannot see it.</p>
+        <p role="status" className="text-sm font-bold text-[#17452a]">Check your email to finish saving</p>
+        <p className="mt-1 text-xs leading-5 text-[#52705d]">Open the link we sent to {email.trim()} within 30 minutes. Your conversation will come with you, even on another device. Check Updates or spam if you cannot see the email.</p>
         <button type="button" onClick={() => setStatus('idle')} className="mt-3 text-xs font-semibold text-[#17452a] underline underline-offset-2">Wrong address or no email? Try again</button>
       </div>
     );
@@ -259,6 +268,7 @@ function InlineEmailSignup({
       <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2 sm:flex-row">
         <input
           type="email"
+          aria-label="Email address to save your conversation"
           value={email}
           onFocus={markEngaged}
           onChange={event => setEmail(event.target.value)}
@@ -269,15 +279,15 @@ function InlineEmailSignup({
         />
         <button
           type="submit"
-          disabled={!email.trim() || status === 'submitting'}
+          disabled={busy || !email.trim() || status === 'submitting'}
           className="rounded-full bg-[#0b1710] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
         >
           {status === 'submitting' ? 'Sending…' : 'Save and continue'}
         </button>
       </form>
-      <p className="mt-2 text-[10px] leading-4 text-[#789083]">No password. We’ll email a secure confirmation link.</p>
+      <p className="mt-2 text-[10px] leading-4 text-[#789083]">Free account. No password. Confirm your email to save this conversation.</p>
       {status === 'error' && (
-        <p className="mt-2 text-xs text-red-700">We couldn’t send the confirmation email. Please check the address and try again.</p>
+        <p role="alert" className="mt-2 text-xs text-red-700">{failureMessage}</p>
       )}
     </div>
   );
@@ -341,6 +351,7 @@ function ShoppingAgentInner({
   const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
   const [marketStarters, setMarketStarters] = useState<Starter[] | null>(null);
   const [structuredSave, setStructuredSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveAttempt, setSaveAttempt] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const landingPromptHandled = useRef(false);
   const conversationIdRef = useRef<string | null>(initialConversationId ?? null);
@@ -416,7 +427,10 @@ function ShoppingAgentInner({
   const firstUserRequest = messages.find(message => message.role === 'user');
   const firstRequestText = firstUserRequest ? messageText(firstUserRequest) : '';
   const firstRequestIntent = inferSuggestionIntent(firstRequestText);
-  const signupPrompt = signupPromptFor(firstRequestText);
+  const signupPrompt = latestStructuredShop ? {
+    title: 'Save this household shop',
+    description: 'Keep your products, quantities and household needs together. Create a free account to return to this shop and adjust it with your agent.',
+  } : signupPromptFor(firstRequestText);
   const hasVisibleAnswer = Boolean(latestStructuredShop) || messages.some(message =>
     message.role === 'assistant' && Boolean(visibleAgentText(messageText(message)))
   );
@@ -532,8 +546,10 @@ function ShoppingAgentInner({
 
   useEffect(() => {
     if (isGuest || busy || !latestStructuredShop) return;
-    const saveKey = `sm_saved_household_shop:${latestStructuredShop.provenance.generated_at}`;
-    if (localStorage.getItem(saveKey)) {
+    const saveKey = `sm_saved_household_shop:${storageKey}:${latestStructuredShop.provenance.generated_at}`;
+    let savedList: string | null = null;
+    try { savedList = localStorage.getItem(saveKey); } catch {}
+    if (savedList) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reflect the external persistence marker
       setStructuredSave('saved');
       return;
@@ -544,18 +560,19 @@ function ShoppingAgentInner({
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ household_shop: latestStructuredShop }),
+      body: JSON.stringify({ household_shop: latestStructuredShop, conversation_id: conversationIdRef.current }),
       signal: controller.signal,
     }).then(async response => {
       if (!response.ok) throw new Error('Structured shop save failed');
       const result = await response.json() as { list_id: string };
-      localStorage.setItem(saveKey, result.list_id);
+      try { localStorage.setItem(saveKey, result.list_id); } catch {}
       setStructuredSave('saved');
+      window.dispatchEvent(new CustomEvent('sm:eve-turn-finished'));
     }).catch(error => {
       if (!(error instanceof DOMException && error.name === 'AbortError')) setStructuredSave('error');
     });
     return () => controller.abort();
-  }, [isGuest, busy, latestStructuredShop]);
+  }, [isGuest, busy, latestStructuredShop, storageKey, saveAttempt]);
 
   async function send(text: string, source: AgentStartSource) {
     const message = text.trim();
@@ -568,7 +585,7 @@ function ShoppingAgentInner({
     setInput('');
     setError('');
     if (!isGuest) await ensureConversation(message);
-    await agent.send([{ type: 'text', text: message }]);
+    await agent.send([{ type: 'text', text: message }], !agent.session && saved.resumeContext ? { clientContext: saved.resumeContext } : undefined);
   }
 
   useEffect(() => {
@@ -711,7 +728,7 @@ function ShoppingAgentInner({
 
         {showSignupPrompt && (
           <div className="ml-9 rounded-2xl border border-[#dbe9df] bg-[#f5faf6] px-4 py-4 sm:px-5">
-            <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} />
+            <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} continuation={{ events: agent.events }} busy={busy} />
           </div>
         )}
 
@@ -720,6 +737,7 @@ function ShoppingAgentInner({
             {structuredSave === 'saving' && 'Saving this validated household shop…'}
             {structuredSave === 'saved' && 'Saved to your household lists with current validated prices.'}
             {structuredSave === 'error' && 'This shop is still here, but it could not be saved. Please try again.'}
+            {structuredSave === 'error' && <button onClick={() => setSaveAttempt(value => value + 1)} className="ml-2 font-semibold underline">Retry saving</button>}
           </div>
         )}
 
@@ -731,12 +749,14 @@ function ShoppingAgentInner({
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#d9f2e1] text-[#0a773a]"><Bell className="size-4" /></span>
               <div className="min-w-0 flex-1">
                 <InlineEmailSignup
-                  prompt={{
+                  prompt={latestStructuredShop ? signupPrompt : {
                     title: 'Keep working with your household agent',
                     description: 'Add your email so Supermarket.ie can remember your household, this conversation and the useful changes you want it to keep track of.',
                   }}
                   placement="guest_gate"
                   intent={firstRequestIntent}
+                  continuation={{ events: agent.events }}
+                  busy={busy}
                 />
               </div>
             </div>
@@ -786,6 +806,8 @@ export function HomePlanner({
   const [loaded, setLoaded] = useState<LoadedEveChat | null>(null);
   const [isGuest, setIsGuest] = useState(true);
   const [chatKey, setChatKey] = useState(0);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -804,12 +826,21 @@ export function HomePlanner({
         return;
       }
       const requestedId = params.get('chat');
+      if (requestedId) {
+        fetch(`/api/conversations/${encodeURIComponent(requestedId)}`, { credentials: 'same-origin' })
+          .then(response => response.ok ? response.json() : Promise.reject(new Error('Could not load the requested conversation')))
+          .then((data: { conversation?: { profile?: { eve_state?: SavedEveChat } } }) => {
+            const saved = data.conversation?.profile?.eve_state;
+            if (!saved) throw new Error('Conversation is not ready');
+            setLoaded({ saved, storageKey: local.storageKey, conversationId: requestedId });
+          })
+          .catch(() => setLoadError(true));
+        return;
+      }
       fetch('/api/conversations', { credentials: 'same-origin' })
         .then(response => response.ok ? response.json() : Promise.reject(new Error('Could not load chats')))
         .then(async (data: { conversations?: Array<{ id: string; agent_chat?: boolean }> }) => {
-          const selected = requestedId
-            ? data.conversations?.find(item => item.id === requestedId && item.agent_chat)
-            : data.conversations?.find(item => item.agent_chat);
+          const selected = data.conversations?.find(item => item.agent_chat);
           if (!selected) return local;
           const response = await fetch(`/api/conversations/${encodeURIComponent(selected.id)}`, { credentials: 'same-origin' });
           if (!response.ok) return local;
@@ -821,8 +852,12 @@ export function HomePlanner({
         .catch(() => setLoaded(local));
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [loadAttempt]);
 
+  if (loadError) return <div role="alert" className="rounded-2xl bg-[#f5faf6] p-6 text-sm text-[#17452a]">
+    <p>Your conversation could not be opened. Please try again.</p>
+    <button className="mt-3 font-semibold underline" onClick={() => { setLoadError(false); setLoadAttempt(value => value + 1); }}>Try again</button>
+  </div>;
   if (!loaded) {
     return null;
   }

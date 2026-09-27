@@ -1,6 +1,7 @@
 import { GUEST_PREVIEW_STARTED_KEY } from '@/lib/session';
 
 const SESSION_KEY = 'smi_session_id';
+let volatileSessionId = '';
 
 declare global {
   interface Window {
@@ -10,12 +11,14 @@ declare global {
 
 export function getAnalyticsSessionId(): string {
   if (typeof window === 'undefined') return '';
-  let id = sessionStorage.getItem(SESSION_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem(SESSION_KEY, id);
+  try {
+    let id = sessionStorage.getItem(SESSION_KEY);
+    if (!id) { id = crypto.randomUUID(); sessionStorage.setItem(SESSION_KEY, id); }
+    return id;
+  } catch {
+    volatileSessionId ||= crypto.randomUUID();
+    return volatileSessionId;
   }
-  return id;
 }
 
 export function trackEvent(

@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from "next/link";
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 
@@ -15,7 +14,7 @@ export default function PrivacyPolicy() {
 
       <main className="px-6 py-16 max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold mb-8" style={{ color: 'var(--on-background)' }}>Privacy Policy</h1>
-        <p className="mb-8" style={{ color: 'var(--on-surface)' }}>Last updated: February 2026</p>
+        <p className="mb-8" style={{ color: 'var(--on-surface)' }}>Last updated: 27 September 2026</p>
 
         <div className="prose prose-lg max-w-none space-y-8" style={{ color: 'var(--on-surface)' }}>
           <section>
@@ -32,6 +31,7 @@ export default function PrivacyPolicy() {
             <ul className="list-disc pl-6 mt-4 space-y-2">
               <li><strong>Email address:</strong> To send you your personalised shopping lists and service updates.</li>
               <li><strong>Household size:</strong> To customize your shopping recommendations.</li>
+              <li><strong>Shopping conversations:</strong> When you choose to save a guest conversation, we keep a private temporary copy so it can follow you through email verification, including on another device.</li>
               <li><strong>Usage data:</strong> Anonymous analytics to improve our service.</li>
               <li><strong>Cookies:</strong> To remember your preferences and improve site functionality.</li>
             </ul>
@@ -99,6 +99,9 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="text-2xl font-semibold mb-4" style={{ color: 'var(--on-background)' }}>8. Data Retention</h2>
+            <p className="mb-4">
+              A guest conversation waiting for email verification is available for up to 24 hours. Expired temporary copies are removed during automated cleanup. After you verify, the conversation is saved to your account and its temporary content is cleared.
+            </p>
             <p>
               We retain your personal data only for as long as necessary to provide our services to you, or as required 
               by law. If you unsubscribe from our service, we will delete your data within 30 days unless we are legally 

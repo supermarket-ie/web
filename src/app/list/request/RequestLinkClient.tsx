@@ -5,10 +5,11 @@ import Link from "next/link";
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { getAnalyticsSessionId, trackEvent } from '@/lib/analytics';
+import { readGuestRegistrationContinuation } from '@/lib/registration-continuation';
 
 type Status = "idle" | "submitting" | "sent" | "error";
 
-export default function RequestLinkPage({ expired = false }: { expired?: boolean }) {
+export default function RequestLinkPage({ expired = false, continuationId }: { expired?: boolean; continuationId?: string }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
 
@@ -29,9 +30,10 @@ export default function RequestLinkPage({ expired = false }: { expired?: boolean
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: normalizedEmail,
-          familySize: "2",
           sessionId: getAnalyticsSessionId(),
           source: 'sign_in',
+          continuation: continuationId ? undefined : readGuestRegistrationContinuation(),
+          continuationId,
         }),
       });
 
@@ -54,12 +56,12 @@ export default function RequestLinkPage({ expired = false }: { expired?: boolean
         <div className="bg-white rounded-2xl shadow-sm border border-[#E8E2DC] max-w-md w-full p-8">
           <h1 className="text-2xl font-bold text-[#1D2324] mb-2">Continue free</h1>
           <p className="text-[#636E72] text-sm mb-6">
-            Enter your email to keep your household agent, shopping preferences and future updates. No password needed.
+            Sign in or create a free account to save your shops and return to your conversations. No password needed.
           </p>
 
           {expired && (
             <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              That link has expired or is invalid. Request a new one below.
+              That link has expired or is invalid. {continuationId ? 'Enter the same email to request a fresh link to your conversation.' : 'Request a new one below.'}
             </p>
           )}
 
@@ -71,10 +73,11 @@ export default function RequestLinkPage({ expired = false }: { expired?: boolean
             </div>
           ) : <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-[#1D2324] mb-2">
+              <label htmlFor="sign-in-email" className="block text-sm font-semibold text-[#1D2324] mb-2">
                 Email address
               </label>
               <input
+                id="sign-in-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

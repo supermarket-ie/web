@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { evaluateActiveAgentTasks } from '@/lib/agent-task-evaluator';
+import { cleanupRegistrationContinuations } from '@/lib/registration-continuation-store';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await cleanupRegistrationContinuations();
     const result = await evaluateActiveAgentTasks();
     console.log('[agent-tasks] Evaluation complete', result);
     return NextResponse.json(result);
