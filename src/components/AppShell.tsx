@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { loadSession, clearSession } from '@/lib/session';
 import { AgentMark } from '@/components/homepage/AgentMark';
+import { CATALOGUE_CATEGORIES } from '@/lib/catalogue-categories';
 
 const NAV_ITEMS = [
   {
@@ -92,6 +93,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   const hideNav = HIDDEN_ON.some(p => pathname.startsWith(p));
   const showNav = ready && !!listToken && !hideNav;
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menuOpen || !menu) return;
+    menu.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const desktop = window.matchMedia('(min-width: 640px)');
+    const closeOnDesktop = () => { if (desktop.matches) menu.close(); };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => {
+      menu.close();
+      document.body.style.overflow = previousOverflow;
+      desktop.removeEventListener('change', closeOnDesktop);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => { menuRef.current?.close(); }, [pathname]);
 
   function signOut() {
     clearSession();
@@ -132,8 +152,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
 
-          <button className="flex size-9 items-center justify-center rounded-lg text-[#132019] transition-opacity hover:opacity-70 sm:hidden"
-            onClick={() => setMenuOpen(o => !o)} aria-label="Menu">
+          <button type="button" className="flex size-11 shrink-0 items-center justify-center rounded-lg text-[#132019] transition-opacity hover:opacity-70 sm:hidden"
+            onClick={() => setMenuOpen(true)} aria-label="Menu" aria-expanded={menuOpen} aria-controls="mobile-navigation" aria-haspopup="dialog">
             {menuOpen ? (
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -146,27 +166,46 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        {menuOpen && (
-          <div className="mt-3 flex flex-col gap-1 border-t border-black/[0.06] pb-2 sm:hidden">
-            {!showNav && !hideNav && (
-              <Link href="/shop" className="rounded-lg px-2 py-2.5 text-sm font-semibold text-[#132019] hover:bg-[#f3f6f3]" onClick={() => setMenuOpen(false)}>
-                Browse
+        <dialog
+          ref={menuRef}
+          id="mobile-navigation"
+          aria-labelledby="mobile-navigation-title"
+          onClose={() => setMenuOpen(false)}
+          onClick={event => {
+            if (event.target !== event.currentTarget) return;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) setMenuOpen(false);
+          }}
+          className="fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[calc(100%_-_1.5rem)] max-w-[380px] border-0 bg-[#fcfdfb] p-0 text-[#132019] shadow-2xl backdrop:bg-[#122018]/35 backdrop:backdrop-blur-[2px]"
+        >
+          <div className="flex h-full flex-col">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#e5ece6] px-5 py-3">
+              <h2 id="mobile-navigation-title" className="text-lg font-bold tracking-tight">Explore Supermarket.ie</h2>
+              <button type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)} className="flex size-11 shrink-0 items-center justify-center rounded-full text-[#536058] hover:bg-[#edf4ee] focus-visible:outline-2 focus-visible:outline-[#168049]">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" d="m6 6 12 12M6 18 18 6" /></svg>
+              </button>
+            </div>
+            <nav aria-label="Mobile navigation" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+              <Link href="/" onClick={() => setMenuOpen(false)} className="mb-5 flex min-h-12 items-center gap-3 rounded-xl bg-[#eaf5ed] px-3 font-semibold text-[#21603b]">
+                <AgentMark className="size-7" /> Your agent
               </Link>
-            )}
-            {ready && (
-              showNav ? (
-                <button onClick={() => { setMenuOpen(false); signOut(); }}
-                  className="rounded-lg px-2 py-2.5 text-left text-sm font-medium text-[#132019] hover:bg-[#f3f6f3]">
-                  Sign out
-                </button>
-              ) : (
-                <Link href="/list/request" className="rounded-lg px-2 py-2.5 text-sm font-semibold text-[#132019] hover:bg-[#f3f6f3]" onClick={() => setMenuOpen(false)}>
-                  Sign in
-                </Link>
-              )
-            )}
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.1em] text-[#6d7c71]">Browse by category</h3>
+              <ul className="grid grid-cols-2 gap-x-2 gap-y-1">
+                {CATALOGUE_CATEGORIES.map(category => (
+                  <li key={category.slug}>
+                    <Link href={`/shop/${category.slug}`} aria-current={pathname === `/shop/${category.slug}` ? 'page' : undefined} onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center rounded-lg px-2 py-2 text-sm font-medium hover:bg-[#edf4ee] focus-visible:outline-2 focus-visible:outline-[#168049] aria-[current=page]:bg-[#eaf5ed] aria-[current=page]:text-[#21603b]">
+                      {category.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/shop" onClick={() => setMenuOpen(false)} className="mt-4 inline-flex min-h-11 items-center px-2 text-sm font-semibold text-[#21603b] underline underline-offset-4">View all categories</Link>
+            </nav>
+            {ready && <div className="shrink-0 border-t border-[#e5ece6] px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {showNav ? <button type="button" onClick={() => { setMenuOpen(false); signOut(); }} className="min-h-11 w-full rounded-full border border-[#dbe5dd] px-5 text-sm font-semibold">Sign out</button> : <Link href="/list/request" onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center justify-center rounded-full bg-[#122018] px-5 text-sm font-semibold text-white">Sign in / register</Link>}
+            </div>}
           </div>
-        )}
+        </dialog>
       </header>
 
       <div className="flex flex-1">

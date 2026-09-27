@@ -21,6 +21,13 @@ describe('Eve capability instruction routing', () => {
   it('selects meal and ingredient guidance' , () => {
     expect(selectEveCapabilities('Plan four dinners with ingredients reused to reduce waste')).toContain('meal');
   });
+  it.each([
+    'What could I make with Philadelphia?',
+    'Suggest different ways to use Philadelphia cheese',
+    'Suggest a snack using cream cheese',
+  ])('routes exploratory ingredient ideas to meal guidance: %s', request => {
+    expect(selectEveCapabilities(request)).toContain('meal');
+  });
   it('keeps safety distinctions inside selected capability content', () => {
     expect(instructionsForTurn('Compare my basket at one supermarket').content).toMatch(/partial basket has no complete total/);
   });

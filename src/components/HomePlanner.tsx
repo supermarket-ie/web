@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useEveAgent } from 'eve/react';
 import {
   ArrowUp,
@@ -356,6 +356,8 @@ function ShoppingAgentInner({
   const [input, setInput] = useState('');
   const [pendingExample, setPendingExample] = useState<string | null>(null);
   const [exampleReady, setExampleReady] = useState(false);
+  const [answerSaveOpen, setAnswerSaveOpen] = useState(false);
+  const answerSaveId = useId();
   const exampleResultPending = useRef<{ previousShop: string | null } | null>(null);
   const [error, setError] = useState('');
   const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
@@ -442,6 +444,9 @@ function ShoppingAgentInner({
   const signupPrompt = latestStructuredShop ? {
     title: 'Create a free account to save this shop',
     description: 'Keep your products, quantities and conversation together. Pick up here whenever you return.',
+  } : firstRequestIntent === 'meal' ? {
+    title: 'Save these meal ideas',
+    description: 'Create a free account to keep these ideas and return to this conversation.',
   } : signupPromptFor(firstRequestText);
   const hasVisibleAnswer = Boolean(latestStructuredShop) || messages.some(message =>
     message.role === 'assistant' && Boolean(visibleAgentText(messageText(message)))
@@ -454,6 +459,7 @@ function ShoppingAgentInner({
     && isGuestClarification(messageText(lastAssistantMessage))
   );
   const showSignupPrompt = isGuest && !busy && (guestTurns === 1 || (showGuestReceipt && Boolean(latestStructuredShop))) && hasVisibleAnswer && !awaitingGuestClarification && !showGuestGate;
+  const showSignupForm = showGuestGate || (showSignupPrompt && (Boolean(latestStructuredShop) || answerSaveOpen));
   const liveSuggestions = !input.includes('\n') && input.trim().length >= 2
     ? buildPredictiveSuggestions(input, catalogueSuggestions)
     : [];
@@ -580,14 +586,14 @@ function ShoppingAgentInner({
   }, [messages, busy, showGuestGate]);
 
   useEffect(() => {
-    if (busy || (!showSignupPrompt && !showGuestGate)) return;
+    if (busy || !showSignupForm) return;
     trackEventOnce('signup_prompt_viewed', {
       entry_path: window.location.pathname,
       intent: firstRequestIntent,
       placement: showGuestGate ? 'guest_gate' : 'first_answer',
       flow: 'inline_agent_continuation',
     });
-  }, [busy, firstRequestIntent, showGuestGate, showSignupPrompt]);
+  }, [busy, firstRequestIntent, showGuestGate, showSignupForm]);
 
   useEffect(() => {
     if (isGuest || busy || !latestStructuredShop) return;
@@ -782,8 +788,19 @@ function ShoppingAgentInner({
         })}
 
         {showSignupPrompt && !(showGuestReceipt && latestStructuredShop) && (
-          <div className="ml-9 rounded-2xl border border-[#dbe9df] bg-[#f5faf6] px-4 py-4 sm:px-5">
-            <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} continuation={{ events: agent.events }} busy={busy} />
+          <div className="ml-9">
+            {!latestStructuredShop && <button
+              type="button"
+              aria-expanded={answerSaveOpen}
+              aria-controls={answerSaveId}
+              onClick={() => setAnswerSaveOpen(value => !value)}
+              className="min-h-11 rounded-lg px-1 text-xs font-medium text-[#397250] underline decoration-[#c2d6c8] underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#168049]"
+            >
+              {answerSaveOpen ? 'Close save form' : firstRequestIntent === 'meal' ? 'Save these ideas — free account' : 'Save this answer — free account'}
+            </button>}
+            <div id={answerSaveId} hidden={!latestStructuredShop && !answerSaveOpen} className="rounded-2xl border border-[#dbe9df] bg-[#f5faf6] px-4 py-4 sm:px-5">
+              <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} continuation={{ events: agent.events }} busy={busy} />
+            </div>
           </div>
         )}
 

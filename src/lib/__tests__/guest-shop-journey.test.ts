@@ -5,6 +5,7 @@ import { guestShopFixture } from './fixtures/registration-shop';
 
 type Message = Pick<EveMessage, 'id' | 'role' | 'parts'>;
 const user = (id: string, text: string): Message => ({ id, role: 'user', parts: [{ type: 'text', text }] });
+const answer = (id: string, text: string): Message => ({ id, role: 'assistant', parts: [{ type: 'text', text }] });
 const proposal = (id: string, partial = false): Message => ({ id, role: 'assistant', parts: [{
   type: 'dynamic-tool', toolName: 'present_household_shop', toolCallId: id, state: 'output-available', input: {},
   output: { kind: 'household_shop', shop: guestShopFixture().shop }, ...(partial ? { partial: true as const } : {}),
@@ -32,6 +33,16 @@ describe('guest shop journey', () => {
   });
   it('still gates a persistent watch request immediately', () => {
     expect(guestShopJourney([user('1', 'Watch the price of milk'), proposal('2')])).toMatchObject({ gated: true, revisionAvailable: false });
+  });
+  it('keeps ideas exploratory but requires registration after two answers without a shop', () => {
+    const messages = [user('1', 'Suggest different ways to use Philadelphia cheese'), answer('2', 'Try creamy pasta or stuffed peppers. Which would you like a shopping list for?')];
+    expect(guestShopJourney(messages)).toMatchObject({ shopping: false, gated: false, revisionAvailable: false });
+    expect(guestShopJourney([...messages, user('3', 'Tell me more about the peppers'), answer('4', 'Mix the cheese with herbs and bake in pepper halves.')])).toMatchObject({ shopping: false, gated: true, revisionAvailable: false });
+  });
+  it('lets an ideas conversation become a shop, then requires registration after one revision', () => {
+    const messages = [user('1', 'What could I make with Philadelphia?'), answer('2', 'Creamy pasta. Shall I prepare a shopping list?'), user('3', 'Yes, for two. I already have the cheese.'), proposal('4')];
+    expect(guestShopJourney(messages)).toMatchObject({ shopping: true, gated: false, revisionAvailable: true });
+    expect(guestShopJourney([...messages, user('5', 'Add a garlic baguette'), proposal('6')])).toMatchObject({ shopping: true, gated: true, revisionAvailable: false });
   });
   it('describes real quantity changes without treating changing line IDs as products added', () => {
     const previous = guestShopFixture().shop;
