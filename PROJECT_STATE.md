@@ -2662,3 +2662,31 @@ unchanged. Added regressions cover ideas without a shop reaching the gate,
 ideas becoming a shop followed by one revision and the gate, and natural meal
 idea routing. Local tests pass 344 assertions across 51 files. Preview, CI and
 production evidence will be recorded on the release PR.
+
+The READY PR #239 preview at d8c01e8159a8e32ff496d6bb4d71902b5fe09365
+returned Philadelphia ideas with only the optional save action. Opening and
+closing that action revealed the existing email form without submitting it.
+Choosing spinach/mushroom pasta for two produced a three-line priced proposal
+at €3.89, excluding the cheese, garlic, oil and pepper already owned. One
+revision doubled the pasta, updated the total to €5.64 and disabled further
+guest input while preserving the registration form. The first mobile ideas
+response at 390px also retained an enabled composer and collapsed save action.
+Local build passes using system TLS certificates for Google Fonts; CI passed.
+
+## 79. Mobile navigation overlays the page and exposes category links
+
+While §78 was in preview, the user reported that the mobile menu pushed the
+page down and asked for category headings instead of a generic browse option.
+AppShell's menu was an in-flow header block. It is now a native modal dialog
+anchored to the right, with a dimmed backdrop, independent category scrolling,
+body scroll lock and a fixed sign-in/register action. Native modal behaviour
+keeps keyboard focus inside the menu and restores it on close; Escape, close
+button, backdrop and destination selection dismiss the panel. It also closes
+when navigating or resizing to the desktop breakpoint.
+
+The menu leads with “Your agent” and lists the existing CATALOGUE_CATEGORIES
+names in two columns, linking to their existing canonical /shop/{slug} routes.
+“View all categories” remains available. No product counts, new catalogue
+routes, catalogue data changes or registration exemptions are introduced.
+Desktop navigation and the signed-in bottom navigation remain in place.
+Responsive preview and final production evidence are tracked on PR #239.
