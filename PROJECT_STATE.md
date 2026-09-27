@@ -2737,7 +2737,7 @@ outcomes, validate comparison eligibility, use honest freshness copy, remove
 the redundant deal chip/count emphasis, and measure individual starter outcomes.
 These are findings and recommendations only; this audit changes no live UI/data.
 
-## 82. Homepage starter usefulness and attribution (28 September 2026)
+## 82. Homepage starter usefulness and attribution (27 September 2026)
 
 User approved the §81 recommendations. The first starter now prepares a household
 shop after asking for household/budget/existing-stock context. Meal and household

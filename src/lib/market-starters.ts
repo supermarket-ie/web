@@ -111,14 +111,14 @@ export function buildMarketStarters(prices: ProductPrice[], rotationWindow = 0):
     id: `meal:${meal.canonical_product_id}:${meal.store}`,
     label: `What could I make with ${productName(meal)}?`,
     detail: offerDetail(meal),
-    prompt: `Suggest a few practical meal or snack ideas using ${productName(meal)}. Its price was checked at ${euro(meal.price)} at ${storeDisplayName(meal.store)} on ${checkedDate(meal.observed_at)}. Help me reuse the ingredients, then offer to build a shop for the ideas I choose. Recheck prices before preparing a shop.`,
+    prompt: `Suggest a few practical meal or snack ideas using ${productName(meal)}. Its price was checked at ${euro(meal.price)} at ${storeDisplayName(meal.store)} on ${checkedDate(meal.observed_at)}. Help me reuse the ingredients, then ask which ideas I'd like to try and offer to help with the ingredients I need. Recheck any prices before costing the ingredients.`,
     icon: 'meal',
   };
   if (household) starters[2] = {
     id: `offer:${household.canonical_product_id}:${household.store}`,
     label: `Is ${productName(household)} good value?`,
     detail: offerDetail(household),
-    prompt: `Help me decide whether ${productName(household)} belongs in my household shop. Its price was checked at ${euro(household.price)} at ${storeDisplayName(household.store)} on ${checkedDate(household.observed_at)}. Check pack size, unit price and suitable alternatives; don't recommend stocking up just because it is discounted.`,
+    prompt: `Help me decide whether ${productName(household)} is a useful purchase for my household. Its price was checked at ${euro(household.price)} at ${storeDisplayName(household.store)} on ${checkedDate(household.observed_at)}. Check pack size, unit price and suitable alternatives; don't recommend stocking up just because it is discounted.`,
     icon: 'offer',
   };
   if (comparison) {

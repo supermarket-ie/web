@@ -548,8 +548,11 @@ function ShoppingAgentInner({
       fetch(`/api/agent/starter-prompts?window=${rotationWindow}`, { signal: controller.signal })
         .then(response => response.ok ? response.json() : Promise.reject(new Error('Starter prompt request failed')))
         .then((data: { starters?: MarketStarter[] }) => {
-          if (Array.isArray(data.starters) && data.starters.length > 0) {
+          if (Array.isArray(data.starters) && data.starters.length > 0
+            && data.starters.every(item => typeof item.id === 'string' && item.icon in MARKET_STARTER_ICONS)) {
             setMarketStarters(asStarters(data.starters));
+          } else {
+            setMarketStarters(GUEST_STARTERS);
           }
         })
         .catch(nextError => {

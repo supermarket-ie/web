@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildMarketStarters } from '@/lib/market-starters';
 import type { ProductPrice } from '@/lib/price-data';
+import { inferSuggestionIntent } from '@/lib/agent-suggestions';
+import { guestShopJourney } from '@/lib/guest-shop-journey';
 
 function price(overrides: Partial<ProductPrice> = {}): ProductPrice {
   const name = overrides.canonical_name ?? 'Irish Chicken Fillets 1kg';
@@ -59,7 +61,9 @@ describe('buildMarketStarters', () => {
   it('retains the actual retailer brand and pack in offer labels', () => {
     const starters = buildMarketStarters([price({ canonical_name: 'Soft Cheese', store_product_name: 'Philadelphia Original Soft Cream Cheese 165g', category: 'Dairy' })]);
     expect(starters[1].label).toContain('Philadelphia Original Soft Cream Cheese 165g');
-    expect(starters[1].prompt).toContain('Recheck prices');
+    expect(starters[1].prompt).toContain('Recheck any prices');
+    expect(inferSuggestionIntent(starters[1].prompt)).toBe('meal');
+    expect(guestShopJourney([{ id: 'meal-start', role: 'user', parts: [{ type: 'text', text: starters[1].prompt }] }]).shopping).toBe(false);
   });
 
   it.each([
