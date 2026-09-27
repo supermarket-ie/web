@@ -2474,3 +2474,11 @@ or verification email has been created in production. Database application,
 release CI, preview UI and READY production checks remain release gates and
 will be recorded on the PR; real inbox delivery and conversion uplift are not
 established by isolated flow tests.
+
+Database migration `20260927081635_registration_continuations` was applied
+successfully. The repository migration filename follows that database-assigned
+version. Live checks confirm RLS enabled, no anon/authenticated SELECT or RPC
+EXECUTE permission, service-role access, a rejected unowned claim and the unique
+saved-shop index. No pending handoff rows or test accounts were created. The
+security advisor reports only the expected informational no-policy notice for
+the new service-only table; no browser policy is appropriate to this design.
