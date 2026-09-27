@@ -2690,3 +2690,12 @@ names in two columns, linking to their existing canonical /shop/{slug} routes.
 routes, catalogue data changes or registration exemptions are introduced.
 Desktop navigation and the signed-in bottom navigation remain in place.
 Responsive preview and final production evidence are tracked on PR #239.
+
+## 80. Remove the example section's self-link
+
+The user flagged “Link to this example” in the homepage “See the result”
+section as random. It linked back to the section already being viewed and
+competed with the meaningful “Make this shop yours” action. Remove that visible
+self-link and its unused import. Keep the sample-shop anchor for existing
+inbound links, the example content, prefill behaviour and registration flow.
+This is a presentation-only cleanup; release verification is recorded on its PR.
