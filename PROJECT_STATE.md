@@ -2482,3 +2482,52 @@ EXECUTE permission, service-role access, a rejected unowned claim and the unique
 saved-shop index. No pending handoff rows or test accounts were created. The
 security advisor reports only the expected informational no-policy notice for
 the new service-only table; no browser policy is appropriate to this design.
+
+PR #235 merged as `c6b56305`; production `dpl_5gSJPENNg7CxVEBwe772TWAyZj2B`
+reached READY with both public aliases. Live guest-shop/save copy, expired-link
+recovery, unauthenticated restore rejection and invalid-token/no-cookie checks
+passed. All 323 tests passed. No production test account/email was created.
+
+## 75. Price-backed homepage example and editable handoff — 27 September 2026
+
+Paul approved replacing the existing illustrative `#sample-shop` section below
+the homepage agent, not adding another banner, generic prompt row or new SEO
+landing page. The baseline main and READY production were `c6b56305`; a read-only
+Supabase check returned 2,476 trusted offers. No retailer job, mapping, schema,
+account, email or paid promotion is changed by this work.
+
+The household-essentials example uses stable canonical identities and quantities,
+with current prices from the existing fully paginated `latest_prices` reader and
+the shopping-workspace freshness/identity/pack guards. It chooses one retailer by
+coverage, then subtotal; it does not combine stores into a one-store total or
+claim national cheapest status. Actual retailer names, quantities, check dates and
+line totals are visible. The full list expands in place. Missing prices remain
+explicit and prevent a complete total; no-data/dependency failure retains the
+unpriced intentions without a numeric zero or taking down the agent homepage.
+The server section streams independently behind Suspense. No price or total is
+hardcoded. The example is labelled a starting basket, not a full week's meal plan
+or an average household spend. The two-adult/one-child/€100 context is editable.
+
+`Make this shop yours` fills the existing guest agent composer and moves focus
+there without sending, saving or ordering. A non-empty request is preserved
+unless the visitor explicitly chooses the example instead. Busy/gated sessions
+are not overwritten. The visitor edits and sends through the existing Eve flow,
+then uses Sprint 4 registration. Only shopping intentions, not cached prices or
+canonical IDs, enter the editable prompt. No household text is placed in URLs;
+`/#sample-shop` is the public shareable anchor. Existing catalogue and SEO routes
+remain unchanged.
+
+Aggregate `homepage_example_viewed`, `homepage_example_selected`,
+`homepage_example_started` and `homepage_example_result` events distinguish actual
+visibility, handoff, explicit submission and a new structured result. They use the
+existing analytics session so registration can be joined to the same journey;
+they contain no request text, quantities, household values or prices. Existing
+server-confirmed registration events remain the conversion source of truth.
+Release tests, preview interaction and READY production checks are recorded on
+this work's PR. No traffic or conversion uplift is claimed. External promotion,
+outreach and advertising are not launched by this homepage implementation.
+
+Local validation passes 331 tests across 50 files, TypeScript, changed-file lint
+and diff checks. Eight new regressions cover cents/quantities, one-store coverage
+selection, partial/no-data states, freshness/pack/identity exclusions, intent-only
+handoff and existing-draft/busy/gated protection.
