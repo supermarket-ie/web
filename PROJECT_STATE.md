@@ -2408,3 +2408,77 @@ A read-only Supabase check returned 2,476 trusted price rows for 1,248 canonical
 products. No database, retailer refresh, matching, registration or agent-flow
 changes are part of this copy update. Release checks and live confirmation will
 be recorded on the PR.
+
+PR #234 merged as `37ad3615`; production `dpl_FTZ6uYYY93picNTrb3nNoMFsYt1M`
+reached READY. Live catalogue, category and browse checks confirmed the copy
+change and preserved navigation/canonicals.
+
+## 74. Registration and guest-shop continuity — 27 September 2026
+
+Sprint 4 starts from verified GitHub main and READY production `37ad3615`.
+The existing email token held account details only. Guest Eve state lived in
+origin-local browser storage; another browser/device had no state to transfer.
+An existing account's saved/local chat could replace the new guest journey, and
+the restored transcript was not persisted as an account chat until another turn.
+The sign-in form also sent a default household of two, overwriting existing
+subscriber family size. These are observed implementation gaps, not proof of
+which issue caused any particular visitor to abandon registration.
+
+`/api/subscribe` now stages a bounded snapshot before sending the email. The
+private `registration_continuations` table binds an opaque UUID to an HMAC of
+the normalized email, with RLS and service-role-only table/function grants.
+The email token carries the UUID, never the transcript or household details.
+Snapshots expire after 24 hours; email links still expire after 30 minutes.
+An expired, correctly signed link may lead to a fresh email request for the
+same snapshot, but never authenticates on its own. Resend checks both email
+binding and expiry. Automated cleanup runs on registration requests and the
+existing daily protected agent-task job; claimed temporary content clears
+immediately. The privacy page describes this temporary transfer.
+
+After verification sets the existing HttpOnly session cookie, the completion
+screen calls an authenticated restore route. A transaction locks and claims the
+handoff, checks subscriber/email ownership and creates exactly one existing-style
+account conversation. Replays return the same chat. The screen opens `/?chat=...`
+and exposes a retry if restoration fails, rather than silently opening an older
+chat. Requested chats load directly under the existing ownership check. Guest
+events preserve the native card and display history; guest runtime session IDs
+and client account claims are discarded. The first signed-in message starts an
+authenticated Eve session with bounded, explicitly untrusted prior conversation
+and shopping intentions as supported client context. Prices remain server-grounded.
+
+The existing structured-shop save route still reprices before its first write.
+An account/proposal uniqueness key prevents repeated links, reloads or concurrent
+requests from creating duplicate shops. Autosave cache keys are account-scoped,
+the shop links to the owned conversation, and a failed save has a working retry.
+Sign-in preserves an existing family size; new registrations derive it from a
+validated household shop when available. Registration prompts explain the free
+account/save benefit and email confirmation step, and email copy follows the
+actual saved-shop/conversation intent. Forms wait for a completed agent response.
+
+Server events distinguish email sent/failed, verification opened/expired,
+registration completed, continuation restored/failed and first shop saved.
+The omitted client event types `signup_email_engaged` and `sign_in_started` are
+accepted, and blocked browser storage no longer stops analytics or submission.
+No transcript, household requirements, budget or bearer token enters analytics.
+GA completion remains supplementary to the server-confirmed registration event.
+
+Validation: 323 tests across 49 files, TypeScript, changed-file lint and diff
+checks pass. New route tests exercise the real email-token/cookie/restore/save
+handlers with an isolated email sink and database double; they cover another
+browser with no local storage, new/existing accounts, duplicate save, expired
+and forged links, fresh-link recovery, staging failure and provider rejection.
+The migration also passed isolated Postgres assertions for service-role access,
+denied browser-role access, email/account binding, expiry, single claim/event,
+temporary content removal and account-scoped save uniqueness. No test account
+or verification email has been created in production. Database application,
+release CI, preview UI and READY production checks remain release gates and
+will be recorded on the PR; real inbox delivery and conversion uplift are not
+established by isolated flow tests.
+
+Database migration `20260927081635_registration_continuations` was applied
+successfully. The repository migration filename follows that database-assigned
+version. Live checks confirm RLS enabled, no anon/authenticated SELECT or RPC
+EXECUTE permission, service-role access, a rejected unowned claim and the unique
+saved-shop index. No pending handoff rows or test accounts were created. The
+security advisor reports only the expected informational no-policy notice for
+the new service-only table; no browser policy is appropriate to this design.

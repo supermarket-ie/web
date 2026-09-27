@@ -3,6 +3,8 @@ import { resend } from '@/lib/resend';
 import { supabaseAdmin } from '@/lib/supabase';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { isContinuationId, MAX_CONTINUATION_BYTES } from '@/lib/registration-continuation';
+import { cleanupRegistrationContinuations, resumeRegistrationContinuation, stageRegistrationContinuation } from '@/lib/registration-continuation-store';
 
 const SECRET = process.env.MAGIC_LINK_SECRET;
 if (!SECRET) throw new Error('MAGIC_LINK_SECRET environment variable is required');
@@ -56,10 +58,14 @@ async function recordEmailFailure(sessionId: string | null, source: 'signup' | '
   if (error) console.error('[subscribe] failure analytics insert failed:', error);
 }
 
-function verificationEmail(verificationUrl: string) {
+function verificationEmail(verificationUrl: string, kind?: 'shop' | 'conversation') {
+  const title = kind === 'shop' ? 'Confirm and save your shop' : kind === 'conversation' ? 'Continue your conversation' : 'Confirm your email';
+  const explanation = kind
+    ? 'Your conversation is ready to continue. Confirm your email to keep it with your account, even if you open this link on another device.'
+    : 'Use the secure link below to continue with your household agent. No password needed.';
   return {
-    subject: 'Confirm your email for Supermarket.ie',
-    text: `Confirm your email to continue with Supermarket.ie:\n\n${verificationUrl}\n\nThis link is valid for 30 minutes. If you did not request it, you can ignore this email.\n\n— supermarket.ie`,
+    subject: kind === 'shop' ? 'Save your household shop — Supermarket.ie' : kind === 'conversation' ? 'Continue your conversation — Supermarket.ie' : 'Your sign-in link — Supermarket.ie',
+    text: `${title}\n\n${explanation}\n\n${verificationUrl}\n\nThis link is valid for 30 minutes. If you did not request it, you can ignore this email.\n\n— supermarket.ie`,
     html: `<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#F6F2EA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#183126;">
@@ -69,11 +75,11 @@ function verificationEmail(verificationUrl: string) {
         <tr><td style="padding:0 4px 18px;font-size:22px;font-weight:800;color:#173827;">supermarket<span style="color:#0A7A3E;">.ie</span></td></tr>
         <tr><td style="background:#0F6B3B;border-radius:22px 22px 0 0;padding:34px 32px;color:#FFFFFF;">
           <div style="font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#D9F0DE;margin-bottom:10px;">Ireland’s household shopping agent</div>
-          <div style="font-size:30px;line-height:1.15;font-weight:800;">Confirm your email</div>
-          <div style="font-size:16px;line-height:1.6;color:#E7F4EA;margin-top:14px;">Use the secure link below to continue and protect your household information.</div>
+          <div style="font-size:30px;line-height:1.15;font-weight:800;">${title}</div>
+          <div style="font-size:16px;line-height:1.6;color:#E7F4EA;margin-top:14px;">${explanation}</div>
         </td></tr>
         <tr><td style="background:#FFFFFF;border:1px solid #E8E2D8;border-top:0;border-radius:0 0 22px 22px;padding:30px 32px;">
-          <a href="${verificationUrl}" style="display:inline-block;background:#13271D;color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:800;padding:14px 22px;border-radius:999px;">Confirm and continue →</a>
+          <a href="${verificationUrl}" style="display:inline-block;background:#13271D;color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:800;padding:14px 22px;border-radius:999px;">${title} →</a>
           <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#8A918C;">This link is valid for 30 minutes. If you did not request it, you can ignore this email.</p>
         </td></tr>
       </table>
@@ -86,11 +92,15 @@ function verificationEmail(verificationUrl: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => null) as {
+    const raw = await request.text();
+    if (Buffer.byteLength(raw, 'utf8') > MAX_CONTINUATION_BYTES + 10_000) return NextResponse.json({ error: 'This conversation is too large to transfer.' }, { status: 413 });
+    const body = JSON.parse(raw) as {
       email?: unknown;
       familySize?: unknown;
       sessionId?: unknown;
       source?: unknown;
+      continuation?: unknown;
+      continuationId?: unknown;
     } | null;
 
     const sessionId = typeof body?.sessionId === 'string' && body.sessionId.length <= MAX_SESSION_ID_LENGTH
@@ -109,7 +119,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
     }
 
-    const familySize = typeof body.familySize === 'string' ? body.familySize : '2';
+    let familySize = typeof body.familySize === 'string' && /^\d{1,2}$|^3-4$|^5\+$/.test(body.familySize) ? body.familySize : undefined;
 
     const ipLimited = consumeLimit(bucketKey(`ip:${clientIp(request)}`), MAX_REQUESTS_PER_IP);
     const emailLimited = consumeLimit(bucketKey(`email:${normalizedEmail}`), MAX_REQUESTS_PER_EMAIL);
@@ -118,6 +128,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Too many requests. Please wait before trying again.' }, { status: 429 });
     }
 
+    let continuation: Awaited<ReturnType<typeof stageRegistrationContinuation>> | undefined;
+    let stagedNewContinuation = false;
+    if (body.continuation !== undefined || isContinuationId(body.continuationId)) {
+      try {
+        stagedNewContinuation = body.continuation !== undefined;
+        continuation = stagedNewContinuation
+          ? await stageRegistrationContinuation(normalizedEmail, body.continuation, sessionId)
+          : await resumeRegistrationContinuation(normalizedEmail, body.continuationId as string);
+        familySize = continuation.familySize ?? familySize;
+      } catch {
+        await recordEmailFailure(sessionId, source, 'continuation_unavailable');
+        return NextResponse.json({ error: stagedNewContinuation ? 'We could not keep your conversation ready for verification. Please keep this tab open and try again.' : 'This continuation is unavailable for that email. Request a new link from your original conversation.' }, { status: 503 });
+      }
+    }
+    await cleanupRegistrationContinuations();
     const verificationToken = jwt.sign(
       {
         purpose: 'registration_verification',
@@ -125,6 +150,7 @@ export async function POST(request: NextRequest) {
         familySize,
         analyticsSessionId: sessionId,
         source,
+        ...(continuation ? { continuationId: continuation.id } : {}),
       },
       SECRET!,
       { expiresIn: '30m' },
@@ -132,7 +158,7 @@ export async function POST(request: NextRequest) {
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
     const verificationUrl = `${siteUrl}/api/auth/complete-registration?token=${encodeURIComponent(verificationToken)}`;
-    const email = verificationEmail(verificationUrl);
+    const email = verificationEmail(verificationUrl, continuation?.kind);
     const { error } = await resend.emails.send({
       from: 'supermarket.ie <hello@mail.supermarket.ie>',
       to: normalizedEmail,
@@ -142,6 +168,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
+      if (continuation && stagedNewContinuation) await supabaseAdmin.from('registration_continuations').delete().eq('id', continuation.id);
       console.error('[subscribe] verification email failed:', error);
       await recordEmailFailure(sessionId, source, 'provider_rejected');
       return NextResponse.json({ error: 'We could not send the verification email.' }, { status: 502 });
@@ -150,7 +177,7 @@ export async function POST(request: NextRequest) {
     const { error: analyticsError } = await supabaseAdmin.from('agent_events').insert({
       event_type: 'verification_email_sent',
       session_id: sessionId,
-      metadata: { method: 'email', flow: 'verified_email_continuation', source },
+      metadata: { method: 'email', flow: 'verified_email_continuation', source, continuation: continuation?.kind ?? 'none' },
     });
     if (analyticsError) console.error('[subscribe] analytics insert failed:', analyticsError);
 

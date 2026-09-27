@@ -4,6 +4,7 @@ import { getSubscriberId } from '@/lib/auth';
 import { parseMarkdownList } from '@/lib/parse-planner-markdown';
 import { householdShopToolOutputSchema, type HouseholdShopContract } from '@/lib/shopping/household-shop-contract';
 import { groundHouseholdShop } from '@/lib/shopping/household-shop';
+import { isContinuationId } from '@/lib/registration-continuation';
 
 function sessionToken(request: NextRequest, explicit?: string) {
   return request.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
@@ -38,9 +39,26 @@ async function repriceStructuredShop(input: unknown): Promise<HouseholdShopContr
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as { token?: string; markdown?: string; household_shop?: unknown; name?: string; family_size?: string };
+    const body = await request.json() as { token?: string; markdown?: string; household_shop?: unknown; name?: string; family_size?: string; conversation_id?: unknown };
     const subscriberId = getSubscriberId(sessionToken(request, body.token));
     if (!subscriberId) return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
+    const conversationId = isContinuationId(body.conversation_id) ? body.conversation_id : null;
+    let continuationSave = false;
+    if (conversationId) {
+      const { data: conversation, error } = await supabaseAdmin.from('conversations').select('id,profile').eq('id', conversationId).eq('subscriber_id', subscriberId).maybeSingle();
+      if (error || !conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      continuationSave = Boolean(conversation.profile?.eve_state?.resumeContext);
+    }
+    const originalShop = body.household_shop ? householdShopToolOutputSchema.parse({ kind: 'household_shop', shop: body.household_shop }).shop : null;
+    const sourceShopKey = originalShop ? `household:${originalShop.provenance.generated_at}` : null;
+    async function existingSave() {
+      if (!sourceShopKey) return null;
+      const { data, error } = await supabaseAdmin.from('saved_lists').select('id').eq('subscriber_id', subscriberId).eq('source_shop_key', sourceShopKey).maybeSingle();
+      if (error) throw new Error('Unable to check saved shop');
+      return data;
+    }
+    const previous = await existingSave();
+    if (previous) return NextResponse.json({ ok: true, list_id: previous.id, already_saved: true });
     const structured = body.household_shop ? await repriceStructuredShop(body.household_shop) : null;
     if (!structured && !body.markdown) return NextResponse.json({ error: 'Missing household_shop or markdown' }, { status: 400 });
     const legacy = structured ? null : parseMarkdownList(body.markdown!);
@@ -59,17 +77,24 @@ export async function POST(request: NextRequest) {
       ? structured.store_coverage.map(row => ({ store: row.retailer, total: row.basket_total, item_count: row.covered_lines, complete: row.complete }))
       : legacy!.storeTotals;
 
-    const { data: existing } = await supabaseAdmin.from('saved_lists').select('id, created_at').eq('subscriber_id', subscriberId).order('created_at', { ascending: true });
-    if (existing && existing.length >= 10) await supabaseAdmin.from('saved_lists').delete().in('id', existing.slice(0, existing.length - 9).map(row => row.id));
-    await supabaseAdmin.from('saved_lists').update({ is_default: false }).eq('subscriber_id', subscriberId);
     const name = body.name ?? (structured ? `${structured.household.planning_period.label} household shop` : body.markdown!.split('\n').find(line => line.startsWith('# '))?.slice(2).trim()) ?? 'Weekly grocery list';
     const { data: saved, error } = await supabaseAdmin.from('saved_lists').insert({
       subscriber_id: subscriberId, name: name.slice(0, 80),
+      source_shop_key: sourceShopKey, conversation_id: conversationId,
       family_size: body.family_size ?? (structured ? String(structured.household.adults + (structured.household.children ?? 0)) : undefined) ?? '2',
       items, store_totals: storeTotals, is_default: true, generated_at: new Date().toISOString(),
       agent_decision_trace: structured ? { kind: 'household_shop', schema_version: structured.schema_version, household: structured.household, missing_or_uncertain_items: structured.missing_or_uncertain_items, provenance: structured.provenance } : null,
     }).select('id').single();
+    if (error?.code === '23505' && sourceShopKey) {
+      const concurrent = await existingSave();
+      if (concurrent) return NextResponse.json({ ok: true, list_id: concurrent.id, already_saved: true });
+    }
     if (error || !saved) throw error ?? new Error('Failed to save list');
+    await supabaseAdmin.from('saved_lists').update({ is_default: false }).eq('subscriber_id', subscriberId).neq('id', saved.id);
+    const { data: existing } = await supabaseAdmin.from('saved_lists').select('id, created_at').eq('subscriber_id', subscriberId).order('created_at', { ascending: false });
+    if (existing && existing.length > 10) await supabaseAdmin.from('saved_lists').delete().in('id', existing.slice(10).map(row => row.id));
+    if (conversationId) await supabaseAdmin.from('conversations').update({ list_id: saved.id }).eq('id', conversationId).eq('subscriber_id', subscriberId);
+    await supabaseAdmin.from('agent_events').insert({ event_type: continuationSave ? 'registration_shop_saved' : 'list_saved', subscriber_id: subscriberId, metadata: { flow: continuationSave ? 'verified_email_continuation' : 'household_shop', item_count: items.length } });
     const history = items.filter(item => item.price != null && item.store).map(item => ({ subscriber_id: subscriberId, list_id: saved.id, canonical_name: item.canonical_name, category: item.category, store: item.store, price_paid: item.price, quantity: item.quantity, observed_at: new Date().toISOString() }));
     if (history.length) await supabaseAdmin.from('list_items').insert(history);
     void supabaseAdmin.from('subscribers').update({ refresh_cache: null, refresh_cache_at: null }).eq('id', subscriberId);
