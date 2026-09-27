@@ -2631,3 +2631,34 @@ mutually exclusive, uses plain missing-price wording, and suppresses an early
 registration prompt while the initial proposal is still processing. A further
 isolated regression confirms the latest revision, quantities and budget survive
 email continuation. No live verification email or test account was created.
+
+## 78. Guest ideas: optional first-answer saving, registration gate retained
+
+The first product-use/meal-ideas answer had no structured shop, correctly, but
+HomePlanner automatically opened the full registration form after any first
+useful answer. That made exploration feel interrupted before the shopper chose
+an idea. The user requested a quieter first-answer experience while explicitly
+retaining the registration gateway.
+
+First non-shop answers now show a small optional “Save these ideas — free
+account” action (or “Save this answer” for other intents). Opening it reveals
+the existing email continuation form; closing it preserves the mounted form.
+Meal copy describes saving ideas rather than claiming a meal plan already
+exists. The collapsed action does not count as a full signup-form impression.
+Completed structured shops keep the existing receipt and save invitation.
+
+Exploratory meal guidance now offers a contextual next step: choose an idea,
+give the number of people, and optionally name ingredients already owned. It
+does not create a basket from ideas alone. Acceptance prepares a structured
+proposed shop through present_household_shop, excluding stated owned ingredients
+and making reasonable assumptions. Short follow-ups use conversation context;
+natural “make with”, “ways to use” and snack queries select meal guidance.
+
+The guest journey limits are unchanged: two user turns without a completed
+proposal; one revision after a completed proposal with at most three user turns;
+persistent monitoring still leads to registration immediately. Composer/send
+guards, server authentication, verification and continuation persistence remain
+unchanged. Added regressions cover ideas without a shop reaching the gate,
+ideas becoming a shop followed by one revision and the gate, and natural meal
+idea routing. Local tests pass 344 assertions across 51 files. Preview, CI and
+production evidence will be recorded on the release PR.

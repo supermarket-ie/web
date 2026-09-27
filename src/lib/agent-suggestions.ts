@@ -48,7 +48,7 @@ export function inferSuggestionIntent(input: string): SuggestionIntent {
   // lookup, and should keep its basket-oriented continuation CTA.
   if (/\b(?:complete|full|weekly|grocery|value led)\s+(?:household\s+)?(?:shop|shopping list)\b|\b(?:build|plan|prepare|sort out)\b.{0,50}\b(?:shop|shopping list)\b|\bshopping list\b/.test(query)) return 'shop';
   if (/\b(gluten(?:\s+f(?:r(?:e(?:e)?)?)?)?|dairy(?:\s+f(?:r(?:e(?:e)?)?)?)?|lactose(?:\s+f(?:r(?:e(?:e)?)?)?)?|nut(?:\s+f(?:r(?:e(?:e)?)?)?)?|peanut(?:\s+f(?:r(?:e(?:e)?)?)?)?|egg(?:\s+f(?:r(?:e(?:e)?)?)?)?|soy(?:\s+f(?:r(?:e(?:e)?)?)?)?|sesame(?:\s+f(?:r(?:e(?:e)?)?)?)?|low\s+(?:prot(?:e(?:i(?:n)?)?)?|sod(?:i(?:u(?:m)?)?)?|salt|sugar|carb)|high\s+prot(?:e(?:i(?:n)?)?)?|no\s+added\s+sugar|without\s+(?:gluten|dairy|lactose|nuts?|peanuts?|eggs?|soy|sesame)|allerg(?:y|ies|en|ens)|vegetarian|vegan|halal|kosher|keto)\b/.test(query)) return 'dietary';
-  if (/\b(dinners?|meals?|cook|make|recipes?|lunch(?:es)?|breakfasts?|ingredients?)\b/.test(query)) return 'meal';
+  if (/\b(dinners?|meals?|snacks?|cook|make|recipes?|lunch(?:es)?|breakfasts?|ingredients?)\b|\bways? to use\b/.test(query)) return 'meal';
   if (/€|£|\b(budget|spend|under|less than|shop for|family of|adults?|people)\b/.test(query)) return 'budget';
   if (/\b(compare|versus|vs|difference|which store|cheapest)\b/.test(query)) return 'compare';
   if (/\b(offer|offers|promotion|promotions|sale|reduced|deal)\b/.test(query)) return 'offer';

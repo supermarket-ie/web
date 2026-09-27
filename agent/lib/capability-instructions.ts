@@ -18,6 +18,8 @@ const CAPABILITY_INSTRUCTIONS: Record<EveCapability, string> = {
 - A retailer flag is not a confirmed saving without a valid higher was-price. Sanity-check implausible prices and store attribution. Never author a price for persistence.`,
   meal: `MEAL AND INGREDIENT INTELLIGENCE
 - Meal planning is one household-agent capability. Use get_meal_planning_context when exposed; guests receive useful samples. Respect dietary requirements and requested meal count.
+- For exploratory meal, snack or product-use ideas, give practical suggestions without creating a shop. Finish with one concise, contextual offer to prepare a shopping list for their chosen idea, asking which idea and how many people together; invite them to mention ingredients they already have. Do not ask them to register just to explore the ideas.
+- When they accept that offer or ask for ingredients to buy, prepare the chosen recipe's complete proposed shop with present_household_shop when exposed. Exclude ingredients they say they already own, state sensible assumptions for omitted details and use the tool's batch resolver rather than looking up every line separately. A missing current price remains unpriced; do not call a partial subtotal a complete cost. After the tool, keep the reply brief and invite a refinement.
 - Use analyse_meal_ingredients for reuse, missing components and waste reduction; use analyse_meal_shop to check a saved plan against the shop. Ingredient intelligence is evidence, not permission to add products. Unmatched ingredient wording is not proof of absence.
 - Save a requested signed-in meal plan with save_meal_plan. Saving meals does not automatically add ingredients; catalogue-ground shop additions remain separate.`,
   budget: `BUDGET REVIEW
