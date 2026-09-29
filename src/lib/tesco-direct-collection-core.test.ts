@@ -54,7 +54,10 @@ describe('Tesco transport stop rules', () => {
       ['https://www.tesco.ie/shop/en-IE/', 301, true],
       ['https://www.tesco.ie/shop/en-IE/', 302, false],
       ['https://www.tesco.ie/shop/en-IE/browse/frozen-food/vegetables/steamed-vegetables-rice-and-pasta', 301, true],
-      ['https://www.tesco.ie/shop/en-IE/browse/unknown', 301, false],
+      ['https://www.tesco.ie/shop/en-IE/browse/fresh-food/fruit', 301, true],
+      ['https://www.tesco.ie/shop/en-IE/browse/fruit?challenge=1', 301, false],
+      ['https://www.tesco.ie/shop/en-IE/browse/security-check', 301, false],
+      ['https://www.tesco.ie/shop/en-IE/browse/fruit', 302, false],
       ['https://www.tesco.ie/account/login', 301, false],
       ['https://example.com/', 301, false],
     ] as const) {

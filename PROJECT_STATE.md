@@ -2910,8 +2910,21 @@ counts and the resumable queue; successful page retrieval is not trusted coverag
 
 The subsequent supervised requests encountered a permanent redirect from a
 retired product URL to the Irish steamed-vegetables/rice/pasta category. That
-exact observed category destination is now also skippable without following it;
-other category redirects remain unknown and still stop. No workspace access
+Irish browse-category shape is now also skippable without following it, limited
+to permanent redirects, clean lowercase category path segments, no query/hash,
+no authentication/security markers and no Retry-After. Other redirects remain
+unknown and still stop. No workspace access
 denial or rate limit was recorded. Application pauses already set by the older
 handler are not shortened. CI passed all tests and the behavioural gate; its
 first build failed in unchanged Google-font handling and a single retry passed.
+
+Further private duplicate-SKU review showed that wrong or underspecified peers
+were preventing otherwise exact products from refreshing. Reviewed stale peers
+were quarantined with URL/SKU/GTIN cleared and `url_status=failed`; prior values,
+canonical identity and the retailer evidence remain in immutable audit snapshots.
+Different flavour/pack/product conflicts are labelled material mismatches;
+underspecified or unproven identities are labelled insufficient evidence, not
+retailer absence. No fresh peer was removed. Exact remaining mappings were
+replayed with original evidence timestamps and the unchanged identity predicate.
+Two previously conflicting groups also became unique after the earlier remaps.
+Shared canonical definitions and synonym/duplicate matching rules are unchanged.

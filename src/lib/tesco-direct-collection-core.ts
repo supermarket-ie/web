@@ -148,18 +148,20 @@ export function tescoPauseUntil(outcome: TescoFetchOutcome, retryAfter: string |
 
 // A missing resource is not an egress denial. Never follow an out-of-scope
 // redirect; only a permanent redirect to the public Irish homepage or a
-// confirmed category destination is skippable.
+// Irish browse category is skippable. The destination is never requested.
 // Unknown redirects (including login/challenge paths) still stop collection.
 export function tescoResourceUnavailable(response: TescoPageResponse): boolean {
   if (response.retryAfter) return false;
   if (response.outcome === 'http_error' && [404, 410].includes(response.status ?? 0)) return true;
   if (response.outcome !== 'unsafe_redirect' || ![301, 308].includes(response.status ?? 0)) return false;
-  return [
+  if ([
     'https://www.tesco.ie/',
     'https://www.tesco.ie/shop/en-IE',
     'https://www.tesco.ie/shop/en-IE/',
-    'https://www.tesco.ie/shop/en-IE/browse/frozen-food/vegetables/steamed-vegetables-rice-and-pasta',
-  ].includes(response.redirectUrl ?? '');
+  ].includes(response.redirectUrl ?? '')) return true;
+  const target = response.redirectUrl ?? '';
+  return /^https:\/\/www\.tesco\.ie\/shop\/en-IE\/browse\/[a-z0-9-]+(?:\/[a-z0-9-]+)*\/?$/.test(target)
+    && !/captcha|challenge|login|security|auth/i.test(target);
 }
 
 // One attempt only, with no cookies, login, browser impersonation or proxy
