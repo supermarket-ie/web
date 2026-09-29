@@ -195,7 +195,8 @@ async function directFetch(url: string): Promise<DirectFetchResult> {
       if (looksBlocked(html)) {
         // A confirmed Akamai/security challenge is an egress-level signal.
         // Stop immediately: retrying or falling through to search only hammers
-        // an identity that now needs a 24-48 hour cooldown.
+        // an identity under our conservative 48-hour quarantine policy. This
+        // is not a measured or retailer-guaranteed block expiry time.
         return { ok: false, reason: 'blocked_challenge', error: 'Tesco challenge page returned to direct Vercel request', finalUrl: response.url, status: response.status };
       }
       if (response.status === 429) {

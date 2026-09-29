@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 26 September 2026
+**Last updated:** 29 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -2798,3 +2798,27 @@ The final selection logic's mobile tuna starter produced useful meal ideas,
 an enabled follow-up composer and the quiet optional save link without an empty
 receipt. Internal events recorded individual impressions/selections and the
 prepared shop; the report's production-host filter excludes this QA traffic.
+
+## Tesco structured direct collection — 29 September 2026
+
+The historical 24–48-hour Tesco wait is an application quarantine policy, not a
+measured retailer block lifetime. The legacy RPC defaults to 48 hours and clamps
+at a 24-hour minimum. A later success on ordinary Vercel egress would not prove
+same-IP recovery. Keep stop-on-challenge and do not treat cooldown expiry as proof
+that transport is healthy.
+
+A bounded product/listing collector now reads Tesco's Irish structured Apollo
+page data and exact listing references. It separates regular prices from
+conditional promotions, performs strict canonical identity checks, records
+private request evidence, paginates selection inputs, and allows successful
+products to become eligible for renewal after four days. It uses one deployment
+path gate for the full run, stops on 401/403/challenge or 429, honors Retry-After,
+and avoids repeated page requests for 24 hours. Existing seven-day freshness and
+mapping-repair rules are unchanged. No recurring schedule is introduced.
+
+See `docs/tesco-direct-collection.md` for the owner-issue probe/collection commands,
+evidence schema, limitations and rollout gates. Local validation passes: 376 tests, including 14 collection tests, TypeScript,
+lint (existing warnings only), and replay of the public product/listing fixtures.
+Production transport validation is pending deployment.
+Production audit rows and request results belong in private evidence storage,
+not this repository.

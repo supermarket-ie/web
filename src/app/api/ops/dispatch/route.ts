@@ -18,6 +18,9 @@ type Operation = { name: string; target: string; privateResult?: boolean };
 
 const OPERATIONS: Record<string, Operation> = {
   '[ops] analytics traffic report': { name: 'analytics-traffic-report', target: '/api/ops/analytics-traffic-report', privateResult: true },
+  '[ops] tesco direct probe': { name: 'tesco-direct-probe', target: '/api/workers/tesco-direct-collect?mode=probe', privateResult: true },
+  '[ops] tesco direct products': { name: 'tesco-direct-products', target: '/api/workers/tesco-direct-collect?mode=products&pages=5', privateResult: true },
+  '[ops] tesco direct listings': { name: 'tesco-direct-listings', target: '/api/workers/tesco-direct-collect?mode=listings&query=milk&pages=5', privateResult: true },
   '[ops] dunnes alternative canary': { name: 'dunnes-alternative-canary', target: '/api/ops/dunnes-alternative-canary?limit=30' },
   '[ops] dunnes usage-ranked discovery': { name: 'dunnes-usage-ranked-discovery', target: '/api/workers/dunnes-discovery-trigger?limit=250&batch_size=1&stagger_seconds=2' },
   '[ops] dunnes discovery recovery': { name: 'dunnes-discovery-recovery', target: '/api/workers/dunnes-discovery-recover' },

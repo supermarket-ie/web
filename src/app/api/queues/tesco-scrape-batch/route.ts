@@ -91,13 +91,14 @@ export const POST = handleCallback<TescoBatchMessage>(
     // The egress pool is a real semaphore for the configured network identity.
     // With one Vercel Static-IP identity this serialises batches; when that
     // identity is cooling down no outbound Tesco request is made.
-    const lease = await claimTescoEgress(180);
+    const lease = await claimTescoEgress(600);
     if (!lease) {
       throw new Error('No Tesco egress identity is currently available for this batch');
     }
 
     const spacingMs = Math.max(500, Math.min(Number(process.env.TESCO_VERCEL_PRODUCT_SPACING_MS || 1500), 10_000));
     let blocked = false;
+    let released = false;
 
     try {
       for (let index = 0; index < message.products.length; index += 1) {
@@ -173,6 +174,7 @@ export const POST = handleCallback<TescoBatchMessage>(
       }
 
       await markTescoEgressSuccess(lease.egressKey);
+      released = true;
       console.log('[tesco-queue] controlled-egress batch complete', {
         runId: message.runId,
         batchIndex: message.batchIndex,
@@ -184,7 +186,7 @@ export const POST = handleCallback<TescoBatchMessage>(
     } finally {
       // mark_success / mark_blocked already clear the lease; release is
       // intentionally idempotent and leaves a block cooldown intact.
-      if (!blocked) await releaseTescoEgress(lease.egressKey).catch(() => undefined);
+      if (!blocked && !released) await releaseTescoEgress(lease.egressKey).catch(() => undefined);
     }
   },
   {
