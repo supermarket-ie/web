@@ -2830,3 +2830,41 @@ accepted retailer access before scaling. Do not shorten the timer as a presumed
 transport fix. The implementation is deployed; coverage recovery is not proven.
 Production audit rows and request results belong in private evidence storage,
 not this repository.
+
+### Supervised workspace recovery (partial run checkpoint)
+
+Following explicit user approval, a separately supervised workspace collection
+is refreshing existing mappings through the same structured parser, identity
+checks and idempotent price finalizer. Vercel's quarantine is unchanged. The
+workspace evidence gate is disabled for automated selection and is not a pool
+failover identity. No paid provider, cookies, challenge solver or IP rotation is
+used. Each page is checkpointed privately before continuing; a denial/rate limit
+or other fetch failure stops the run.
+
+The first accepted write was verified through `latest_prices`. Listing breadth
+had low trusted yield. Exact pages with fully specified canonical identities are
+now prioritised; generic canonical descriptions frequently fail strict pack-size
+checks. The earlier 500/1,000 planning estimates are not established forecasts.
+The standalone `scripts/tesco-workspace-page.mjs` emits one parsed page and its
+identity decisions without holding database credentials. The supervising client
+persists private evidence and calls the existing finalizer only for accepted,
+still-resolved, unchanged canonical/SKU mappings. This is a supervised recovery,
+not a recurring production transport.
+
+The supervised pass completed 118 successful page requests before a brand-search
+URL returned HTTP 404. The current conservative supervisor stops on any HTTP
+error, so this triggered a 15-minute application pause, not the 48-hour
+access-denial quarantine. No 401/403/429 was observed. The Vercel pause is unchanged.
+Accepted prices were committed and verified incrementally. Private page evidence,
+price receipts and the resumable queue are persisted in the manual scrape run.
+The run is explicitly partial/degraded, not a completed full-catalogue scrape.
+Future work should distinguish a confirmed no-result search from an access denial
+without weakening challenge/429 handling or silently clearing an active gate.
+
+Brand-specific listings with a requested count of 100 returned larger structured
+result sets and materially improved yield. Pagination must preserve the actual
+returned page size; do not change count mid-pagination and skip offsets. Stored
+metadata-only candidate checks overestimated exact live matches, especially where
+canonicals omit pack sizes. Do not extrapolate the initial 20-page sample into a
+promised 500/1,000 fresh trusted products. Remaining mapping repairs require
+separate identity evidence; no canonical mappings were changed during this run.
