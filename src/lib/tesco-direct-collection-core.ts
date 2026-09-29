@@ -20,6 +20,7 @@ export type TescoPageResponse = {
   outcome: TescoFetchOutcome;
   status: number | null;
   finalUrl: string;
+  redirectUrl?: string;
   html: string;
   retryAfter: string | null;
   elapsedMs: number;
@@ -145,6 +146,24 @@ export function tescoPauseUntil(outcome: TescoFetchOutcome, retryAfter: string |
   return new Date(Math.max(now + baseline, Number.isFinite(retryAt) ? retryAt : 0)).toISOString();
 }
 
+// A missing resource is not an egress denial. Never follow an out-of-scope
+// redirect; only a permanent redirect to the public Irish homepage or a
+// Irish browse category is skippable. The destination is never requested.
+// Unknown redirects (including login/challenge paths) still stop collection.
+export function tescoResourceUnavailable(response: TescoPageResponse): boolean {
+  if (response.retryAfter) return false;
+  if (response.outcome === 'http_error' && [404, 410].includes(response.status ?? 0)) return true;
+  if (response.outcome !== 'unsafe_redirect' || ![301, 308].includes(response.status ?? 0)) return false;
+  if ([
+    'https://www.tesco.ie/',
+    'https://www.tesco.ie/shop/en-IE',
+    'https://www.tesco.ie/shop/en-IE/',
+  ].includes(response.redirectUrl ?? '')) return true;
+  const target = response.redirectUrl ?? '';
+  return /^https:\/\/www\.tesco\.ie\/shop\/en-IE\/browse\/[a-z0-9-]+(?:\/[a-z0-9-]+)*\/?$/.test(target)
+    && !/captcha|challenge|login|security|auth/i.test(target);
+}
+
 // One attempt only, with no cookies, login, browser impersonation or proxy
 // rotation. A challenge stops the caller's entire collection, including listings.
 export async function fetchTescoCollectedPage(url: string, fetcher: typeof fetch = fetch): Promise<TescoPageResponse> {
@@ -163,7 +182,7 @@ export async function fetchTescoCollectedPage(url: string, fetcher: typeof fetch
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location');
         const next = location ? new URL(location, current).href : '';
-        if (redirects === 2 || !isTescoCollectionUrl(next)) return { ...result, outcome: 'unsafe_redirect', html: '' };
+        if (redirects === 2 || !isTescoCollectionUrl(next)) return { ...result, redirectUrl: next, outcome: 'unsafe_redirect', html: '' };
         current = next;
         continue;
       }

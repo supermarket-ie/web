@@ -2830,3 +2830,101 @@ accepted retailer access before scaling. Do not shorten the timer as a presumed
 transport fix. The implementation is deployed; coverage recovery is not proven.
 Production audit rows and request results belong in private evidence storage,
 not this repository.
+
+### Supervised workspace recovery (partial run checkpoint)
+
+Following explicit user approval, a separately supervised workspace collection
+is refreshing existing mappings through the same structured parser, identity
+checks and idempotent price finalizer. Vercel's quarantine is unchanged. The
+workspace evidence gate is disabled for automated selection and is not a pool
+failover identity. No paid provider, cookies, challenge solver or IP rotation is
+used. Each page is checkpointed privately before continuing; a denial/rate limit
+or other fetch failure stops the run.
+
+The first accepted write was verified through `latest_prices`. Listing breadth
+had low trusted yield. Exact pages with fully specified canonical identities are
+now prioritised; generic canonical descriptions frequently fail strict pack-size
+checks. The earlier 500/1,000 planning estimates are not established forecasts.
+The standalone `scripts/tesco-workspace-page.mjs` emits one parsed page and its
+identity decisions without holding database credentials. The supervising client
+persists private evidence and calls the existing finalizer only for accepted,
+still-resolved, unchanged canonical/SKU mappings. This is a supervised recovery,
+not a recurring production transport.
+
+The supervised pass completed 118 successful page requests before a brand-search
+URL returned HTTP 404. The current conservative supervisor stops on any HTTP
+error, so this triggered a 15-minute application pause, not the 48-hour
+access-denial quarantine. No 401/403/429 was observed. The Vercel pause is unchanged.
+Accepted prices were committed and verified incrementally. Private page evidence,
+price receipts and the resumable queue are persisted in the manual scrape run.
+The run is explicitly partial/degraded, not a completed full-catalogue scrape.
+Future work should distinguish a confirmed no-result search from an access denial
+without weakening challenge/429 handling or silently clearing an active gate.
+
+Brand-specific listings with a requested count of 100 returned larger structured
+result sets and materially improved yield. Pagination must preserve the actual
+returned page size; do not change count mid-pagination and skip offsets. Stored
+metadata-only candidate checks overestimated exact live matches, especially where
+canonicals omit pack sizes. Do not extrapolate the initial 20-page sample into a
+promised 500/1,000 fresh trusted products. Remaining mapping repairs require
+separate identity evidence; no canonical mappings were changed during this run.
+
+The user subsequently authorised continuation after the workspace pause had
+expired. The saved brand-listing queue and its returned pagination were completed,
+followed by the remaining stale, unseen candidates with explicit canonical sizes
+or pack counts that passed the stored-identity precheck. The resumed requests
+returned HTTP 200 without access denials or rate limits; accepted writes were
+verified through `latest_prices`. Previously completed requests were not repeated.
+The narrower overlapping Ballymaloe Foods query was covered by the broader
+Ballymaloe search. Generic/underspecified residuals remain a mapping/product-policy
+workload, not evidence that Tesco lacks those products. The selected collection
+phase is complete; this is not a claim of full-catalogue coverage, a new production
+transport, or achievement of the earlier speculative coverage targets.
+
+### Tesco expansion and exact mapping repair — 29 September 2026
+
+The user authorised a broader pass over previously unvisited resolved SKUs,
+without rejecting requests solely because stored identity metadata is weak.
+The first tranche stopped on an out-of-scope permanent redirect. This was a
+resource-level event, not a new access denial; the existing application pause
+was retained until its expiry. The production Vercel gate remains untouched.
+
+Offline review of saved retailer evidence identified a small cohort of unique,
+branded replacement SKUs with equal explicit pack size and variant. These were
+applied transactionally after rechecking live canonical names, old mappings,
+retailer evidence and destination-SKU collisions. Immutable private audit rows
+retain the prior mapping, replacement product and source page. Cached prices
+retain their original observation timestamps. Shared canonical definitions and
+general identity thresholds were not changed. Broader classifier suggestions
+included unsuitable variants and composite products and were not auto-applied.
+
+The supervised helper now distinguishes missing resources from transport stops:
+404/410 without Retry-After, and permanent redirects to the exact public Irish
+homepage, can be recorded and skipped. Out-of-scope redirects are never followed.
+Unknown redirects, challenges, 401/403, 429, Retry-After, parse and network errors
+retain the conservative stop policy. Targeted tests cover missing pages that
+actually contain access challenges and ensure redirect targets are not fetched.
+This helper change does not enable an automatic production transport or clear
+an active cooldown. Private run/evidence records remain the source of operational
+counts and the resumable queue; successful page retrieval is not trusted coverage.
+
+The subsequent supervised requests encountered a permanent redirect from a
+retired product URL to the Irish steamed-vegetables/rice/pasta category. That
+Irish browse-category shape is now also skippable without following it, limited
+to permanent redirects, clean lowercase category path segments, no query/hash,
+no authentication/security markers and no Retry-After. Other redirects remain
+unknown and still stop. No workspace access
+denial or rate limit was recorded. Application pauses already set by the older
+handler are not shortened. CI passed all tests and the behavioural gate; its
+first build failed in unchanged Google-font handling and a single retry passed.
+
+Further private duplicate-SKU review showed that wrong or underspecified peers
+were preventing otherwise exact products from refreshing. Reviewed stale peers
+were quarantined with URL/SKU/GTIN cleared and `url_status=failed`; prior values,
+canonical identity and the retailer evidence remain in immutable audit snapshots.
+Different flavour/pack/product conflicts are labelled material mismatches;
+underspecified or unproven identities are labelled insufficient evidence, not
+retailer absence. No fresh peer was removed. Exact remaining mappings were
+replayed with original evidence timestamps and the unchanged identity predicate.
+Two previously conflicting groups also became unique after the earlier remaps.
+Shared canonical definitions and synonym/duplicate matching rules are unchanged.
