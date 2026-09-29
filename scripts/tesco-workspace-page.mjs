@@ -27,8 +27,12 @@ if (!core.isTescoCollectionUrl(url)) throw new Error('Invalid Tesco URL');
     return { storeProductId: row.id, sku: product.sku,
       reasons: row.url_status === 'resolved' ? core.validateTescoCollectedIdentity(mapping, product) : ['mapping_not_resolved'] };
   }));
-  console.log(JSON.stringify({ requestedUrl: url, finalUrl: response.finalUrl, outcome, observedAt,
+  const resourceUnavailable = core.tescoResourceUnavailable(response);
+  const stopCollection = outcome !== 'ok' && !resourceUnavailable;
+  console.log(JSON.stringify({ requestedUrl: url, finalUrl: response.finalUrl, redirectUrl: response.redirectUrl, outcome, observedAt,
     status: response.status, retryAfter: response.retryAfter, elapsedMs: response.elapsedMs,
-    bodySha256: createHash('sha256').update(response.html).digest('hex'), parsed, identities, detail,
-    pauseUntil: outcome === 'ok' ? null : core.tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter) }));
+    bodySha256: createHash('sha256').update(response.html).digest('hex'), parsed, identities,
+    detail: detail ?? (resourceUnavailable ? 'resource_unavailable; redirect not followed' : response.redirectUrl ? `rejected_redirect: ${response.redirectUrl}` : null),
+    resourceUnavailable, stopCollection,
+    pauseUntil: stopCollection ? core.tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter) : null }));
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

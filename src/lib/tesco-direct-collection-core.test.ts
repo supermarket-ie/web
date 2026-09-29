@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchTescoCollectedPage, parseTescoCollectedPage, tescoListingUrl, tescoPauseUntil, tescoProductUrl, validateTescoCollectedIdentity, type TescoCollectedProduct } from './tesco-direct-collection-core';
+import { fetchTescoCollectedPage, parseTescoCollectedPage, tescoListingUrl, tescoPauseUntil, tescoProductUrl, tescoResourceUnavailable, validateTescoCollectedIdentity, type TescoCollectedProduct } from './tesco-direct-collection-core';
 
 const sku = '123456789';
 const milk = { __typename: 'ProductType', id: sku, tpnc: sku, title: 'Tesco Whole Milk 1L', brandName: 'TESCO', gtin: '05000000000001', price: { actual: 1.15 }, isForSale: true, status: 'AvailableForSale', details: { packSize: [{ value: '1', units: 'L' }] }, promotions: [{ afterDiscount: 0.01 }] };
@@ -42,6 +42,26 @@ describe('Tesco structured collection', () => {
 });
 
 describe('Tesco transport stop rules', () => {
+  it('skips only missing resources and permanent Irish-homepage redirects, retaining denial stops', async () => {
+    for (const status of [404, 410]) {
+      const response = await fetchTescoCollectedPage(tescoProductUrl(sku), vi.fn<typeof fetch>().mockResolvedValue(new Response('Missing', { status })));
+      expect(tescoResourceUnavailable(response)).toBe(true);
+      expect(tescoResourceUnavailable({ ...response, retryAfter: '600' })).toBe(false);
+      const challenge = await fetchTescoCollectedPage(tescoProductUrl(sku), vi.fn<typeof fetch>().mockResolvedValue(new Response('<title>Access Denied</title>', { status })));
+      expect(tescoResourceUnavailable(challenge)).toBe(false);
+    }
+    for (const [location, status, skippable] of [
+      ['https://www.tesco.ie/shop/en-IE/', 301, true],
+      ['https://www.tesco.ie/shop/en-IE/', 302, false],
+      ['https://www.tesco.ie/account/login', 301, false],
+      ['https://example.com/', 301, false],
+    ] as const) {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status, headers: { location } }));
+      const response = await fetchTescoCollectedPage(tescoProductUrl(sku), fetcher);
+      expect(tescoResourceUnavailable(response)).toBe(skippable);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
   it('does not retry 403, even without a recognizable challenge body', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('Forbidden', { status: 403 }));
     expect((await fetchTescoCollectedPage(tescoProductUrl(sku), fetcher)).outcome).toBe('access_block');

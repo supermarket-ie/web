@@ -2880,3 +2880,30 @@ Ballymaloe search. Generic/underspecified residuals remain a mapping/product-pol
 workload, not evidence that Tesco lacks those products. The selected collection
 phase is complete; this is not a claim of full-catalogue coverage, a new production
 transport, or achievement of the earlier speculative coverage targets.
+
+### Tesco expansion and exact mapping repair — 29 September 2026
+
+The user authorised a broader pass over previously unvisited resolved SKUs,
+without rejecting requests solely because stored identity metadata is weak.
+The first tranche stopped on an out-of-scope permanent redirect. This was a
+resource-level event, not a new access denial; the existing application pause
+was retained until its expiry. The production Vercel gate remains untouched.
+
+Offline review of saved retailer evidence identified a small cohort of unique,
+branded replacement SKUs with equal explicit pack size and variant. These were
+applied transactionally after rechecking live canonical names, old mappings,
+retailer evidence and destination-SKU collisions. Immutable private audit rows
+retain the prior mapping, replacement product and source page. Cached prices
+retain their original observation timestamps. Shared canonical definitions and
+general identity thresholds were not changed. Broader classifier suggestions
+included unsuitable variants and composite products and were not auto-applied.
+
+The supervised helper now distinguishes missing resources from transport stops:
+404/410 without Retry-After, and permanent redirects to the exact public Irish
+homepage, can be recorded and skipped. Out-of-scope redirects are never followed.
+Unknown redirects, challenges, 401/403, 429, Retry-After, parse and network errors
+retain the conservative stop policy. Targeted tests cover missing pages that
+actually contain access challenges and ensure redirect targets are not fetched.
+This helper change does not enable an automatic production transport or clear
+an active cooldown. Private run/evidence records remain the source of operational
+counts and the resumable queue; successful page retrieval is not trusted coverage.
