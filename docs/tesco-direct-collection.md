@@ -63,8 +63,10 @@ No recurring schedule is added by this change.
 ## Validation and rollout
 
 Tests exercise parser scoping, currency/price separation, identity conflicts,
-redirects, challenge/429 stop rules and Retry-After. Production access remains
-unproven until the protected probe executes from the actual deployment.
+redirects, challenge/429 stop rules and Retry-After. PR #242 passed required CI,
+Preview and production deployment verification. The deployed probe was denied
+on its first request, stopped before listings, and wrote no prices. Quarantine
+and private diagnostics were verified; accepted production access remains absent.
 
 After a clean probe, run one bounded collection and verify page evidence, receipt
 idempotency, accepted price identity and trusted freshness before scaling.
