@@ -2819,6 +2819,14 @@ mapping-repair rules are unchanged. No recurring schedule is introduced.
 See `docs/tesco-direct-collection.md` for the owner-issue probe/collection commands,
 evidence schema, limitations and rollout gates. Local validation passes: 376 tests, including 14 collection tests, TypeScript,
 lint (existing warnings only), and replay of the public product/listing fixtures.
-Production transport validation is pending deployment.
+PR #242 passed required CI and Vercel Preview, merged, and reached READY in
+production. The deployed bounded probe returned an access denial on its first
+request and stopped before listing collection; it wrote no prices. Persistent
+quarantine and private result recording worked. Direct production transport is
+therefore still blocked. Waiting longer than the earlier proposed cooldown did
+not establish accepted access on the deployment path; ordinary Vercel egress
+does not establish same-IP continuity. Retain the 48-hour policy and require
+accepted retailer access before scaling. Do not shorten the timer as a presumed
+transport fix. The implementation is deployed; coverage recovery is not proven.
 Production audit rows and request results belong in private evidence storage,
 not this repository.
