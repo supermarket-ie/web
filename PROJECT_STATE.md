@@ -2907,3 +2907,11 @@ actually contain access challenges and ensure redirect targets are not fetched.
 This helper change does not enable an automatic production transport or clear
 an active cooldown. Private run/evidence records remain the source of operational
 counts and the resumable queue; successful page retrieval is not trusted coverage.
+
+The subsequent supervised requests encountered a permanent redirect from a
+retired product URL to the Irish steamed-vegetables/rice/pasta category. That
+exact observed category destination is now also skippable without following it;
+other category redirects remain unknown and still stop. No workspace access
+denial or rate limit was recorded. Application pauses already set by the older
+handler are not shortened. CI passed all tests and the behavioural gate; its
+first build failed in unchanged Google-font handling and a single retry passed.

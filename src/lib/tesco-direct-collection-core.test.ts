@@ -53,6 +53,8 @@ describe('Tesco transport stop rules', () => {
     for (const [location, status, skippable] of [
       ['https://www.tesco.ie/shop/en-IE/', 301, true],
       ['https://www.tesco.ie/shop/en-IE/', 302, false],
+      ['https://www.tesco.ie/shop/en-IE/browse/frozen-food/vegetables/steamed-vegetables-rice-and-pasta', 301, true],
+      ['https://www.tesco.ie/shop/en-IE/browse/unknown', 301, false],
       ['https://www.tesco.ie/account/login', 301, false],
       ['https://example.com/', 301, false],
     ] as const) {
