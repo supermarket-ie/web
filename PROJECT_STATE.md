@@ -2868,3 +2868,15 @@ metadata-only candidate checks overestimated exact live matches, especially wher
 canonicals omit pack sizes. Do not extrapolate the initial 20-page sample into a
 promised 500/1,000 fresh trusted products. Remaining mapping repairs require
 separate identity evidence; no canonical mappings were changed during this run.
+
+The user subsequently authorised continuation after the workspace pause had
+expired. The saved brand-listing queue and its returned pagination were completed,
+followed by the remaining stale, unseen candidates with explicit canonical sizes
+or pack counts that passed the stored-identity precheck. The resumed requests
+returned HTTP 200 without access denials or rate limits; accepted writes were
+verified through `latest_prices`. Previously completed requests were not repeated.
+The narrower overlapping Ballymaloe Foods query was covered by the broader
+Ballymaloe search. Generic/underspecified residuals remain a mapping/product-policy
+workload, not evidence that Tesco lacks those products. The selected collection
+phase is complete; this is not a claim of full-catalogue coverage, a new production
+transport, or achievement of the earlier speculative coverage targets.
