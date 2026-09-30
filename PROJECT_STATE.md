@@ -3021,3 +3021,27 @@ Further collection requires workspace network approval to be restored before
 opening another linked run. Do not retry through another process or route to
 circumvent that permission block. Follow the newest checkpoint rather than a
 superseded parent, and do not describe this partial queue as complete.
+
+### Saved recovery queue completed — 30 September 2026
+
+After the user explicitly requested another continuation, the original workspace
+route successfully fetched the unresolved URL under normal network-permission
+checks. No alternate route, permission bypass or production gate change was
+used. The remaining saved queue was then exhausted and the final linked run
+closed successfully, with no pending page in that run, no remaining queue and
+no active collector or workspace lease.
+
+Private reconciliation accounts for every URL in the selected resumed queue
+and found no repeated completed request across its continuation chain. Every
+accepted price receipt remains visible as a fresh trusted Tesco observation.
+Historical unanswered reservations remain unknown evidence, with their URLs
+covered by later successful requests; their original outcomes were not rewritten.
+
+The latest checkpoint records selected-queue completion and is not resumable.
+Earlier partial queue snapshots are historical and must not be restarted.
+This completes the saved recovery phase, not the full Tesco catalogue or a
+recurring production transport. Identity rejections remain principally
+incomplete exact-identity evidence, pack-size/brand conflicts and unavailable
+regular prices. Further coverage work needs separately scoped, evidence-backed
+mapping review; matching thresholds were not weakened and no paid provider was
+used. Exact counts and queue/product evidence remain private in Supabase.
