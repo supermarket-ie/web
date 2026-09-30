@@ -2989,3 +2989,18 @@ again inside the completed run. Do not re-fetch completed pages, rewrite failed
 evidence as success, or interpret the checkpoint as a background job. Exact
 counts, prices, request evidence and queue contents remain private in Supabase.
 Production quarantine and paid-provider configuration were unchanged.
+
+A linked continuation then resumed after the workspace pause expired naturally.
+The previously failed URL returned HTTP 200 and produced an accepted trusted
+price. Further sequential requests produced additional verified prices before
+another request ended without an HTTP response after the twenty-second deadline.
+No access-denial or rate-limit response was recorded. The underlying network
+cause remains unknown; successful recovery of one URL is not evidence of a
+permanent transport fix.
+
+The later run also exited cleanly with no pending page and no active lease, while
+retaining the prescribed pause and its remaining queue. Its parent checkpoint is
+now explicitly historical and superseded. Follow the linked continuation chain
+to the latest resumable run: restarting an old parent queue would repeat pages
+already completed by its child. Run-specific evidence remains immutable, and the
+failed URL remains eligible only in a subsequent linked run after the pause.
