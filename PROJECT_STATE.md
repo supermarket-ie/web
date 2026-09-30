@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 29 September 2026
+**Last updated:** 30 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -2928,3 +2928,41 @@ retailer absence. No fresh peer was removed. Exact remaining mappings were
 replayed with original evidence timestamps and the unchanged identity predicate.
 Two previously conflicting groups also became unique after the earlier remaps.
 Shared canonical definitions and synonym/duplicate matching rules are unchanged.
+
+
+### Supervised interruption recovery — 30 September 2026
+
+A read-only check found that the expansion run still said `running` even though
+its final page reservation remained `pending` and no later page result or price
+receipt had been recorded. A running status or unexpired lease is not proof that
+a workspace supervisor is alive. The evidence does not identify why that
+supervisor stopped; no retailer response was recorded for the pending request.
+
+After the existing workspace lease expired normally, a separate manual recovery
+run was opened. Its queue was reconstructed from durable page evidence, including
+the unfinished request and an earlier HTTP 502, while excluding completed pages
+and a URL without a current eligible mapping. Both interrupted/error URLs then
+returned HTTP 200. The bounded recovery validation completed without an access
+denial or rate limit. Its accepted-identity count was zero: successful retrieval
+did not resolve missing canonical detail or material brand/pack conflicts.
+
+The old run is explicitly recorded as interrupted, with a reference to its
+recovery run. The recovery run was closed as resumable/partial after validation,
+with no outstanding pending page or active workspace lease. Its private summary
+contains `remainingUrls`, `heartbeatAt`, the parent run, request outcomes and
+unchanged trusted-price totals. It is not running in the background. Private
+database evidence remains authoritative for exact counts and queue contents.
+
+For subsequent supervised recovery, reconcile the latest page/receipt activity
+and linked recovery runs before using old summary counters. Renew a short lease
+only while actively supervising, persist each result before the next request,
+and record a terminal partial state when stopping deliberately. A pending page
+without a response is unknown evidence, not a proven access block or a completed
+request. Preserve original observation times when reusing cached evidence.
+
+GitHub main and the READY production deployment were verified at the approved
+collector commit before recovery. The Vercel quarantine, disabled automated
+workspace gate, matching predicates, catalogue mappings and paid-provider
+configuration were unchanged. No paid provider was used. This recovery proves
+continued supervised workspace access only; recurring production transport and
+broader trusted coverage remain separate work.
