@@ -3004,3 +3004,20 @@ now explicitly historical and superseded. Follow the linked continuation chain
 to the latest resumable run: restarting an old parent queue would repeat pages
 already completed by its child. Run-specific evidence remains immutable, and the
 failed URL remains eligible only in a subsequent linked run after the pause.
+
+A subsequent HTTP 502 stop was handled by retaining the full application pause
+and waiting within the supervised session. Only after the recorded gate expired
+did a linked continuation start; the previously failed URL then returned
+successfully. Further accepted prices were verified through the trusted view.
+
+The later interruption was an explicit workspace network-approval cancellation,
+not a retailer response. The local collector disappeared before its next reserved
+page returned evidence. The run is terminal partial, the lease is released, and
+the reservation is annotated as an unknown outcome rather than a fabricated
+HTTP/network result. Its URL stays in the authoritative remaining queue. No
+retailer cooldown was invented for this workspace permission failure.
+
+Further collection requires workspace network approval to be restored before
+opening another linked run. Do not retry through another process or route to
+circumvent that permission block. Follow the newest checkpoint rather than a
+superseded parent, and do not describe this partial queue as complete.
