@@ -2966,3 +2966,26 @@ workspace gate, matching predicates, catalogue mappings and paid-provider
 configuration were unchanged. No paid provider was used. This recovery proves
 continued supervised workspace access only; recurring production transport and
 broader trusted coverage remain separate work.
+
+### Resumed queue and recorded transport stop — 30 September 2026
+
+The user authorised continuation of the saved queue. The supervisor resumed
+sequential requests with a short renewed lease, an owner token and a durable
+checkpoint after each response. Completed pages were excluded. Accepted live
+prices were written through the existing finalizer and verified in the trusted
+fresh-price view; identity thresholds and catalogue mappings were unchanged.
+
+This continuation stopped on a recorded network error before any HTTP response.
+That result does not establish an access denial or rate limit, and the collector
+did not retain a more specific network cause. The application network-error
+pause was preserved. The run was closed as partial/resumable, its workspace lease
+released, and the local collector exited with no outstanding pending page.
+The failed URL remains in the saved queue alongside unattempted URLs.
+
+A later continuation must wait for the recorded workspace pause, reconcile live
+mapping/freshness state and use a linked run for the remaining queue. Keep the
+failed page as historical evidence: the unique run/URL key prevents reserving it
+again inside the completed run. Do not re-fetch completed pages, rewrite failed
+evidence as success, or interpret the checkpoint as a background job. Exact
+counts, prices, request evidence and queue contents remain private in Supabase.
+Production quarantine and paid-provider configuration were unchanged.
