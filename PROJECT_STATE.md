@@ -3045,3 +3045,64 @@ incomplete exact-identity evidence, pack-size/brand conflicts and unavailable
 regular prices. Further coverage work needs separately scoped, evidence-backed
 mapping review; matching thresholds were not weakened and no paid provider was
 used. Exact counts and queue/product evidence remain private in Supabase.
+
+
+### Tesco coverage review and proposed recovery plan — 1 October 2026
+
+Read-only review reconciled the overnight decline in trusted Tesco coverage to
+older provider observations crossing the seven-day freshness boundary. The
+accepted observations from the completed recovery chain remain fresh. Main and
+the READY production deployment still use the previously verified collector
+commit. No collector, mapping repair, production change or paid request was
+started by this review.
+
+The saved recovery evidence identifies distinct workloads: incomplete canonical
+identity, missing exact measures, material brand/pack/variant conflicts,
+unavailable regular prices and duplicate-SKU ambiguity. These counts describe
+mapping decisions rather than distinct URLs; rejection reasons can overlap and
+the first failing check can hide later failures. They are not estimates of
+recoverable coverage.
+
+Code review confirms that exact measure validation reads canonical title text;
+the mapping evidence contract does not include canonical default quantity/unit.
+Some rejected records have structured defaults, but many have none and some
+defaults disagree with the live Tesco pack. Defaults therefore require
+corroboration and must not be blindly appended to make matching pass. Review
+also found narrow brand-spacing and short-title candidates, alongside unequivocal
+wrong-product mappings. Saved retailer title/structured-quantity discrepancies
+require explicit reconciliation before quantity evidence can be trusted.
+
+Proposed sequence, not yet implemented:
+
+1. Revalidate recently expired previously trusted mappings using current retailer
+   evidence and the unchanged safeguards. Track restored coverage separately
+   from newly covered products.
+2. Build a private, deduplicated review queue from saved pages, prioritised by
+   household demand and evidence completeness. Separate exact repair candidates,
+   wrong URLs, underspecified canonical products, duplicates and unavailable
+   prices. Preserve unresolved cases rather than forcing matches.
+3. Pilot a small reviewed cohort. Test narrowly evidenced brand aliases, title
+   normalisation and structured identity support against both positive examples
+   and wrong-brand/pack/variant controls. Resolve conflicts between title,
+   structured quantity and canonical evidence; never infer an exact pack from
+   a generic ingredient or retailer candidate alone.
+4. Apply only proven unique replacement mappings with immutable before/after
+   evidence, collision checks and a fresh validation fetch. Shared canonical
+   changes require checking other retailer mappings and household references;
+   create distinct exact product identities where appropriate instead of
+   redefining an existing shared product to fit Tesco.
+5. Expand retailer-owned discovery for high-demand unresolved exact products,
+   using listing pagination and cached discovery evidence where useful. Keep
+   alternatives explicitly separate from exact matches. Unavailable prices and
+   missing resources remain distinct from access failures.
+6. Establish reliable renewal before scaling. Use the existing four-day due
+   threshold and seven-day expiry; retain leases, durable checkpoints,
+   idempotency and stop/cooldown rules. A recurring approved execution path
+   remains unproven and must be established before promising unattended refresh.
+
+Measure net fresh trusted coverage, distinct retailer SKUs and canonical coverage,
+demand coverage, new versus restored prices, expiry losses, accepted yield and
+unresolved conflicts. Require the pilot's accepted receipts to reach the trusted
+view and survive a subsequent renewal before extrapolating. No numerical uplift
+forecast is justified by the rejection totals alone. Exact operational counts
+and product-level review evidence remain private.
