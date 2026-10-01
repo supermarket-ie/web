@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Supermarket.ie SuperValu Cart Bridge (PoC)",
+  "version": "0.1.0",
+  "description": "User-authorised proof of concept for handing a Supermarket.ie basket into the shopper's own SuperValu browser session.",
+  "permissions": [],
+  "host_permissions": [
+    "https://shop.supervalu.ie/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://shop.supervalu.ie/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
