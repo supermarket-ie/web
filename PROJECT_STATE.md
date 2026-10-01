@@ -3106,3 +3106,39 @@ unresolved conflicts. Require the pilot's accepted receipts to reach the trusted
 view and survive a subsequent renewal before extrapolating. No numerical uplift
 forecast is justified by the rejection totals alone. Exact operational counts
 and product-level review evidence remain private.
+
+
+### Renewal and reviewed repair pilot — 1 October 2026
+
+The user authorised proceeding with the expired-price cohort and a reviewed
+repair pilot. A supervised direct run completed the entire selected expired
+cohort with durable per-page evidence and unchanged validation. Accepted
+receipts were verified as fresh in the trusted consumer view. Some historically
+trusted mappings now fail exact size, brand or pack checks and remain excluded.
+The run closed successfully with no remaining queue, active process or lease.
+No paid provider or production access-gate change was used.
+
+Offline screening of saved retailer evidence was followed by an explicit
+reviewed pilot. A small subset passed the unchanged validator after proposed
+duplicate-peer quarantine or exact branded remapping. Other suggestions were
+held: missing packs, different formulations, composite products containing the
+requested ingredient, brand-spacing cases requiring code tests, and possibly
+equivalent peers requiring further corroboration. Passing the replacement
+classifier alone is not authorisation to apply an arbitrary discovery result.
+No shared canonical definitions or matching thresholds were changed.
+
+The guarded repair transaction was NOT applied. The Supabase connector twice
+returned `McpServerError: Invalid or expired requestState`. A read-only check
+found no repair run or active repair query, and trusted coverage reflected only
+the completed renewal writes. Do not describe this as a retailer failure, a
+confirmed SQL-validation error, or a completed mapping repair.
+
+The completed renewal run privately stores the pilot decisions, exact proposed
+repairs, source pages and before-mapping snapshots under
+`repairPilot.status=reviewed_not_applied`. A future authorised continuation
+must first recheck those snapshots, current trusted freshness and source age,
+then apply the reviewed transaction through working connector permissions.
+Preserve source observation timestamps when replaying saved evidence, and
+verify every resulting receipt in the trusted view. Exact counts and product
+evidence remain private. The reviewed-but-unapplied pilot is the next checkpoint;
+the completed URL queue must not be restarted.
