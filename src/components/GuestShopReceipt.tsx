@@ -18,7 +18,6 @@ export function GuestShopReceipt({ shop, previous, busy, error, revisionAvailabl
   signup: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [saveExpanded, setSaveExpanded] = useState(false);
   const priced = Boolean(shop && shop.totals.priced_lines > 0);
   const incomplete = Boolean(shop && shop.totals.priced_lines < shop.totals.total_lines);
   const changes = shop ? shopRevisionSummary(previous, shop) : null;
@@ -36,7 +35,7 @@ export function GuestShopReceipt({ shop, previous, busy, error, revisionAvailabl
             <h2 className="font-bold tracking-[-0.035em] text-[#1d2921] lg:mt-1 lg:text-xl">Your shop</h2>
           </div>
           <ReceiptText aria-hidden="true" className="hidden size-5 text-[#839087] lg:block" />
-          <button type="button" aria-expanded={expanded} aria-controls="guest-shop-details" onClick={() => { setExpanded(value => !value); setSaveExpanded(false); }} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-[#346046] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#168049] lg:hidden">
+          <button type="button" aria-expanded={expanded} aria-controls="guest-shop-details" onClick={() => setExpanded(value => !value)} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-[#346046] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#168049] lg:hidden">
             {expanded ? 'Hide shop' : 'View shop'} <ChevronDown aria-hidden="true" className={`size-4 ${expanded ? 'rotate-180' : ''}`} />
           </button>
         </div>
@@ -82,8 +81,7 @@ export function GuestShopReceipt({ shop, previous, busy, error, revisionAvailabl
       </div>
       {shop && <div className="shrink-0 border-t border-dashed border-[#cfd6d0] px-4 py-3 lg:px-5 lg:py-4">
         {revisionAvailable && <p className="mb-3 hidden lg:block text-xs leading-5 text-[#526b5c]">Try a change with your agent, or save this shop to keep working on it.</p>}
-        <button type="button" aria-expanded={saveExpanded} aria-controls="guest-shop-signup" onClick={() => { setSaveExpanded(value => !value); setExpanded(false); }} className="min-h-11 w-full rounded-xl bg-[#122018] px-4 py-3 text-xs font-bold text-white lg:hidden">{saveExpanded ? 'Close save form' : 'Save this shop — free account'}</button>
-        <div id="guest-shop-signup" className={`${saveExpanded ? 'mt-3 block' : 'hidden'} lg:mt-0 lg:block`}>{signup}</div>
+        <div id="guest-shop-signup">{signup}</div>
       </div>}
     </ShopReceiptFrame>
   );

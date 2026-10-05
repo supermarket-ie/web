@@ -615,6 +615,7 @@ function ShoppingAgentInner({
       intent: firstRequestIntent,
       placement: showGuestGate ? 'guest_gate' : 'first_answer',
       flow: 'inline_agent_continuation',
+      visibility: 'visible',
     });
   }, [busy, firstRequestIntent, showGuestGate, showSignupForm]);
 
