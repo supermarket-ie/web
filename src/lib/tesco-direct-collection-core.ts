@@ -24,6 +24,14 @@ export type TescoPageResponse = {
   html: string;
   retryAfter: string | null;
   elapsedMs: number;
+  transport?: {
+    phase: 'headers' | 'body';
+    timedOut: boolean;
+    headersElapsedMs: number | null;
+    redirectCount: number;
+    errorName: string;
+    errorCode: string | null;
+  };
 };
 
 function object(value: unknown): Record<string, unknown> {
@@ -172,12 +180,24 @@ export async function fetchTescoCollectedPage(url: string, fetcher: typeof fetch
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   let current = url;
+  let status: number | null = null;
+  let retryAfter: string | null = null;
+  let phase: 'headers' | 'body' = 'headers';
+  let headersElapsedMs: number | null = null;
+  let redirectCount = 0;
   try {
     for (let redirects = 0; redirects <= 2; redirects += 1) {
+      status = null;
+      retryAfter = null;
+      headersElapsedMs = null;
+      phase = 'headers';
+      redirectCount = redirects;
       const response = await fetcher(current, { signal: controller.signal, redirect: 'manual', cache: 'no-store', headers: {
         'User-Agent': 'Supermarket.ie/1.0 (+https://www.supermarket.ie)', Accept: 'text/html', 'Accept-Language': 'en-IE,en;q=0.9',
       } });
-      const retryAfter = response.headers.get('retry-after');
+      status = response.status;
+      retryAfter = response.headers.get('retry-after');
+      headersElapsedMs = Date.now() - start;
       const result = { status: response.status, finalUrl: current, retryAfter, elapsedMs: Date.now() - start };
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location');
@@ -186,6 +206,7 @@ export async function fetchTescoCollectedPage(url: string, fetcher: typeof fetch
         current = next;
         continue;
       }
+      phase = 'body';
       const html = await response.text();
       const challenge = /<title[^>]*>\s*Access Denied|(?:complete|pass|failed|perform) (?:the )?security checks|not (?:quite )?right[\s\S]{0,150}security/i.test(html)
         || (!html.includes('application/discover+json') && /captcha|verify (?:that )?you are human/i.test(html));
@@ -194,7 +215,19 @@ export async function fetchTescoCollectedPage(url: string, fetcher: typeof fetch
       return { ...result, html, outcome, elapsedMs: Date.now() - start };
     }
     throw new Error('Redirect limit exceeded');
-  } catch {
-    return { outcome: 'network_error', status: null, finalUrl: current, html: '', retryAfter: null, elapsedMs: Date.now() - start };
+  } catch (error) {
+    // Body failures must never erase a denial/rate limit already received.
+    // Missing/incomplete bodies still stop; these diagnostics do not authorise retries.
+    const outcome: TescoFetchOutcome = status === 401 || status === 403 ? 'access_block'
+      : status === 429 ? 'rate_limited' : 'network_error';
+    const failure = object(error);
+    const name = error instanceof Error ? error.name : '';
+    const code = string(failure.code) || string(object(failure.cause).code);
+    return { outcome, status, finalUrl: current, html: '', retryAfter, elapsedMs: Date.now() - start,
+      transport: { phase, timedOut: controller.signal.aborted, headersElapsedMs, redirectCount,
+        errorName: ['AbortError', 'TimeoutError', 'TypeError', 'Error'].includes(name) ? name : 'UnknownError',
+        errorCode: ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET'].includes(code) ? code : null,
+      } };
   } finally { clearTimeout(timer); }
 }
+
