@@ -3312,3 +3312,51 @@ renewed and expired products and net coverage; alert only on run failures, acces
 restrictions or meaningful coverage loss. No per-product model call is necessary.
 Do not deploy a scheduler until the host access test and reviewed worker prove
 reliable. Work billing is unavailable; no paid provider was used.
+
+### Coverage protection, new-candidate validation and host assessment — 8 October 2026
+
+The authorised expansion combined the remaining proven cohort and the metadata-
+screened unproven cohort, prioritising existing retailer overlap. It stopped early
+on a live measureConflict, as explicitly required. All attempted pages returned
+HTTP 200. Accepted identities were inserted through the same guarded finalizer and
+verified in latest_prices; two other results had no usable regular price. The
+conflicting pizza mapping expects a different pack measure from the current Tesco
+page and must not be repaired by weakening validation or changing the shared
+canonical spec. No mapping change or retry occurred. The run is degraded/partial,
+with no active lease or pending reservation. Exact private evidence and remaining
+selection are in tesco_workspace_expansion65_20261008.
+
+All baseline Tesco prices were observed on 8 October. Four-day renewal begins
+12 October at 11:28 Europe/Dublin; earliest seven-day expiry is 15 October at 11:28.
+Renew oldest first, then prioritize useful comparison coverage and newly verified
+products. Preserve the prior valid observation when a renewal fails, retaining its
+original timestamp and allowing normal expiry; never freshen cached/uncertain data.
+Track newly covered identities, renewal receipts, expiries and net coverage as
+separate metrics. Keep enough runway for existing transport/access cooldowns.
+
+Read-only overlap analysis found a substantial both-retailer gap, mostly mappings
+with historical identity rejections. This is an evidence-review workload, not a
+high-confidence collection queue. Separate proven refreshes, clean metadata-only
+candidates, ambiguous/underspecified identities, material conflicts and missing
+resolved mappings. Review stored evidence first and submit exact SKU/brand/variant/
+pack repairs for independent approval. Numeric coverage targets do not permit
+canonical changes that invalidate SuperValu/Dunnes comparisons. Existing distinct
+Tesco SKU count also constrains optimistic large-coverage projections.
+
+AWS execution could not be tested: this session has no AWS connector/CLI, configured
+AWS credential provider or SSH connection. No host address was guessed and no
+credentials were requested or exposed. Vercel's saved direct probe remains a 403
+without subsequent successful evidence; expired cooldown is not a connectivity
+result. Neither host has been established as reliable for scheduled collection.
+
+Recommended minimal deployment is the existing Node collector in a conventional
+scheduled worker on a maintained existing host after an authorised manual canary.
+If existing AWS EC2 is available, a systemd timer/cron and one worker process can
+reuse Supabase leases, evidence, checkpoints and trusted finalization without LLM
+calls. Do not assume AWS is accepted by Tesco. Vercel's bounded worker is another
+option only after its own accepted-access test; no failover between blocked hosts.
+Retain all pacing, expiry, snapshot and access stops. Daily due-selection can renew
+at four days while processing small durable work units; failures generate an alert
+and preserve cooldown rather than an automatic retry loop. No scheduler, hosting
+change, product mapping change or additional batch was deployed. Work credits and
+AWS marginal pricing are unavailable; no paid scraping-provider calls occurred.
