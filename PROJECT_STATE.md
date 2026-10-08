@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-**Last updated:** 29 September 2026
+**Last updated:** 30 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
 >
@@ -2928,3 +2928,301 @@ retailer absence. No fresh peer was removed. Exact remaining mappings were
 replayed with original evidence timestamps and the unchanged identity predicate.
 Two previously conflicting groups also became unique after the earlier remaps.
 Shared canonical definitions and synonym/duplicate matching rules are unchanged.
+
+
+### Supervised interruption recovery — 30 September 2026
+
+A read-only check found that the expansion run still said `running` even though
+its final page reservation remained `pending` and no later page result or price
+receipt had been recorded. A running status or unexpired lease is not proof that
+a workspace supervisor is alive. The evidence does not identify why that
+supervisor stopped; no retailer response was recorded for the pending request.
+
+After the existing workspace lease expired normally, a separate manual recovery
+run was opened. Its queue was reconstructed from durable page evidence, including
+the unfinished request and an earlier HTTP 502, while excluding completed pages
+and a URL without a current eligible mapping. Both interrupted/error URLs then
+returned HTTP 200. The bounded recovery validation completed without an access
+denial or rate limit. Its accepted-identity count was zero: successful retrieval
+did not resolve missing canonical detail or material brand/pack conflicts.
+
+The old run is explicitly recorded as interrupted, with a reference to its
+recovery run. The recovery run was closed as resumable/partial after validation,
+with no outstanding pending page or active workspace lease. Its private summary
+contains `remainingUrls`, `heartbeatAt`, the parent run, request outcomes and
+unchanged trusted-price totals. It is not running in the background. Private
+database evidence remains authoritative for exact counts and queue contents.
+
+For subsequent supervised recovery, reconcile the latest page/receipt activity
+and linked recovery runs before using old summary counters. Renew a short lease
+only while actively supervising, persist each result before the next request,
+and record a terminal partial state when stopping deliberately. A pending page
+without a response is unknown evidence, not a proven access block or a completed
+request. Preserve original observation times when reusing cached evidence.
+
+GitHub main and the READY production deployment were verified at the approved
+collector commit before recovery. The Vercel quarantine, disabled automated
+workspace gate, matching predicates, catalogue mappings and paid-provider
+configuration were unchanged. No paid provider was used. This recovery proves
+continued supervised workspace access only; recurring production transport and
+broader trusted coverage remain separate work.
+
+### Resumed queue and recorded transport stop — 30 September 2026
+
+The user authorised continuation of the saved queue. The supervisor resumed
+sequential requests with a short renewed lease, an owner token and a durable
+checkpoint after each response. Completed pages were excluded. Accepted live
+prices were written through the existing finalizer and verified in the trusted
+fresh-price view; identity thresholds and catalogue mappings were unchanged.
+
+This continuation stopped on a recorded network error before any HTTP response.
+That result does not establish an access denial or rate limit, and the collector
+did not retain a more specific network cause. The application network-error
+pause was preserved. The run was closed as partial/resumable, its workspace lease
+released, and the local collector exited with no outstanding pending page.
+The failed URL remains in the saved queue alongside unattempted URLs.
+
+A later continuation must wait for the recorded workspace pause, reconcile live
+mapping/freshness state and use a linked run for the remaining queue. Keep the
+failed page as historical evidence: the unique run/URL key prevents reserving it
+again inside the completed run. Do not re-fetch completed pages, rewrite failed
+evidence as success, or interpret the checkpoint as a background job. Exact
+counts, prices, request evidence and queue contents remain private in Supabase.
+Production quarantine and paid-provider configuration were unchanged.
+
+A linked continuation then resumed after the workspace pause expired naturally.
+The previously failed URL returned HTTP 200 and produced an accepted trusted
+price. Further sequential requests produced additional verified prices before
+another request ended without an HTTP response after the twenty-second deadline.
+No access-denial or rate-limit response was recorded. The underlying network
+cause remains unknown; successful recovery of one URL is not evidence of a
+permanent transport fix.
+
+The later run also exited cleanly with no pending page and no active lease, while
+retaining the prescribed pause and its remaining queue. Its parent checkpoint is
+now explicitly historical and superseded. Follow the linked continuation chain
+to the latest resumable run: restarting an old parent queue would repeat pages
+already completed by its child. Run-specific evidence remains immutable, and the
+failed URL remains eligible only in a subsequent linked run after the pause.
+
+A subsequent HTTP 502 stop was handled by retaining the full application pause
+and waiting within the supervised session. Only after the recorded gate expired
+did a linked continuation start; the previously failed URL then returned
+successfully. Further accepted prices were verified through the trusted view.
+
+The later interruption was an explicit workspace network-approval cancellation,
+not a retailer response. The local collector disappeared before its next reserved
+page returned evidence. The run is terminal partial, the lease is released, and
+the reservation is annotated as an unknown outcome rather than a fabricated
+HTTP/network result. Its URL stays in the authoritative remaining queue. No
+retailer cooldown was invented for this workspace permission failure.
+
+Further collection requires workspace network approval to be restored before
+opening another linked run. Do not retry through another process or route to
+circumvent that permission block. Follow the newest checkpoint rather than a
+superseded parent, and do not describe this partial queue as complete.
+
+### Saved recovery queue completed — 30 September 2026
+
+After the user explicitly requested another continuation, the original workspace
+route successfully fetched the unresolved URL under normal network-permission
+checks. No alternate route, permission bypass or production gate change was
+used. The remaining saved queue was then exhausted and the final linked run
+closed successfully, with no pending page in that run, no remaining queue and
+no active collector or workspace lease.
+
+Private reconciliation accounts for every URL in the selected resumed queue
+and found no repeated completed request across its continuation chain. Every
+accepted price receipt remains visible as a fresh trusted Tesco observation.
+Historical unanswered reservations remain unknown evidence, with their URLs
+covered by later successful requests; their original outcomes were not rewritten.
+
+The latest checkpoint records selected-queue completion and is not resumable.
+Earlier partial queue snapshots are historical and must not be restarted.
+This completes the saved recovery phase, not the full Tesco catalogue or a
+recurring production transport. Identity rejections remain principally
+incomplete exact-identity evidence, pack-size/brand conflicts and unavailable
+regular prices. Further coverage work needs separately scoped, evidence-backed
+mapping review; matching thresholds were not weakened and no paid provider was
+used. Exact counts and queue/product evidence remain private in Supabase.
+
+
+### Tesco coverage review and proposed recovery plan — 1 October 2026
+
+Read-only review reconciled the overnight decline in trusted Tesco coverage to
+older provider observations crossing the seven-day freshness boundary. The
+accepted observations from the completed recovery chain remain fresh. Main and
+the READY production deployment still use the previously verified collector
+commit. No collector, mapping repair, production change or paid request was
+started by this review.
+
+The saved recovery evidence identifies distinct workloads: incomplete canonical
+identity, missing exact measures, material brand/pack/variant conflicts,
+unavailable regular prices and duplicate-SKU ambiguity. These counts describe
+mapping decisions rather than distinct URLs; rejection reasons can overlap and
+the first failing check can hide later failures. They are not estimates of
+recoverable coverage.
+
+Code review confirms that exact measure validation reads canonical title text;
+the mapping evidence contract does not include canonical default quantity/unit.
+Some rejected records have structured defaults, but many have none and some
+defaults disagree with the live Tesco pack. Defaults therefore require
+corroboration and must not be blindly appended to make matching pass. Review
+also found narrow brand-spacing and short-title candidates, alongside unequivocal
+wrong-product mappings. Saved retailer title/structured-quantity discrepancies
+require explicit reconciliation before quantity evidence can be trusted.
+
+Proposed sequence, not yet implemented:
+
+1. Revalidate recently expired previously trusted mappings using current retailer
+   evidence and the unchanged safeguards. Track restored coverage separately
+   from newly covered products.
+2. Build a private, deduplicated review queue from saved pages, prioritised by
+   household demand and evidence completeness. Separate exact repair candidates,
+   wrong URLs, underspecified canonical products, duplicates and unavailable
+   prices. Preserve unresolved cases rather than forcing matches.
+3. Pilot a small reviewed cohort. Test narrowly evidenced brand aliases, title
+   normalisation and structured identity support against both positive examples
+   and wrong-brand/pack/variant controls. Resolve conflicts between title,
+   structured quantity and canonical evidence; never infer an exact pack from
+   a generic ingredient or retailer candidate alone.
+4. Apply only proven unique replacement mappings with immutable before/after
+   evidence, collision checks and a fresh validation fetch. Shared canonical
+   changes require checking other retailer mappings and household references;
+   create distinct exact product identities where appropriate instead of
+   redefining an existing shared product to fit Tesco.
+5. Expand retailer-owned discovery for high-demand unresolved exact products,
+   using listing pagination and cached discovery evidence where useful. Keep
+   alternatives explicitly separate from exact matches. Unavailable prices and
+   missing resources remain distinct from access failures.
+6. Establish reliable renewal before scaling. Use the existing four-day due
+   threshold and seven-day expiry; retain leases, durable checkpoints,
+   idempotency and stop/cooldown rules. A recurring approved execution path
+   remains unproven and must be established before promising unattended refresh.
+
+Measure net fresh trusted coverage, distinct retailer SKUs and canonical coverage,
+demand coverage, new versus restored prices, expiry losses, accepted yield and
+unresolved conflicts. Require the pilot's accepted receipts to reach the trusted
+view and survive a subsequent renewal before extrapolating. No numerical uplift
+forecast is justified by the rejection totals alone. Exact operational counts
+and product-level review evidence remain private.
+
+
+### Renewal and reviewed repair pilot — 1 October 2026
+
+The user authorised proceeding with the expired-price cohort and a reviewed
+repair pilot. A supervised direct run completed the entire selected expired
+cohort with durable per-page evidence and unchanged validation. Accepted
+receipts were verified as fresh in the trusted consumer view. Some historically
+trusted mappings now fail exact size, brand or pack checks and remain excluded.
+The run closed successfully with no remaining queue, active process or lease.
+No paid provider or production access-gate change was used.
+
+Offline screening of saved retailer evidence was followed by an explicit
+reviewed pilot. A small subset passed the unchanged validator after proposed
+duplicate-peer quarantine or exact branded remapping. Other suggestions were
+held: missing packs, different formulations, composite products containing the
+requested ingredient, brand-spacing cases requiring code tests, and possibly
+equivalent peers requiring further corroboration. Passing the replacement
+classifier alone is not authorisation to apply an arbitrary discovery result.
+No shared canonical definitions or matching thresholds were changed.
+
+The guarded repair transaction was NOT applied. The Supabase connector twice
+returned `McpServerError: Invalid or expired requestState`. A read-only check
+found no repair run or active repair query, and trusted coverage reflected only
+the completed renewal writes. Do not describe this as a retailer failure, a
+confirmed SQL-validation error, or a completed mapping repair.
+
+The completed renewal run privately stores the pilot decisions, exact proposed
+repairs, source pages and before-mapping snapshots under
+`repairPilot.status=reviewed_not_applied`. A future authorised continuation
+must first recheck those snapshots, current trusted freshness and source age,
+then apply the reviewed transaction through working connector permissions.
+Preserve source observation timestamps when replaying saved evidence, and
+verify every resulting receipt in the trusted view. Exact counts and product
+evidence remain private. The reviewed-but-unapplied pilot is the next checkpoint;
+the completed URL queue must not be restarted.
+
+
+### Controlled overlap-priority collection — 8 October 2026
+
+The user requested one bounded product batch using the previously tested
+workspace collector, prioritising missing fresh Tesco prices where SuperValu
+or Dunnes already had fresh coverage. Selection used existing resolved Tesco
+mappings with prior successful direct identity evidence; the chosen cohort had
+fresh coverage at both other retailers. No scraper redesign, production code
+change, mapping repair, paid provider or per-product model inference was used.
+
+The complete selected batch returned HTTP 200. Most products passed the unchanged
+exact identity validator and produced idempotent finalizer receipts, each
+verified in the fresh trusted view. Exclusions were unavailable regular prices
+and missing exact measure evidence. Collection stopped at the requested limit,
+with no pending page, active process or workspace lease. No access challenge
+was observed. Older observations expired during collection, so net freshness
+growth is lower than the count restored by this run.
+
+These are restored prices for existing catalogue identities, not newly created
+catalogue products. Yield from prioritised previously proven mappings must not
+be extrapolated to unresolved mappings or a much larger catalogue expansion.
+The private run tesco_workspace_overlap100_20261008 contains the selected cohort,
+page evidence, receipts and completed checkpoint. Exact counts stay private.
+
+ChatGPT Work billing/credit telemetry is unavailable to this session. Paid
+scraping-provider usage was zero, but that does not establish zero total cost
+or an economic case for a larger Work-supervised run. Additional collection
+requires a separately authorised batch. No larger collection or recurring
+schedule was started.
+
+An optional post-run report annotation returned the connector's
+Invalid or expired requestState error after the completed run and accepted
+receipts had already been independently verified. This did not undo the
+completed collection checkpoint or price writes.
+
+### Follow-on bounded collection — 8 October 2026
+
+The separately authorised remaining proven-candidate batch used the unchanged
+workspace collector, exact identity validator and trusted finalizer. Candidates
+with current coverage at both comparison retailers were prioritised. Accepted
+observations and their fresh consumer-view coverage were independently verified.
+
+The run stopped early on a transport timeout, as required by the existing
+stop-on-network-error policy. No Akamai challenge or HTTP denial was observed;
+a timeout does not prove retailer access is blocked or permitted. The existing
+transport cooldown was recorded, the workspace lease released and the run closed
+as degraded. There are no pending page reservations. Unattempted candidates
+remain in the private selected-cohort checkpoint; no retry or alternate route
+was used. See private run tesco_workspace_batch2_147_20261008 for exact counts,
+page evidence, receipts and remaining scope. No baseline fresh observations
+expired during this short run.
+
+A scheduled job could reuse the deterministic collector and finalizer without
+per-product Work interaction, but transport reliability and stable permitted
+access need validation before unattended operation. Preserve pacing, exclusive
+ownership, durable checkpoints, identity checks and stop/cooldown behavior.
+Work billing remains unavailable; no paid scraping provider was used. No
+scheduler, architecture, production code, matching rule or catalogue mapping
+was changed in this batch.
+
+### Bounded transport recovery — 8 October 2026
+
+After the recorded workspace cooldown expired, a separately authorised recovery
+selected only unattempted members of the prior cohort, prioritising current
+coverage at both other retailers. The earlier timed-out product was deferred.
+The unchanged collector, pacing, identity validator and trusted finalizer were
+reused. Most selected requests completed with exact identities and fresh prices
+verified in the consumer view, increasing three-retailer coverage without any
+baseline freshness expiry during the run.
+
+Another request reached the existing transport deadline without an HTTP response.
+The collector stopped, recorded its normal cooldown and released the lease; the
+rest of the bounded selection remains unattempted. No challenge, HTTP denial,
+redirect or identity-validation anomaly was observed. Successful requests were
+faster on average than in the preceding attempt, but transport failures across
+both runs mean the first failure cannot be treated as a confirmed isolated event.
+Do not infer a broad outage or retailer block from these timeouts. Larger or
+unattended collection is not yet recommended without transport diagnosis.
+
+Exact private evidence and remaining scope are in run
+tesco_workspace_batch2_recovery25_20261008. No collector logic, production code,
+matching rules, mappings or catalogue products were changed. No larger batch or
+paid-provider fallback was started.
