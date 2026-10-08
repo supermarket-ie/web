@@ -12,7 +12,7 @@ if (!core.isTescoCollectionUrl(url)) throw new Error('Invalid Tesco URL');
   const observedAt = new Date().toISOString();
   let parsed = null;
   let outcome = response.outcome;
-  let detail = null;
+  let detail = response.transport ? JSON.stringify({ transport: response.transport }) : null;
   try {
     if (outcome === 'ok') parsed = core.parseTescoCollectedPage(response.html, response.finalUrl);
   } catch (error) { outcome = 'parse_error'; detail = error.message; }
@@ -36,3 +36,4 @@ if (!core.isTescoCollectionUrl(url)) throw new Error('Invalid Tesco URL');
     resourceUnavailable, stopCollection,
     pauseUntil: stopCollection ? core.tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter) : null }));
 })().catch(error => { console.error(error.message); process.exitCode = 1; });
+

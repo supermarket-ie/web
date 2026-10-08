@@ -72,3 +72,40 @@ After a clean probe, run one bounded collection and verify page evidence, receip
 idempotency, accepted price identity and trusted freshness before scaling.
 On a block, retain the cooldown and report the result; do not describe waiting
 24 or 48 hours as a guaranteed fix.
+
+## Transport diagnosis and retry boundary — 8 October 2026
+
+The supervised timeout records ended at the configured 20-second deadline, but
+the old catch block discarded the exception, response status, Retry-After and
+whether headers had arrived. Null recorded status therefore does not prove no
+HTTP response was received. The deadline spans fetch, allowed redirects and body
+reading. These records cannot attribute delay to Tesco, the network, the managed
+workspace proxy or body delivery. Successful neighbouring requests varied in
+latency. There is no recorded challenge evidence, but incomplete responses cannot
+exclude one.
+
+This correction retains bounded failure diagnostics (headers/body phase, local
+abort state, header timing, redirect count and allowlisted error name/code) in the
+existing private page detail field. Raw exception messages, headers, bodies and
+credentials are not retained. A body failure after HTTP 401/403 remains an access
+block with the existing quarantine; HTTP 429 remains rate limited and preserves
+Retry-After. Incomplete HTTP 200 or 404 bodies remain terminal network errors.
+No timeout, retry, pacing, lease, cache, price or identity policy is relaxed.
+
+Automatic product-level continuation is NOT enabled by this change. A future
+reviewed policy could allow at most one delayed retry of a positively classified
+transient pre-header connection failure, on the same transport, after the existing
+pause and gate checks. Persist the original attempt and retry count durably; do
+not reset the allowance on process restart or overwrite evidence. Require fresh
+lease ownership, retain at least the existing spacing, and stop on any second
+transport failure. Never retry a denial, rate limit, Retry-After instruction,
+redirect, ambiguous/incomplete body, parse failure or identity anomaly under this
+policy. A generic network_error or local timer expiry alone is insufficient proof
+of eligibility. No retry implementation or recurring schedule is in this PR.
+
+The authorised live test used the unchanged collector after its cooldown expired.
+It stopped on an exact-measure rejection after a successful HTTP response; no
+observation was inserted. Remaining candidates and the two deferred timeout
+products were not fetched. This is not a successful transport soak test and does
+not establish reliable unattended collection. Exact operational evidence stays
+in private run tesco_workspace_transport_test6_20261008.

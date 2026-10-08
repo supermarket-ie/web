@@ -142,7 +142,7 @@ export async function collectTescoDirect(options: { mode: TescoCollectionMode; m
       requests += 1;
       let parsed: TescoCollectedPage | null = null;
       let outcome: string = response.outcome;
-      let detail: string | null = null;
+      let detail: string | null = response.transport ? JSON.stringify({ transport: response.transport }) : null;
       if (response.outcome === 'ok') {
         try { parsed = parseTescoCollectedPage(response.html, response.finalUrl); }
         catch (error) { outcome = 'parse_error'; detail = error instanceof Error ? error.message : 'Parse failure'; }
@@ -205,3 +205,4 @@ export async function collectTescoDirect(options: { mode: TescoCollectionMode; m
     if (!paused && !released) await releaseTescoEgress(lease.egressKey);
   }
 }
+

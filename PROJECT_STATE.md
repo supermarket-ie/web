@@ -2928,3 +2928,29 @@ retailer absence. No fresh peer was removed. Exact remaining mappings were
 replayed with original evidence timestamps and the unchanged identity predicate.
 Two previously conflicting groups also became unique after the earlier remaps.
 Shared canonical definitions and synonym/duplicate matching rules are unchanged.
+
+### Tesco transport diagnosis and evidence preservation — 8 October 2026
+
+Repeated supervised network failures hit the local collector deadline. The old
+catch handler erased HTTP status, Retry-After and exception/phase information,
+including when a denial response had already arrived but its body failed. This
+prevents retrospective attribution to Tesco versus network/workspace transport.
+The workspace uses its existing managed proxy; no alternate route was tested.
+Latency variance supports transient delay as a hypothesis, not a proven origin.
+
+A narrow reviewed correction retains allowlisted transport diagnostics in private
+page detail and preserves known 401/403/429 classifications on body failure.
+Tests cover local deadlines before headers and during body reads, header/status
+preservation, redirects, error sanitisation, existing challenge/Retry-After rules
+and no extra requests. Deadline, pacing, terminal network-error policy, lease,
+checkpoints, finalizer, identity matching and production mappings are unchanged.
+See docs/tesco-direct-collection.md for the conservative conditional retry proposal;
+no retry or scheduler is implemented or authorised by this code change.
+
+The bounded live test ran the existing collector after cooldown expiry and stopped
+on an exact-measure validation rejection after HTTP success. No new trusted price
+was inserted. Deferred timeout products remain untested. Private run
+tesco_workspace_transport_test6_20261008 contains the evidence. This small result
+cannot validate a larger batch or unattended execution. Main and production were
+unchanged at inspection; the correction remains a PR requiring review/deployment
+approval. Operational counts and product evidence remain outside the repository.
