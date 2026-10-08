@@ -3226,3 +3226,43 @@ Exact private evidence and remaining scope are in run
 tesco_workspace_batch2_recovery25_20261008. No collector logic, production code,
 matching rules, mappings or catalogue products were changed. No larger batch or
 paid-provider fallback was started.
+
+### Released transport diagnostics and successful bounded recovery — 8 October 2026
+
+The owner authorised release of PR #249 after checks and review. CI #894 passed,
+review threads were clear and GitHub's normal merge endpoint accepted the merge.
+Commit 54c4710634e6a09a80d61a15e3775874bfdf66fc reached READY in production deployment
+dpl_Gk2g9pcXyvcPcZH1U55Dc2emAVzA. The workspace helper/core were loaded from that
+exact commit. This verifies deployed source inclusion and the real successful
+collection path, not a deliberately induced live failure. Failure classifications
+and diagnostic persistence are covered by the regression tests.
+
+Both deferred timeout products returned HTTP 200 and passed unchanged exact
+identity validation. A separately authorised bounded follow-on pass selected
+previously proven resolved mappings missing fresh Tesco observations, excluding
+products already attempted that day and prioritising both-retailer overlap. All
+selected pages returned HTTP 200 and all selected identities passed. Successful
+receipts were independently joined to fresh tesco_direct rows in latest_prices.
+No baseline Tesco observations expired, no pending pages or lease remain, and
+no retry, access challenge, redirect, transport failure or mapping change occurred.
+Private runs tesco_workspace_deferred2_20261008 and
+tesco_workspace_evening50_20261008 contain operational counts and evidence.
+
+The separate beans rejection remains justified: the canonical default measure
+and the mapped retailer multipack disagree. No validator relaxation or mapping
+repair was made. Remaining previously proven candidates cannot alone achieve
+the owner's coverage objective; broader exact identity validation is needed.
+A further bounded supervised batch is supported by this clean result, subject
+to the same terminal transport rules, but it was not started without approval.
+
+For sustainable operation, retain the deterministic Node collector and existing
+Supabase evidence, leases and finalizer. A conventional scheduled worker should
+renew before the freshness boundary, process small sequential checkpoints and
+stop on existing access/transport conditions, without per-product model calls.
+First prove permitted access on the chosen existing execution host. The current
+Vercel cron configuration already refreshes Dunnes/SuperValu; workspace Tesco
+success does not establish Vercel Tesco access. A maintained existing EC2 runner
+could host the Node process if its availability and accepted transport are
+verified; neither is established by this session. Do not add infrastructure,
+route failover or an unattended scheduler on the basis of workspace success.
+Work billing remains unavailable and no paid scraping provider was called.
