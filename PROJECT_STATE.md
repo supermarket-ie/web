@@ -3202,3 +3202,27 @@ ownership, durable checkpoints, identity checks and stop/cooldown behavior.
 Work billing remains unavailable; no paid scraping provider was used. No
 scheduler, architecture, production code, matching rule or catalogue mapping
 was changed in this batch.
+
+### Bounded transport recovery — 8 October 2026
+
+After the recorded workspace cooldown expired, a separately authorised recovery
+selected only unattempted members of the prior cohort, prioritising current
+coverage at both other retailers. The earlier timed-out product was deferred.
+The unchanged collector, pacing, identity validator and trusted finalizer were
+reused. Most selected requests completed with exact identities and fresh prices
+verified in the consumer view, increasing three-retailer coverage without any
+baseline freshness expiry during the run.
+
+Another request reached the existing transport deadline without an HTTP response.
+The collector stopped, recorded its normal cooldown and released the lease; the
+rest of the bounded selection remains unattempted. No challenge, HTTP denial,
+redirect or identity-validation anomaly was observed. Successful requests were
+faster on average than in the preceding attempt, but transport failures across
+both runs mean the first failure cannot be treated as a confirmed isolated event.
+Do not infer a broad outage or retailer block from these timeouts. Larger or
+unattended collection is not yet recommended without transport diagnosis.
+
+Exact private evidence and remaining scope are in run
+tesco_workspace_batch2_recovery25_20261008. No collector logic, production code,
+matching rules, mappings or catalogue products were changed. No larger batch or
+paid-provider fallback was started.
