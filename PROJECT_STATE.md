@@ -3142,3 +3142,38 @@ Preserve source observation timestamps when replaying saved evidence, and
 verify every resulting receipt in the trusted view. Exact counts and product
 evidence remain private. The reviewed-but-unapplied pilot is the next checkpoint;
 the completed URL queue must not be restarted.
+
+
+### Controlled overlap-priority collection — 8 October 2026
+
+The user requested one bounded product batch using the previously tested
+workspace collector, prioritising missing fresh Tesco prices where SuperValu
+or Dunnes already had fresh coverage. Selection used existing resolved Tesco
+mappings with prior successful direct identity evidence; the chosen cohort had
+fresh coverage at both other retailers. No scraper redesign, production code
+change, mapping repair, paid provider or per-product model inference was used.
+
+The complete selected batch returned HTTP 200. Most products passed the unchanged
+exact identity validator and produced idempotent finalizer receipts, each
+verified in the fresh trusted view. Exclusions were unavailable regular prices
+and missing exact measure evidence. Collection stopped at the requested limit,
+with no pending page, active process or workspace lease. No access challenge
+was observed. Older observations expired during collection, so net freshness
+growth is lower than the count restored by this run.
+
+These are restored prices for existing catalogue identities, not newly created
+catalogue products. Yield from prioritised previously proven mappings must not
+be extrapolated to unresolved mappings or a much larger catalogue expansion.
+The private run tesco_workspace_overlap100_20261008 contains the selected cohort,
+page evidence, receipts and completed checkpoint. Exact counts stay private.
+
+ChatGPT Work billing/credit telemetry is unavailable to this session. Paid
+scraping-provider usage was zero, but that does not establish zero total cost
+or an economic case for a larger Work-supervised run. Additional collection
+requires a separately authorised batch. No larger collection or recurring
+schedule was started.
+
+An optional post-run report annotation returned the connector's
+Invalid or expired requestState error after the completed run and accepted
+receipts had already been independently verified. This did not undo the
+completed collection checkpoint or price writes.
