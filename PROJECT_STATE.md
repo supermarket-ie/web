@@ -3177,3 +3177,28 @@ An optional post-run report annotation returned the connector's
 Invalid or expired requestState error after the completed run and accepted
 receipts had already been independently verified. This did not undo the
 completed collection checkpoint or price writes.
+
+### Follow-on bounded collection — 8 October 2026
+
+The separately authorised remaining proven-candidate batch used the unchanged
+workspace collector, exact identity validator and trusted finalizer. Candidates
+with current coverage at both comparison retailers were prioritised. Accepted
+observations and their fresh consumer-view coverage were independently verified.
+
+The run stopped early on a transport timeout, as required by the existing
+stop-on-network-error policy. No Akamai challenge or HTTP denial was observed;
+a timeout does not prove retailer access is blocked or permitted. The existing
+transport cooldown was recorded, the workspace lease released and the run closed
+as degraded. There are no pending page reservations. Unattempted candidates
+remain in the private selected-cohort checkpoint; no retry or alternate route
+was used. See private run tesco_workspace_batch2_147_20261008 for exact counts,
+page evidence, receipts and remaining scope. No baseline fresh observations
+expired during this short run.
+
+A scheduled job could reuse the deterministic collector and finalizer without
+per-product Work interaction, but transport reliability and stable permitted
+access need validation before unattended operation. Preserve pacing, exclusive
+ownership, durable checkpoints, identity checks and stop/cooldown behavior.
+Work billing remains unavailable; no paid scraping provider was used. No
+scheduler, architecture, production code, matching rule or catalogue mapping
+was changed in this batch.
