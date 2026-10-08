@@ -42,6 +42,64 @@ describe('Tesco structured collection', () => {
 });
 
 describe('Tesco transport stop rules', () => {
+  it('records the local deadline before headers without retrying or leaking error text', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+        init!.signal!.addEventListener('abort', () => reject(new DOMException('private diagnostic', 'AbortError')), { once: true });
+      }));
+      const pending = fetchTescoCollectedPage(tescoProductUrl(sku), fetcher);
+      await vi.advanceTimersByTimeAsync(20_000);
+      const response = await pending;
+      expect(response).toMatchObject({ outcome: 'network_error', status: null, elapsedMs: 20_000,
+        transport: { phase: 'headers', timedOut: true, headersElapsedMs: null, redirectCount: 0, errorName: 'AbortError', errorCode: null } });
+      expect(JSON.stringify(response)).not.toContain('private diagnostic');
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('preserves denial, rate limit and Retry-After when the body fails', async () => {
+    for (const status of [401, 403, 429, 200, 404]) {
+      const body = new ReadableStream({ start(controller) { controller.error(new Error('private body failure')); } });
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status, headers: { 'Retry-After': '7200' } }));
+      const response = await fetchTescoCollectedPage(tescoProductUrl(sku), fetcher);
+      expect(response).toMatchObject({ status, retryAfter: '7200',
+        outcome: status === 401 || status === 403 ? 'access_block' : status === 429 ? 'rate_limited' : 'network_error',
+        transport: { phase: 'body', timedOut: false, errorName: 'Error' } });
+      expect(tescoResourceUnavailable(response)).toBe(false);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(response)).not.toContain('private body failure');
+      const pause = Date.parse(tescoPauseUntil(response.outcome, response.retryAfter, 0)!);
+      expect(pause).toBe(status === 401 || status === 403 ? 48 * 3600_000 : 7200_000);
+    }
+  });
+  it('distinguishes a body deadline from a headers deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => new Response(new ReadableStream({
+        start(controller) { init!.signal!.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')), { once: true }); },
+      }), { status: 200 }));
+      const pending = fetchTescoCollectedPage(tescoProductUrl(sku), fetcher);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(await pending).toMatchObject({ outcome: 'network_error', status: 200,
+        transport: { phase: 'body', timedOut: true, headersElapsedMs: 0 } });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('retains only allowlisted network error codes and marks prior redirects', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: tescoProductUrl('987654321') } }))
+      .mockRejectedValueOnce(new TypeError('private connection details', { cause: { code: 'ECONNRESET' } }));
+    const response = await fetchTescoCollectedPage(tescoProductUrl(sku), fetcher);
+    expect(response).toMatchObject({ outcome: 'network_error', status: null, transport: {
+      phase: 'headers', timedOut: false, redirectCount: 1, errorCode: 'ECONNRESET', errorName: 'TypeError',
+    } });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(response)).not.toContain('private connection details');
+    const unknown = await fetchTescoCollectedPage(tescoProductUrl(sku), vi.fn<typeof fetch>().mockRejectedValue({ code: 'sensitive unknown value' }));
+    expect(unknown.transport).toMatchObject({ errorName: 'UnknownError', errorCode: null });
+  });
   it('skips only missing resources and permanent Irish-homepage redirects, retaining denial stops', async () => {
     for (const status of [404, 410]) {
       const response = await fetchTescoCollectedPage(tescoProductUrl(sku), vi.fn<typeof fetch>().mockResolvedValue(new Response('Missing', { status })));
@@ -97,3 +155,4 @@ describe('Tesco transport stop rules', () => {
     expect(tescoPauseUntil('rate_limited', 'nonsense', now)).toBe('2026-09-29T10:15:00.000Z');
   });
 });
+
