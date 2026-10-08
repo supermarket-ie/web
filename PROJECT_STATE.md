@@ -3266,3 +3266,49 @@ could host the Node process if its availability and accepted transport are
 verified; neither is established by this session. Do not add infrastructure,
 route failover or an unattended scheduler on the basis of workspace success.
 Work billing remains unavailable and no paid scraping provider was called.
+
+### Next bounded proven-candidate batch — 8 October 2026
+
+The owner authorised another bounded supervised collection from remaining
+previously verified mappings. Live baseline, cooldown expiry and lease release
+were checked before selection. Fresh Tesco rows, same-day attempted URLs and
+historical identity-mismatch rejections were excluded. Current overlap with one
+other retailer was prioritised; no eligible member of this cohort currently had
+fresh prices at both other retailers. Existing code, transport, pacing, checkpoint,
+lease and finalizer safeguards were reused without retries or production changes.
+
+Every selected page returned HTTP 200. All but one provided an exact usable regular
+price; the exclusion was unavailable_or_no_regular_price, not an identity repair.
+Success receipts were verified against fresh tesco_direct offers. Tesco coverage
+increased without baseline observation expiry; three-retailer coverage remained
+unchanged as expected for this cohort. No access challenge, timeout, pending page
+or active lease remains. Exact evidence is private in run
+tesco_workspace_next100_20261008. No further batch was started.
+
+Read-only planning applied the existing mapping classifier to fresh, unattempted,
+resolved non-rejected rows. A small additional unproven group passes metadata
+screening, which is not evidence of a live exact price. The remaining proven queue
+and this group together cannot achieve the requested coverage milestone. Next:
+renew current trusted prices before expiry, finish the authorised proven queue,
+validate clean unproven candidates live in bounded tranches, then separately review
+saved evidence for ambiguous/rejected mappings and propose explicit pack/variant/
+SKU repairs for approval. Do not weaken identity rules to reach a numeric target.
+
+Hosting assessment: the saved Vercel direct probe is HTTP 403 with no later
+successful gate evidence; expiry of its pause does not prove recovery. The existing
+worker is gated by CRON_SECRET and TESCO_VERCEL_WORKER_ENABLED and bounded to a
+short invocation. No runtime flags or credentials were changed/read to enable a
+probe. No AWS execution connection is available in this session. Thus reliable
+Tesco access on either conventional host remains unverified; workspace success
+cannot establish it. No new Vercel/AWS probe or additional batch was sent.
+
+The smallest automation path is a conventional Node worker reusing the collector,
+Supabase leases/evidence and trusted finalizer. Prefer a maintained existing host
+after an explicitly bounded manual access test there. Use scheduled short work
+units selected by four-day renewal age and newly verified identities, retain
+seven-day freshness, exclusive ownership, pacing and durable progress, and keep
+all current access/transport stops. Track inserts separately from newly covered,
+renewed and expired products and net coverage; alert only on run failures, access
+restrictions or meaningful coverage loss. No per-product model call is necessary.
+Do not deploy a scheduler until the host access test and reviewed worker prove
+reliable. Work billing is unavailable; no paid provider was used.
