@@ -3065,3 +3065,21 @@ prices. Existing spelling-only proposals retain negative-control results and
 require dependency review and approval. No newly safe alternate SKU was found.
 Earlier fresh observations remain fresh; renewal priority and boundaries remain
 unchanged. Exact counts, run identifiers and ranked product evidence stay private.
+
+
+### Discovery review and remaining clean collection — 9 October 2026
+
+The title/discovery review did not substantiate the requested larger exact-mapping
+cohort. PR #254 contains spelling-only proposals and passing offline peer/negative
+controls, with no production data changes. A separate red-cheddar SKU proposal
+remains held after its grated-blend negative control passed unexpectedly; do not
+collect or repair it based on validator acceptance alone. The private queue now
+records explicit rejections, evidence gaps, repair requirements and live outcomes.
+
+After the existing cooldown expired, the remaining clean bounded collection
+completed successfully and released its lease. No new transport, access, identity
+or unknown-outcome failures occurred. Earlier trusted observations were verified
+unchanged and historical pending holds remain intact. The clean reviewed queue is
+exhausted; further collection requires approved repairs or newly established exact
+evidence. Renewal dates and safeguards remain unchanged. Operational counts and
+product-level evidence remain private.
