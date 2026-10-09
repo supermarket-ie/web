@@ -3046,3 +3046,22 @@ collector was active, completed the new run without reproducing an implementatio
 defect. Keep that operational discipline, retain the existing acknowledgement
 deadline and stop/reconcile on uncertain acknowledgements. Do not weaken holds or
 add automatic retries. No implementation PR is warranted from this evidence.
+
+
+### Later expansion safety stop — 9 October 2026
+
+A further authorised bounded batch stopped on a recorded pre-header network
+error. The transport diagnostic recorded TypeError, no HTTP status and no local
+timeout; this does not establish the upstream cause or an access challenge.
+The collector persisted its normal cooldown, checkpointed the known failure,
+closed degraded and released its lease. Availability/regular-price exclusions
+produced no observations. There were no new unknown outcomes; historical pending
+requests remain held. No retries, mapping changes or scheduler changes occurred.
+
+The private next-opportunity record distinguishes a small remaining clean queue
+from title-review and identity-discovery work. It is not an approved collection
+queue: known mismatches remain excluded and stored evidence cannot create fresh
+prices. Existing spelling-only proposals retain negative-control results and
+require dependency review and approval. No newly safe alternate SKU was found.
+Earlier fresh observations remain fresh; renewal priority and boundaries remain
+unchanged. Exact counts, run identifiers and ranked product evidence stay private.
