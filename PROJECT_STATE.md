@@ -2954,3 +2954,108 @@ tesco_workspace_transport_test6_20261008 contains the evidence. This small resul
 cannot validate a larger batch or unattended execution. Main and production were
 unchanged at inspection; the correction remains a PR requiring review/deployment
 approval. Operational counts and product evidence remain outside the repository.
+
+
+## Tesco supervised recovery and renewal readiness — 9 October 2026
+
+Production was verified READY at main commit
+`54c4710634e6a09a80d61a15e3775874bfdf66fc` (PR #249). The local
+one-page helper and collector matched current main; the mapping validator
+differed only by a trailing blank line. The diagnostic release is active.
+
+The owner authorised up to 100 remaining previously verified products, excluding
+fresh prices and known identity failures. Reconciliation showed the earlier
+100-product operation was already complete. Only the unattempted residue of that
+original cohort was selected; the previously reserved product with no recorded
+response remained deferred. A new supervised request returned HTTP 200 but failed
+the unchanged exact-measure predicate. The run stopped immediately, saved the
+page and rejection, inserted no price and released its lease. No transport error,
+challenge, retry, mapping repair or application-code change occurred. Exact
+operational counts, product identities and evidence remain in private Supabase
+run `129a47e0-5315-446b-84ff-5d83b2a3021f`.
+
+A historical successful validation is not perpetual proof of canonical pack
+identity. A newly returned structured weight can expose an underspecified
+canonical title that previously passed against less complete evidence. Do not
+discard structured quantities or weaken the predicate to recover that product.
+
+### Renewal plan (not deployed)
+
+The oldest current observation becomes four days old on 12 October 2026 at
+11:28 Irish time and reaches the seven-day freshness boundary on 15 October at
+11:28. Recheck these deadlines from live observations before execution.
+
+- Select four-day-due Tesco observations first, oldest timestamp first, then
+  newly verified missing-price mappings ranked by fresh peer-retailer coverage.
+- Start on 12 October; aim to complete the initial renewal cohort by 14 October,
+  leaving time for permitted recovery before each individual expiry.
+- Keep the seven-day trusted view unchanged. Only a new successful live exact
+  validation can append a new observation. Failed renewal must not delete an
+  existing observation or change its original timestamp.
+- The deployed collector has a four-day due predicate. The separately supervised
+  expansion finalisation guard skips every still-fresh price. It is therefore
+  unsuitable for renewal unchanged. Prepare and review an explicit supervised
+  renewal mode before relying on it for the October deadline.
+- Retain serial pacing, the 20-second deadline, ownership checks, checkpoints,
+  idempotent receipts, cooldowns and terminal access/transport/identity stops.
+  Pending attempts with no recorded outcome must remain visibly unresolved,
+  not silently counted as an unattempted candidate or automatically retried.
+
+### Conventional worker plan and hosting evidence
+
+Current `vercel.json` already schedules Dunnes and SuperValu direct workers
+and the free Pepesto retrieval job. It does not schedule Tesco direct collection.
+The Vercel Tesco gate still records blocks and no successful transport. Expired
+quarantine is not evidence of accepted access; do not repeatedly probe or route
+around its restriction.
+
+`docs/aws-exit-plan.md` and `docs/aws-exit-status.md` describe the legacy
+EC2 `supermarket-scrape.timer` / systemd runtime and `scripts/scrape_all.sh`.
+Those dated documents do not establish that EC2 is still running. This session
+has no AWS execution connector, CLI, configured credentials or SSH connection.
+AWS Tesco connectivity and current operating cost remain unverified.
+
+The simplest conditional option is a dedicated Node command and disabled
+systemd timer on that existing maintained host, if it is still available. Reuse
+the existing parser, validator and Supabase finalizer; do not reintroduce the
+legacy multi-retailer browser pipeline. Before implementing:
+
+1. Identify the actual instance, region, maintenance owner and active timers;
+   obtain a scoped SSM or SSH execution path and confirm Node compatibility.
+2. Provide server-side Supabase access through the existing secret-management
+   mechanism. Keep credentials out of source, arguments, logs and browser code.
+   Confirm outbound HTTPS and database/API access.
+3. Check the host's existing access history and cooldown. Only after approval,
+   run one read-only Tesco product canary from that host with the existing
+   timeout, headers and stop rules. Do not change IPs, proxies or fingerprints
+   to evade restrictions. A block ends the test.
+4. Following accepted access, run a bounded supervised validation and a restart/
+   duplicate-delivery check before seeking approval to enable a daily timer.
+   No systemd failure-restart policy may automatically retry Tesco requests.
+5. Keep one durable owner/lease, record page evidence before finalisation, and
+   stop on lost ownership. Reconcile uncertain attempts before any later run.
+6. Record new coverage, renewals, expiries, net coverage, oldest due timestamp,
+   pending attempts and access/transport failures separately. Integrate alerts
+   with the existing private operational monitoring, without exposing secrets.
+
+No infrastructure, schedule, production flags or renewal behaviour was changed.
+No paid scraping provider was used; Work credits and host operating costs are
+not available. Measured earlier supervised throughput was roughly 20 seconds
+per attempted product including pacing; use this only as a capacity estimate,
+not an AWS performance or reliability claim.
+
+### Path to 500
+
+Query live trusted coverage before every tranche. Protect the current cohort
+first. Complete eligible unattempted candidates only under the existing stop
+rules; do not pad a requested limit with ambiguous mappings. Prioritise the
+stored-evidence audit's validator-passing comparison gaps, with independent
+SuperValu/Dunnes identity checks and a separately authorised fresh-validation
+batch. Historical rejection exclusions for this run remain in force.
+
+Incorrect SKUs, incomplete canonical definitions and formatting candidates are
+separate repair proposals requiring evidence, negative controls and approval.
+Review all peer-retailer and catalogue dependencies before a canonical change.
+The clean residual queue alone is insufficient for 500; broader evidence-backed
+mapping recovery is required. Do not extrapolate the previous 99% batch yield
+to the unresolved mapping backlog.
