@@ -2999,3 +2999,18 @@ thin PostgreSQL adapter around this runner. Current host access/credentials and
 Tesco reachability are unverified; the legacy shell's Tesco branch uses a
 different scraper. No AWS canary, new infrastructure, egress change, scheduler
 or live renewal was executed. Work access does not establish Vercel/AWS access.
+
+
+### Tesco discovery and spelling-only proposals — 9 October 2026
+
+An offline review of the current title/discovery cohorts and stored structured
+Tesco catalogue found a limited set of exact spelling-only repair proposals;
+it did not establish the requested larger collection-ready cohort. The proposed
+spacing changes and peer-validator/negative-control tests are documented in
+`docs/tesco-spelling-proposals.md`. No production data or validation policy changes
+are included. Generic canonical names can admit several distinct returned
+variants; manual exact-identity review continues to hold those candidates even
+when the validator passes. Known mismatches and historical unknown requests remain
+excluded. Current availability must be verified live, never inferred from stored
+listing evidence. Renewal priority, leases, cooldowns and append-only observations
+remain unchanged. Private evidence and counts remain in the operational queue.
