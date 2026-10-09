@@ -48,4 +48,6 @@ describe('offline deterministic Tesco discovery', () => {
   it('holds equal-time conflicting records across timezones', () => { const x = fixture(); x.evidence.push({ ...x.evidence[0], page_id: 'conflict', created_at: '2026-10-08T13:00:00+01:00', product: { ...x.evidence[0].product, name: 'Other 200g' } }); expect(discover(x).counts.ready).toBe(0); });
   it('retains historical SKU/URL hints without accepting legacy classifications', () => { const x = fixture(); x.evidence = []; x.historicalHints = [{ id: 'legacy', store_product_id: 'mapping', candidate_sku: '123456789', candidate_url: x.mappings[0].store_url, candidate_name: x.mappings[0].canonical_name, created_at: '2026-09-20T12:00:00Z', classification: 'exact_replacement_candidate' }]; const d = discover(x).decisions[0]; expect(d.historicalHints).toHaveLength(1); expect(d.collectorTarget).toBeNull(); expect(d.classification).toBe('needs_evidence'); });
 
+  it('retrieves one-word evidence without bypassing the unchanged identity validator', () => { const x = fixture(); x.mappings[0].canonical_name = 'Brand 200g'; x.mappings[0].store_sku = '111111111'; x.evidence[0].product.name = 'Brand 200g'; for (const p of x.peers) p.store_product_name = 'Brand 200g'; const r = discover(x); expect(r.decisions[0].candidates.map(c => c.sku)).toEqual(['123456789']); expect(r.counts.ready).toBe(0); });
+
 });

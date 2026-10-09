@@ -101,7 +101,7 @@ export function discover(raw: unknown, previous?: DiscoveryState) {
     for (const gtin of independentGtins) for (const e of byGtin.get(gtin) ?? []) pool.add(e);
     const overlaps = new Map<Evidence, number>();
     for (const word of words) for (const e of byToken.get(word) ?? []) overlaps.set(e, (overlaps.get(e) ?? 0) + 1);
-    for (const [e, n] of overlaps) if (n >= 2) pool.add(e);
+    for (const [e, n] of overlaps) if (n >= Math.min(2, words.length)) pool.add(e);
     const score = (e: Evidence) => (independentGtins.has(validGtin(e.product.gtin) ?? '') ? 100 : 0)
       + (m.store_sku === e.product.sku ? 40 : 0) + (overlaps.get(e) ?? 0) * 3;
     const ranked = [...pool].sort((a, b) => score(b) - score(a) || a.product.sku.localeCompare(b.product.sku));
