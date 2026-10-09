@@ -35,6 +35,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Supervised Tesco runner TypeScript
+        run: npm run typecheck:tesco-supervised
+
       - name: Behavioural release gate
         run: npm run test:behavioural
 

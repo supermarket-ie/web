@@ -2954,3 +2954,29 @@ tesco_workspace_transport_test6_20261008 contains the evidence. This small resul
 cannot validate a larger batch or unattended execution. Main and production were
 unchanged at inspection; the correction remains a PR requiring review/deployment
 approval. Operational counts and product evidence remain outside the repository.
+
+### Supervised Tesco renewal implementation — 9 October 2026
+
+The transport diagnostic correction above is now on main (#249). A separate
+implementation from documentation-only #250 adds an operator-only Node renewal
+entry point; see `docs/tesco-supervised-renewal.md`. It explicitly selects
+still-fresh, proven observations at four days old, oldest first, separately from
+expansion. Live parser/identity checks and the existing append-only finaliser
+remain authoritative. No database migration, mapping change, scheduler or
+production routing change is included.
+
+The persistent SQL bridge uses the authenticated Supabase connector, the existing
+disabled workspace gate, owner-guarded leases and atomic page/receipt/observation
+commits. Unknown attempts remain held for reconciliation without automatic
+retry; committed pages are skipped on an eligible interrupted-run resume.
+Cooldowns precede checkpoints, and a stale owner cannot clear its successor.
+Automated isolated PostgreSQL tests execute the existing finaliser, including
+idempotency, rollback, old-price preservation and access-stop cases. Dedicated
+runner TypeScript validation is included in CI. The production read-only dry run
+selected no due products on 9 October; no Tesco request or production write was
+made for this implementation check. Operational counts remain private.
+
+First renewal is due 12 October 2026 at 11:28 Irish time, before the corresponding
+15 October expiry. The implementation requires review; supervised live renewal
+must be explicitly authorised at the due window. Work network access does not
+establish Vercel/AWS reliability, and unattended collection remains unapproved.

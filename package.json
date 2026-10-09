@@ -12,7 +12,9 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:behavioural": "vitest run src/lib/evaluations/__tests__/behavioural-gate.test.ts",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "tesco:supervised": "node --use-env-proxy --import tsx scripts/tesco-supervised-collect.ts",
+    "typecheck:tesco-supervised": "tsc --project tsconfig.tesco-supervised.json"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.38",
@@ -41,6 +43,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -49,6 +52,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vitest": "^4.0.18"
   }

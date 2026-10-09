@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "scripts/tesco-supervised-collect.ts",
+    "src/lib/tesco-supervised-collection.ts",
+    "src/lib/tesco-supervised-collection.test.ts"
+  ],
+  "exclude": ["node_modules"]
+}
