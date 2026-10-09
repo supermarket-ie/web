@@ -2977,6 +2977,25 @@ selected no due products on 9 October; no Tesco request or production write was
 made for this implementation check. Operational counts remain private.
 
 First renewal is due 12 October 2026 at 11:28 Irish time, before the corresponding
-15 October expiry. The implementation requires review; supervised live renewal
-must be explicitly authorised at the due window. Work network access does not
-establish Vercel/AWS reliability, and unattended collection remains unapproved.
+15 October expiry. PR #251 was reviewed and merged on 9 October at
+`69797402833097d3c7982db331a8828b6612c70d`, with an identical tree to CI #897
+(406 tests, including 25 renewal tests). Main's ruleset required the passing
+validate check and squash merge, with no approving-review requirement or bypass.
+Production deployment `dpl_7zsS3B2AmJcZkDPW57SEcSbRBf3s` reached READY. The merged
+CLI's read-only production dry run selected no due products and made no writes.
+
+The first supervised batch is capped at 25 due products; 12 October at 11:40
+Irish time is the recommended initial window, subject to live preflight. Front-
+load renewal as the cohort becomes due that day, finish late carry-over early
+on 13 October and retain 14 October for safe recovery. A 48-hour quarantine or
+unresolved identity failure can still prevent complete coverage preservation.
+Do not retry held requests or expand the catalogue during renewal protection.
+The detailed procedure is in `docs/tesco-supervised-renewal.md`; exact coverage,
+workload and unresolved-request evidence remain private.
+
+The smallest proposed Work-independent follow-up is inspection of the existing
+EC2/systemd host, a separately approved one-product connectivity test and a
+thin PostgreSQL adapter around this runner. Current host access/credentials and
+Tesco reachability are unverified; the legacy shell's Tesco branch uses a
+different scraper. No AWS canary, new infrastructure, egress change, scheduler
+or live renewal was executed. Work access does not establish Vercel/AWS access.

@@ -1,7 +1,7 @@
 # Supervised Tesco renewal
 
 This operator-only Node runner reuses the existing direct collector, identity
-validator and `finalize_scrape_product` pipeline. It does not install a scheduler,
+validator and `finalize_store_scrape_product` pipeline. It does not install a scheduler,
 change production mappings, enable an egress route or modify previous prices.
 The separate renewal proposal is documentation-only PR #250.
 
@@ -110,3 +110,75 @@ CLI. At the first due window, start with a small supervised authorised batch,
 verify new observation IDs and timestamps against preserved prior rows, reconcile
 counts, then continue only within the approved scope and stop policy. Unattended
 hosting and additional candidate validation remain separate follow-up work.
+
+## First renewal window and release verification — 9 October 2026
+
+PR #251 was reviewed and squash-merged as
+`69797402833097d3c7982db331a8828b6612c70d`. Its tree is identical to CI #897's
+tested revision: `1adb50eea7f12487292361788cc418d51892d107`. The required validate
+check passed, no approving review was required, review threads were clear, and
+the active main ruleset had no bypass actors. Production deployment
+`dpl_7zsS3B2AmJcZkDPW57SEcSbRBf3s` reached READY and received the production
+domains. The merged CLI's read-only production dry run selected no due products.
+No collection, mapping mutation, price write or schedule was initiated.
+
+For the first window, use at most 25 due products, selected by the live runner.
+Recommended start: 12 October at 11:40 Irish time; the existing oldest cohort
+has enough individually due products then, subject to a fresh preflight. Never
+substitute the forecast's date for the database clock in a live run. Start with
+the dry run, inspect the gate and holds, then use `--mode renewal --limit 25
+--confirm-run` through the documented bridge once the due window is open.
+
+After the batch, reconcile its persisted run ID and page outcomes; verify new
+observation IDs, `tesco_direct` provenance, exact mapping identity and unchanged
+prior observation rows. Count successful receipts, including unchanged-price
+renewals, rather than relying on `scrape_runs.inserted` alone. Compare trusted
+coverage, unrenewed due products and expirations before approving continuation.
+Keep subsequent batches bounded and sequential on the same owned gate.
+
+Front-load the existing cohort as products become due on 12 October, including
+the evening windows. Complete any late-evening carry-over early on 13 October;
+reserve 14 October for reconciliation and permitted recovery. Private live
+evidence records the exact daily workload and individual deadlines. Protecting
+existing prices takes priority over expansion. Budget supervision overhead and
+re-measure throughput after the first batch rather than promising historical
+rates. A block causes at least a 48-hour quarantine; a late block or repeated
+transport/identity failures can prevent complete renewal before expiry.
+
+On any terminal failure, stop and reconcile before a new bounded run. Do not
+retry the held product, automatically restart a terminal run, shorten cooldowns,
+switch egress, or use cached evidence to extend freshness. Failed products keep
+their earlier price until its original expiry, then fall out of trusted coverage.
+
+### Smallest next step outside Work (recommendation only)
+
+The repository records a legacy EC2/systemd worker, `supermarket-scrape.timer`
+and `scripts/scrape_all.sh`. The legacy Tesco branch invokes a different
+ScrapingBee-based scraper; it must not be mistaken for this direct collector.
+Current EC2 runtime, timer state and Tesco connectivity are not verified by these
+documents. This session had no AWS/SSH credentials or AWS connector; Vercel
+environment metadata exposed no AWS connection configuration. No secret values
+were read and no AWS request or alternate Tesco route was attempted.
+
+First regain authorised access to the existing worker and inspect its Node
+version, service definitions, database access and logs read-only. Then, under
+separate approval, test one live product on its existing network path with the
+same deadline and stop policy. Work's successful path cannot establish AWS
+access. Do not provision or rotate egress as a response to a failed canary.
+
+If access is accepted, retain `collectTescoSupervised` and add a small direct
+PostgreSQL `ExecuteSql` adapter using TLS and a dedicated least-privileged worker
+role. The existing Supabase HTTP service key is not a PostgreSQL password and
+cannot itself replace the SQL bridge. A direct connection, or session pooler
+where IPv4 is needed, suits the persistent worker. Make its gate explicitly
+represent the proven runtime and prevent cross-runtime concurrent execution;
+never relabel AWS as the workspace gate or use it for block failover.
+
+Validate manual one-shot runs and restart reconciliation first. Only after
+separate approval consider a bounded renewal-only timer, no automatic restart
+after terminal failures, and alerts for missed runs, restrictions and impending
+expiry. Record renewed, newly fresh and expired products separately so flat
+coverage cannot conceal successful renewals. Reuse existing compute and database
+state; no LLM calls, paid scraping provider or new infrastructure is needed by
+the deterministic runner itself. Incremental hosting cost and access reliability
+remain unverified until the existing host is inspected.
