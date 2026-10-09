@@ -2999,3 +2999,18 @@ thin PostgreSQL adapter around this runner. Current host access/credentials and
 Tesco reachability are unverified; the legacy shell's Tesco branch uses a
 different scraper. No AWS canary, new infrastructure, egress change, scheduler
 or live renewal was executed. Work access does not establish Vercel/AWS access.
+
+## Read-only Tesco catalogue discovery (implementation review)
+
+A separate offline discovery CLI now indexes structured Tesco listing/product
+snapshots across the complete missing-price catalogue, with exact SKU/URL evidence,
+independent GTIN checks, conservative identity/peer checks, duplicate ownership,
+request/rejection holds and incremental fingerprints. It invokes the existing
+identity validator without changing collection or renewal. Stored evidence never
+receives a live-verified URL label. See `docs/tesco-offline-discovery.md`.
+
+Full-catalogue evaluation exposes incomplete canonical brand/pack information,
+shared or conflicting historical SKUs and absent independent peer GTIN evidence
+as constraints on new exact identities. Private reports retain actual yields and
+operational evidence. A ready queue is not manufactured to meet coverage targets.
+No production mappings, observations, timestamps, leases or schedules were changed.

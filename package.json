@@ -14,7 +14,9 @@
     "test:behavioural": "vitest run src/lib/evaluations/__tests__/behavioural-gate.test.ts",
     "test:watch": "vitest",
     "tesco:supervised": "node --use-env-proxy --import tsx scripts/tesco-supervised-collect.ts",
-    "typecheck:tesco-supervised": "tsc --project tsconfig.tesco-supervised.json"
+    "typecheck:tesco-supervised": "tsc --project tsconfig.tesco-supervised.json",
+    "tesco:discover": "node --import tsx scripts/tesco-discover.ts",
+    "typecheck:tesco-discovery": "tsc --project tsconfig.tesco-discovery.json"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.38",
