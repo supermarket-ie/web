@@ -1,0 +1,24 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { PGlite } from '@electric-sql/pglite';
+import { prepareSpellingRepair, spellingRepairs, type SpellingRepairManifest } from './tesco-spelling-repair-plan';
+const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const manifest: SpellingRepairManifest = spellingRepairs.map(([name, , sku], i) => ({
+  expectedProduct: { id: uuid(i + 1), canonical_name: name },
+  expectedMappings: ['tesco', 'supervalu', 'dunnes'].map((store, j) => ({ id: uuid(100 + i * 3 + j), product_id: uuid(i + 1), store, store_sku: store === 'tesco' ? sku : 'peer', store_url: store === 'tesco' ? `https://www.tesco.ie/shop/en-IE/products/${sku}` : 'https://example.test/peer' })),
+}));
+describe('unexecuted guarded spelling repair document', () => {
+  let db: PGlite;
+  beforeAll(async () => { db = new PGlite(); await db.exec('create table products(id uuid primary key, canonical_name text); create table store_products(id uuid primary key,product_id uuid,store text,store_sku text,store_url text); create table tesco_egress_pool(leased_until timestamptz,cooldown_until timestamptz); create table price_observations(id int, observed_at timestamptz,price numeric);'); });
+  afterAll(async () => { await db.close(); });
+  beforeEach(async () => { await db.exec('rollback; truncate products,store_products,tesco_egress_pool,price_observations;'); for (const m of manifest) { await db.query('insert into products values($1,$2)', [m.expectedProduct.id,m.expectedProduct.canonical_name]); for (const s of m.expectedMappings) await db.query('insert into store_products values($1,$2,$3,$4,$5)', [s.id,s.product_id,s.store,s.store_sku,s.store_url]); } await db.exec("insert into price_observations values(1,'2026-10-08T10:28:30Z',2.5)"); });
+  const approvedTestSql = () => prepareSpellingRepair(manifest).replace(/rollback;\s*$/, 'commit;'); // isolated test database only
+  it('defaults to rollback and leaves all data unchanged', async () => { await db.exec(prepareSpellingRepair(manifest)); expect((await db.query<{ canonical_name: string }>('select canonical_name from products order by id')).rows.map(x => x.canonical_name)).toEqual(spellingRepairs.map(x => x[0])); });
+  it('applies only all five titles atomically and is idempotent in the isolated database', async () => { const before = (await db.query('select * from price_observations')).rows; await db.exec(approvedTestSql()); await db.exec(approvedTestSql()); expect((await db.query<{ canonical_name: string }>('select canonical_name from products order by id')).rows.map(x => x.canonical_name)).toEqual(spellingRepairs.map(x => x[1])); expect((await db.query('select * from price_observations')).rows).toEqual(before); });
+  it.each(['store_sku', 'store_url'])('rejects changed peer %s and preserves every title', async field => { await db.exec(`update store_products set ${field}='changed' where store='dunnes'`); await expect(db.exec(approvedTestSql())).rejects.toThrow('Retailer dependency changed'); await db.exec('rollback'); expect((await db.query<{ canonical_name: string }>('select canonical_name from products order by id')).rows.map(x => x.canonical_name)).toEqual(spellingRepairs.map(x => x[0])); });
+  it.each(['leased_until','cooldown_until'])('rejects active %s', async field => { await db.exec(`insert into tesco_egress_pool(${field}) values(now()+interval '1 hour')`); await expect(db.exec(approvedTestSql())).rejects.toThrow('Active Tesco lease or cooldown'); });
+  it('rejects mixed applied state', async () => { await db.query('update products set canonical_name=$1 where id=$2',[spellingRepairs[0][1],uuid(1)]); await expect(db.exec(approvedTestSql())).rejects.toThrow('Mixed repair state'); });
+  it('rejects missing or changed canonical rows', async () => { await db.query('delete from products where id=$1',[uuid(5)]); await expect(db.exec(approvedTestSql())).rejects.toThrow('Canonical dependency changed'); });
+  it('rejects unrelated repairs, duplicate targets and incorrect SKUs before generating SQL', () => { for (const mutate of [(m: SpellingRepairManifest) => { m[0].expectedProduct.canonical_name = 'Different 999g'; }, (m: SpellingRepairManifest) => { m[0] = m[1]; }, (m: SpellingRepairManifest) => { m[0].expectedMappings[0].store_sku = '999'; }]) { const m = structuredClone(manifest); mutate(m); expect(() => prepareSpellingRepair(m)).toThrow(); } });
+  it('treats quotes, backslashes and SQL block delimiters as snapshot data', async () => { const m = structuredClone(manifest); const url = "https://example.test/'$repair$\\"; m[0].expectedMappings[1].store_url = url; await db.query('update store_products set store_url=$1 where id=$2',[url,m[0].expectedMappings[1].id]); await db.exec(prepareSpellingRepair(m)); expect((await db.query<{ n: number }>('select count(*)::int n from products')).rows[0].n).toBe(5); });
+
+});

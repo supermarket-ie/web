@@ -3014,3 +3014,13 @@ when the validator passes. Known mismatches and historical unknown requests rema
 excluded. Current availability must be verified live, never inferred from stored
 listing evidence. Renewal priority, leases, cooldowns and append-only observations
 remain unchanged. Private evidence and counts remain in the operational queue.
+
+## Guarded spelling-only repair preparation (not applied)
+
+The five reviewed Tesco spelling proposals now have a pure SQL-document generator
+with a fixed title/SKU/URL allowlist, complete dependency snapshot comparisons,
+short transaction locks, lease/cooldown refusal, atomic all-five application and
+idempotence. Generated SQL defaults to ROLLBACK; there is no execution client or
+migration. Isolated PostgreSQL tests exercise the guard and preserve observations.
+See `docs/tesco-spelling-repair-guard.md`. Explicit production approval and a fresh
+identity/dependency review remain required. No production data was changed.
