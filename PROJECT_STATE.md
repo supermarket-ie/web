@@ -3025,3 +3025,24 @@ proposal remains blocked by duplicate-SKU ambiguity. The only stored alternate
 SKU found in the incorrect-SKU cohort conflicts with a peer retailer formulation
 and remains held. No mapping repair, broad validator relaxation or new live
 request was made after the unknown outcome.
+
+
+### Bounded expansion continuation — 9 October 2026
+
+After live reconciliation confirmed the previous lease and cooldown had expired,
+a separately authorised bounded expansion run completed successfully with no new
+unknown outcomes. The unchanged collector retained exact identity validation,
+pacing, reservations, atomic checkpoints and append-only finalisation, then
+released its lease. All previously fresh observations were verified unchanged;
+no renewal was due and the first renewal boundary remains unchanged. Earlier
+pending requests remain held, including historical pending requests outside the
+latest interrupted batch. No mappings, application code or schedules changed.
+
+The prior operator observed an unavailable terminal process, while production
+retained a pending reservation without response evidence. This establishes loss
+of supervision, not a Tesco transport failure; the initiating cause remains
+unproven. A dedicated bridge supervision loop, with no unrelated work while the
+collector was active, completed the new run without reproducing an implementation
+defect. Keep that operational discipline, retain the existing acknowledgement
+deadline and stop/reconcile on uncertain acknowledgements. Do not weaken holds or
+add automatic retries. No implementation PR is warranted from this evidence.
