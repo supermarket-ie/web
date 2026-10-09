@@ -2999,3 +2999,87 @@ thin PostgreSQL adapter around this runner. Current host access/credentials and
 Tesco reachability are unverified; the legacy shell's Tesco branch uses a
 different scraper. No AWS canary, new infrastructure, egress change, scheduler
 or live renewal was executed. Work access does not establish Vercel/AWS access.
+
+
+### Supervised expansion interruption — 9 October 2026
+
+A fresh production queue review used current coverage, exact-page attempt holds,
+stored identity replay and cross-retailer pack/variant checks. Live expansion
+appended trusted observations before the supervisor session was lost with a
+durable pending request. Read-only reconciliation confirmed committed receipts
+and an unknown request outcome. Do not resume this run or retry that URL; allow
+its owned lease to expire normally. The persisted run can still display running
+after supervisor loss. Exact run IDs, products and counts remain private.
+
+Existing fresh observations were verified unchanged and no renewal was due.
+Renewal remains the priority from 12 October; expansion did not change its code,
+eligibility, automated routing or schedules. New expansion observations acquire
+their own later four-day renewal windows.
+
+Recovery review identified two spelling-only canonical-title proposals. Offline
+replay accepted those proposed titles and rejected wrong-SKU, unavailable,
+missing-price, wrong-size, wrong-brand and wrong-variant controls. These are
+shared canonical changes, not approved production mapping repairs: inspect all
+canonical dependencies and obtain approval before applying them. Another title
+proposal remains blocked by duplicate-SKU ambiguity. The only stored alternate
+SKU found in the incorrect-SKU cohort conflicts with a peer retailer formulation
+and remains held. No mapping repair, broad validator relaxation or new live
+request was made after the unknown outcome.
+
+
+### Bounded expansion continuation — 9 October 2026
+
+After live reconciliation confirmed the previous lease and cooldown had expired,
+a separately authorised bounded expansion run completed successfully with no new
+unknown outcomes. The unchanged collector retained exact identity validation,
+pacing, reservations, atomic checkpoints and append-only finalisation, then
+released its lease. All previously fresh observations were verified unchanged;
+no renewal was due and the first renewal boundary remains unchanged. Earlier
+pending requests remain held, including historical pending requests outside the
+latest interrupted batch. No mappings, application code or schedules changed.
+
+The prior operator observed an unavailable terminal process, while production
+retained a pending reservation without response evidence. This establishes loss
+of supervision, not a Tesco transport failure; the initiating cause remains
+unproven. A dedicated bridge supervision loop, with no unrelated work while the
+collector was active, completed the new run without reproducing an implementation
+defect. Keep that operational discipline, retain the existing acknowledgement
+deadline and stop/reconcile on uncertain acknowledgements. Do not weaken holds or
+add automatic retries. No implementation PR is warranted from this evidence.
+
+
+### Later expansion safety stop — 9 October 2026
+
+A further authorised bounded batch stopped on a recorded pre-header network
+error. The transport diagnostic recorded TypeError, no HTTP status and no local
+timeout; this does not establish the upstream cause or an access challenge.
+The collector persisted its normal cooldown, checkpointed the known failure,
+closed degraded and released its lease. Availability/regular-price exclusions
+produced no observations. There were no new unknown outcomes; historical pending
+requests remain held. No retries, mapping changes or scheduler changes occurred.
+
+The private next-opportunity record distinguishes a small remaining clean queue
+from title-review and identity-discovery work. It is not an approved collection
+queue: known mismatches remain excluded and stored evidence cannot create fresh
+prices. Existing spelling-only proposals retain negative-control results and
+require dependency review and approval. No newly safe alternate SKU was found.
+Earlier fresh observations remain fresh; renewal priority and boundaries remain
+unchanged. Exact counts, run identifiers and ranked product evidence stay private.
+
+
+### Discovery review and remaining clean collection — 9 October 2026
+
+The title/discovery review did not substantiate the requested larger exact-mapping
+cohort. PR #254 contains spelling-only proposals and passing offline peer/negative
+controls, with no production data changes. A separate red-cheddar SKU proposal
+remains held after its grated-blend negative control passed unexpectedly; do not
+collect or repair it based on validator acceptance alone. The private queue now
+records explicit rejections, evidence gaps, repair requirements and live outcomes.
+
+After the existing cooldown expired, the remaining clean bounded collection
+completed successfully and released its lease. No new transport, access, identity
+or unknown-outcome failures occurred. Earlier trusted observations were verified
+unchanged and historical pending holds remain intact. The clean reviewed queue is
+exhausted; further collection requires approved repairs or newly established exact
+evidence. Renewal dates and safeguards remain unchanged. Operational counts and
+product-level evidence remain private.
