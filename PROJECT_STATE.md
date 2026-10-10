@@ -3023,3 +3023,26 @@ now holds compound-measure canonical, retailer and peer titles for review rather
 than comparing only the first amount. Negative controls cover extra same-unit and
 mixed-unit amounts. The discovery version changes to invalidate previous cached
 decisions. Production matching/collection code is unchanged.
+
+### Targeted Tesco evidence acquisition, 10 October 2026
+
+PR #255 merged as `5e0d88a`; reviewed CI #910 and post-merge CI #911 passed,
+and its matching Vercel production deployment reached READY. PR #256 remains
+draft and unexecuted; guarded data repairs still require explicit approval.
+Production remains at 341 fresh Tesco prices and 171 three-retailer comparisons.
+The current targeted queue rechecks 100 products and 200 peer prices. Nine gained
+independent manufacturer corroboration, including two consumer-GTIN links to
+stored Tesco SKUs. No new Tesco response was recorded, no URL was live-verified,
+and no new mapping passed all collection gates. Four pack metadata completions
+are review proposals only. The private queue preserves exact candidate SKU/URLs.
+
+The first bounded listing reservation lost supervision before any response
+checkpoint. Its outcome remains unknown. The run was guardedly reconciled after
+lease expiry, without retrying or changing the pending page. Four historical
+product holds plus this new listing hold remain; no active lease or cooldown
+remained at 19:30 UTC. No product price requests, trusted price insertions,
+production mapping/canonical changes or observation timestamp changes occurred.
+Renewal is unchanged: 285 products first due 12 October, 56 on 13 October; first
+due 12 October 11:28 Irish and first expiry 15 October 11:28 Irish. See
+`docs/tesco-evidence-acquisition-2026-10-10.md` for release verification, evidence
+limits, reconciliation and the next supervised acquisition recommendation.
