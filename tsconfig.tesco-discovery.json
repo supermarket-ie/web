@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": ["scripts/tesco-discover.ts", "src/lib/tesco-discovery.ts", "src/lib/tesco-discovery.test.ts"],
+  "exclude": ["node_modules"]
+}
