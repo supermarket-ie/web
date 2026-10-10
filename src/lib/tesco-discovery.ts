@@ -4,7 +4,7 @@ import { validateTescoCollectedIdentity, type TescoCollectedProduct } from './te
 
 // Discovery never writes mappings/prices or fetches a retailer. A score retrieves
 // candidates; it cannot override a failed identity check or an operational hold.
-export const DISCOVERY_VERSION = 'tesco-discovery-v1';
+export const DISCOVERY_VERSION = 'tesco-discovery-v2';
 const text = z.string();
 const nullable = text.nullable();
 const product = z.object({ sku: text, url: text, name: text, brand: nullable,
@@ -54,11 +54,12 @@ function fresh(at: string | null, now: number, days: number) {
 }
 function measure(s: string) {
   const t = plain(s).replace(/kilograms?/g, 'kg').replace(/grams?/g, 'g').replace(/millilitres?/g, 'ml').replace(/litres?/g, 'l');
-  const m = t.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
+  const measures = [...t.matchAll(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/g)];
+  const m = measures[0];
   const pack = t.match(/\b(\d+)\s*(?:x|pack|pk|pieces?|rolls?)\b/)?.[1] ?? null;
   const multipliers: Record<string, number> = { kg: 1000, l: 1000, cl: 10 };
   return { amount: m ? Number(m[1]) * (multipliers[m[2]] ?? 1) : null,
-    unit: m ? ['kg', 'g'].includes(m[2]) ? 'g' : 'ml' : null, pack };
+    unit: m ? ['kg', 'g'].includes(m[2]) ? 'g' : 'ml' : null, pack, measureCount: measures.length };
 }
 function sameIdentityWords(a: string, b: string) { return JSON.stringify(tokens(a)) === JSON.stringify(tokens(b)); }
 function brandInTitle(brand: string, title: string) { return (` ${plain(title)} `).includes(` ${plain(brand)} `); }
@@ -129,6 +130,7 @@ export function discover(raw: unknown, previous?: DiscoveryState) {
       if (!m.canonical_brand || !brandInTitle(m.canonical_brand, p.name)) reasons.push('explicit_brand_not_established');
       if (m.canonical_brand && p.brand && plain(p.brand) !== plain(m.canonical_brand)) reasons.push('structured_brand_conflict');
       const canonicalMeasure = measure(m.canonical_name), candidateMeasure = measure(p.name);
+      if (canonicalMeasure.measureCount > 1 || candidateMeasure.measureCount > 1) reasons.push('compound_measure_requires_review');
       if (canonicalMeasure.amount === null && canonicalMeasure.pack === null) reasons.push('canonical_pack_or_measure_missing');
       if (candidateMeasure.amount === null && candidateMeasure.pack === null) reasons.push('candidate_pack_or_measure_missing');
       if (JSON.stringify(canonicalMeasure) !== JSON.stringify(candidateMeasure)) reasons.push('explicit_pack_or_measure_differs');
@@ -138,6 +140,7 @@ export function discover(raw: unknown, previous?: DiscoveryState) {
       if (group.some(x => x.product_id !== m.product_id)) reasons.push('duplicate_sku_requires_review');
       if (gtin && independentGtins.size && !independentGtins.has(gtin)) reasons.push('independent_gtin_conflict');
       for (const peer of peers) {
+        if (measure(peer.store_product_name).measureCount > 1) reasons.push('peer_compound_measure_requires_review');
         if (peer.brand && m.canonical_brand && plain(peer.brand) !== plain(m.canonical_brand)) reasons.push('peer_brand_conflict');
         if (!sameIdentityWords(m.canonical_name, peer.store_product_name)
           || JSON.stringify(measure(m.canonical_name)) !== JSON.stringify(measure(peer.store_product_name))) reasons.push('peer_identity_requires_review');

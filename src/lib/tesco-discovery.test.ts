@@ -50,4 +50,7 @@ describe('offline deterministic Tesco discovery', () => {
 
   it('retrieves one-word evidence without bypassing the unchanged identity validator', () => { const x = fixture(); x.mappings[0].canonical_name = 'Brand 200g'; x.mappings[0].store_sku = '111111111'; x.evidence[0].product.name = 'Brand 200g'; for (const p of x.peers) p.store_product_name = 'Brand 200g'; const r = discover(x); expect(r.decisions[0].candidates.map(c => c.sku)).toEqual(['123456789']); expect(r.counts.ready).toBe(0); });
 
+  it.each([' + 100g', ' 100g Extra', ' + 100ml'])('holds compound quantity evidence: %s', suffix => { const x = fixture(); x.evidence[0].product.name += suffix; const r = discover(x); expect(r.counts.ready).toBe(0); expect(r.decisions[0].candidates[0].reasons).toContain('compound_measure_requires_review'); });
+  it('holds compound canonical and peer quantities even when the first measure agrees', () => { const x = fixture(); x.mappings[0].canonical_name += ' + 100g'; x.evidence[0].product.name += ' + 200g'; expect(discover(x).counts.ready).toBe(0); const y = fixture(); y.peers[0].store_product_name += ' + 100g'; expect(discover(y).decisions[0].candidates[0].reasons).toContain('peer_compound_measure_requires_review'); });
+
 });

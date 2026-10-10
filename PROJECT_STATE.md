@@ -3014,3 +3014,12 @@ shared or conflicting historical SKUs and absent independent peer GTIN evidence
 as constraints on new exact identities. Private reports retain actual yields and
 operational evidence. A ready queue is not manufactured to meet coverage targets.
 No production mappings, observations, timestamps, leases or schedules were changed.
+
+### Discovery review: compound quantity guard
+
+Pre-merge review reproduced a false exact discovery result when an extra explicit
+measure was appended to a title and structured quantity was absent. Discovery
+now holds compound-measure canonical, retailer and peer titles for review rather
+than comparing only the first amount. Negative controls cover extra same-unit and
+mixed-unit amounts. The discovery version changes to invalidate previous cached
+decisions. Production matching/collection code is unchanged.
