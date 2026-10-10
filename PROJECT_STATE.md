@@ -1,5 +1,23 @@
 # Supermarket.ie — Canonical Project State
 
+## Latest Tesco evidence test — 10 October 2026, 21:51 UTC
+
+The bounded supervised product-page test acquired two new live HTTP 200 responses
+(Avonmore Protein Milk Vanilla 1L and Birds Eye Petits Pois 450g), with direct
+SKU/URL correspondence, GTIN and structured quantity. Both passed the unchanged
+collector identity validator, but neither passed the stricter merged discovery
+pipeline. No trusted observations or production mappings changed. Production
+remains 341 fresh Tesco prices and 171 three-retailer comparisons, with 337
+comparison gaps. The run stopped on discovery/collector validation disagreement,
+checkpointed both responses and released its lease; no new unknown request exists.
+The four historical product holds and earlier unknown Glenisk listing remain held.
+
+See `docs/tesco-e2e-evidence-2026-10-10.md` for the fail-closed findings and minimum
+next corrective action. Do not count these previously known SKUs as newly discovered
+identities or collection-ready mappings. No production rule change is approved.
+Renewal remains due for 285 products on 12 October and 56 on 13 October; first due
+12 October 11:28:30 Irish time, first expiry 15 October at the same local time.
+
 **Last updated:** 29 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
