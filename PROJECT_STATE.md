@@ -1,5 +1,23 @@
 # Supermarket.ie — Canonical Project State
 
+## Latest Tesco evidence test — 10 October 2026, 21:51 UTC
+
+The bounded supervised product-page test acquired two new live HTTP 200 responses
+(Avonmore Protein Milk Vanilla 1L and Birds Eye Petits Pois 450g), with direct
+SKU/URL correspondence, GTIN and structured quantity. Both passed the unchanged
+collector identity validator, but neither passed the stricter merged discovery
+pipeline. No trusted observations or production mappings changed. Production
+remains 341 fresh Tesco prices and 171 three-retailer comparisons, with 337
+comparison gaps. The run stopped on discovery/collector validation disagreement,
+checkpointed both responses and released its lease; no new unknown request exists.
+The four historical product holds and earlier unknown Glenisk listing remain held.
+
+See `docs/tesco-e2e-evidence-2026-10-10.md` for the fail-closed findings and minimum
+next corrective action. Do not count these previously known SKUs as newly discovered
+identities or collection-ready mappings. No production rule change is approved.
+Renewal remains due for 285 products on 12 October and 56 on 13 October; first due
+12 October 11:28:30 Irish time, first expiry 15 October at the same local time.
+
 **Last updated:** 29 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**
@@ -3023,3 +3041,26 @@ now holds compound-measure canonical, retailer and peer titles for review rather
 than comparing only the first amount. Negative controls cover extra same-unit and
 mixed-unit amounts. The discovery version changes to invalidate previous cached
 decisions. Production matching/collection code is unchanged.
+
+### Targeted Tesco evidence acquisition, 10 October 2026
+
+PR #255 merged as `5e0d88a`; reviewed CI #910 and post-merge CI #911 passed,
+and its matching Vercel production deployment reached READY. PR #256 remains
+draft and unexecuted; guarded data repairs still require explicit approval.
+Production remains at 341 fresh Tesco prices and 171 three-retailer comparisons.
+The current targeted queue rechecks 100 products and 200 peer prices. Nine gained
+independent manufacturer corroboration, including two consumer-GTIN links to
+stored Tesco SKUs. No new Tesco response was recorded, no URL was live-verified,
+and no new mapping passed all collection gates. Four pack metadata completions
+are review proposals only. The private queue preserves exact candidate SKU/URLs.
+
+The first bounded listing reservation lost supervision before any response
+checkpoint. Its outcome remains unknown. The run was guardedly reconciled after
+lease expiry, without retrying or changing the pending page. Four historical
+product holds plus this new listing hold remain; no active lease or cooldown
+remained at 19:30 UTC. No product price requests, trusted price insertions,
+production mapping/canonical changes or observation timestamp changes occurred.
+Renewal is unchanged: 285 products first due 12 October, 56 on 13 October; first
+due 12 October 11:28 Irish and first expiry 15 October 11:28 Irish. See
+`docs/tesco-evidence-acquisition-2026-10-10.md` for release verification, evidence
+limits, reconciliation and the next supervised acquisition recommendation.
