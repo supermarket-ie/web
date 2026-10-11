@@ -118,6 +118,18 @@ export function compare(a: Evidence, b: Evidence, rules: BrandRule[], asOf: stri
   if (aa.rule?.kind === 'retailer_private_label' || bb.rule?.kind === 'retailer_private_label') contradictions.push('retailer_private_label');
   if (aa.rule && bb.rule && aa.rule.name !== bb.rule.name) contradictions.push('brand_conflict');
   if (aa.conflict || bb.conflict) contradictions.push('title_brand_metadata_conflict');
+  // Original structured attributes are evidence too. Differently phrased values
+  // may be synonyms, so hold for source review rather than declaring equivalence.
+  for(const key of ['variant','flavour','formulation']){
+    const av=a.sourceAttributes?.[key],bv=b.sourceAttributes?.[key];
+    if(typeof av==='string'&&typeof bv==='string'&&normalise(av)&&normalise(bv)&&normalise(av)!==normalise(bv))
+      missing.push(`structured_${key}_conflict_requires_review`);
+  }
+  for(const [e,p] of [[a,pa],[b,pb]] as const){
+    const count=e.sourceAttributes?.packCount;
+    if(typeof count==='number'&&Number.isInteger(count)&&count>0&&p.count!==null&&count!==p.count)
+      contradictions.push('structured_title_pack_count_conflict');
+  }
   if (pa.count !== null && pb.count !== null && pa.count !== pb.count) contradictions.push('pack_count_conflict');
   if (pa.amount !== null && pb.amount !== null && pa.basis === pb.basis && (pa.amount !== pb.amount || pa.unit !== pb.unit)) contradictions.push('pack_size_conflict');
   const samePack = pa.amount !== null && pb.amount !== null && pa.unit === pb.unit && pa.amount === pb.amount && pa.count === pb.count && pa.basis === pb.basis && !pa.issues.length && !pb.issues.length;
