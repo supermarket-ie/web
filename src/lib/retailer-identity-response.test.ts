@@ -43,10 +43,10 @@ describe('original retailer response retention', () => {
       await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
       await db.exec(readFileSync('supabase/migrations/20261011120000_retailer_identity_responses.sql','utf8'));
       const r = captureIdentityResponse(args)!;
-      const {body_sha256: _, ...row} = r;
+      const {body_sha256, ...row} = r;
       const data = {...row,run_uuid:'11111111-1111-4111-8111-111111111111',store_product_id:'22222222-2222-4222-8222-222222222222'};
       await db.query(`insert into retailer_identity_responses (${Object.keys(data).join(',')}) values (${Object.keys(data).map((_,i)=>'$'+(i+1)).join(',')})`,Object.values(data).map(v=>typeof v==='object'?JSON.stringify(v):v));
-      expect((await db.query<{body_sha256:string}>('select body_sha256 from retailer_identity_responses')).rows[0].body_sha256).toBe(r.body_sha256);
+      expect((await db.query<{body_sha256:string}>('select body_sha256 from retailer_identity_responses')).rows[0].body_sha256).toBe(body_sha256);
       await expect(db.exec("update retailer_identity_responses set sku='999999'")).rejects.toThrow('append-only');
       await expect(db.exec('delete from retailer_identity_responses')).rejects.toThrow('append-only');
       await db.exec('set role anon'); await expect(db.exec('select * from retailer_identity_responses')).rejects.toThrow('permission denied');
