@@ -1,3 +1,5 @@
+import { captureIdentityResponse, type IdentityResponse } from './retailer-identity-response';
+import { retainIdentityResponse } from './retailer-identity-retention';
 import { supabaseAdmin } from '@/lib/supabase';
 
 const STORE = 'supervalu';
@@ -7,6 +9,7 @@ const STORE_ID = 5550;
 const GATEWAY_BASE = 'https://storefrontgateway.supervalu.ie/api';
 
 export type Candidate = {
+  identityResponse?: IdentityResponse | null;
   name: string;
   sku: string | null;
   price: number;
@@ -439,7 +442,13 @@ export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Pro
         failureReason: response.status === 404 ? 'product_not_found' : 'no_product_data',
       };
     }
-    return classifySupervaluProductPage(await response.text());
+    const body = await response.text();
+    const result = classifySupervaluProductPage(body);
+    if (result.candidate) result.candidate.identityResponse = captureIdentityResponse({ store: STORE,
+      sku: result.candidate.sku, title: result.candidate.name, productUrl: result.candidate.url ?? product.storeUrl,
+      requestedUrl: product.storeUrl, finalUrl: response.url || product.storeUrl,
+      contentType: response.headers.get('content-type') ?? '', body });
+    return result;
   } catch (error) {
     if (error instanceof TransientSupervaluError) throw error;
     const message = error instanceof Error ? error.message : String(error);
@@ -502,7 +511,10 @@ async function fetchSupervaluSearchCandidates(query: string, product: SupervaluQ
       throw new TransientSupervaluError(`SuperValu search returned HTTP ${response.status}`, product, `search_http_${response.status}`);
     }
     if (!response.ok) return [];
-    return parseSupervaluSearchResponse(await response.json());
+    const body = await response.text();
+    return parseSupervaluSearchResponse(JSON.parse(body)).map(candidate => ({ ...candidate,
+      identityResponse: captureIdentityResponse({ store: STORE, sku: candidate.sku, title: candidate.name, productUrl: candidate.url,
+        requestedUrl: url, finalUrl: response.url || url, contentType: response.headers.get('content-type') ?? '', body }) }));
   } catch (error) {
     if (error instanceof TransientSupervaluError) throw error;
     const message = error instanceof Error ? error.message : String(error);
@@ -617,6 +629,7 @@ async function finalize(
     p_is_retryable: false,
   });
   if (error) throw new Error(`Failed finalizing SuperValu product: ${error.message}`);
+  if (params.success) await retainIdentityResponse(candidate?.identityResponse, message.runUuid, product.storeProductId);
 }
 
 export async function finalizeSupervaluPermanentFailure(

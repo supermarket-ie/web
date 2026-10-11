@@ -1,3 +1,5 @@
+import { captureIdentityResponse, type IdentityResponse } from './retailer-identity-response';
+import { retainIdentityResponse } from './retailer-identity-retention';
 import { supabaseAdmin } from '@/lib/supabase';
 import { dunnesPackSignature, hasDunnesVariantConflict } from '@/lib/dunnes-discovery';
 import { isStrictExactResolution } from '@/lib/product-resolution';
@@ -37,6 +39,7 @@ type DunnesApiItem = {
 type DunnesApiResponse = { items?: DunnesApiItem[] };
 
 type Candidate = {
+  identityResponse?: IdentityResponse | null;
   sku: string | null;
   name: string;
   price: number | null;
@@ -330,7 +333,8 @@ async function fetchCandidates(queryName: string, product: DunnesQueueProduct): 
     }
     if (!response.ok) return [];
 
-    const body = await response.json() as DunnesApiResponse;
+    const originalBody = await response.text();
+    const body = JSON.parse(originalBody) as DunnesApiResponse;
     return (body.items ?? []).map((item) => {
       const activeTpr = (item.tprPrice ?? []).find((entry) => entry.active === true);
       const price = typeof item.priceNumeric === 'number' ? item.priceNumeric : null;
@@ -343,6 +347,9 @@ async function fetchCandidates(queryName: string, product: DunnesQueueProduct): 
         wasPrice,
         onPromotion: Boolean(activeTpr || wasPrice),
         url: makeProductUrl(item),
+        identityResponse: captureIdentityResponse({ store: STORE, sku: item.sku == null ? null : String(item.sku),
+          title: item.name ?? '', productUrl: makeProductUrl(item), requestedUrl: url, finalUrl: response.url || url,
+          contentType: response.headers.get('content-type') ?? '', body: originalBody }),
       };
     });
   } catch (error) {
@@ -458,6 +465,7 @@ async function finalize(
     p_is_retryable: params.retryable ?? false,
   });
   if (error) throw new Error(`Failed finalizing Dunnes product: ${error.message}`);
+  if (params.success) await retainIdentityResponse(candidate?.identityResponse, message.runUuid, product.storeProductId);
 }
 
 export async function finalizeDunnesPermanentFailure(
