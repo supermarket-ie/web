@@ -4,7 +4,7 @@ import { validateTescoCollectedIdentity, type TescoCollectedProduct } from './te
 
 // Discovery never writes mappings/prices or fetches a retailer. A score retrieves
 // candidates; it cannot override a failed identity check or an operational hold.
-export const DISCOVERY_VERSION = 'tesco-discovery-v2';
+export const DISCOVERY_VERSION = 'tesco-discovery-v3';
 const text = z.string();
 const nullable = text.nullable();
 const product = z.object({ sku: text, url: text, name: text, brand: nullable,
@@ -20,7 +20,10 @@ const evidence = z.object({ product, page_id: text, created_at: text, body_sha25
 const hold = z.object({ id: text, at: text, reasons: z.array(text) });
 const historicalHint = z.object({ id: text, store_product_id: text, candidate_sku: nullable, candidate_name: nullable, candidate_url: nullable, classification: text, created_at: text });
 export const discoveryInput = z.object({ asOf: text.datetime(), mappings: z.array(mapping), peers: z.array(peer),
-  evidence: z.array(evidence), attempts: z.array(z.object({ requested_url: text, unresolved: z.boolean() })),
+  evidence: z.array(evidence), attempts: z.array(z.object({ requested_url: text, unresolved: z.boolean(),
+    // Exporter must establish this from a completed acquisition-only DB record.
+    // The supervised handoff rechecks the original record under the lease.
+    acquisitionPageId: text.optional(), acquisitionBodySha256: text.optional() })),
   rejections: z.array(hold), historicalHints: z.array(historicalHint).default([]), demand: z.array(z.object({ name: text, demand: z.number().nonnegative() })) });
 export type DiscoveryInput = z.input<typeof discoveryInput>;
 type Mapping = DiscoveryInput['mappings'][number];
@@ -40,7 +43,9 @@ export function digest(value: unknown) { return createHash('sha256').update(JSON
 function plain(s: string | null) { return (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   .replace(/&(?:amp;)?/g, ' and ').replace(/[^a-z0-9.]+/g, ' ').trim().replace(/\s+/g, ' '); }
 // No fuzzy spelling, synonyms, brand inference or formulation aliases here.
-function tokens(s: string) { return [...new Set(plain(s).replace(/\b\d+(?:\.\d+)?\s*(?:kg|g|ml|cl|l)\b/g, ' ')
+function units(s: string) { return plain(s).replace(/\bkilograms?\b/g, 'kg').replace(/\bgrams?\b/g, 'g')
+  .replace(/\bmillilitres?\b/g, 'ml').replace(/\blitres?\b/g, 'l'); }
+function tokens(s: string) { return [...new Set(units(s).replace(/\bpetits? pois(?: peas)?\b/g, 'petits pois').replace(/\b\d+(?:\.\d+)?\s*(?:kg|g|ml|cl|l)\b/g, ' ')
   .split(' ').filter(x => (x.length > 1 || /^\d/.test(x)) && !['and', 'the', 'with', 'pack', 'bottle', 'box', 'packet'].includes(x)))].sort(); }
 export function validGtin(value: string | null): string | null {
   if (!value || !/^(?:\d{8}|\d{12}|\d{13}|\d{14})$/.test(value) || /^0+$/.test(value)) return null;
@@ -53,7 +58,7 @@ function fresh(at: string | null, now: number, days: number) {
   return Number.isFinite(time) && time <= now && time > now - days * 86400000;
 }
 function measure(s: string) {
-  const t = plain(s).replace(/kilograms?/g, 'kg').replace(/grams?/g, 'g').replace(/millilitres?/g, 'ml').replace(/litres?/g, 'l');
+  const t = units(s);
   const measures = [...t.matchAll(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/g)];
   const m = measures[0];
   const pack = t.match(/\b(\d+)\s*(?:x|pack|pk|pieces?|rolls?)\b/)?.[1] ?? null;
@@ -130,6 +135,21 @@ export function discover(raw: unknown, previous?: DiscoveryState) {
       if (!m.canonical_brand || !brandInTitle(m.canonical_brand, p.name)) reasons.push('explicit_brand_not_established');
       if (m.canonical_brand && p.brand && plain(p.brand) !== plain(m.canonical_brand)) reasons.push('structured_brand_conflict');
       const canonicalMeasure = measure(m.canonical_name), candidateMeasure = measure(p.name);
+      // Only single-product ROOT_QUERY evidence can fill an omitted title measure.
+      // Never infer multiplicity, accept compound quantities or override a title.
+      const q = p.quantity, keys = q ? Object.keys(q) : [];
+      const structured = keys.length === 1 && q && Number.isFinite(Object.values(q)[0]) && Object.values(q)[0] > 0
+        ? q.grams != null ? { amount: q.grams, unit: 'g' } : q.millilitres != null ? { amount: q.millilitres, unit: 'ml' } : null : null;
+      const matchingPieces = keys.length === 1 && q?.pieces != null && Number.isInteger(q.pieces) && q.pieces > 0
+        && canonicalMeasure.amount === null && canonicalMeasure.pack !== null && Number(canonicalMeasure.pack) === q.pieces;
+      if (q && ((!structured && !matchingPieces) || (structured && canonicalMeasure.amount !== null && (structured.amount !== canonicalMeasure.amount || structured.unit !== canonicalMeasure.unit))))
+        reasons.push('structured_quantity_conflict_or_ambiguous');
+      if (candidateMeasure.amount === null && candidateMeasure.pack === null && canonicalMeasure.pack === null && structured
+        && e.mode === 'products' && e.requested_url === p.url && e.final_url === p.url) {
+        candidateMeasure.amount = structured.amount; candidateMeasure.unit = structured.unit;
+        candidateMeasure.measureCount = 1;
+        signals.push('direct_product_structured_quantity');
+      }
       if (canonicalMeasure.measureCount > 1 || candidateMeasure.measureCount > 1) reasons.push('compound_measure_requires_review');
       if (canonicalMeasure.amount === null && canonicalMeasure.pack === null) reasons.push('canonical_pack_or_measure_missing');
       if (candidateMeasure.amount === null && candidateMeasure.pack === null) reasons.push('candidate_pack_or_measure_missing');
@@ -157,7 +177,10 @@ export function discover(raw: unknown, previous?: DiscoveryState) {
     let classification: Classification = 'needs_evidence';
     if (exact.length > 1) { classification = 'ambiguous'; reasons.push('multiple_exact_candidate_skus'); }
     else if (exact.length === 1 && !truncated) {
-      const e = exact[0], attempt = attempts.find(x => x.requested_url === latest.get(e.sku)!.product.url);
+      const e = exact[0], source = latest.get(e.sku)!;
+      const attempt = attempts.find(x => x.requested_url === source.product.url && (x.unresolved
+        || x.acquisitionPageId !== source.page_id || x.acquisitionBodySha256 !== source.body_sha256
+        || source.mode !== 'products' || source.requested_url !== source.product.url || source.final_url !== source.product.url));
       if (attempt) { classification = 'held'; reasons.push(attempt.unresolved ? 'unresolved_request' : 'previously_attempted'); }
       else if (rejections.some(x => Date.parse(x.at) >= Date.parse(e.observedAt))) { classification = 'held'; reasons.push('no_new_evidence_after_rejection'); }
       else if (e.sku !== m.store_sku || m.store_url !== latest.get(e.sku)!.product.url || m.url_status !== 'resolved' || !m.id) {

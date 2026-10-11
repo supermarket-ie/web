@@ -4,6 +4,7 @@ import {
   tescoPauseUntil, tescoResourceUnavailable, validateTescoCollectedIdentity,
   type TescoCollectedPage, type TescoPageResponse,
 } from './tesco-direct-collection-core';
+import { acquisitionDecision, acquisitionSnapshotSql, selectAcquisitionCandidates, type Acquisition } from './tesco-acquisition-handoff';
 
 // Operator-only runner. No route, scheduler, migration or automatic retries.
 // Each execute call is one database request. Every mutating DO block is atomic,
@@ -17,15 +18,15 @@ type Mapping = {
   store_product_name: string; store_brand: string | null; is_own_brand: boolean;
   store_sku: string; store_url: string; url_status: string;
 };
-type Candidate = Mapping & {
+export type Candidate = Mapping & {
   observed_at: string | null; price: number | null; due: boolean; held: boolean;
-  proven: boolean; overlap: number; peers: Mapping[];
+  proven: boolean; overlap: number; peers: Mapping[]; acquisition?: Acquisition;
 };
 type RunState = {
   protocol: string; mode: CollectionMode; selected: Candidate[];
   activeSupervisor: string | null; stopReason?: string; complete?: boolean;
 };
-export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean };
+export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean; acquisitionPages?: string[] };
 export type Dependencies = {
   execute: ExecuteSql;
   fetchPage?: (url: string) => Promise<TescoPageResponse>;
@@ -54,6 +55,10 @@ function snapshot(sku: string): string {
 function assertSnapshot(target: Candidate): string {
   return `if ${snapshot(target.store_sku)} is distinct from ${literal(target.peers)}::jsonb
     then raise exception 'mapping_changed'; end if;`;
+}
+function assertAcquisition(target: Candidate, runId: string) {
+  return target.acquisition ? `if ${acquisitionSnapshotSql(target.acquisition.pageId, runId)}
+    is distinct from ${literal(target.acquisition.snapshot)}::jsonb then raise exception 'acquisition_or_peer_changed'; end if;` : '';
 }
 function duePredicate(target: Candidate, mode: CollectionMode): string {
   return mode === 'renewal'
@@ -115,6 +120,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   if (!['renewal', 'expansion'].includes(options.mode)) throw new Error('Explicit renewal or expansion mode required');
   const limit = options.limit ?? 25;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Limit must be 1–100');
+  if (options.acquisitionPages && (options.mode !== 'expansion' || options.resume || options.acquisitionPages.length > limit))
+    throw new Error('Acquisition handoff requires a new bounded expansion run');
   const { execute } = deps;
   let selected: Candidate[];
   let completedUrls: string[] = [];
@@ -126,7 +133,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
     if (state.complete || (state.stopReason && state.stopReason !== 'interrupted')) return { ...prior, result: 'terminal_run' };
     selected = state.selected;
     completedUrls = prior.completed_urls as string[];
-  } else selected = await selectSupervisedCandidates(execute, options.mode, limit);
+  } else selected = options.acquisitionPages ? await selectAcquisitionCandidates(execute, options.acquisitionPages)
+    : await selectSupervisedCandidates(execute, options.mode, limit);
   if (options.dryRun || !selected.length) return { result: options.dryRun ? 'dry_run' : 'no_due_products',
     mode: options.mode, selected: selected.map(m => ({ id: m.id, name: m.canonical_name, observedAt: m.observed_at })) };
 
@@ -170,14 +178,17 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       const [spacing] = await execute(`select greatest(0,10000-extract(epoch from
         (now()-last_success_at))*1000)::int wait_ms from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}`);
       await (deps.sleep ?? (ms => new Promise(r => setTimeout(r, ms))))(Number(spacing?.wait_ms ?? 0));
-      await execute(`do $runner$ begin ${owned(runId, owner)} ${assertSnapshot(target)}
+      await execute(`do $runner$ begin ${owned(runId, owner)} ${assertSnapshot(target)} ${assertAcquisition(target, runId)}
         if not (${duePredicate(target, options.mode)}) then raise exception 'not_due_or_observation_changed'; end if;
         if exists(select 1 from tesco_direct_collection_pages where requested_url=${literal(target.store_url)}
+          ${target.acquisition ? `and id<>${uuid(target.acquisition.pageId)}` : ''}
           and (outcome='pending' or created_at>now()-interval '24 hours')) then raise exception 'attempt_already_recorded'; end if;
         if exists(select 1 from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}
           and last_success_at>now()-interval '10 seconds') then raise exception 'pacing_not_elapsed'; end if;
-        insert into tesco_direct_collection_pages(run_id,egress_key,requested_url,mode,outcome)
-          values(${uuid(runId)},${literal(SUPERVISED_GATE)},${literal(target.store_url)},'products','pending');
+        insert into tesco_direct_collection_pages(run_id,egress_key,requested_url,mode,outcome,detail)
+          values(${uuid(runId)},${literal(SUPERVISED_GATE)},${literal(target.store_url)},'products','pending',
+          ${literal(target.acquisition ? JSON.stringify({ purpose: 'price_verification', sourceAcquisitionPageId: target.acquisition.pageId,
+            sourceBodySha256: target.acquisition.snapshot.page.body_sha256 }) : null)});
         end $runner$; select 1 reserved`);
 
       const response = await (deps.fetchPage ?? fetchTescoCollectedPage)(target.store_url);
@@ -191,6 +202,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         storeProductName: target.store_product_name, storeBrand: target.store_brand, isOwnBrand: target.is_own_brand,
         storeSku: target.store_sku, storeUrl: target.store_url, duplicateSkuCount: target.peers.length,
         duplicateCanonicalNames: target.peers.map(p => p.canonical_name), isFresh: !!target.observed_at }, product) : ['missing_exact_product'];
+      if (target.acquisition && product && !acquisitionDecision(target.acquisition.snapshot, product))
+        reasons.push('acquisition_live_identity_not_exact');
       const unavailable = tescoResourceUnavailable(response);
       const transportStop = outcome !== 'ok' && !unavailable;
       const identityStop = outcome === 'ok' && reasons.some(r => r !== 'unavailable_or_no_regular_price');
@@ -208,13 +221,15 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       await execute(`do $runner$ begin ${owned(runId, owner, !!pauseUntil)}
         if exists(select 1 from tesco_direct_collection_pages where run_id=${uuid(runId)}
           and requested_url=${literal(target.store_url)} and outcome='pending') then
-          ${accepted ? assertSnapshot(target) : ''}
+          ${accepted ? assertSnapshot(target) + assertAcquisition(target, runId) : ''}
           update tesco_direct_collection_pages set final_url=${literal(response.finalUrl)},outcome=${literal(outcome)},
             http_status=${literal(response.status)}::int,retry_after=${literal(response.retryAfter)},elapsed_ms=${literal(response.elapsedMs)}::int,
             body_sha256=${literal(createHash('sha256').update(response.html).digest('hex'))},parsed=${literal(parsed)}::jsonb,
             identity_results=${literal([{ storeProductId: target.id, sku: target.store_sku, reasons }])}::jsonb,
             detail=${literal(JSON.stringify({ transport: response.transport, stopReason: pageStop,
-              resourceUnavailable: unavailable, redirectUrl: response.redirectUrl }))}
+              resourceUnavailable: unavailable, redirectUrl: response.redirectUrl,
+              ...(target.acquisition ? { purpose: 'price_verification', sourceAcquisitionPageId: target.acquisition.pageId,
+                sourceBodySha256: target.acquisition.snapshot.page.body_sha256 } : {}) }))}
             where run_id=${uuid(runId)} and requested_url=${literal(target.store_url)};
           ${accepted ? `if not (${duePredicate(target, options.mode)}) then raise exception 'observation_changed'; end if;
             perform finalize_store_scrape_product(p_run_uuid=>${uuid(runId)},p_store=>'tesco',p_store_product_id=>${uuid(target.id)},
