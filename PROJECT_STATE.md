@@ -17,11 +17,11 @@ portfolio/alias recognition. No catalogue/mapping/price approvals are changed.
 
 On the unchanged 09:28 available-catalogue snapshot, eligible valid-URL identities
 increase Tesco 2,474→2,679, SuperValu 982→1,110, Dunnes 503→563 (+393). Recorded
-exact groups across >=2 retailers increase 225→248; three-retailer groups 39→45,
+exact groups across >=2 retailers increase 225→252; three-retailer groups 39→45,
 of which 31 have three fresh prices. Independently captured triples remain zero.
-Brand-only ablation is 246/44, deterministic-only including new safety holds is
-225/40. The combined result includes gains and the removal of four unsafe graph
-groups due to URL/title pack disagreement. Counts are provisional, not estimated
+Brand-only ablation is 246/44, deterministic-only is 229/40. Specific URL/title
+pack disagreement is held, while lossy decimal slugs (1.5L→1-5l) are not treated
+as contradictory measurements. Counts are provisional, not estimated
 whole-retailer assortment or independently verified matches.
 
 A 26-case primary-source diagnostic has 14 positive and 12 negative cases, with

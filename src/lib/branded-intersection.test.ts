@@ -36,6 +36,7 @@ describe('exact branded identity controls',()=>{
     ['Lucozade Zero Original Bottle 380ml','Lucozade Zero Original Bottle (380 ml)'],
   ])('accepts complete recorded identity: %s',(a,b)=>expect(decision(a,b).decision).toBe('exact_match'));
   it.each([
+    ['Dr Oetker Ristorante Mozzarella Pizza 290g','Dr Oetker Ristorante Mozzarella Pizza 332g'],
     ['Heinz Tomato Ketchup 500g','Heinz Tomato Ketchup 400g'],
     ['Heinz Tomato Ketchup 2x500g','Heinz Tomato Ketchup 1kg'],
     ['Heinz Tomato Ketchup 2x500g','Heinz Tomato Ketchup 3x500g'],

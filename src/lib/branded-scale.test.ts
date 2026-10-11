@@ -44,6 +44,11 @@ describe('pack and language controls',()=>{
   b.url=b.url.replace('/sauce/','/batchelors-mushy-peas-3-x-225g/');
   const r=compare(a,b,BRAND_RULES,now);expect(r.decision).toBe('insufficient_evidence');expect(r.missing).toContain('url_title_pack_conflict_requires_review');
  });
+ it('does not misread decimal quantities in lossy retailer URL slugs',()=>{
+  const a=evidence('Ballygowan Hint of Fruit Peach Bottle 1.5L'),b=evidence('Ballygowan Hint of Fruit Peach Bottle 1.5L','dunnes');
+  b.url=b.url.replace('/sauce/','/ballygowan-hint-of-fruit-peach-bottle-1-5l/');
+  expect(compare(a,b,BRAND_RULES,now).decision).toBe('exact_match');
+ });
  it('checks explicit per-item/total arithmetic and retains count identity',()=>{
   expect(parsePack('Brand Yogurt 4x90g (360g)')).toEqual(parsePack('Brand Yogurt 4x90g'));
   expect(parsePack('Brand Yogurt 4x90g (350g)').issues).toContain('multiple_explicit_measures');

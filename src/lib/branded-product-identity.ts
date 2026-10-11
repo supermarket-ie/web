@@ -148,6 +148,9 @@ export function compare(a: Evidence, b: Evidence, rules: BrandRule[], asOf: stri
   for(const e of [a,b]){
     if(e.store==='tesco'||!safeProductUrl(e))continue;
     const slug=decodeURIComponent(new URL(e.url).pathname).replace(e.sku,'');
+    // Slugs replace decimal points with hyphens (1.5L -> 1-5l). Such
+    // lossy measurements cannot establish a contradiction.
+    if(/\d-\d+\s*(?:kg|g|ml|cl|l)\b/i.test(slug))continue;
     const up=parsePack(slug),tp=parsePack(e.title,e.quantity,e.source.kind==='captured_product');
     if(up.amount!==null&&tp.amount!==null&&up.unit!== 'count' && tp.unit!=='count'
       &&(up.count!==tp.count||(up.basis===tp.basis&&(up.amount!==tp.amount||up.unit!==tp.unit))))
