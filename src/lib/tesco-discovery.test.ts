@@ -12,6 +12,52 @@ function fixture(): DiscoveryInput {
       page_id: 'page', created_at: '2026-10-08T12:00:00Z', body_sha256: 'a'.repeat(64) }], attempts: [], rejections: [], demand: [{ name: 'Brand Mature Red Cheddar 200g', demand: 7 }] };
 }
 describe('offline deterministic Tesco discovery', () => {
+  function acquired(sku: string, canonical: string, title: string, brand: string, quantity: { grams?: number; millilitres?: number }) {
+    const x = fixture(); const url = `https://www.tesco.ie/shop/en-IE/products/${sku}`;
+    Object.assign(x.mappings[0], { canonical_name: canonical, canonical_brand: brand, store_product_name: title, store_brand: brand, store_sku: sku, store_url: url });
+    for (const p of x.peers) Object.assign(p, { store_product_name: canonical, brand });
+    Object.assign(x.evidence[0].product, { sku, url, name: title, brand, quantity });
+    Object.assign(x.evidence[0], { requested_url: url, final_url: url, mode: 'products' });
+    return x;
+  }
+  const avonmore = () => acquired('308465836', 'Avonmore Protein Milk Vanilla 1L', 'Avonmore Protein Milk Vanilla 1 Litre', 'Avonmore', { millilitres: 1000 });
+  const birds = () => acquired('294076621', 'Birds Eye Petits Pois 450g', 'Birds Eye Petit Pois Peas', 'Birds Eye', { grams: 450 });
+  it('accepts live Avonmore unit wording including Dunnes peer wording', () => {
+    const x = avonmore(); x.peers[0].store_product_name = 'Avonmore Protein Milk Vanilla 1 Litre';
+    expect(discover(x).counts.ready).toBe(1);
+  });
+  it('accepts Birds Eye only with corroborated direct-product structured quantity', () => {
+    const x = birds(); expect(discover(x).counts.ready).toBe(1);
+    expect(discover(x).decisions[0].candidates[0].signals).toContain('direct_product_structured_quantity');
+    x.evidence[0].product.quantity = null; expect(discover(x).counts.ready).toBe(0);
+  });
+  it.each(['listings', 'probe'] as const)('does not fill an omitted measure from %s evidence', mode => {
+    const x = birds(); x.evidence[0].mode = mode; expect(discover(x).counts.ready).toBe(0);
+  });
+  it.each(['requested_url', 'final_url'] as const)('requires exact product provenance: %s', key => {
+    const x = birds(); x.evidence[0][key] = 'https://www.tesco.ie/shop/en-IE/search?query=peas'; expect(discover(x).counts.ready).toBe(0);
+  });
+  it.each([{ grams: 900 }, { grams: 450, pieces: 2 }, { grams: 0 }, { grams: -450 }, { millilitres: 450 }])('rejects conflicting/ambiguous structured quantity %j', quantity => {
+    const x = birds(); x.evidence[0].product.quantity = quantity; expect(discover(x).counts.ready).toBe(0);
+  });
+  it.each(['Birds Eye Petit Pois Peas 900g', 'Birds Eye Petit Pois Peas 2 Pack', 'Birds Eye Petit Pois Peas 2 x 225g',
+    'Birds Eye Petit Pois Peas 450g + 100g', 'Birds Eye Petit Pois Peas With Mint', 'Birds Eye Garden Peas', 'Birds Eye Organic Petit Pois Peas'])('rejects peas near-match %s', name => {
+    const x = birds(); x.evidence[0].product.name = name; expect(discover(x).counts.ready).toBe(0);
+  });
+  it.each(['Chocolate', 'Lactose Free Vanilla', 'Vanilla 0% Fat'])('does not normalize away milk variant %s', variant => {
+    const x = avonmore(); x.evidence[0].product.name = `Avonmore Protein Milk ${variant} 1 Litre`; expect(discover(x).counts.ready).toBe(0);
+  });
+  it('does not allow structured quantity to override an explicit contradictory title', () => {
+    const x = avonmore(); x.evidence[0].product.name = 'Avonmore Protein Milk Vanilla 2 Litre'; expect(discover(x).counts.ready).toBe(0);
+  });
+  it('exempts only the exact completed acquisition evidence, never another or unknown attempt', () => {
+    const x = avonmore(), e = x.evidence[0];
+    x.attempts = [{ requested_url: e.product.url, unresolved: false, acquisitionPageId: e.page_id, acquisitionBodySha256: e.body_sha256 }];
+    expect(discover(x).counts.ready).toBe(1);
+    x.attempts.push({ requested_url: e.product.url, unresolved: true }); expect(discover(x).counts.held).toBe(1);
+    x.attempts[1].unresolved = false; expect(discover(x).counts.held).toBe(1);
+    x.attempts.pop(); x.attempts[0].acquisitionBodySha256 = 'b'.repeat(64); expect(discover(x).counts.held).toBe(1);
+  });
   it('separates exact identity from live price acceptance', () => { const r = discover(fixture()); expect(r.counts.ready).toBe(1); expect(r.decisions[0].comparison).toBe(true); expect(r.decisions[0].reasons).toEqual(['live_price_verification_required']); });
   it.each(['400g', 'White Cheddar 200g', 'Red Cheddar & Mozzarella Grated 200g', 'Red Low Fat Cheddar 200g'])('rejects material change %s', replacement => {
     const x = fixture(); x.evidence[0].product.name = `Brand Mature ${replacement}`; expect(discover(x).counts.ready).toBe(0);

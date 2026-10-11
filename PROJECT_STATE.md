@@ -1,5 +1,27 @@
 # Supermarket.ie — Canonical Project State
 
+## Tesco identity/acquisition handoff proposal — 11 October 2026
+
+Production verified at 06:42 UTC: 341 fresh trusted Tesco prices, 171 fresh
+three-retailer comparisons, five preserved unknown requests, no active lease or
+cooldown, and zero renewals currently due. First renewal is 12 October 11:28:30
+Irish time; 285 due on 12 October and 56 on 13 October. Earliest expiry is
+15 October 11:28:30. Production remains merged main `5e0d88a`, deployment READY.
+
+This branch proposes consistent unit-word normalization, narrowly bounded
+direct-product structured quantity fallback, and an explicit completed-acquisition
+handoff in the supervised expansion runner. No renewal mode, production mapping,
+canonical record, original evidence timestamp or pricing policy was changed.
+A production read-only dry-run selected Avonmore Protein Milk Vanilla 1L (308465836)
+and Birds Eye Petits Pois 450g (294076621) from their original checkpointed evidence
+and current peer mappings. No Tesco request or trusted-price write was made.
+Both are eligible under this proposed code, not yet enabled in production.
+
+See `docs/tesco-acquisition-handoff.md` for evidence requirements, review boundary,
+duplicate prevention, commands and retained limitations. Do not merge/deploy or
+retry checkpointed requests merely to demonstrate the proposal. PR #256 remains
+unapproved and unexecuted; all five unknown outcomes remain held.
+
 **Last updated:** 29 September 2026
 
 > **READ THIS FIRST BEFORE STARTING SUPERMARKET.IE DEVELOPMENT.**

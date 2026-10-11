@@ -6,7 +6,7 @@ import { collectTescoSupervised, reconcileSupervisedRun, type CollectionMode, ty
 
 const args = process.argv.slice(2);
 function option(name: string) { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; }
-const allowed = new Set(['--mode', '--limit', '--resume', '--reconcile', '--dry-run', '--confirm-run']);
+const allowed = new Set(['--mode', '--limit', '--resume', '--reconcile', '--dry-run', '--confirm-run', '--acquisition-pages']);
 for (let i = 0; i < args.length; i++) {
   if (!allowed.has(args[i])) throw new Error('Unknown option');
   if (!['--dry-run', '--confirm-run'].includes(args[i])) {
@@ -54,7 +54,8 @@ const execute: ExecuteSql = query => new Promise((resolve, reject) => {
 async function main() {
   const result = reconcile ? await reconcileSupervisedRun(execute, reconcile)
     : await collectTescoSupervised({ mode: mode as CollectionMode, limit: Number(option('--limit') ?? 25),
-      resume: option('--resume'), dryRun: args.includes('--dry-run') }, {
+      resume: option('--resume'), dryRun: args.includes('--dry-run'),
+      acquisitionPages: option('--acquisition-pages')?.split(',') }, {
       execute, progress: value => send({ type: 'progress', ...value }),
       fetchPage: async url => {
         if (disconnected) throw new Error('Supervisor disconnected');

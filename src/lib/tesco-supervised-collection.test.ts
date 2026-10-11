@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { collectTescoSupervised, reconcileSupervisedRun, selectSupervisedCandidates, SUPERVISED_GATE, type ExecuteSql } from './tesco-supervised-collection';
-import { fetchTescoCollectedPage, type TescoPageResponse } from './tesco-direct-collection-core';
+import { fetchTescoCollectedPage, parseTescoCollectedPage, type TescoPageResponse } from './tesco-direct-collection-core';
+import { selectAcquisitionCandidates } from './tesco-acquisition-handoff';
 
 let db: PGlite;
 let execute: ExecuteSql;
@@ -45,7 +46,7 @@ beforeEach(async () => {
     create role anon; create role authenticated; create role service_role;
     create table products(id uuid primary key,canonical_name text,brand text);
     create table store_products(id uuid primary key,product_id uuid references products,store text,store_sku text,
-      store_url text,store_product_name text,brand text,is_own_brand boolean,url_status text);
+      store_url text,store_product_name text,brand text,is_own_brand boolean,url_status text,gtin text);
     create table price_observations(id uuid primary key default gen_random_uuid(),store_product_id uuid references store_products,
       price numeric,was_price numeric,on_promotion boolean,observed_at timestamptz,source text);
     create table scrape_runs(id uuid primary key default gen_random_uuid(),store text,run_id text,started_at timestamptz default now(),
@@ -84,6 +85,113 @@ beforeEach(async () => {
   });
 }, 20_000);
 afterEach(async () => { await db.close(); });
+
+describe('explicit acquisition handoff with PostgreSQL finalisation', () => {
+  async function acquisition() {
+    await seed(0, '8 days');
+    await db.exec(`update products set canonical_name='Avonmore Protein Milk Vanilla 1L',brand='Avonmore';
+      update store_products set store_product_name='Avonmore Protein Milk Vanilla 1 Litre',brand='Avonmore',is_own_brand=false;`);
+    const r = randomUUID(), page = randomUUID();
+    const live = response(0, { title: 'Avonmore Protein Milk Vanilla 1 Litre', brandName: 'Avonmore', price: { actual: 3.39 } });
+    await db.query(`insert into scrape_runs(id,store,status,finished_at,error_summary) values($1,'tesco','degraded',now(),$2)`,
+      [r, JSON.stringify({ protocol: 'tesco-supervised-discovery-v1', pricesAllowed: false, activeSupervisor: null })]);
+    await db.query(`insert into tesco_direct_collection_pages(id,run_id,egress_key,requested_url,final_url,mode,outcome,http_status,body_sha256,parsed,identity_results,detail,created_at)
+      values($1,$2,$3,$4,$4,'products','ok',200,$5,$6,$7,
+        jsonb_build_object('acquisitionOnly',true,'pricesInserted',0,'observedAt',now()-interval '1 second')::text,now()-interval '2 seconds')`,
+      [page,r,SUPERVISED_GATE,url(),'a'.repeat(64),JSON.stringify(parseTescoCollectedPage(live.html,url())),JSON.stringify([{storeProductId:ids[0],sku:sku(),reasons:[]}])]);
+    return { page, r, live };
+  }
+  async function handoff(page: string, live: TescoPageResponse, sql = execute) {
+    const fetchPage = vi.fn().mockResolvedValue(live);
+    const result = await collectTescoSupervised({ mode: 'expansion', limit: 1, acquisitionPages: [page] }, { execute: sql, sleep, fetchPage });
+    return { result, fetchPage };
+  }
+  it('dry-runs a completed source without fetching or changing any evidence', async () => {
+    const {page} = await acquisition(); const before = await db.query('select * from tesco_direct_collection_pages');
+    const fetchPage = vi.fn();
+    const result = await collectTescoSupervised({mode:'expansion',limit:1,acquisitionPages:[page],dryRun:true},{execute,fetchPage});
+    expect(result.selected).toHaveLength(1); expect(fetchPage).not.toHaveBeenCalled();
+    expect(await db.query('select * from tesco_direct_collection_pages')).toEqual(before);
+  });
+  it('retains acquisition and old observation, reserves one new price request, and finalises once', async () => {
+    const {page,live}=await acquisition(); const before=await observations();
+    const source=(await db.query('select * from tesco_direct_collection_pages where id=$1',[page])).rows;
+    const {result,fetchPage}=await handoff(page,live);
+    expect(result).toMatchObject({result:'complete',reserved:1,completed:1,inserted:1}); expect(fetchPage).toHaveBeenCalledTimes(1);
+    expect((await observations())[0]).toEqual(before[0]); expect(await observations()).toHaveLength(2);
+    expect((await observations())[1].price).toBe('3.39');
+    expect((await db.query('select * from tesco_direct_collection_pages where id=$1',[page])).rows).toEqual(source);
+    const newPage=(await db.query<{detail:string}>('select detail from tesco_direct_collection_pages where run_id=$1',[result.id])).rows[0];
+    expect(JSON.parse(newPage.detail)).toMatchObject({purpose:'price_verification',sourceAcquisitionPageId:page});
+    expect(await selectAcquisitionCandidates(execute,[page])).toEqual([]);
+    await db.query(`select finalize_store_scrape_product(p_run_uuid=>$1,p_store=>'tesco',p_store_product_id=>$2,p_success=>true,p_price=>99)`,[result.id,ids[0]]);
+    expect(await observations()).toHaveLength(2);
+  });
+  it.each(['pending','network_error'] as const)('never exempts a separate %s request',async outcome=>{
+    const {page,live,r}=await acquisition();
+    const other=randomUUID();await db.query(`insert into scrape_runs(id,store) values($1,'tesco')`,[other]);
+    await db.query(`insert into tesco_direct_collection_pages(run_id,egress_key,requested_url,mode,outcome) values($1,$2,$3,'products',$4)`,[other,SUPERVISED_GATE,url(),outcome]);
+    const {fetchPage,result}=await handoff(page,live);expect(fetchPage).not.toHaveBeenCalled();expect(result.result).toBe('no_due_products');
+    expect((await db.query<{n:number}>('select count(*)::int n from tesco_direct_collection_pages where run_id=$1',[r])).rows[0].n).toBe(1);
+  });
+  it('leaves an interrupted new price request held across restart and reselection',async()=>{
+    const {page}=await acquisition();
+    const first=await collectTescoSupervised({mode:'expansion',acquisitionPages:[page]},{execute,sleep,fetchPage:vi.fn().mockRejectedValue(new Error('lost'))});
+    expect(first).toMatchObject({result:'interrupted',inserted:0,unresolved:[url()]});
+    expect(await selectAcquisitionCandidates(execute,[page])).toEqual([]);
+    expect(await collectTescoSupervised({mode:'expansion',resume:String(first.id)},{execute})).toMatchObject({result:'unresolved_attempts'});
+  });
+  it('reconciles lost finalisation acknowledgement without a second fetch or duplicate',async()=>{
+    const {page,live}=await acquisition();let lost=false;
+    const flaky:ExecuteSql=async sql=>{const rows=await execute(sql);if(!lost&&sql.endsWith('select 1 checkpointed')){lost=true;throw new Error('lost ack');}return rows;};
+    const {result}=await handoff(page,live,flaky);expect(result).toMatchObject({inserted:1,unresolved:[]});
+    const before=await observations(),fetchPage=vi.fn();
+    await collectTescoSupervised({mode:'expansion',resume:String(result.id)},{execute,sleep,fetchPage});
+    expect(fetchPage).not.toHaveBeenCalled();expect(await observations()).toEqual(before);
+  });
+  it('rechecks source evidence before reservation after selection',async()=>{
+    const {page,live}=await acquisition();
+    const sql:ExecuteSql=async q=>{const rows=await execute(q);if(q.endsWith(' snapshot'))await db.query('update tesco_direct_collection_pages set body_sha256=$1 where id=$2',['b'.repeat(64),page]);return rows;};
+    const {result,fetchPage}=await handoff(page,live,sql);expect(result.result).toBe('interrupted');expect(fetchPage).not.toHaveBeenCalled();
+  });
+  it('rejects a changed live flavour instead of accepting the acquisition price',async()=>{
+    const {page}=await acquisition();const live=response(0,{title:'Avonmore Protein Milk Chocolate 1 Litre',brandName:'Avonmore'});
+    const {result}=await handoff(page,live);expect(result).toMatchObject({result:'identity_validation_anomaly',inserted:0});expect(await observations()).toHaveLength(1);
+  });
+  it('retains access restriction cooldowns on the new price request',async()=>{
+    const {page,live}=await acquisition();const {result}=await handoff(page,{...live,outcome:'access_block',status:403,html:'Denied'});
+    expect(result).toMatchObject({result:'access_block',inserted:0});expect(Date.parse(String((await gate()).cooldown_until))).toBeGreaterThan(Date.now());
+    expect(await selectAcquisitionCandidates(execute,[page])).toEqual([]);
+  });
+  it('requires the prior-success policy and forbids mixing acquisition with renewal',async()=>{
+    const {page,live}=await acquisition();await db.query('delete from scrape_product_receipts where store_product_id=$1',[ids[0]]);
+    expect((await handoff(page,live)).fetchPage).not.toHaveBeenCalled();
+    await expect(collectTescoSupervised({mode:'renewal',acquisitionPages:[page]},{execute})).rejects.toThrow('new bounded expansion');
+  });
+  it.each(['pending_source','active_source','missing_acquisition_purpose','invalid_timestamp','bad_hash'])(
+    'fails closed on %s',async issue=>{
+      const {page,r,live}=await acquisition();
+      if(issue==='pending_source')await db.query("update tesco_direct_collection_pages set outcome='pending' where id=$1",[page]);
+      if(issue==='active_source')await db.query("update scrape_runs set status='running',finished_at=null where id=$1",[r]);
+      if(issue==='missing_acquisition_purpose')await db.query("update tesco_direct_collection_pages set detail='{}' where id=$1",[page]);
+      if(issue==='invalid_timestamp')await db.query("update tesco_direct_collection_pages set detail=(detail::jsonb||jsonb_build_object('observedAt','invalid'))::text where id=$1",[page]);
+      if(issue==='bad_hash')await db.query("update tesco_direct_collection_pages set body_sha256='invalid' where id=$1",[page]);
+      expect((await handoff(page,live)).fetchPage).not.toHaveBeenCalled();
+    });
+  it('fails finalisation if a peer changes while the new live request is in flight',async()=>{
+    const {page,live}=await acquisition(),before=await observations();
+    const fetchPage=vi.fn(async()=>{
+      await db.query(`insert into store_products(id,product_id,store,store_product_name,brand) values($1,$2,'dunnes','Avonmore Protein Milk Vanilla 2L','Avonmore')`,[randomUUID(),products[0]]);
+      return live;
+    });
+    const result=await collectTescoSupervised({mode:'expansion',acquisitionPages:[page]},{execute,sleep,fetchPage});
+    expect(result).toMatchObject({result:'interrupted',inserted:0,unresolved:[url()]});expect(await observations()).toEqual(before);
+  });
+  it.each(['leased_until','cooldown_until'])('preserves the %s collection gate',async field=>{
+    const {page,live}=await acquisition();await db.exec(`update tesco_egress_pool set ${field}=now()+interval '10 minutes'`);
+    await expect(handoff(page,live)).rejects.toThrow('gate_unavailable');expect(await observations()).toHaveLength(1);
+  });
+});
 
 describe('supervised renewal with PostgreSQL finalisation', () => {
   it('exposes a reconcilable run ID when the lease claim acknowledgement is lost', async () => {
