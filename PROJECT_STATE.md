@@ -1,5 +1,26 @@
 # Supermarket.ie — Canonical Project State
 
+## Original retailer identity retention — 11 October 2026
+
+PR #260 was reviewed against the main ruleset (required validate, resolved
+threads, squash; no required human approval), merged as `f92e4bc` and verified
+on www.supermarket.ie: production deployment `dpl_4soRkpbG3frZsDobjz1rVuSyctPx`,
+READY, exact main SHA. At 11:14 UTC there were 341 fresh Tesco observations,
+zero renewals due and five unresolved request holds. First renewal remains
+12 October 10:28:30 UTC. Existing Tesco gates/schedules were not changed.
+
+This follow-up retains original decoded HTTP bodies from successful normal
+SuperValu/Dunnes refreshes in private append-only `retailer_identity_responses`.
+It adds no retailer requests, schedules, mapping approval or price rules.
+Source nodes must independently supply the selected SKU and title. Retention
+runs after successful price finalization; storage failures are logged without
+replaying that completed operation. Listing responses remain listing evidence.
+Hashes are database-computed over original decoded UTF-8, never assembled
+metadata. The source adapter reparses and hashes retained bodies before use.
+No historical receipt backfill is permitted. Browser roles have no table access.
+Migration must precede worker release; until both are deployed, this is prepared
+capability, not evidence that any historical product has been independently captured.
+
 ## Branded intersection audit proposal — 11 October 2026
 
 GitHub main and production were verified at merged `1979aaa` (PR #258), Vercel

@@ -10,7 +10,7 @@ export type Evidence = {
   description?: string | null; ingredients?: string | null; imageUrl?: string | null;
   manufacturer?: string | null; dimensions?: string | null;
   source: { kind: 'captured_product' | 'captured_listing' | 'refresh_attested' | 'stored_mapping';
-    ref: string; at: string | null; url: string | null; hash?: string };
+    ref: string; at: string | null; url: string | null; hash?: string; archiveRef?: string };
   mappingIds: string[]; canonicalIds: string[]; conflicts: string[];
   lastLiveVerifiedAt: string | null;
 };
