@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": ["scripts/branded-intersection*.ts", "src/lib/branded-*.ts"],
+  "exclude": ["node_modules"]
+}

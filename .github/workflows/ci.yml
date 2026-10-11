@@ -41,6 +41,9 @@ jobs:
       - name: Offline Tesco discovery TypeScript
         run: npm run typecheck:tesco-discovery
 
+      - name: Branded intersection TypeScript
+        run: npm run typecheck:branded
+
       - name: Behavioural release gate
         run: npm run test:behavioural
 

@@ -16,7 +16,10 @@
     "tesco:supervised": "node --use-env-proxy --import tsx scripts/tesco-supervised-collect.ts",
     "typecheck:tesco-supervised": "tsc --project tsconfig.tesco-supervised.json",
     "tesco:discover": "node --import tsx scripts/tesco-discover.ts",
-    "typecheck:tesco-discovery": "tsc --project tsconfig.tesco-discovery.json"
+    "typecheck:tesco-discovery": "tsc --project tsconfig.tesco-discovery.json",
+    "branded:intersection": "node --import tsx scripts/branded-intersection.ts",
+    "branded:infer": "node --import tsx scripts/branded-intersection-infer.ts",
+    "typecheck:branded": "tsc --project tsconfig.branded-intersection.json"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.38",
