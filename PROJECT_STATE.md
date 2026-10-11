@@ -1,5 +1,21 @@
 # Supermarket.ie — Canonical Project State
 
+## Tesco coverage release and scale evaluation — 11 October 2026
+
+PR #258 is merged as `1979aaa`; CI #915 passed and production is READY on that
+commit. This supersedes the proposal-only release status below. Production remains
+341 fresh Tesco / 171 three-retailer prices. Same-evidence evaluation of all 2,121
+missing products unlocked four exact identities, two eligible for guarded acquisition
+handoff, and zero new prices. Five unknown outcomes remain held. Zero renewals due
+at 07:14 UTC; first due 12 October 11:28:30 Irish.
+
+This branch adds a read-only batch acquisition planner: 422 eligible retrieval
+targets, with an initial ten-query plan covering 72 products (12 comparison gaps).
+These are targets, not accepted mappings. No Tesco requests, production mapping
+changes, observations, holds or renewal safeguards changed. PR #256 remains
+unapproved. See `docs/tesco-coverage-scale-2026-10-11.md` for complete before/after
+results, root causes, limitations and the supervised acquisition recommendation.
+
 ## Tesco identity/acquisition handoff proposal — 11 October 2026
 
 Production verified at 06:42 UTC: 341 fresh trusted Tesco prices, 171 fresh
