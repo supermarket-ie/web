@@ -21,6 +21,8 @@ describe('exact branded identity controls',()=>{
     ['Heinz Tomato Ketchup 2 x 500g','Heinz Tomato Ketchup 2x0.5kg'],
     ['Heinz Tomato Ketchup 500g x 2','Heinz Tomato Ketchup 2 × 0.5kg'],
     ['Birds Eye Petits Pois 450g','Birds Eye Petit Pois Peas 450g'],
+    ['Heinz By Nature Strawberry Banana Raspberry Apple 100g','Heinz By Nature Strawberry Banana Raspberry Apple 100g'],
+    ['Lucozade Zero Original Bottle 380ml','Lucozade Zero Original Bottle (380 ml)'],
   ])('accepts complete recorded identity: %s',(a,b)=>expect(decision(a,b).decision).toBe('exact_match'));
   it.each([
     ['Heinz Tomato Ketchup 500g','Heinz Tomato Ketchup 400g'],
@@ -51,6 +53,10 @@ describe('exact branded identity controls',()=>{
   it('blocks a valid shared barcode when sizes conflict',()=>{
     const a=record('Heinz Tomato Ketchup 500g','tesco',{gtin:'4006381333931'}),b=record('Heinz Tomato Ketchup 400g','supervalu',{gtin:'4006381333931'});
     expect(compare(a,b,BRAND_RULES,now).decision).toBe('not_exact_match');
+  });
+  it('does not label equivalent age numerals as a numeric contradiction',()=>{
+    const d=decision('Ellas Kitchen Mango Baby Brekkie 6+ Months 100g','Ellas Kitchen Organic Mango Baby Brekkie Pouch 6m+ 100g');
+    expect(d.contradictions).not.toContain('numeric_formulation_conflict');expect(d.decision).toBe('insufficient_evidence');
   });
   it('requires evidence before a barcode establishes identity',()=>{
     const a=record('Heinz Tomato Ketchup 500g','tesco',{gtin:'4006381333931'}),b=record('Heinz Tomato Ketchup 500g','supervalu',{gtin:'4006381333931'});

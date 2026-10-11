@@ -122,9 +122,10 @@ export function compare(a: Evidence, b: Evidence, rules: BrandRule[], asOf: stri
     'powder','liquid','gel','spray','frozen','fresh','antibacterial','sugar','no','free','reduced'];
   for (const term of critical) if (wa.includes(term) !== wb.includes(term)) missing.push(`variant_unconfirmed:${term}`);
   const opposing = [['salted','unsalted'],['whole','skimmed'],['smoked','unsmoked'],['white','wholemeal'],['original','zero'],['original','light'],['bio','non bio'],['fresh','frozen'],['powder','liquid'],['chocolate','vanilla'],['strawberry','raspberry']];
-  const ta = ` ${wa.join(' ')} `, tb = ` ${wb.join(' ')} `;
-  for (const [x,y] of opposing) if ((ta.includes(` ${x} `) && tb.includes(` ${y} `)) || (tb.includes(` ${x} `) && ta.includes(` ${y} `))) contradictions.push('formulation_or_flavour_conflict');
-  const numbers = (w: string[]) => w.filter(x => /^\d/.test(x));
+  const has = (words:string[],term:string) => term.split(' ').every(t=>words.includes(t)) && !(term==='bio'&&words.includes('non'));
+  for (const [x,y] of opposing) if ((has(wa,x)&&!has(wa,y)&&has(wb,y)&&!has(wb,x))
+    ||(has(wb,x)&&!has(wb,y)&&has(wa,y)&&!has(wa,x))) contradictions.push('formulation_or_flavour_conflict');
+  const numbers = (w: string[]) => w.filter(x => /^\d/.test(x)).map(x=>x.match(/^\d+(?:\.\d+)?/)![0]).sort();
   if (numbers(wa).length && numbers(wb).length && JSON.stringify(numbers(wa)) !== JSON.stringify(numbers(wb))) contradictions.push('numeric_formulation_conflict');
   const container = (e: Evidence) => unitWords(e.title).match(/\b(can|bottle|jar)s?\b/)?.[1];
   if (container(a) && container(b) && container(a) !== container(b)) contradictions.push('container_conflict');
