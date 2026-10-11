@@ -1,5 +1,32 @@
 # Supermarket.ie — Canonical Project State
 
+## Branded intersection audit proposal — 11 October 2026
+
+GitHub main and production were verified at merged `1979aaa` (PR #258), Vercel
+READY. A read-only full available-catalogue audit covers 2,462 canonical products,
+7,381 Tesco/SuperValu/Dunnes mappings and 3,968 retained Tesco SKUs. Nominal
+three-store associations and non-own-brand flags are not verified identity.
+Sourced brand ownership, explicit pack/variant checks and retailer SKU evidence
+must establish identity independently of the canonical associations.
+
+This branch adds an offline deterministic evaluator, private JSON/CSV proposal
+outputs, source-evidence intake and a bounded Anthropic inference interface.
+Original SuperValu/Dunnes response bodies are not retained in the audited data;
+refresh-attested title matches remain category B pending independent capture.
+Only independently captured evidence at all three stores enters category A.
+No provider credential was available in this audit session, so live inference
+was not run. Fixture inference must never be reported as live model results.
+See `docs/branded-intersection.md` for commands, evidence tiers and rollout.
+
+Production rechecked at 09:55 UTC: 341 fresh trusted Tesco observations, 1,268
+SuperValu and 919 Dunnes; the mapping identity digest was unchanged throughout
+the chunked export and final check. Zero Tesco renewals are currently due; 285
+become due on 12 October from 11:28:30 Irish time and 56 on 13 October. First
+expiry remains 15 October 11:28:30. Five unknown requests (four products, one
+listing) remain held. No active lease/cooldown; the supervised workspace egress
+remains disabled between approved runs. Renewal takes priority over discovery.
+No mappings, prices, gates, checkpoints or scheduler were changed by this work.
+
 ## Tesco identity/acquisition handoff proposal — 11 October 2026
 
 Production verified at 06:42 UTC: 341 fresh trusted Tesco prices, 171 fresh
