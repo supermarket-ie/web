@@ -1,3 +1,4 @@
+import { captureIdentityResponse, responseHash } from './retailer-identity-response';
 import { describe,it,expect,vi } from 'vitest';
 import { compare,parsePack,safeProductUrl,type Evidence } from './branded-product-identity';
 import { BRAND_RULES } from './branded-brand-registry';
@@ -10,6 +11,16 @@ function record(title:string,store:Evidence['store']='tesco',extra:Partial<Evide
   const url=store==='tesco'?`https://www.tesco.ie/shop/en-IE/products/${sku}`:store==='supervalu'?`https://shop.supervalu.ie/sm/delivery/rsid/5550/product/product-id-${sku}`:`https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/product/${sku}`;
   return {id:`${store}:${sku}`,store,sku,url,title,brand:null,gtin:null,source:{kind:'captured_product',at,ref:store,url,hash:'a'.repeat(64)},
     canonicalIds:[],mappingIds:[],conflicts:[],lastLiveVerifiedAt:at,...extra};
+}
+function gtinProof(r:Evidence,gtin='4006381333931') {
+  const common={store:r.store,sku:r.sku,gtin,sourceRef:`independent:${r.store}`,observedAt:at};
+  if(r.store==='tesco'){
+    const body=`<p>€1.00</p><script type="application/discover+json">${JSON.stringify({'mfe-orchestrator':{props:{config:{global:{locale:'en-IE'}},apolloCache:{ROOT_QUERY:{[`product({"tpnc":"${r.sku}"})`]:{__ref:'p'}},p:{id:r.sku,tpnc:r.sku,title:r.title,brandName:'Heinz',gtin,price:{actual:1},isForSale:true,status:'AvailableForSale'}}}}})}</script>`;
+    return {...common,bodySha256:responseHash(body),originalTescoResponse:{body,requestedUrl:r.url,finalUrl:r.url}};
+  }
+  const capture=captureIdentityResponse({store:r.store,sku:r.sku,title:r.title,productUrl:r.url,requestedUrl:r.url,finalUrl:r.url,
+    contentType:'application/json',body:JSON.stringify({sku:r.sku,name:r.title,gtin}),retrievedAt:at})!;
+  return {...common,bodySha256:capture.body_sha256,originalResponse:{...capture,id:common.sourceRef}};
 }
 const decision=(a:string,b:string)=>compare(record(a),record(b,'supervalu'),BRAND_RULES,now);
 describe('exact branded identity controls',()=>{
@@ -25,6 +36,7 @@ describe('exact branded identity controls',()=>{
     ['Lucozade Zero Original Bottle 380ml','Lucozade Zero Original Bottle (380 ml)'],
   ])('accepts complete recorded identity: %s',(a,b)=>expect(decision(a,b).decision).toBe('exact_match'));
   it.each([
+    ['Dr Oetker Ristorante Mozzarella Pizza 290g','Dr Oetker Ristorante Mozzarella Pizza 332g'],
     ['Heinz Tomato Ketchup 500g','Heinz Tomato Ketchup 400g'],
     ['Heinz Tomato Ketchup 2x500g','Heinz Tomato Ketchup 1kg'],
     ['Heinz Tomato Ketchup 2x500g','Heinz Tomato Ketchup 3x500g'],
@@ -111,14 +123,24 @@ describe('full catalogue evaluation',()=>{
     const s=snapshot();s.mappings[1].product_id='another';const r=evaluate(s);
     expect(r.intersection).toHaveLength(1);expect(r.intersection[0].canonicalProductId).toBeNull();expect(r.intersection[0].mappingRepairRequired).toBe(true);
   });
-  it('requires separate recent retailer captures to enter verified category A',()=>{
+  it('does not treat a hash of supplied metadata as an original retained response',()=>{
     const s=snapshot();s.retailerEvidence=['supervalu','dunnes'].map(store=>{
       const r=record('Heinz Tomato Ketchup 500g',store as Evidence['store']);
       return {store:r.store,sku:r.sku,url:r.url,title:r.title,brand:r.brand,gtin:r.gtin,
         source:{kind:'captured_product' as const,ref:`independent:${store}`,at:'2026-10-11T08:00:00.000Z',url:r.url,hash:'b'.repeat(64)}};
     });
-    const r=evaluate(s);expect(r.summary.independentlyVerifiedThree).toBe(1);expect(r.intersection[0].category).toBe('A');
+    const r=evaluate(s);expect(r.summary.independentlyVerifiedThree).toBe(0);expect(r.intersection[0].category).toBe('B');
     s.retailerEvidence[0].source.url='https://unrelated.test';expect(evaluate(s).intersection).toHaveLength(0);
+  });
+  it('verifies original archived responses and rejects metadata with a forged body',()=>{
+    const s=snapshot();s.retailerResponses=(['supervalu','dunnes'] as const).map(store=>{
+      const r=record('Heinz Tomato Ketchup 500g',store);
+      const capture=captureIdentityResponse({store,sku:r.sku,title:r.title,productUrl:r.url,requestedUrl:r.url,finalUrl:r.url,
+        contentType:'application/json',body:JSON.stringify({sku:r.sku,name:r.title}),retrievedAt:'2026-10-11T08:00:00.000Z'})!;
+      return {...capture,id:'archive:'+store};
+    });
+    expect(evaluate(s).summary.independentlyVerifiedThree).toBe(1);
+    s.retailerResponses[0].body_text='{}';expect(evaluate(s).summary.independentlyVerifiedThree).toBe(0);
   });
   it('never builds a transitive triple with a contradictory third pair',()=>{
     const s=snapshot();s.mappings[2].store_product_name='Heinz No Added Sugar Tomato Ketchup 500g';expect(evaluate(s).intersection).toHaveLength(0);
@@ -137,7 +159,7 @@ describe('full catalogue evaluation',()=>{
     const s=snapshot();s.mappings[1].store_product_name='Heinz Tomato Ketchup Squeezy 500g';
     const base=evaluate(s),a=base.records.find(r=>r.store==='tesco')!,b=base.records.find(r=>r.store==='supervalu')!;
     const proposal={left:a.id,right:b.id,evidenceDigest:digest([a,b].sort((x,y)=>x.id.localeCompare(y.id))),result:model,
-      corroboration:[a,b].map(r=>({store:r.store,sku:r.sku,gtin:'4006381333931',sourceRef:`independent:${r.store}`,observedAt:at,bodySha256:'b'.repeat(64)}))};
+      corroboration:[a,b].map(r=>gtinProof(r))};
     expect(evaluate(s,undefined,[proposal]).pairs.find(p=>p.id===[a.id,b.id].sort().join('|'))!.result.method).toBe('llm_corroborated');
     proposal.evidenceDigest='stale';expect(evaluate(s,undefined,[proposal]).summary.llmCorroboratedPairs).toBe(0);
   });
@@ -148,14 +170,14 @@ describe('inference boundaries and bounded spend',()=>{
   it('confidence alone cannot resolve different wording',()=>expect(gateInference(record('Heinz Tomato Ketchup 500g'),record('Heinz Tomato Ketchup Squeezy 500g','supervalu'),model,BRAND_RULES,now).accepted).toBe(false));
   it('independently acquired SKU-bound GTINs can corroborate wording inference',()=>{
     const a=record('Heinz Tomato Ketchup 500g'),b=record('Heinz Tomato Ketchup Squeezy 500g','supervalu');
-    const corroboration=[a,b].map(r=>({store:r.store,sku:r.sku,gtin:'4006381333931',sourceRef:`independent:${r.store}`,observedAt:at,bodySha256:'b'.repeat(64)}));
+    const corroboration=[a,b].map(r=>gtinProof(r));
     expect(gateInference(a,b,model,BRAND_RULES,now,corroboration).accepted).toBe(true);
     corroboration[1].sku='different';expect(gateInference(a,b,model,BRAND_RULES,now,corroboration).accepted).toBe(false);
   });
   it('rejects invented evidence references',()=>expect(()=>gateInference(record('Heinz Tomato Ketchup 500g'),record('Heinz Tomato Ketchup 500g','supervalu'),{...model,supportingAttributes:[{attribute:'brand',value:'Heinz',evidenceIds:['invented']}]},BRAND_RULES,now)).toThrow());
   it('cannot replace a pre-existing valid GTIN with inconsistent corroboration',()=>{
     const a=record('Heinz Tomato Ketchup 500g','tesco',{gtin:'5012345678900'}),b=record('Heinz Tomato Ketchup Squeezy 500g','supervalu');
-    const corroboration=[a,b].map(r=>({store:r.store,sku:r.sku,gtin:'4006381333931',sourceRef:`independent:${r.store}`,observedAt:at,bodySha256:'b'.repeat(64)}));
+    const corroboration=[a,b].map(r=>gtinProof(r));
     expect(gateInference(a,b,model,BRAND_RULES,now,corroboration).accepted).toBe(false);
   });
   it('bounds inputs and labels retailer prompt injection as untrusted',()=>{

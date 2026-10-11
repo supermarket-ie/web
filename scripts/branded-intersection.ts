@@ -16,6 +16,8 @@ function write(name:string,value:string){
 }
 write('report.json',JSON.stringify(report,null,2));
 write('summary.json',JSON.stringify({asOf:report.asOf,...report.summary,limitations:report.limitations},null,2));
+write('all-exact-groups.json',JSON.stringify(report.exactGroups,null,2));
+write('brand-review-queue.json',JSON.stringify(report.brandReviewQueue,null,2));
 write('intersection.json',JSON.stringify(report.intersection,null,2));
 write('collection-opportunities.json',JSON.stringify(report.opportunities,null,2));
 write('catalogue-audit.json',JSON.stringify(report.associations,null,2));

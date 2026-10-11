@@ -36,6 +36,8 @@ with latest_receipt as (
 )
 select jsonb_build_object(
   'asOf',to_char(now() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+  'brandClaims',(select coalesce(jsonb_agg(claim order by id),'[]'::jsonb) from public.manufacturer_brand_claims),
+  'retailerResponses',(select coalesce(jsonb_agg(r),'[]'::jsonb) from (select distinct on (store,sku) * from public.retailer_identity_responses order by store,sku,retrieved_at desc,id) r),
   'products',(select jsonb_agg(p order by id) from products p),
   'mappings',(select jsonb_agg(m order by id) from mappings m),
   'tesco',(select jsonb_agg(t order by product->>'sku',page_id) from tesco t where preference=1),

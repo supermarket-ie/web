@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { generateText, Output } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
-import { BRAND_RULES } from '../src/lib/branded-brand-registry';
 import { inferenceRequest, inferenceSchema, INFERENCE_VERSION, runBounded, gateInference, type Budget, type Ledger, type Corroboration } from '../src/lib/branded-inference';
 import type { evaluate } from '../src/lib/branded-intersection';
 import { digest } from '../src/lib/tesco-discovery';
 
+async function main() {
 // Separate operator CLI. No application route, collector hook or automatic run.
 const [reportPath,outputDirectory,budgetPath,confirm]=process.argv.slice(2);
 if(!reportPath||!outputDirectory||!budgetPath||confirm!=='--confirm-bounded-inference')throw Error('Usage: REPORT.json PRIVATE_OUTPUT BUDGET.json --confirm-bounded-inference');
@@ -24,7 +24,10 @@ try{
   if(ledger.model!==config.model)throw Error('Existing ledger uses another model');
   const records=new Map(report.records.map(r=>[r.id,r]));
   const selected=report.candidates.filter(p=>p.result.missing.every(m=>m==='wording_requires_inference_or_corroboration'))
-    .sort((a,b)=>a.id.localeCompare(b.id));
+    .sort((a,b)=>{
+      const impact=(p:typeof a)=>new Set([...(records.get(p.left)?.canonicalIds??[]),...(records.get(p.right)?.canonicalIds??[])]).size===1?1:0;
+      return impact(b)-impact(a)||a.id.localeCompare(b.id);
+    });
   const requests=selected.slice(0,20).map(p=>{const a=records.get(p.left)!,b=records.get(p.right)!;
     const context=report.canonicalMetadata.filter(x=>a.canonicalIds.includes(x.id)||b.canonicalIds.includes(x.id));
     return inferenceRequest(a,b,context);});
@@ -34,7 +37,7 @@ try{
     return {result:response.output,usage:{inputTokens:response.usage.inputTokens??NaN,outputTokens:response.usage.outputTokens??NaN}};
   },config,ledger,persist);
   const decisions=ledger.entries.filter(e=>e.result).map(e=>{const req=requests.find(r=>r.id===e.id);if(!req)return {id:e.id,status:'other_input_preserved'};
-    return {id:e.id,...gateInference(req.data.records[0],req.data.records[1],e.result,BRAND_RULES,report.asOf,config.corroboration)};});
+    return {id:e.id,...gateInference(req.data.records[0],req.data.records[1],e.result,report.brandRules,report.asOf,config.corroboration)};});
   fs.writeFileSync(path.join(outputDirectory,'inference-proposals.json'),JSON.stringify({version:INFERENCE_VERSION,decisions},null,2),{mode:0o600});
   const replay=ledger.entries.flatMap(e=>{const req=requests.find(r=>r.id===e.id);if(!req||!e.result)return [];
     return [{left:req.data.records[0].id,right:req.data.records[1].id,evidenceDigest:digest([...req.data.records].sort((a,b)=>a.id.localeCompare(b.id))),result:e.result,corroboration:config.corroboration??[]}];});
@@ -42,3 +45,6 @@ try{
   console.log(JSON.stringify({callsReserved:ledger.entries.length,completed:ledger.entries.filter(e=>e.status==='completed').length,
     reservedUsd:ledger.entries.reduce((n,e)=>n+e.reservedUsd,0),usageCostEstimateUsd:ledger.entries.reduce((n,e)=>n+(e.usageCostEstimateUsd??0),0)}));
 }finally{fs.closeSync(lock);fs.unlinkSync(ledgerPath+'.lock');}
+
+}
+void main().catch(error=>{console.error(error instanceof Error?error.message:String(error));process.exitCode=1;});

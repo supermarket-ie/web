@@ -1,5 +1,37 @@
 # Supermarket.ie — Canonical Project State
 
+## Manufacturer matching scale follow-up — 11 October 2026
+
+PR #261 merged after required CI passed (552 tests, behavioural gate, typechecks,
+lint and build). The original-response migration is applied with RLS, no browser
+read privileges and no service update/delete privileges. Production is READY at
+`cf21e92`, deployment `dpl_4YHbts52KZmuNdEnt4rnUPoaiCVG`. At 11:35 UTC the new
+table had zero rows: source retention is deployed, historical verification is not
+backfilled. Tesco remains 341 fresh, zero renewals due and five unresolved holds.
+
+This follow-up adds Supabase-backed versioned brand claims, an unresolved-brand
+review queue, separate private-label/exclusive-manufacturer classes, strict pack
+normalisation, original-body corroboration with GTIN or manufacturer product code,
+and four-way bounded structured inference. Twenty-two primary-source claims seed
+portfolio/alias recognition. No catalogue/mapping/price approvals are changed.
+
+On the unchanged 09:28 available-catalogue snapshot, eligible valid-URL identities
+increase Tesco 2,474→2,679, SuperValu 982→1,110, Dunnes 503→563 (+393). Recorded
+exact groups across >=2 retailers increase 225→252; three-retailer groups 39→45,
+of which 31 have three fresh prices. Independently captured triples remain zero.
+Brand-only ablation is 246/44, deterministic-only is 229/40. Specific URL/title
+pack disagreement is held, while lossy decimal slugs (1.5L→1-5l) are not treated
+as contradictory measurements. Counts are provisional, not estimated
+whole-retailer assortment or independently verified matches.
+
+A 26-case primary-source diagnostic has 14 positive and 12 negative cases, with
+12 accepted, zero false acceptances and two positive cases held. It is targeted,
+not independently dual-rated, and cannot establish population false-match risk.
+Dunnes 100739964 is independently published as 3x225g despite retained 225g title;
+keep its mapping repair separate. Local provider credential is unavailable (the
+provider key exists in Vercel); no secret was retrieved, no live model calls made,
+no inference cost or validated live yield claimed. See docs/branded-intersection.md.
+
 ## Original retailer identity retention — 11 October 2026
 
 PR #260 was reviewed against the main ruleset (required validate, resolved

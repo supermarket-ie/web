@@ -150,3 +150,64 @@ discovery, evidence tiers, inference replay and cost reservation failures. Fixtu
 accuracy and review of retained text are not a substitute for independently
 labelled live-product precision/recall. Measure that separately as peer source
 captures become available.
+
+## Scale follow-up (11 October 2026)
+
+`branded-identity-v2.1` adds reviewed, versioned ownership claims from
+`manufacturer_brand_claims` in Supabase. The seed import contains 22 primary-source
+claims, including portfolio batches and supported aliases; future brands are data,
+not code releases. `brand-review-queue.json` groups unresolved metadata labels by
+retailer breadth and SKU count. Retailer metadata and LLM suggestions only propose
+claims. Approval requires an identifiable manufacturer/operator and ownership
+source, reviewer, date and source summary. Claims expire after a year; contradictory
+approved claims and colliding aliases are held. Private label and retailer-exclusive
+manufacturer are distinct classes. None of the new claims asserts exclusivity.
+These classes affect matching only, not catalogue membership or price collection.
+
+Original SuperValu/Dunnes responses are retained in the private append-only
+`retailer_identity_responses` table by existing workers, after normal successful
+price finalization. No additional network requests, scheduler, historic backfill or
+mapping writes are introduced. The database hashes the original decoded UTF-8
+response; this is not a hash of reconstructed metadata or wire/compressed bytes.
+The 4 MiB ceiling and missing/ambiguous structured SKU/title binding cause capture
+to be skipped. Retention errors log store/SKU/error code and do not replay completed
+price writes. Listing evidence never claims a direct-page verification timestamp.
+Body reparsing/integrity checks are mandatory before archived peer evidence can
+qualify for category A; a metadata-only capture with a purported hash remains B.
+JSON product attributes, manufacturer, identifiers, description, ingredients,
+quantity, count, flavour, variant and formulation are retained when supplied.
+Missing fields remain missing. Raw source attributes are available to inference.
+
+Deterministic changes recognise `marrow fat`/`marrowfat`, validate explicit
+per-item plus total arithmetic (4x90g and 360g), and hold title/URL pack conflicts.
+A pack in a URL can veto unsafe acceptance but cannot establish product identity.
+The source-reviewed diagnostic exposed Dunnes SKU 100739964: its published
+3x225g mushy-peas pack conflicts with a retained 225g title. Keep that mapping out
+of exact identity until reviewed; this work does not change the production mapping.
+
+Inference v2 has four structured decisions: exact, different product, related with
+different pack, and insufficient. No factual contradiction is overridden. Both
+GTIN corroboration and the new manufacturer-product-code path require original
+source bodies that independently bind the relevant retailer SKU. Code-based
+corroboration requires separate source refs/hashes, the same manufacturer and
+product code, consistent explicit packs, and no missing formulation/variant facts.
+A confidence score or a hash of assembled metadata cannot pass the gate. All
+reservations, no-retry rules and <=20-call / <=USD1 hard limits remain in force.
+The CLI uses the report's resolved brand rules, not the old static registry.
+
+Run the export only after both migrations. Keep its raw bodies and catalogue data
+private. It is a read-only snapshot, never a production mapping proposal approval.
+`all-exact-groups.json` contains two-or-more-retailer groups, including missing
+retailers; `intersection.csv` contains the three-retailer product/SKU/URL/price
+catalogue. `scripts/branded-intersection-evaluate-sample.ts REPORT LABELS OUTPUT`
+reports precision, recall, false matches and a sampling caveat. Labels must be
+created separately from predictions with source references. The current 26-case
+primary-source diagnostic is not random, blinded or independently dual-rated and
+cannot establish a population error rate.
+
+Production #261 was verified READY at cf21e92 after its migration and green CI.
+No source responses had yet accumulated at the 11:35 UTC check. Local bounded
+inference is blocked by an unavailable local Anthropic credential. Vercel does
+have a configured provider key; it was not exported. Run the reviewed CLI in an
+authorized protected runtime with verified current token rates. Do not add an
+unauthenticated inference endpoint or put credentials in a build/log/report.
