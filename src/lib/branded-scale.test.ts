@@ -81,8 +81,8 @@ describe('four-way inference and independent non-GTIN corroboration',()=>{
 it('applies the versioned claims migration without touching catalogue tables',async()=>{
  const db=await PGlite.create();try{
   await db.exec('create role anon;create role authenticated;create role service_role bypassrls;');
-  await db.exec(readFileSync('supabase/migrations/20261011120000_retailer_identity_responses.sql','utf8'));
-  await db.exec(readFileSync('supabase/migrations/20261011123000_manufacturer_brand_claims.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261011113227_retailer_identity_responses.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261011114913_manufacturer_brand_claims.sql','utf8'));
   const rows=(await db.query<{claim:unknown}>('select claim from manufacturer_brand_claims')).rows;
   expect(rows).toHaveLength(22);for(const r of rows)expect(brandClaimSchema.safeParse(r.claim).success).toBe(true);
   await expect(db.exec('delete from manufacturer_brand_claims')).rejects.toThrow('append-only');

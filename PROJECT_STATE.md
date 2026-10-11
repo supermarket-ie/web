@@ -1,5 +1,25 @@
 # Supermarket.ie — Canonical Project State
 
+## Verified matching release and migration history — 11 October 2026
+
+PR #262 merged as `18e08fa`; required CI passed 566 tests plus the 16-test
+behavioural gate, all TypeScript checks, lint (zero errors, 22 existing warnings)
+and build. Production was verified READY at exactly that commit, deployment
+`dpl_D4vB5siLvN4vKRvma7AN3RSqFpmJ`, and the homepage returned HTTP 200.
+Both new migrations are applied. Supabase records their actual versions as
+`20261011113227_retailer_identity_responses` and
+`20261011114913_manufacturer_brand_claims`; repository filenames and migration
+tests are aligned to those applied IDs to prevent accidental reapplication.
+This follow-up changes filenames/test references only, not SQL contents.
+
+The 11:50 UTC read-only check confirmed 22 brand claims, zero original peer
+responses accumulated so far, 341/1,268/919 fresh Tesco/SuperValu/Dunnes prices,
+zero Tesco renewals due, 285 due 12 October and 56 due 13 October, with five
+unresolved requests held. Mapping identity fields match the frozen audit snapshot
+(digest `ea6e911672bd91292c77db965378af32`). No price/mapping/gate writes were made.
+The final audit is 252 provisional >=2-store groups, including 45 triples and
+31 triples with three fresh prices; zero independently captured triples.
+
 ## Manufacturer matching scale follow-up — 11 October 2026
 
 PR #261 merged after required CI passed (552 tests, behavioural gate, typechecks,
