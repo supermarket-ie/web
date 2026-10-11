@@ -16,6 +16,7 @@
     "tesco:supervised": "node --use-env-proxy --import tsx scripts/tesco-supervised-collect.ts",
     "typecheck:tesco-supervised": "tsc --project tsconfig.tesco-supervised.json",
     "tesco:discover": "node --import tsx scripts/tesco-discover.ts",
+    "tesco:coverage-plan": "node --import tsx scripts/tesco-coverage-plan.ts",
     "typecheck:tesco-discovery": "tsc --project tsconfig.tesco-discovery.json"
   },
   "dependencies": {

@@ -67,6 +67,8 @@ function measure(s: string) {
     unit: m ? ['kg', 'g'].includes(m[2]) ? 'g' : 'ml' : null, pack, measureCount: measures.length };
 }
 function sameIdentityWords(a: string, b: string) { return JSON.stringify(tokens(a)) === JSON.stringify(tokens(b)); }
+// Read-only planning uses the exact same identity profile as acceptance.
+export function discoveryIdentityProfile(title: string) { return { words: tokens(title), ...measure(title) }; }
 function brandInTitle(brand: string, title: string) { return (` ${plain(title)} `).includes(` ${plain(brand)} `); }
 function mappingFor(m: Mapping, e: Evidence, group: Mapping[]) {
   return { storeProductId: m.id ?? m.product_id, canonicalName: m.canonical_name, canonicalBrand: m.canonical_brand,
