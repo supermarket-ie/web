@@ -1,14 +1,14 @@
 import { validGtin } from './tesco-discovery';
 
-export const IDENTITY_VERSION = 'branded-identity-v1';
+export const IDENTITY_VERSION = 'branded-identity-v2.1';
 export type Store = 'tesco' | 'supervalu' | 'dunnes';
 export type BrandRule = { name: string; aliases: string[]; owner: string | null;
-  kind: 'manufacturer_brand' | 'retailer_private_label'; source: string; checkedAt: string };
+  kind: 'manufacturer_brand' | 'retailer_private_label' | 'retailer_exclusive_manufacturer'; source: string; checkedAt: string };
 export type Evidence = {
   id: string; store: Store; sku: string; url: string; title: string; brand: string | null;
   gtin: string | null; quantity?: { grams?: number; millilitres?: number; pieces?: number } | null;
   description?: string | null; ingredients?: string | null; imageUrl?: string | null;
-  manufacturer?: string | null; dimensions?: string | null;
+  manufacturer?: string | null; dimensions?: string | null; sourceAttributes?: Record<string, unknown>;
   source: { kind: 'captured_product' | 'captured_listing' | 'refresh_attested' | 'stored_mapping';
     ref: string; at: string | null; url: string | null; hash?: string; archiveRef?: string };
   mappingIds: string[]; canonicalIds: string[]; conflicts: string[];
@@ -51,9 +51,16 @@ export function parsePack(title: string, quantity?: Evidence['quantity'], allowS
   const of = text.match(/\bpack of (\d+)\b/); if (of) counts.push(Number(of[1]));
   if (times) counts.push(Number(times[1])); if (reverse) counts.push(Number(reverse[3]));
   if (new Set(counts).size > 1 || counts.some(n => n < 1)) issues.push('conflicting_pack_counts');
-  if (measures.length > 1) issues.push('multiple_explicit_measures');
+  // A stated per-item measure plus a consistent total is redundant proof,
+  // not an ambiguous pack. Other multiple measures remain held.
+  const explicit = times ? { count:Number(times[1]), amount:Number(times[2])*multiplier[times[3]], unit:['g','kg'].includes(times[3])?'g':'ml' }
+    : reverse ? { count:Number(reverse[3]), amount:Number(reverse[1])*multiplier[reverse[2]], unit:['g','kg'].includes(reverse[2])?'g':'ml' } : null;
+  const verifiedTotal = measures.length === 2 && explicit && measures.some(m=>Number(m[1])*multiplier[m[2]]===explicit.amount*explicit.count
+    && (['g','kg'].includes(m[2])?'g':'ml')===explicit.unit);
+  if (measures.length > 1 && !verifiedTotal) issues.push('multiple_explicit_measures');
   const m = measures[0]; let amount = m ? Number(m[1]) * multiplier[m[2]] : null;
   let unit: Pack['unit'] = m ? ['g', 'kg'].includes(m[2]) ? 'g' : 'ml' : null;
+  if (verifiedTotal && explicit) { amount = explicit.amount; unit = explicit.unit as Pack['unit']; }
   const count = counts[0] ?? (m ? 1 : null);
   if (amount !== null && amount <= 0) issues.push('invalid_measure');
   const structured = quantity ? Object.entries(quantity).filter(([,v]) => v !== undefined) : [];
@@ -78,13 +85,14 @@ export function identityWords(e: Evidence, titleAlias: string) {
   s = s.replace(/\b\d+\s*x\s*(?=\d)/g, '').replace(/\b\d+(?:\.\d+)?\s*(?:kg|g|ml|cl|l)\b/g, '')
     .replace(/\bx\s*\d+\b/g, '')
     .replace(/\b(?:pack of )?\d+\s*(?:packs?|pk|pieces?|rolls?|bags?|sachets?|capsules?|tablets?|cans?|bottles?)\b/g, '')
-    .replace(/\bpetits? pois(?: peas)?\b/g, 'petits pois');
+    .replace(/\bpetits? pois(?: peas)?\b/g, 'petits pois')
+    .replace(/\bmarrow fat\b/g, 'marrowfat');
   // No generic stemming, stopword removal of negation, or spelling inference.
   return [...new Set(s.split(' ').filter(w => w && !['and', 'the', 'pack', 'pk', 'bottle', 'can', 'jar'].includes(w)))].sort();
 }
 export function safeProductUrl(e: Pick<Evidence, 'url' | 'sku' | 'store'>) {
   if (!/^\d{5,14}$/.test(e.sku)) return false;
-  try { const u = new URL(e.url);
+  try { const u = new URL(e.url); decodeURIComponent(u.pathname);
     if (u.protocol !== 'https:' || u.username || u.password || u.hash || u.search) return false;
     if (e.store === 'tesco') return u.origin === 'https://www.tesco.ie' && u.pathname === `/shop/en-IE/products/${e.sku}`;
     const host = e.store === 'supervalu' ? 'shop.supervalu.ie' : 'www.dunnesstoresgrocery.com';
@@ -135,6 +143,16 @@ export function compare(a: Evidence, b: Evidence, rules: BrandRule[], asOf: stri
   if (!supported(a, asOf) || !supported(b, asOf)) missing.push('independent_recent_retailer_evidence_missing');
   if (a.conflicts.length || b.conflicts.length) missing.push('conflicting_sku_records');
   if (!safeProductUrl(a) || !safeProductUrl(b)) missing.push('invalid_or_missing_product_url');
+  // A specific pack in a retained direct-URL slug can expose stale titles.
+  // It cannot establish identity, but a disagreement requires fresh evidence.
+  for(const e of [a,b]){
+    if(e.store==='tesco'||!safeProductUrl(e))continue;
+    const slug=decodeURIComponent(new URL(e.url).pathname).replace(e.sku,'');
+    const up=parsePack(slug),tp=parsePack(e.title,e.quantity,e.source.kind==='captured_product');
+    if(up.amount!==null&&tp.amount!==null&&up.unit!== 'count' && tp.unit!=='count'
+      &&(up.count!==tp.count||(up.basis===tp.basis&&(up.amount!==tp.amount||up.unit!==tp.unit))))
+      missing.push('url_title_pack_conflict_requires_review');
+  }
   const sameWords = wa.length > 0 && JSON.stringify(wa) === JSON.stringify(wb);
   const shared = wa.filter(w => wb.includes(w)).length;
   const plausible = Boolean(aa.rule && bb.rule && aa.rule.name === bb.rule.name && shared > 0 && shared / Math.max(wa.length,wb.length) >= .4);

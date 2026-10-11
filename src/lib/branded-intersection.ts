@@ -1,3 +1,5 @@
+import { brandClaimSchema, rulesFromClaims, eligibleBrand, brandReviewQueue } from './branded-brand-claims';
+import { evidenceFromResponse, type IdentityResponse } from './retailer-identity-response';
 import { z } from 'zod';
 import { digest } from './tesco-discovery';
 import { BRAND_RULES, BRAND_REGISTRY_VERSION } from './branded-brand-registry';
@@ -22,6 +24,10 @@ const captureSchema=z.object({store:z.enum(['tesco','supervalu','dunnes']),sku:t
   source:z.object({kind:z.literal('captured_product'),ref:text,at:text.datetime(),url:text,hash:text.regex(/^[a-f0-9]{64}$/)})});
 const snapshotSchema = z.object({ asOf: text.datetime(), products: z.array(productSchema), mappings: z.array(mappingSchema),
   retailerEvidence:z.array(captureSchema).optional(),
+  brandClaims:z.array(brandClaimSchema).optional(),
+  retailerResponses:z.array(z.object({id:text,store:z.enum(['supervalu','dunnes']),sku:text,product_url:text,
+    requested_url:text,final_url:text,retrieved_at:text,content_type:text,body_text:text,body_sha256:text,parser_version:text,
+    source_kind:z.enum(['captured_product','captured_listing']),source_path:text,identity:z.record(text,z.unknown())})).optional(),
   tesco: z.array(z.object({ product: z.object({ sku: text, url: text, name: text, brand: nullable, gtin: nullable,
     quantity: z.object({ grams: z.number().optional(), millilitres: z.number().optional(), pieces: z.number().optional() }).nullable() }),
     page_id: text, created_at: text, body_sha256: text, requested_url: text, final_url: nullable, mode: text })),
@@ -65,7 +71,7 @@ function recordsFrom(input: Snapshot): Evidence[] {
     const direct=t.mode==='products' && t.requested_url===p.url && t.final_url===p.url;
     if (t.mode==='products' && !direct) conflicts.push('product_provenance_conflict');
     records.set(id,{ id,store:'tesco',sku,url:p.url,title:p.name,brand:p.brand,gtin:p.gtin,quantity:p.quantity,
-      source:{kind:direct ? 'captured_product':'captured_listing',ref:t.page_id,at:t.created_at,url:t.requested_url,hash:t.body_sha256},
+      source:{kind:direct ? 'captured_product':'captured_listing',ref:t.page_id,at:t.created_at,url:t.requested_url,hash:t.body_sha256,archiveRef:`tesco_direct_collection_pages:${t.page_id}`},
       mappingIds:mapped?.mappingIds ?? [],canonicalIds:mapped?.canonicalIds ?? [],conflicts,
       lastLiveVerifiedAt:direct ? t.created_at : null });
   }
@@ -76,14 +82,23 @@ function recordsFrom(input: Snapshot): Evidence[] {
     if(previous&&e.source.at===previous.source.at&&(e.title!==previous.title||e.url!==previous.url||e.gtin!==previous.gtin))conflicts.push('equal_time_evidence_conflict');
     records.set(id,{...e,id,conflicts,mappingIds:previous?.mappingIds??[],canonicalIds:previous?.canonicalIds??[],lastLiveVerifiedAt:e.source.at});
   }
+  for(const row of [...(input.retailerResponses??[])].sort((a,b)=>a.retrieved_at.localeCompare(b.retrieved_at)||a.id.localeCompare(b.id))){
+    const e=evidenceFromResponse(row as IdentityResponse & {id:string}); if(!e)continue;
+    const id=key(e.store,e.sku),previous=records.get(id);
+    if(previous && Date.parse(e.source.at!)<Date.parse(previous.source.at??''))continue;
+    const conflicts=[...(previous?.conflicts??[])];
+    if(previous&&e.source.at===previous.source.at&&(e.title!==previous.title||e.url!==previous.url||e.gtin!==previous.gtin))conflicts.push('equal_time_evidence_conflict');
+    records.set(id,{...e,id,conflicts,mappingIds:previous?.mappingIds??[],canonicalIds:previous?.canonicalIds??[]});
+  }
   return [...records.values()].sort((a,b)=>a.id.localeCompare(b.id));
 }
 export type Pair = { id: string; left: string; right: string; result: Decision };
 export type InferenceProposal = {left:string;right:string;evidenceDigest:string;result:InferenceResult;corroboration:Corroboration[]};
 export function evaluate(raw: unknown, rules: BrandRule[]=BRAND_RULES, proposals:InferenceProposal[]=[]) {
-  const input=snapshotSchema.parse(raw), records=recordsFrom(input), byId=new Map(records.map(r=>[r.id,r]));
+  const input=snapshotSchema.parse(raw); rules=rulesFromClaims(rules,input.brandClaims??[],input.asOf);
+  const records=recordsFrom(input), byId=new Map(records.map(r=>[r.id,r]));
   const brands=new Map(records.map(r=>[r.id,brandFor(r,rules)]));
-  const national=records.filter(r=>brands.get(r.id)!.rule?.kind==='manufacturer_brand');
+  const national=records.filter(r=>eligibleBrand(brands.get(r.id)!.rule));
   const byBrand=new Map<string,Evidence[]>();
   for (const r of national) { const b=brands.get(r.id)!.rule!.name; byBrand.set(b,[...(byBrand.get(b)??[]),r]); }
   const pairs:Pair[]=[], pairMap=new Map<string,Pair>();
@@ -153,13 +168,13 @@ export function evaluate(raw: unknown, rules: BrandRule[]=BRAND_RULES, proposals
     const brand=brands.get(rs[0].id)!.rule!;
     const retailers=Object.fromEntries(rs.map(r=>[r.store,retailer(r,canonicalId)])) as Record<Store,ReturnType<typeof retailer>>;
     const missingPrices=STORES.filter(s=>!retailers[s].hasCurrentTrustedPrice);
-    const independentlyCaptured=rs.every(r=>r.source.kind.startsWith('captured_'));
+    const independentlyCaptured=rs.every(r=>Boolean(r.source.archiveRef)&&r.source.kind.startsWith('captured_'));
     return {id:digest(t.ids),category:independentlyCaptured?'A' as const:'B' as const,canonicalProductId:canonicalId,canonicalName:canonical?.canonical_name??null,
       name:rs[0].title,normalisedName:normalise(rs[0].title),brand:brand.name,manufacturer:brand.owner,brandEvidence:brand,
       pack:parsePack(rs[0].title,rs[0].quantity,rs[0].source.kind==='captured_product'),
       decision:t.pairs.some(p=>p.result.method==='llm_corroborated')?'llm_corroborated':t.pairs.some(p=>p.result.method==='barcode')?'barcode':'deterministic',
       verificationStatus:independentlyCaptured?'exact_independently_captured_identity':'exact_recorded_identity_pending_independent_capture',rawEvidenceAtAllThree:independentlyCaptured,
-      requiredCorroboration:independentlyCaptured?[]:rs.filter(r=>!r.source.kind.startsWith('captured_')).map(r=>`${r.store}:independent_product_response_or_sku_bound_gtin`),
+      requiredCorroboration:independentlyCaptured?[]:rs.filter(r=>!(r.source.archiveRef&&r.source.kind.startsWith('captured_'))).map(r=>`${r.store}:independent_product_response_or_sku_bound_gtin`),
       immediatelyCollectionReady:independentlyCaptured&&missingPrices.length>0&&missingPrices.every(s=>retailers[s].collectionReady),
       retailers,missingPrices,mappingRepairRequired:STORES.some(s=>retailers[s].mappingRepairRequired),
       demand:canonical?demands.get(normalise(canonical.canonical_name))??0:0};
@@ -172,7 +187,7 @@ export function evaluate(raw: unknown, rules: BrandRule[]=BRAND_RULES, proposals
     const ps=rs.flatMap((a,i)=>rs.slice(i+1).map(b=>pair(a,b)));
     const reasons=[...new Set(ps.flatMap(q=>q.result.reasons))];
     const own=rs.some(r=>brands.get(r.id)!.rule?.kind==='retailer_private_label');
-    const allBranded=rs.length===3&&rs.every(r=>brands.get(r.id)!.rule?.kind==='manufacturer_brand');
+    const allBranded=rs.length===3&&rs.every(r=>eligibleBrand(brands.get(r.id)!.rule));
     const badUrl=rs.some(r=>!safeProductUrl(r)), conflicts=ps.some(q=>q.result.contradictions.length);
     const category=own?'excluded_private_label':badUrl?'D':conflicts?'C':allBranded&&ps.every(q=>q.result.plausible&&q.result.samePack)?'B':'E';
     return {productId:p.id,name:p.canonical_name,category,reasons,retailers:rs.map(r=>retailer(r,p.id))};
@@ -186,13 +201,24 @@ export function evaluate(raw: unknown, rules: BrandRule[]=BRAND_RULES, proposals
     recognisedManufacturerBrandIdentities:national.filter(r=>r.store===store&&safeProductUrl(r)).length,
     supportedManufacturerBrandIdentities:national.filter(r=>r.store===store&&supported(r,input.asOf)).length,
     excludedPrivateLabelIdentities:records.filter(r=>r.store===store&&brands.get(r.id)!.rule?.kind==='retailer_private_label').length,
+    retailerExclusiveManufacturerIdentities:records.filter(r=>r.store===store&&brands.get(r.id)!.rule?.kind==='retailer_exclusive_manufacturer').length,
     unknownBrandIdentities:records.filter(r=>r.store===store&&!brands.get(r.id)!.rule).length}]));
   const visited=new Set<string>();let twoGroups=0;
+  const exactGroups:Record<string,unknown>[]=[];
   for(const start of exactNeighbors.keys()){
     if(visited.has(start))continue;const component:string[]=[],queue=[start];
     while(queue.length){const id=queue.pop()!;if(visited.has(id))continue;visited.add(id);component.push(id);queue.push(...(exactNeighbors.get(id)??[]));}
     const rs=component.map(id=>byId.get(id)!);
-    if(rs.length>=2&&new Set(rs.map(r=>r.store)).size===rs.length&&rs.every((a,i)=>rs.slice(i+1).every(b=>pair(a,b).result.decision==='exact_match')))twoGroups++;
+    if(rs.length>=2&&new Set(rs.map(r=>r.store)).size===rs.length&&rs.every((a,i)=>rs.slice(i+1).every(b=>pair(a,b).result.decision==='exact_match'))){
+      twoGroups++;
+      const common=rs[0].canonicalIds.filter(id=>rs.every(r=>r.canonicalIds.includes(id))),canonicalId=common.length===1?common[0]:null;
+      const brand=brands.get(rs[0].id)!.rule!,retailers=Object.fromEntries(rs.map(r=>[r.store,retailer(r,canonicalId)]));
+      exactGroups.push({id:digest(component.sort()),name:rs[0].title,brand:brand.name,manufacturer:brand.owner,
+        normalisedIdentity:identityWords(rs[0],brands.get(rs[0].id)!.titleAlias),pack:parsePack(rs[0].title,rs[0].quantity,rs[0].source.kind==='captured_product'),
+        canonicalProductId:canonicalId,verificationStatus:rs.every(r=>r.source.archiveRef)?'independently_captured_at_present_retailers':'provisional_recorded_identity',
+        missingRetailerIdentities:STORES.filter(s=>!retailers[s]),missingFreshPrices:STORES.filter(s=>!retailers[s]?.hasCurrentTrustedPrice),
+        mappingRepairRequired:!canonicalId||Object.values(retailers).some(r=>r.mappingRepairRequired),retailers});
+    }
   }
   return {version:IDENTITY_VERSION,brandRegistryVersion:BRAND_REGISTRY_VERSION,brandRegistryDigest:digest(rules),asOf:input.asOf,inputDigest:digest({input,proposals}),
     summary:{canonicalProducts:input.products.length,mappingRows:input.mappings.length,retailerRecords:records.length,perStore,
@@ -211,7 +237,7 @@ export function evaluate(raw: unknown, rules: BrandRule[]=BRAND_RULES, proposals
       llmCorroboratedPairs:pairs.filter(p=>p.result.method==='llm_corroborated').length,
       actualModelCallsThisEvaluation:0,actualModelCostUsdThisEvaluation:0,liveInferenceStatus:proposals.length?'external_proposals_replayed_no_calls':'not_run_offline_evaluation',reasonCounts,
       renewal:input.renewal,unresolvedRequests:input.attempts.filter(a=>a.unresolved).length},
-    intersection,opportunities,associations,records,pairs,candidates,canonicalMetadata:input.products,
+    exactGroups,brandRules:rules,brandReviewQueue:brandReviewQueue(records,rules),intersection,opportunities,associations,records,pairs,candidates,canonicalMetadata:input.products,
     limitations:['Known stored catalogue only; no estimate of full retailer assortment.',
       'Refresh-attested peer titles are retained retailer output; original peer response bodies/GTIN are unavailable.',
       'Identity evidence ceiling is 14 days; trusted prices retain the existing seven-day policy.',

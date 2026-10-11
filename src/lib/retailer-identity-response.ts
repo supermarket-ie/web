@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { normalise, safeProductUrl, type Evidence } from './branded-product-identity';
 
-export const RESPONSE_PARSER_VERSION = 'retailer-identity-response-v1';
+export const RESPONSE_PARSER_VERSION = 'retailer-identity-response-v2';
 export type IdentityResponse = {
   store: 'supervalu' | 'dunnes'; sku: string; product_url: string;
   requested_url: string; final_url: string; retrieved_at: string;
@@ -54,25 +54,32 @@ export function captureIdentityResponse(args: {
   if (!found.length || visited > 20000) return null;
   // Multiple copies must agree on their identity attributes, not only their SKU.
   const attrs = (n: Record<string, unknown>) => ({ title: label(n.name), brand: label(n.brand), manufacturer: label(n.manufacturer),
-    gtin: label(n.gtin13 ?? n.gtin ?? n.ean ?? n.barcode), description: label(n.description), ingredients: label(n.ingredients),
+    manufacturerProductCode: label(n.mpn ?? n.manufacturerProductCode), gtin: label(n.gtin13 ?? n.gtin ?? n.ean ?? n.barcode), description: label(n.description), ingredients: label(n.ingredients),
     quantity: n.quantity ?? null, packSize: n.packSize ?? n.size ?? null, packCount: n.packCount ?? null,
     variant: n.variant ?? null, flavour: n.flavour ?? n.flavor ?? null, formulation: n.formulation ?? null });
   const identities = found.map(x => attrs(x.node));
-  if (new Set(identities.map(x => JSON.stringify(x))).size !== 1 || normalise(identities[0].title ?? '') !== normalise(args.title)) return null;
+  const merged: Record<string, unknown> = {};
+  for (const key of Object.keys(identities[0])) {
+    const values = identities.map(i => (i as Record<string, unknown>)[key]).filter(v => v != null);
+    if (values.some(v => !isDeepStrictEqual(v, values[0]))) return null;
+    merged[key] = values[0] ?? null;
+  }
+  if (normalise(String(merged.title ?? '')) !== normalise(args.title)) return null;
   const direct = args.requestedUrl === args.productUrl && args.finalUrl === args.productUrl;
   return { store, sku, product_url: args.productUrl, requested_url: args.requestedUrl, final_url: args.finalUrl,
     retrieved_at: args.retrievedAt ?? new Date().toISOString(), content_type: args.contentType.slice(0, 120),
     body_text: body, body_sha256: responseHash(body), parser_version: RESPONSE_PARSER_VERSION,
-    source_kind: direct ? 'captured_product' : 'captured_listing', source_path: found[0].path, identity: identities[0] };
+    source_kind: direct ? 'captured_product' : 'captured_listing', source_path: found.map(x=>x.path).join('|'), identity: merged };
 }
 export function evidenceFromResponse(row: IdentityResponse & { id: string }): Omit<Evidence, 'id' | 'mappingIds' | 'canonicalIds' | 'conflicts'> | null {
-  if (row.body_sha256 !== responseHash(row.body_text) || row.parser_version !== RESPONSE_PARSER_VERSION) return null;
+  if (row.body_sha256 !== responseHash(row.body_text) || !['retailer-identity-response-v1',RESPONSE_PARSER_VERSION].includes(row.parser_version)) return null;
   const parsed = captureIdentityResponse({ store: row.store, sku: row.sku, title: String(row.identity.title ?? ''), productUrl: row.product_url,
     requestedUrl: row.requested_url, finalUrl: row.final_url, contentType: row.content_type, body: row.body_text, retrievedAt: row.retrieved_at });
+  if (parsed && row.parser_version === 'retailer-identity-response-v1') { delete parsed.identity.manufacturerProductCode; parsed.source_path = parsed.source_path.split('|')[0]; }
   if (!parsed || parsed.source_path !== row.source_path || !isDeepStrictEqual(parsed.identity, row.identity) || parsed.source_kind !== row.source_kind) return null;
   const i = parsed.identity;
   return { store: row.store, sku: row.sku, url: row.product_url, title: String(i.title), brand: label(i.brand), manufacturer: label(i.manufacturer),
-    gtin: label(i.gtin), description: label(i.description), ingredients: label(i.ingredients),
+    sourceAttributes: i, gtin: label(i.gtin), description: label(i.description), ingredients: label(i.ingredients),
     source: { kind: parsed.source_kind, ref: row.id, at: row.retrieved_at, url: row.requested_url, hash: row.body_sha256, archiveRef: `retailer_identity_responses:${row.id}` },
     lastLiveVerifiedAt: parsed.source_kind === 'captured_product' ? row.retrieved_at : null };
 }
