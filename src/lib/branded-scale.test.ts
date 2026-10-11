@@ -59,7 +59,7 @@ describe('pack and language controls',()=>{
 describe('four-way inference and independent non-GTIN corroboration',()=>{
  const a=evidence('Heinz Tomato Ketchup 500g'),b=evidence('Heinz Tomato Ketchup Squeezy 500g','dunnes');
  const result:InferenceResult={decision:'exact_match',supportingAttributes:[{attribute:'brand',value:'Heinz',evidenceIds:[a.id,b.id]}],contradictions:[],missingEvidence:[],rationale:'Fixture only',confidence:1};
- const proof=(e:Evidence)=>{const body=JSON.stringify({sku:e.sku,name:e.title,manufacturer:'Kraft Heinz',mpn:'TOMATO-500-SQ'});
+ const proof=(e:Evidence,flavour?:string)=>{const body=JSON.stringify({sku:e.sku,name:e.title,manufacturer:'Kraft Heinz',mpn:'TOMATO-500-SQ',...(flavour?{flavour}:{})});
   const row={...captureIdentityResponse({store:e.store as 'supervalu'|'dunnes',sku:e.sku,title:e.title,productUrl:e.url,requestedUrl:e.url,finalUrl:e.url,contentType:'application/json',body,retrievedAt:at})!,id:'new:'+e.store};
   return {store:e.store,sku:e.sku,sourceRef:row.id,bodySha256:row.body_sha256,observedAt:at,originalResponse:row};};
  it('allows genuinely separate SKU-bound manufacturer codes with original bodies',()=>{
@@ -71,6 +71,17 @@ describe('four-way inference and independent non-GTIN corroboration',()=>{
   for(const title of ['Heinz Tomato Ketchup Squeezy 400g','Heinz No Added Sugar Tomato Ketchup 500g']){
    const different=evidence(title,'dunnes');expect(gateInference(a,different,result,BRAND_RULES,now,[proof(a),proof(different)]).accepted).toBe(false);
   }
+ });
+ it('cannot use a shared manufacturer code to override structured flavours in independent proofs',()=>{
+  expect(gateInference(a,b,result,BRAND_RULES,now,[proof(a,'Peach'),proof(b,'Strawberry')]).accepted).toBe(false);
+ });
+ it('cannot use shared GTINs to override conflicting structured flavours in source proofs',()=>{
+  const barcodeProof=(e:Evidence,flavour:string)=>{
+    const gtin='4006381333931',row={...captureIdentityResponse({store:e.store as 'supervalu'|'dunnes',sku:e.sku,title:e.title,productUrl:e.url,
+      requestedUrl:e.url,finalUrl:e.url,contentType:'application/json',body:JSON.stringify({sku:e.sku,name:e.title,gtin,flavour}),retrievedAt:at})!,id:'barcode:'+e.store};
+    return {store:e.store,sku:e.sku,gtin,sourceRef:row.id,bodySha256:row.body_sha256,observedAt:at,originalResponse:row};
+  };
+  expect(gateInference(a,b,result,BRAND_RULES,now,[barcodeProof(a,'Peach'),barcodeProof(b,'Strawberry')]).accepted).toBe(false);
  });
  it('represents different retail packs without accepting them',()=>{
   expect(inferenceSchema.parse({...result,decision:'related_different_pack'}).decision).toBe('related_different_pack');
@@ -95,4 +106,14 @@ it('starts the real inference CLI and fails before reading input or making calls
  const r=spawnSync(process.execPath,['--import','tsx','scripts/branded-intersection-infer.ts','missing-report.json','unused-output','missing-budget.json','--confirm-bounded-inference'],{env,encoding:'utf8'});
  expect(r.status).toBe(1);expect(r.stderr).toContain('Approved Anthropic provider credential unavailable; no calls made');
  expect(r.stderr).not.toContain('Transform failed');
+});
+
+it('holds explicit structured flavour/formulation disagreement even when titles are identical',()=>{
+ const a=evidence('Heinz Sauce 500g'),b=evidence('Heinz Sauce 500g','dunnes');
+ for(const key of ['variant','flavour','formulation']){
+  a.sourceAttributes={[key]:'Peach'};b.sourceAttributes={[key]:'Strawberry'};
+  expect(compare(a,b,BRAND_RULES,now).decision).toBe('insufficient_evidence');
+ }
+ b.sourceAttributes={packCount:2};a.sourceAttributes={};
+ expect(compare(a,b,BRAND_RULES,now).contradictions).toContain('structured_title_pack_count_conflict');
 });

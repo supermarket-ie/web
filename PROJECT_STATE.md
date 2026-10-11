@@ -1,5 +1,17 @@
 # Supermarket.ie — Canonical Project State
 
+## Structured identity contradiction guard — 11 October 2026
+
+Final review extended exact-match gates to the newly retained structured
+variant, flavour, formulation and pack-count attributes. Identical titles must
+not conceal contradictory source attributes. Non-GTIN manufacturer-code
+corroboration now cross-checks both original proofs; supplemental GTIN evidence
+must also support the retained title, not only the SKU. These are read-only
+identity holds; they do not change prices, mappings or collection rules.
+The frozen audit has no original SuperValu/Dunnes response rows, so its 252/45
+counts are unchanged. Regression coverage includes identical titles with
+conflicting original structured flavours and counts.
+
 ## Verified matching release and migration history — 11 October 2026
 
 PR #262 merged as `18e08fa`; required CI passed 566 tests plus the 16-test

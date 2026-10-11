@@ -50,24 +50,27 @@ export function gateInference(a:Evidence,b:Evidence,raw:unknown,rules:BrandRule[
     if(!supported(r,asOf)||!brand.rule||confirmedBrand.conflict||confirmedBrand.rule?.name!==brand.rule.name
       ||typeof code!=='string'||code.length<3||!r.manufacturer||normalise(r.manufacturer)!==normalise(brand.rule.owner??''))return [];
     const ep=parsePack(e.title,e.quantity,e.source.kind==='captured_product'),rp=parsePack(r.title,r.quantity,r.source.kind==='captured_product');
-    if(JSON.stringify(ep)!==JSON.stringify(rp)||compare(e,r,rules,asOf).contradictions.length)return [];
-    return [{code,manufacturer:normalise(r.manufacturer),hash:c.bodySha256,ref:c.sourceRef}];
+    const link=compare(e,r,rules,asOf);
+    if(JSON.stringify(ep)!==JSON.stringify(rp)||link.contradictions.length||link.missing.some(x=>x.startsWith('structured_')))return [];
+    return [{code,manufacturer:normalise(r.manufacturer),hash:c.bodySha256,ref:c.sourceRef,evidence:r}];
   });
   const ac=coded(a),bc=coded(b);
   if(baseline.samePack&&baseline.missing.every(m=>m==='wording_requires_inference_or_corroboration')
     &&ac.length===1&&bc.length===1&&ac[0].code===bc[0].code&&ac[0].manufacturer===bc[0].manufacturer
-    &&ac[0].hash!==bc[0].hash&&ac[0].ref!==bc[0].ref)
+    &&ac[0].hash!==bc[0].hash&&ac[0].ref!==bc[0].ref
+    &&compare(ac[0].evidence,bc[0].evidence,rules,asOf).missing.every(x=>x==='wording_requires_inference_or_corroboration')
+    &&!compare(ac[0].evidence,bc[0].evidence,rules,asOf).contradictions.length)
     return {decision:'exact_match',accepted:true,reasons:['llm_proposal_independently_manufacturer_code_corroborated'],result};
   const originalGtin=(c:Corroboration,e:Evidence)=>{
     if(c.originalResponse){
       const p=evidenceFromResponse(c.originalResponse);
-      if(!p||p.store!==e.store||p.sku!==e.sku||c.sourceRef!==c.originalResponse.id||c.bodySha256!==c.originalResponse.body_sha256||c.observedAt!==p.source.at)return null;
+      if(!p||p.store!==e.store||p.sku!==e.sku||c.sourceRef!==c.originalResponse.id||c.bodySha256!==c.originalResponse.body_sha256||c.observedAt!==p.source.at||normalise(p.title)!==normalise(e.title))return null;
       return validGtin(p.gtin);
     }
     const t=c.originalTescoResponse;
     if(e.store!=='tesco'||!t||t.requestedUrl!==e.url||t.finalUrl!==e.url||responseHash(t.body)!==c.bodySha256)return null;
     try { const ps=parseTescoCollectedPage(t.body,t.finalUrl).products.filter(p=>p.sku===e.sku);
-      return ps.length===1?validGtin(ps[0].gtin):null; } catch { return null; }
+      return ps.length===1&&normalise(ps[0].name)===normalise(e.title)?validGtin(ps[0].gtin):null; } catch { return null; }
   };
   const augment=(e:Evidence)=>{
     const rows=corroboration.filter(c=>c.store===e.store&&c.sku===e.sku&&c.sourceRef!==e.source.ref&&c.sourceRef.length>0
@@ -75,7 +78,12 @@ export function gateInference(a:Evidence,b:Evidence,raw:unknown,rules:BrandRule[
       &&Date.parse(c.observedAt)>Date.parse(asOf)-14*86400000&&validGtin(c.gtin??null)&&originalGtin(c,e)===validGtin(c.gtin??null));
     if(rows.length!==1)return null;
     if(validGtin(e.gtin)&&validGtin(e.gtin)!==validGtin(rows[0].gtin??null))return null;
-    return {...e,gtin:rows[0].gtin??null};
+    const proof=rows[0].originalResponse?evidenceFromResponse(rows[0].originalResponse):null;
+    if(proof){
+      const linked=compare(e,{...proof,id:'supplement:'+rows[0].sourceRef,canonicalIds:[],mappingIds:[],conflicts:[]},rules,asOf);
+      if(linked.contradictions.length||linked.missing.some(x=>x.startsWith('structured_')))return null;
+    }
+    return {...e,gtin:rows[0].gtin??null,sourceAttributes:{...e.sourceAttributes,...proof?.sourceAttributes}};
   };
   const aa=augment(a),bb=augment(b);
   if(!aa||!bb||!supported(a,asOf)||!supported(b,asOf))return {decision:'insufficient_evidence',accepted:false,reasons:['independent_corroboration_required'],result};

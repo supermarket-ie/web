@@ -174,6 +174,11 @@ describe('inference boundaries and bounded spend',()=>{
     expect(gateInference(a,b,model,BRAND_RULES,now,corroboration).accepted).toBe(true);
     corroboration[1].sku='different';expect(gateInference(a,b,model,BRAND_RULES,now,corroboration).accepted).toBe(false);
   });
+  it('rejects GTIN supplementation from a different original title for the same SKU',()=>{
+    const a=record('Heinz Tomato Ketchup 500g'),b=record('Heinz Tomato Ketchup Squeezy 500g','supervalu');
+    expect(gateInference(a,b,model,BRAND_RULES,now,[gtinProof(a),gtinProof({...b,title:'Heinz BBQ Sauce 500g'})]).accepted).toBe(false);
+    expect(gateInference(a,b,model,BRAND_RULES,now,[gtinProof({...a,title:'Heinz BBQ Sauce 500g'}),gtinProof(b)]).accepted).toBe(false);
+  });
   it('rejects invented evidence references',()=>expect(()=>gateInference(record('Heinz Tomato Ketchup 500g'),record('Heinz Tomato Ketchup 500g','supervalu'),{...model,supportingAttributes:[{attribute:'brand',value:'Heinz',evidenceIds:['invented']}]},BRAND_RULES,now)).toThrow());
   it('cannot replace a pre-existing valid GTIN with inconsistent corroboration',()=>{
     const a=record('Heinz Tomato Ketchup 500g','tesco',{gtin:'5012345678900'}),b=record('Heinz Tomato Ketchup Squeezy 500g','supervalu');
