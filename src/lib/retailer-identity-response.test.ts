@@ -41,7 +41,7 @@ describe('original retailer response retention', () => {
     const db = await PGlite.create();
     try {
       await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
-      await db.exec(readFileSync('supabase/migrations/20261011120000_retailer_identity_responses.sql','utf8'));
+      await db.exec(readFileSync('supabase/migrations/20261011113227_retailer_identity_responses.sql','utf8'));
       const r = captureIdentityResponse(args)!;
       const {body_sha256, ...row} = r;
       const data = {...row,run_uuid:'11111111-1111-4111-8111-111111111111',store_product_id:'22222222-2222-4222-8222-222222222222'};
