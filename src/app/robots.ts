@@ -1,11 +1,12 @@
 import { MetadataRoute } from 'next';
+import { isNoIndexEnv } from '@/lib/runtime-env';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.supermarket.ie').trim();
-const IS_STAGING = BASE_URL.includes('staging');
+const BLOCK_INDEXING = isNoIndexEnv(BASE_URL);
 
 export default function robots(): MetadataRoute.Robots {
-  // Block all crawlers on staging/preview environments
-  if (IS_STAGING) {
+  // Block all crawlers on staging/preview/development environments
+  if (BLOCK_INDEXING) {
     return {
       rules: [{ userAgent: '*', disallow: ['/'] }],
       host: BASE_URL,

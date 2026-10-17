@@ -14,6 +14,7 @@ import { CookieBanner } from '@/components/homepage/CookieBanner';
 import { faqs } from '@/components/homepage/FAQSection';
 import { Suspense } from 'react';
 import { ProductProofLoading } from '@/components/homepage/ProductProofSection';
+import { isPreviewEnv } from '@/lib/runtime-env';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.supermarket.ie').trim();
 
@@ -40,7 +41,7 @@ export default async function Home({
   searchParams: Promise<{ living_shop_preview?: string }>;
 }) {
   const params = await searchParams;
-  const previewState = process.env.VERCEL_ENV === 'preview' && ['new', 'progress', 'ready'].includes(params.living_shop_preview ?? '')
+  const previewState = isPreviewEnv() && ['new', 'progress', 'ready'].includes(params.living_shop_preview ?? '')
     ? params.living_shop_preview as 'new' | 'progress' | 'ready'
     : undefined;
 

@@ -14,6 +14,7 @@ import {
   releaseTescoEgress,
 } from '@/lib/tesco-egress';
 import { supabaseAdmin } from '@/lib/supabase';
+import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 const TOPIC = 'tesco-scrape-batches';
 
@@ -42,6 +43,9 @@ async function failRun(runUuid: string, summary: string) {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  if (retailerCollectionBlocked()) {
+    return Response.json({ error: RETAILER_COLLECTION_BLOCKED_REASON, status: 'blocked_preview' }, { status: 503 });
+  }
   if (process.env.TESCO_VERCEL_WORKER_ENABLED !== 'true') {
     return Response.json({ error: 'Worker disabled' }, { status: 503 });
   }

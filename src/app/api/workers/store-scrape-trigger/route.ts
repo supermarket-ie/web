@@ -4,6 +4,7 @@ import { createSupervaluScrapeRun, type SupervaluBatchMessage, type SupervaluQue
 import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import { supabaseAdmin } from '@/lib/supabase';
 import { resolveRetailerRunScope, type RetailerRunScope } from '@/lib/scrape-run-scope';
+import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 const SUPPORTED = ['dunnes', 'supervalu'] as const;
 type Store = (typeof SUPPORTED)[number];
@@ -111,6 +112,9 @@ async function queueSupervalu(limit: number, runScope: RetailerRunScope) {
 }
 
 export async function GET(request: Request) {
+  if (retailerCollectionBlocked()) {
+    return Response.json({ error: RETAILER_COLLECTION_BLOCKED_REASON, status: 'blocked_preview' }, { status: 503 });
+  }
   if (!process.env.CRON_SECRET || !authorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }

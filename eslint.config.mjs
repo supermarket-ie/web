@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // eve build output (generated bundles; linting them OOMs ESLint).
+    ".output/**",
+    ".eve/**",
   ]),
   {
     // Standalone Node scraper/utility scripts — CommonJS by design.

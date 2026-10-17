@@ -1,0 +1,38 @@
+# Dependencies and build artifacts (rebuilt inside the image)
+node_modules
+.next
+.output
+.eve
+out
+build
+coverage
+
+# Local env / secrets — never bake into an image
+.env
+.env.*
+*.pem
+
+# VCS and tooling
+.git
+.github
+.vercel
+.claude
+
+# OS / editor noise
+.DS_Store
+*.log
+npm-debug.log*
+
+# Root-level project docs not needed to build/run the app.
+# NOTE: do NOT blanket-ignore *.md — eve build reads agent/instructions.md.
+/README.md
+/AGENTS.md
+/PROJECT_STATE.md
+/TASK.md
+/GROCERY_PLANNER_SPEC.md
+/MEMORY_SYSTEM_IMPLEMENTATION.md
+docs
+.kiro
+
+# Large data snapshots not needed to build/run the web app
+data
