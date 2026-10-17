@@ -33,30 +33,62 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy the rest of the source (respecting .dockerignore).
 COPY . .
 
-# Build-time environment.
-# - CI=true + the placeholder Supabase URL activate the app's own empty-catalogue
-#   escape hatch (src/lib/product-catalogue-data.ts), so prerendering does NOT
-#   require — and never touches — a live database. These are NON-SECRET
-#   placeholders used only to satisfy import-time guards; real values are
-#   injected at runtime by ECS/App Runner.
-# - NEXT_TELEMETRY_DISABLED keeps the build quiet and offline.
-ENV CI=true \
-    NODE_ENV=production \
+# -- NEXT_PUBLIC_* are INLINED INTO THE BUILD by Next.js --
+# Next replaces `process.env.NEXT_PUBLIC_*` with literals at build time, so these
+# CANNOT be overridden at runtime for client/inlined usage. The deploy image MUST
+# therefore be built with the ACTUAL preview values, passed as build args:
+#
+#   docker build \
+#     --build-arg BUILD_MODE=deploy \
+#     --build-arg NEXT_PUBLIC_SITE_URL=https://<preview-host> \
+#     --build-arg NEXT_PUBLIC_BASE_URL=https://<preview-host> \
+#     --build-arg NEXT_PUBLIC_SUPABASE_URL=https://<preview-ref>.supabase.co \
+#     --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=<preview-anon-key> \
+#     -t <ecr>:<sha> .
+#
+# BUILD_MODE=ci (the default) uses the harmless example.supabase.co placeholder
+# and CI=true to activate the app's empty-catalogue escape hatch
+# (src/lib/{product-catalogue-data,price-data}.ts) so a VALIDATION build needs no
+# database. A BUILD_MODE=ci image must NEVER be deployed — the builder below fails
+# the build if deploy mode is requested without real NEXT_PUBLIC_* values.
+ARG BUILD_MODE=ci
+ARG NEXT_PUBLIC_SITE_URL=https://preview.invalid
+ARG NEXT_PUBLIC_BASE_URL=https://preview.invalid
+ARG NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=build-placeholder
+
+# Fail fast if someone asks for a deploy image but leaves placeholder public vars.
+RUN if [ "$BUILD_MODE" = "deploy" ]; then \
+      if echo "$NEXT_PUBLIC_SITE_URL$NEXT_PUBLIC_BASE_URL" | grep -q "preview.invalid" \
+         || [ "$NEXT_PUBLIC_SUPABASE_URL" = "https://example.supabase.co" ] \
+         || [ "$NEXT_PUBLIC_SUPABASE_ANON_KEY" = "build-placeholder" ]; then \
+        echo "ERROR: BUILD_MODE=deploy requires real NEXT_PUBLIC_* build args (no placeholders)." >&2; \
+        exit 1; \
+      fi; \
+    fi
+
+# Server-only secrets are NOT needed at build (they are injected at runtime by
+# ECS from Secrets Manager). Only import-time guards need to be satisfied, so we
+# pass throwaway non-secret placeholders for those. CI mode also sets CI=true to
+# take the empty-catalogue path; deploy mode does a real (DB-less) prerender and
+# the app degrades gracefully where data is unavailable.
+ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co \
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=build-placeholder \
+    NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL} \
+    NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL} \
+    NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL} \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY} \
     SUPABASE_SERVICE_ROLE_KEY=build-placeholder \
     RESEND_API_KEY=re_build_placeholder \
     MAGIC_LINK_SECRET=build-placeholder-secret \
     VENDOR_MAGIC_LINK_SECRET=build-placeholder-secret \
     CRON_SECRET=build-placeholder-secret \
     REVALIDATE_SECRET=build-placeholder-secret \
-    ANTHROPIC_API_KEY=sk-ant-build-placeholder \
-    NEXT_PUBLIC_SITE_URL=https://preview.invalid \
-    NEXT_PUBLIC_BASE_URL=https://preview.invalid
+    ANTHROPIC_API_KEY=sk-ant-build-placeholder
 
-# eve build -> Nitro agent server at .output ; next build -> .next
-RUN npm run build
+# BUILD_MODE=ci sets CI=true for this one build (empty-catalogue escape hatch);
+# deploy mode builds with CI unset so the real prerender path runs.
+RUN CI=$([ "$BUILD_MODE" = "ci" ] && echo true || echo "") npm run build
 
 # ---------------------------------------------------------------------------
 # Stage 3: runner — slim runtime image

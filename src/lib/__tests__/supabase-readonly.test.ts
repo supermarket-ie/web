@@ -68,12 +68,17 @@ describe('supabaseAdmin read-only guard (preview isolation)', () => {
     expect(fake.calls).toContain('select');
   });
 
-  it('blocks write RPCs but allows allowlisted read RPCs in preview', async () => {
+  it('blocks write RPCs and the Pepesto credential RPC, allows a pure read RPC', async () => {
     process.env.APP_ENV = 'preview';
     const { supabaseAdmin, PreviewReadOnlyError } = await freshSupabase();
+    // Writes blocked.
     expect(() => supabaseAdmin.rpc('finalize_tesco_scrape_product', {})).toThrow(PreviewReadOnlyError);
-    expect(() => supabaseAdmin.rpc('get_pepesto_api_key')).not.toThrow();
-    expect(fake.calls).toContain('rpc:get_pepesto_api_key');
+    // Third-party credential fetch blocked (no Pepesto calls from the preview).
+    expect(() => supabaseAdmin.rpc('get_pepesto_api_key')).toThrow(PreviewReadOnlyError);
+    // Pure read RPC allowed.
+    expect(() => supabaseAdmin.rpc('match_product_search_embeddings', {})).not.toThrow();
+    expect(fake.calls).toContain('rpc:match_product_search_embeddings');
+    expect(fake.calls).not.toContain('rpc:get_pepesto_api_key');
     expect(fake.calls).not.toContain('rpc:finalize_tesco_scrape_product');
   });
 

@@ -62,15 +62,16 @@ function makeReadOnly(client: SupabaseClient): SupabaseClient {
         return (table: string) => readOnlyFromBuilder(target.from(table));
       }
       if (prop === 'rpc') {
-        // Read-only RPCs the preview legitimately needs (pure reads/selects).
-        // Anything not on this allowlist is treated as a potential write and
-        // blocked. Write RPCs (finalize_*, claim_*, mark_*, pause_*, set_*,
-        // resolve_*, finalize_*) are intentionally absent.
+        // Pure read/select RPCs the preview's public read paths legitimately
+        // use. Everything else — writes AND anything that reaches a third-party
+        // service — is blocked. Deliberately EXCLUDED:
+        //  - get_pepesto_api_key: fetches a third-party (Pepesto) credential;
+        //    the preview must not retrieve credentials or make Pepesto calls.
+        //  - select_store_products_for_refresh / select_dunnes_discovery_targets:
+        //    only used by retailer collection, which is already blocked; no need
+        //    to expose them in a read-only preview.
         const READ_ONLY_RPCS = new Set<string>([
-          'get_pepesto_api_key',
-          'select_store_products_for_refresh',
-          'select_dunnes_discovery_targets',
-          'match_product_search_embeddings',
+          'match_product_search_embeddings', // product search (pure read)
         ]);
         return (fn: string, args?: unknown, options?: unknown) => {
           if (!READ_ONLY_RPCS.has(fn)) {

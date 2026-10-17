@@ -80,15 +80,20 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Build the image to prove the Dockerfile works end to end. The image is
-      # NOT pushed anywhere — load=false, no registry login, no AWS credentials.
-      - name: Build image
+      # Build the image to prove the Dockerfile works end to end, from the repo
+      # root (context: .). BUILD_MODE=ci uses the placeholder + empty-catalogue
+      # path so no database is needed. The image is NOT pushed — load=false, no
+      # registry login, no AWS credentials. A deploy image is built separately
+      # with BUILD_MODE=deploy and real NEXT_PUBLIC_* args (see docs/infra).
+      - name: Build image (CI validation)
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
           load: false
           tags: supermarket-ie:preview-ci
+          build-args: |
+            BUILD_MODE=ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

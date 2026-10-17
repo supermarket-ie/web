@@ -1,10 +1,21 @@
 output "preview_url" {
-  description = "Public URL for the preview (ALB DNS). No production DNS is used."
-  value       = local.create ? (local.https_enabled ? "https://${aws_lb.this[0].dns_name}" : "http://${aws_lb.this[0].dns_name}") : null
+  description = <<-EOT
+    Public URL to use for the preview.
+    - Stage 2 (app deployed, HTTPS): the hostname the ACM certificate covers,
+      i.e. public_base_url. The raw ALB hostname is NOT valid for HTTPS (the
+      cert does not cover *.elb.amazonaws.com); point that hostname at the ALB
+      via a CNAME/alias (alb_dns_name) in a zone you control — not production DNS.
+    - Stage 1 (appless HTTP smoke test only): http:// on the raw ALB hostname.
+  EOT
+  value = (
+    local.deploy_app ? var.public_base_url :
+    local.http_smoke_only ? "http://${aws_lb.this[0].dns_name}" :
+    null
+  )
 }
 
 output "alb_dns_name" {
-  description = "Raw ALB DNS name."
+  description = "Raw ALB DNS name. Use as the CNAME/alias target for the preview hostname; do not serve the app over HTTPS on this name directly."
   value       = local.create ? aws_lb.this[0].dns_name : null
 }
 

@@ -50,31 +50,26 @@ terraform validate
 terraform plan                                 # guard off → zero resources
 ```
 
-## Ordered deploy flow (after approval, Supermarket-Prod creds)
+## Ordered deploy flow
 
 The deploy is **two staged applies** so ECS never starts before its image
-exists, and so the app is only ever served over HTTPS.
+exists, and the app is only ever served over HTTPS. The Docker image is built
+from the **repository root** with `BUILD_MODE=deploy` and real `NEXT_PUBLIC_*`
+build args (Next inlines those at build time).
 
-```bash
-# 0) Create secrets in Secrets Manager/SSM (read-only Supabase key included)
-#    and an ACM cert for the preview subdomain.
+**The single, current, step-by-step procedure lives in
+`docs/aws-migration-phase3.md` §4** — follow it there rather than duplicating it
+here, so there is one source of truth. Summary of the ordering only:
 
-# --- Stage 1: ECR + network + ALB + IAM (NO ECS task yet) ---
-#   create_resources=true, deploy_application=false in terraform.tfvars
-terraform apply
-ECR=$(terraform output -raw ecr_repository_url)
-
-# --- Build & push the image to the now-existing ECR repo ---
-aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin "${ECR%/*}"
-docker build -t "$ECR:$(git rev-parse --short HEAD)" .
-docker push "$ECR:$(git rev-parse --short HEAD)"
-
-# --- Stage 2: add the ECS task + service pointing at the pushed tag ---
-#   deploy_application=true, image_tag=<sha>, acm_certificate_arn=<arn>,
-#   public_base_url=https://<preview-host> in terraform.tfvars
-terraform apply
-terraform output -raw preview_url    # HTTPS
-```
+1. Stage 1: `create_resources=true`, `deploy_application=false` → `terraform apply`
+   (ECR + network + ALB + IAM).
+2. Build the deploy image from the repo root with `--build-arg BUILD_MODE=deploy`
+   and the real `NEXT_PUBLIC_*` values; push to the ECR repo output.
+3. Stage 2: `deploy_application=true`, `image_tag=<sha>`,
+   `acm_certificate_arn=<arn>`, `public_base_url=https://<preview-host>` →
+   `terraform apply`.
+4. Point `<preview-host>` at `alb_dns_name` via CNAME/alias in a non-production
+   zone. Use `terraform output preview_url` (the ACM-covered hostname).
 
 A force redeploy of a new image without a Terraform change:
 `aws ecs update-service --cluster <ecs_cluster_name> --service <ecs_service_name> --force-new-deployment`.
