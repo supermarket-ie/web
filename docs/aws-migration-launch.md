@@ -168,7 +168,7 @@ docker push "$ECR:$SHA"
 cd infra/terraform
 # terraform.tfvars: deploy_application=true, image_tag=$SHA
 terraform apply -var "image_tag=$SHA"            # STAGE 2: ECS task + service
-terraform output -raw preview_url                # https://aws-preview.supermarket.ie
+terraform output -raw app_url                # https://aws-preview.supermarket.ie
 terraform output -raw alb_dns_name               # CNAME/alias target for DNS
 ```
 

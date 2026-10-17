@@ -69,7 +69,7 @@ here, so there is one source of truth. Summary of the ordering only:
    `acm_certificate_arn=<arn>`, `public_base_url=https://<preview-host>` →
    `terraform apply`.
 4. Point `<preview-host>` at `alb_dns_name` via CNAME/alias in a non-production
-   zone. Use `terraform output preview_url` (the ACM-covered hostname).
+   zone. Use `terraform output app_url` (the ACM-covered hostname).
 
 A force redeploy of a new image without a Terraform change:
 `aws ecs update-service --cluster <ecs_cluster_name> --service <ecs_service_name> --force-new-deployment`.

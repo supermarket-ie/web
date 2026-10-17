@@ -2,18 +2,25 @@ import 'server-only';
 import { isPreviewEnv } from './runtime-env';
 
 /**
- * Preview-environment safety guards (defence in depth).
+ * Environment safety guards (defence in depth).
  *
- * These are ADDITIVE, fail-closed checks for the isolated AWS preview. They do
- * not replace or weaken any existing safeguard (per-store `*_WORKER_ENABLED`
- * flags, `CRON_SECRET` auth, egress pool, cooldowns, idempotency receipts).
- * They exist so that, even if a retailer worker flag or an email key were
- * accidentally present in the preview, no retailer request, price write, or
- * outbound email can occur.
+ * Two triggers, each independent and ADDITIVE (they never weaken existing
+ * safeguards — per-store `*_WORKER_ENABLED` flags, `CRON_SECRET` auth, egress
+ * pool, cooldowns, idempotency receipts):
  *
- * Behaviour is keyed off `APP_ENV=preview`. In production (`APP_ENV` unset /
- * `VERCEL_ENV=production`) every guard below is a no-op, so Vercel production
- * behaviour is unchanged.
+ *  1. `APP_ENV=preview` — full pre-cutover TEST posture: read-only Supabase, no
+ *     email, no retailer collection. Used to verify the AWS deployment against
+ *     the existing production database without altering any data.
+ *
+ *  2. Explicit `DISABLE_*` env flags — usable in ANY environment, including
+ *     `APP_ENV=production`. During the website migration the AWS production task
+ *     sets `DISABLE_RETAILER_COLLECTION=true` and `DISABLE_OUTBOUND_EMAIL=true`
+ *     so retailer collection and scheduled email keep running ONLY on Vercel and
+ *     are never duplicated on AWS, even though the AWS app is otherwise in full
+ *     production (read/write) mode.
+ *
+ * On Vercel (APP_ENV unset / VERCEL_ENV=production and no DISABLE_* flags) every
+ * guard is a no-op, so existing Vercel behaviour is unchanged.
  */
 
 /**
@@ -34,19 +41,10 @@ export function outboundEmailBlocked(): boolean {
   return process.env.DISABLE_OUTBOUND_EMAIL === 'true';
 }
 
-/**
- * True when the shared Supabase service-role client must reject ALL writes.
- *
- * This is the production-isolation control: worker/email guards alone cannot
- * stop writes originating from other routes (subscribe, auth, vendor, agent
- * tools, ops endpoints, etc.). Enforced at the single client every server route
- * shares, it blocks them all — in addition to using a restricted/read-only
- * Supabase key. Either control alone prevents production writes.
- */
-export function supabaseReadOnly(): boolean {
-  if (isPreviewEnv()) return true;
-  return process.env.SUPABASE_READ_ONLY === 'true';
-}
+// The Supabase read-only control lives in a `server-only`-free module so it can
+// be imported by both the Next.js tree and the Eve agent (Nitro) bundle.
+// Re-exported here for existing callers.
+export { supabaseReadOnly, SUPABASE_READ_ONLY_REASON } from './supabase-readonly-wrap';
 
 /** Reason string for logs/responses when retailer collection is blocked. */
 export const RETAILER_COLLECTION_BLOCKED_REASON =
@@ -55,7 +53,3 @@ export const RETAILER_COLLECTION_BLOCKED_REASON =
 /** Reason string for logs when outbound email is blocked. */
 export const OUTBOUND_EMAIL_BLOCKED_REASON =
   'Outbound email is disabled in this environment (preview safety guard).';
-
-/** Reason string when a Supabase write is blocked by the read-only guard. */
-export const SUPABASE_READ_ONLY_REASON =
-  'Supabase is read-only in this environment (preview isolation guard).';

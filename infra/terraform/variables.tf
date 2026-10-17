@@ -5,9 +5,9 @@ variable "aws_region" {
 }
 
 variable "name_prefix" {
-  description = "Prefix for all resource names."
+  description = "Prefix for all resource names (e.g. smie-prod for the production deployment)."
   type        = string
-  default     = "smie-preview"
+  default     = "smie-prod"
 }
 
 # --- Networking ------------------------------------------------------------
@@ -75,17 +75,57 @@ variable "log_retention_days" {
 
 # --- Application configuration --------------------------------------------
 
-variable "app_env" {
-  description = "APP_ENV value. MUST be 'preview' for the isolated preview so safety guards engage."
+variable "test_mode" {
+  description = <<-EOT
+    Pre-cutover TEST mode. When true, the task runs with APP_ENV=preview, which
+    forces the in-app guards ON: Supabase is READ-ONLY (no writes from any
+    route), outbound email is suppressed, and retailer collection is blocked.
+    Use this to verify the AWS deployment against the EXISTING PRODUCTION
+    Supabase without altering any customer or trusted-pricing data.
+
+    When false (production mode, APP_ENV=production), the app reads AND writes
+    production Supabase normally — set this only once functional verification has
+    passed and cutover is approved.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "app_env_production" {
+  description = "APP_ENV value used when test_mode = false (production)."
   type        = string
-  default     = "preview"
+  default     = "production"
+}
+
+variable "enable_retailer_workers_on_aws" {
+  description = <<-EOT
+    Keep false during the website migration. Retailer collection + cron stay on
+    VERCEL (instruction: preserve existing Vercel workers; prevent duplicate
+    jobs). When false, the AWS task sets DISABLE_RETAILER_COLLECTION=true and all
+    *_WORKER_ENABLED=false so AWS cannot run any retailer/background job even if
+    a worker route is hit. Flip true only in the controlled stage-2 worker
+    migration, after Vercel workers are disabled.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "enable_outbound_email_on_aws" {
+  description = <<-EOT
+    Keep false during stage 1. Scheduled/notification email stays on Vercel. When
+    false, the AWS task sets DISABLE_OUTBOUND_EMAIL=true so AWS never sends mail,
+    preventing duplicate customer emails across AWS and Vercel.
+  EOT
+  type        = bool
+  default     = false
 }
 
 variable "public_base_url" {
   description = <<-EOT
-    Public base URL for the preview. Leave empty to use the ALB DNS name output
-    (set NEXT_PUBLIC_SITE_URL/BASE_URL to the ALB hostname after first apply).
-    No production DNS is used.
+    Public base URL the app advertises (links/cookies/metadata) and that the ACM
+    cert must cover. For the pre-cutover test use the test hostname
+    (e.g. https://aws-preview.supermarket.ie). For production cutover this
+    becomes https://www.supermarket.ie once DNS is switched.
   EOT
   type        = string
   default     = ""
@@ -94,9 +134,11 @@ variable "public_base_url" {
 variable "secret_arns" {
   description = <<-EOT
     Map of container env var name -> Secrets Manager / SSM Parameter ARN. Values
-    are injected at runtime; NO secret values live in Terraform. The preview MUST
-    use a RESTRICTED/READ-ONLY Supabase key here, never the production
-    service-role key. Example keys: NEXT_PUBLIC_SUPABASE_URL,
+    are injected at runtime; NO secret values live in Terraform. This deployment
+    uses the EXISTING PRODUCTION Supabase, so SUPABASE_SERVICE_ROLE_KEY is the
+    real production key — the app's own `test_mode` (APP_ENV=preview) guard makes
+    access read-only during pre-cutover testing, so the production key is safe to
+    supply from the start. Expected keys: NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, MAGIC_LINK_SECRET,
     VENDOR_MAGIC_LINK_SECRET, CRON_SECRET, REVALIDATE_SECRET, RESEND_API_KEY,
     ANTHROPIC_API_KEY.

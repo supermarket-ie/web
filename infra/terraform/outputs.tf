@@ -1,11 +1,11 @@
-output "preview_url" {
+output "app_url" {
   description = <<-EOT
-    Public URL to use for the preview.
-    - Stage 2 (app deployed, HTTPS): the hostname the ACM certificate covers,
-      i.e. public_base_url. The raw ALB hostname is NOT valid for HTTPS (the
-      cert does not cover *.elb.amazonaws.com); point that hostname at the ALB
-      via a CNAME/alias (alb_dns_name) in a zone you control — not production DNS.
-    - Stage 1 (appless HTTP smoke test only): http:// on the raw ALB hostname.
+    Public HTTPS URL the app is reached on (= public_base_url). The ACM cert must
+    cover this hostname; the raw ALB hostname is NOT valid for HTTPS. Point the
+    hostname at the ALB via a CNAME/alias (alb_dns_name).
+    - Pre-cutover TEST: the test hostname, e.g. https://aws-preview.supermarket.ie.
+    - Production cutover: https://www.supermarket.ie (switch DNS only after
+      verification + approval).
   EOT
   value = (
     local.deploy_app ? var.public_base_url :
@@ -15,7 +15,7 @@ output "preview_url" {
 }
 
 output "alb_dns_name" {
-  description = "Raw ALB DNS name. Use as the CNAME/alias target for the preview hostname; do not serve the app over HTTPS on this name directly."
+  description = "Raw ALB DNS name. Use as the CNAME/alias target for the app hostname; do not serve the app over HTTPS on this name directly."
   value       = local.create ? aws_lb.this[0].dns_name : null
 }
 

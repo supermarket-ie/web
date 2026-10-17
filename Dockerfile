@@ -68,8 +68,11 @@ RUN if [ "$BUILD_MODE" = "deploy" ]; then \
     fi
 
 # Non-secret build environment.
-# - APP_ENV=preview makes the read-only Supabase guard active DURING THE BUILD,
-#   so any prerender DB access is SELECT-only, and sets noindex at build too.
+# - APP_ENV=preview is used ONLY for the BUILD so any prerender DB access is
+#   SELECT-only (read-only guard) regardless of which key is mounted. This does
+#   NOT affect runtime: the runner/ECS set APP_ENV for the live environment. The
+#   same image serves both test (APP_ENV=preview) and production (APP_ENV=
+#   production) — behaviour is chosen at runtime, not baked in.
 # - NEXT_PUBLIC_* are inlined (see above).
 # - The server-only secrets below are DUMMY non-secrets that only satisfy
 #   import-time guards for values the build never actually uses (Resend,
@@ -117,9 +120,12 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
-    # Preview defaults baked in (ECS task def also sets these). Guarantees the
-    # read-only Supabase guard, worker/email guards and noindex are ON even if
-    # an env var were omitted at runtime.
+    # FAIL-SAFE DEFAULTS. The single image serves both the pre-cutover TEST
+    # (APP_ENV=preview, read-only) and PRODUCTION (APP_ENV=production, read+write).
+    # The behaviour is chosen by the ECS task definition, which ALWAYS sets
+    # APP_ENV and SUPABASE_READ_ONLY explicitly. These baked defaults are
+    # deliberately the SAFE ones: if the task env were ever omitted, the app
+    # fails safe to read-only rather than silently writing to production.
     APP_ENV=preview \
     SUPABASE_READ_ONLY=true \
     # Eve companion server port. withEve rewrites /eve/v1/* to 127.0.0.1:$EVE_NEXT_PRODUCTION_PORT.

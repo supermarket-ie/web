@@ -23,27 +23,40 @@ resource "aws_ecs_cluster" "this" {
 }
 
 locals {
-  # Non-secret environment baked into the task. Safety flags are hard-off here;
-  # they are ALSO enforced in-app by APP_ENV=preview (defence in depth).
+  # test_mode => APP_ENV=preview, which forces the in-app guards ON (read-only
+  # Supabase, no email, no retailer collection) for safe pre-cutover testing
+  # against the EXISTING PRODUCTION database. Otherwise APP_ENV=production and
+  # the app reads+writes normally.
+  effective_app_env = var.test_mode ? "preview" : var.app_env_production
+
+  # Retailer collection + outbound email stay on VERCEL during the website
+  # migration. They are blocked on AWS unless explicitly enabled (stage 2),
+  # and always blocked in test_mode. This prevents duplicate jobs/emails.
+  retailer_blocked = var.test_mode || !var.enable_retailer_workers_on_aws
+  email_blocked    = var.test_mode || !var.enable_outbound_email_on_aws
+
+  # In test_mode the Supabase client is read-only. In production mode writes are
+  # allowed (customer-facing functionality needs them).
+  supabase_read_only = var.test_mode
+
+  # Non-secret environment for the task. In production mode (test_mode=false,
+  # workers enabled in stage 2) these guards become no-ops in-app as well.
   container_environment = [
     { name = "NODE_ENV", value = "production" },
-    { name = "APP_ENV", value = var.app_env },
+    { name = "APP_ENV", value = local.effective_app_env },
     { name = "PORT", value = tostring(var.container_port) },
     { name = "EVE_NEXT_PRODUCTION_PORT", value = "4274" },
     { name = "NEXT_TELEMETRY_DISABLED", value = "1" },
-    # Preview URL: the https:// hostname the ACM cert covers (required at stage 2).
     { name = "NEXT_PUBLIC_SITE_URL", value = var.public_base_url },
     { name = "NEXT_PUBLIC_BASE_URL", value = var.public_base_url },
-    # Explicit kill-switches (belt and braces alongside APP_ENV=preview).
-    { name = "DISABLE_RETAILER_COLLECTION", value = "true" },
-    { name = "DISABLE_OUTBOUND_EMAIL", value = "true" },
-    # In-app Supabase read-only enforcement (blocks writes from ANY route).
-    { name = "SUPABASE_READ_ONLY", value = "true" },
-    # Retailer worker flags explicitly OFF.
-    { name = "TESCO_VERCEL_WORKER_ENABLED", value = "false" },
-    { name = "DUNNES_VERCEL_WORKER_ENABLED", value = "false" },
-    { name = "SUPERVALU_VERCEL_WORKER_ENABLED", value = "false" },
-    { name = "NON_TESCO_VERCEL_WORKERS_ENABLED", value = "false" },
+    { name = "DISABLE_RETAILER_COLLECTION", value = local.retailer_blocked ? "true" : "false" },
+    { name = "DISABLE_OUTBOUND_EMAIL", value = local.email_blocked ? "true" : "false" },
+    { name = "SUPABASE_READ_ONLY", value = local.supabase_read_only ? "true" : "false" },
+    # Retailer worker flags: OFF on AWS unless stage-2 worker migration enables them.
+    { name = "TESCO_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
+    { name = "DUNNES_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
+    { name = "SUPERVALU_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
+    { name = "NON_TESCO_VERCEL_WORKERS_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
   ]
 
   # Secrets injected from Secrets Manager / SSM at runtime (names -> ARNs).

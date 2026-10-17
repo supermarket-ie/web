@@ -124,7 +124,7 @@ docker push "$ECR:$SHA"
 #    terraform.tfvars: deploy_application=true, image_tag=$SHA
 cd infra/terraform
 terraform apply -var "image_tag=$SHA"
-terraform output -raw preview_url     # the HTTPS hostname (ACM-covered), NOT the ALB DNS
+terraform output -raw app_url     # the HTTPS hostname (ACM-covered), NOT the ALB DNS
 
 # 4) Point the preview hostname at the ALB (zone you control; not production DNS)
 terraform output -raw alb_dns_name    # CNAME/alias target for <preview-host>
