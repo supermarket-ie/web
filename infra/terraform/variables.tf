@@ -115,3 +115,21 @@ variable "create_resources" {
   type        = bool
   default     = false
 }
+
+variable "deploy_application" {
+  description = <<-EOT
+    Two-stage deploy guard (requires create_resources = true to have any effect).
+
+    Stage 1 (deploy_application = false): provisions ECR, networking, ALB, IAM,
+    logs — everything EXCEPT the ECS task definition and service. This lets CI
+    push the image to the now-existing ECR repo before any task tries to pull it.
+
+    Stage 2 (deploy_application = true): adds the ECS task definition + service,
+    which pull the already-pushed image tag. This removes the race where ECS
+    starts before the image exists.
+
+    Default false so a first apply never starts a task against a missing image.
+  EOT
+  type        = bool
+  default     = false
+}

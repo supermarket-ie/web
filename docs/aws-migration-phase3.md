@@ -1,5 +1,35 @@
 # AWS migration — Phase 3: deployable preview (IaC, CI, safety)
 
+## Review corrections (PR #265 follow-up)
+
+Three review findings addressed, plus CI Docker verification:
+
+1. **ECR/image before ECS (deploy ordering).** Provisioning is now two staged
+   applies via `deploy_application`. Stage 1 (`deploy_application=false`) creates
+   ECR + network + ALB + IAM; CI then pushes the image to the new ECR repo;
+   stage 2 (`deploy_application=true`) adds the ECS task + service that pull the
+   already-pushed tag. ECS can no longer start before its image exists.
+2. **HTTPS before auth / non-public data.** The ECS task/service exist only in
+   stage 2, and an ALB `precondition` makes `acm_certificate_arn` mandatory
+   there — so the application is only ever served over HTTPS. Plain HTTP is
+   restricted to an appless stage-1 smoke test whose listener returns a fixed
+   200 string and forwards nothing (no auth/data route reachable over HTTP).
+   `public_base_url` must be an `https://` URL at stage 2.
+3. **Full Supabase isolation (not just workers/email).** `SUPABASE_READ_ONLY`
+   (forced on by `APP_ENV=preview`) wraps the shared service-role client so
+   every write — `insert/update/upsert/delete` and mutating RPCs — throws
+   `PreviewReadOnlyError`, from ANY route (subscribe, auth, vendor, agent tools,
+   ops, etc.), independently of the key's own privileges. Read selects and an
+   allowlist of read-only RPCs pass through. This is defence in depth on top of
+   using a restricted/read-only Supabase key. Verified by
+   `src/lib/__tests__/supabase-readonly.test.ts`.
+
+**CI Docker build verified:** GitHub Actions run 39020696818 built the real
+Docker image successfully (job "Docker image build (validation only, no push)",
+~4m52s) alongside passing lint/test/build and `terraform validate`.
+
+---
+
 Branch: `infra/aws-migration`. **No AWS resources were provisioned**, no
 production/DNS/Supabase/Vercel changes made, no scraping/email/schedules run.
 This phase delivers review-ready infrastructure code, a safe CI workflow, the
@@ -19,22 +49,28 @@ steps.
 
 ## 2. Preview safety model (defence in depth)
 
-Three independent layers ensure the preview has no production side effects:
+Four independent layers ensure the preview has no production side effects:
 
-1. **In-app guard** (`APP_ENV=preview`): every retailer collection trigger
-   returns `503 blocked_preview` before any outbound request; `resend.emails.send`
-   is short-circuited to a no-op. Covers 11 worker routes + all 13 email call
-   sites. Verified by `src/lib/__tests__/preview-guard.test.ts` (8 tests).
-2. **Explicit env kill-switches**: `DISABLE_RETAILER_COLLECTION=true`,
-   `DISABLE_OUTBOUND_EMAIL=true`, and all `*_WORKER_ENABLED=false`, set in the
-   ECS task definition.
-3. **Infrastructure**: no EventBridge/cron schedules exist, no NAT/static egress
-   exists (so Tesco can't reach the internet with a controlled identity), and the
-   Supabase key is a restricted/read-only credential.
+1. **Supabase read-only client** (`SUPABASE_READ_ONLY`, forced by
+   `APP_ENV=preview`): the shared service-role client rejects every write from
+   ANY route — `insert/update/upsert/delete` and mutating RPCs throw
+   `PreviewReadOnlyError`. This is the primary production-isolation control and
+   does not rely on per-route guards. Verified by
+   `src/lib/__tests__/supabase-readonly.test.ts`.
+2. **In-app worker/email guard** (`APP_ENV=preview`): every retailer collection
+   trigger returns `503 blocked_preview` before any outbound request;
+   `resend.emails.send` is short-circuited to a no-op. Covers 11 worker routes +
+   all 13 email call sites. Verified by `src/lib/__tests__/preview-guard.test.ts`.
+3. **Explicit env kill-switches**: `DISABLE_RETAILER_COLLECTION=true`,
+   `DISABLE_OUTBOUND_EMAIL=true`, `SUPABASE_READ_ONLY=true`, and all
+   `*_WORKER_ENABLED=false`, set in the ECS task definition.
+4. **Infrastructure**: no EventBridge/cron schedules exist, no NAT/static egress
+   exists (so Tesco can't reach the internet with a controlled identity), the
+   Supabase key is a restricted/read-only credential, and the app is HTTPS-only.
 
 None of these weaken existing safeguards — the per-store flags, `CRON_SECRET`
 auth, egress pool, cooldowns and idempotency receipts all remain. The guards are
-additional early returns.
+additional early returns / a client wrapper.
 
 ## 3. Infrastructure (Terraform/OpenTofu)
 

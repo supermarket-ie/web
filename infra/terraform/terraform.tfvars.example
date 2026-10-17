@@ -9,17 +9,31 @@ name_prefix = "smie-preview"
 # actually provision resources in Supermarket-Prod.
 create_resources = false
 
+# Two-stage deploy (prevents ECS starting before the image exists):
+#   Stage 1: deploy_application = false  -> creates ECR + network + ALB + IAM.
+#            Then CI pushes the image to the new ECR repo.
+#   Stage 2: deploy_application = true   -> adds the ECS task + service.
+deploy_application = false
+
 # Sizing (preview baseline).
 task_cpu      = 512
 task_memory   = 1024
 desired_count = 1
 
-# Image tag CI pushed to ECR (e.g. the git SHA).
+# Image tag CI pushed to ECR (e.g. the git SHA). Set before stage 2.
 image_tag = "preview"
 
-# Optional: ACM cert ARN for HTTPS on a preview subdomain you control.
-# Leave empty to smoke-test over HTTP on the ALB hostname first.
+# HTTPS: REQUIRED before deploy_application = true. ACM cert for a preview
+# subdomain you control (ACM cannot cert the raw *.elb.amazonaws.com name).
 acm_certificate_arn = ""
+
+# The https:// preview URL the cert covers. REQUIRED at stage 2 (used for
+# links/cookies/metadata). Example: https://preview.supermarket.ie
+public_base_url = ""
+
+# Stage-1 ONLY: allow an appless HTTP smoke test (fixed 200, forwards nothing).
+# Must be false once deploy_application = true.
+allow_http_only_smoke_test = false
 
 # Preview must NOT need NAT (no Tesco static egress in preview).
 enable_nat_gateway = false

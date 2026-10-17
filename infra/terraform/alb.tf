@@ -1,21 +1,35 @@
 # Application Load Balancer fronting the Fargate service.
 #
-# The preview uses the AWS-generated ALB DNS name (no production DNS). HTTPS on
-# the raw ALB hostname needs a certificate; ACM will not issue a public cert for
-# an *.elb.amazonaws.com name, so for a first bring-up either:
-#   (a) provide a cert ARN for a preview subdomain you control (acm_certificate_arn), or
-#   (b) start HTTP-only on the ALB hostname for smoke testing, then add the cert.
-# When no cert ARN is given, only the HTTP listener is created (noindex is
-# enforced in-app, so this is acceptable for a short-lived preview smoke test).
+# HTTPS policy (review finding #2): the application — anything that can touch
+# authentication or non-public data — is ONLY ever served over HTTPS. Plain HTTP
+# is permitted exclusively for a harmless, appless smoke test (stage 1, before
+# the app is deployed) and even then it does not forward to the app: it returns
+# a fixed 200 string so no auth/data route is reachable over HTTP.
+#
+# ACM will not issue a public cert for an *.elb.amazonaws.com name, so HTTPS
+# requires a certificate for a preview subdomain you control (acm_certificate_arn).
 
 variable "acm_certificate_arn" {
-  description = "Optional ACM cert ARN for HTTPS. If empty, only an HTTP listener is created (preview smoke test)."
+  description = "ACM cert ARN for HTTPS. REQUIRED before deploying the application (deploy_application = true)."
   type        = string
   default     = ""
 }
 
+variable "allow_http_only_smoke_test" {
+  description = <<-EOT
+    Permit an HTTP-only ALB with NO application behind it, for a harmless
+    infrastructure smoke test (returns a fixed 200 string, forwards nothing).
+    Only usable in stage 1 (deploy_application = false). It is an error to set
+    this together with deploy_application = true.
+  EOT
+  type        = bool
+  default     = false
+}
+
 locals {
-  https_enabled = var.create_resources && length(var.acm_certificate_arn) > 0
+  https_enabled = local.create && length(var.acm_certificate_arn) > 0
+  # HTTP-only is allowed only for the appless stage-1 smoke test.
+  http_smoke_only = local.create && !local.deploy_app && var.allow_http_only_smoke_test && !local.https_enabled
 }
 
 resource "aws_lb" "this" {
@@ -26,13 +40,26 @@ resource "aws_lb" "this" {
   security_groups    = [aws_security_group.alb[0].id]
   subnets            = aws_subnet.public[*].id
   tags               = { Name = "${var.name_prefix}-alb" }
+
+  lifecycle {
+    precondition {
+      # Enforce HTTPS whenever the application is deployed.
+      condition     = !local.deploy_app || length(var.acm_certificate_arn) > 0
+      error_message = "acm_certificate_arn is required when deploy_application = true: the application must be served over HTTPS before any authentication or non-public data access."
+    }
+    precondition {
+      # HTTP-only smoke test and app deployment are mutually exclusive.
+      condition     = !(var.allow_http_only_smoke_test && local.deploy_app)
+      error_message = "allow_http_only_smoke_test cannot be combined with deploy_application = true. HTTP is only for the appless smoke test."
+    }
+  }
 }
 
 resource "aws_lb_target_group" "app" {
   count       = local.create ? 1 : 0
   name        = "${var.name_prefix}-tg"
   port        = var.container_port
-  protocol    = "HTTP"
+  protocol    = "HTTP" # ALB->task hop inside the VPC; public edge is HTTPS
   vpc_id      = aws_vpc.this[0].id
   target_type = "ip"
 
@@ -49,8 +76,10 @@ resource "aws_lb_target_group" "app" {
   tags = { Name = "${var.name_prefix}-tg" }
 }
 
-# HTTP listener. When HTTPS is enabled it redirects to HTTPS; otherwise it
-# forwards directly (preview smoke test over HTTP on the ALB hostname).
+# HTTP listener (port 80).
+# - When HTTPS is enabled: 301-redirect everything to HTTPS.
+# - When HTTP-only smoke test: return a fixed 200 string, forward NOTHING.
+# The app target group is never served over plain HTTP.
 resource "aws_lb_listener" "http" {
   count             = local.create ? 1 : 0
   load_balancer_arn = aws_lb.this[0].arn
@@ -72,8 +101,12 @@ resource "aws_lb_listener" "http" {
   dynamic "default_action" {
     for_each = local.https_enabled ? [] : [1]
     content {
-      type             = "forward"
-      target_group_arn = aws_lb_target_group.app[0].arn
+      type = "fixed-response"
+      fixed_response {
+        content_type = "text/plain"
+        message_body = "preview smoke test ok (HTTP). The application is served over HTTPS only."
+        status_code  = "200"
+      }
     }
   }
 }

@@ -34,6 +34,20 @@ export function outboundEmailBlocked(): boolean {
   return process.env.DISABLE_OUTBOUND_EMAIL === 'true';
 }
 
+/**
+ * True when the shared Supabase service-role client must reject ALL writes.
+ *
+ * This is the production-isolation control: worker/email guards alone cannot
+ * stop writes originating from other routes (subscribe, auth, vendor, agent
+ * tools, ops endpoints, etc.). Enforced at the single client every server route
+ * shares, it blocks them all — in addition to using a restricted/read-only
+ * Supabase key. Either control alone prevents production writes.
+ */
+export function supabaseReadOnly(): boolean {
+  if (isPreviewEnv()) return true;
+  return process.env.SUPABASE_READ_ONLY === 'true';
+}
+
 /** Reason string for logs/responses when retailer collection is blocked. */
 export const RETAILER_COLLECTION_BLOCKED_REASON =
   'Retailer collection is disabled in this environment (preview safety guard).';
@@ -41,3 +55,7 @@ export const RETAILER_COLLECTION_BLOCKED_REASON =
 /** Reason string for logs when outbound email is blocked. */
 export const OUTBOUND_EMAIL_BLOCKED_REASON =
   'Outbound email is disabled in this environment (preview safety guard).';
+
+/** Reason string when a Supabase write is blocked by the read-only guard. */
+export const SUPABASE_READ_ONLY_REASON =
+  'Supabase is read-only in this environment (preview isolation guard).';

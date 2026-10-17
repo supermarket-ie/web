@@ -31,12 +31,14 @@ locals {
     { name = "PORT", value = tostring(var.container_port) },
     { name = "EVE_NEXT_PRODUCTION_PORT", value = "4274" },
     { name = "NEXT_TELEMETRY_DISABLED", value = "1" },
-    # Preview URL. If not provided, point links at the ALB hostname post-apply.
-    { name = "NEXT_PUBLIC_SITE_URL", value = var.public_base_url != "" ? var.public_base_url : "https://${try(aws_lb.this[0].dns_name, "preview.invalid")}" },
-    { name = "NEXT_PUBLIC_BASE_URL", value = var.public_base_url != "" ? var.public_base_url : "https://${try(aws_lb.this[0].dns_name, "preview.invalid")}" },
+    # Preview URL: the https:// hostname the ACM cert covers (required at stage 2).
+    { name = "NEXT_PUBLIC_SITE_URL", value = var.public_base_url },
+    { name = "NEXT_PUBLIC_BASE_URL", value = var.public_base_url },
     # Explicit kill-switches (belt and braces alongside APP_ENV=preview).
     { name = "DISABLE_RETAILER_COLLECTION", value = "true" },
     { name = "DISABLE_OUTBOUND_EMAIL", value = "true" },
+    # In-app Supabase read-only enforcement (blocks writes from ANY route).
+    { name = "SUPABASE_READ_ONLY", value = "true" },
     # Retailer worker flags explicitly OFF.
     { name = "TESCO_VERCEL_WORKER_ENABLED", value = "false" },
     { name = "DUNNES_VERCEL_WORKER_ENABLED", value = "false" },
@@ -49,7 +51,7 @@ locals {
 }
 
 resource "aws_ecs_task_definition" "app" {
-  count                    = local.create ? 1 : 0
+  count                    = local.deploy_app ? 1 : 0
   family                   = var.name_prefix
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -61,6 +63,15 @@ resource "aws_ecs_task_definition" "app" {
   runtime_platform {
     operating_system_family = "LINUX"
     cpu_architecture        = "X86_64"
+  }
+
+  lifecycle {
+    precondition {
+      # The app must know its own HTTPS URL for links/cookies/metadata. Require
+      # an explicit https:// public_base_url (the subdomain the ACM cert covers).
+      condition     = can(regex("^https://", var.public_base_url))
+      error_message = "public_base_url must be set to the https:// preview URL (matching the ACM cert) before deploying the application."
+    }
   }
 
   container_definitions = jsonencode([
@@ -93,7 +104,7 @@ resource "aws_ecs_task_definition" "app" {
 }
 
 resource "aws_ecs_service" "app" {
-  count           = local.create ? 1 : 0
+  count           = local.deploy_app ? 1 : 0
   name            = "${var.name_prefix}-svc"
   cluster         = aws_ecs_cluster.this[0].id
   task_definition = aws_ecs_task_definition.app[0].arn

@@ -22,6 +22,14 @@ resource is gated behind `create_resources` (default `false`), so a default
 
 - `APP_ENV=preview` engages the in-app preview guard (no retailer collection,
   no outbound email) — see `src/lib/preview-guard.ts`.
+- **Supabase read-only isolation**: `SUPABASE_READ_ONLY=true` makes the shared
+  service-role client reject every write (`insert/update/upsert/delete` and
+  mutating RPCs) from ANY route — not just workers/email. This is enforced
+  in-app on top of using a restricted/read-only key; either control alone
+  prevents production writes.
+- **HTTPS required for the app**: the ECS task/service only exist in stage 2,
+  and stage 2 requires `acm_certificate_arn`. Plain HTTP is only ever an appless
+  stage-1 smoke test (fixed 200, forwards nothing).
 - Belt-and-braces env: `DISABLE_RETAILER_COLLECTION=true`,
   `DISABLE_OUTBOUND_EMAIL=true`, all `*_WORKER_ENABLED=false`.
 - No EventBridge/cron schedules are created, so no scheduled job can run.
@@ -30,33 +38,45 @@ resource is gated behind `create_resources` (default `false`), so a default
   `secret_arns` — never the production service-role key.
 - No secret values live in Terraform; only ARNs pointing at Secrets Manager/SSM.
 
-## Usage
+## Usage (review / validate — safe anywhere)
 
 ```bash
 cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars   # fill in ARNs; keep create_resources=false
 
-terraform init -backend=false   # review/validate without remote state
+terraform init -backend=false
 terraform fmt -check -recursive
 terraform validate
-
-# Plan with the guard off → zero resources (safe to run anywhere):
-terraform plan
-
-# ---- Only after explicit approval, in Supermarket-Prod creds ----
-# 1) Create secrets in Secrets Manager/SSM (read-only Supabase key included).
-# 2) Set create_resources = true and fill secret_arns in terraform.tfvars.
-# 3) terraform apply
+terraform plan                                 # guard off → zero resources
 ```
 
-## Deploy flow (with CI building the image)
+## Ordered deploy flow (after approval, Supermarket-Prod creds)
 
-1. CI builds the Docker image and pushes it to the ECR repo
-   (`ecr_repository_url` output) tagged with the git SHA.
-2. `terraform apply` with `image_tag = <sha>` rolls the service.
-3. Smoke test the `preview_url` output.
+The deploy is **two staged applies** so ECS never starts before its image
+exists, and so the app is only ever served over HTTPS.
 
-A force redeploy without Terraform:
+```bash
+# 0) Create secrets in Secrets Manager/SSM (read-only Supabase key included)
+#    and an ACM cert for the preview subdomain.
+
+# --- Stage 1: ECR + network + ALB + IAM (NO ECS task yet) ---
+#   create_resources=true, deploy_application=false in terraform.tfvars
+terraform apply
+ECR=$(terraform output -raw ecr_repository_url)
+
+# --- Build & push the image to the now-existing ECR repo ---
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin "${ECR%/*}"
+docker build -t "$ECR:$(git rev-parse --short HEAD)" .
+docker push "$ECR:$(git rev-parse --short HEAD)"
+
+# --- Stage 2: add the ECS task + service pointing at the pushed tag ---
+#   deploy_application=true, image_tag=<sha>, acm_certificate_arn=<arn>,
+#   public_base_url=https://<preview-host> in terraform.tfvars
+terraform apply
+terraform output -raw preview_url    # HTTPS
+```
+
+A force redeploy of a new image without a Terraform change:
 `aws ecs update-service --cluster <ecs_cluster_name> --service <ecs_service_name> --force-new-deployment`.
 
 ## Teardown / rollback

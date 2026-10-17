@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // server-only is a build marker; stub it so the guard module imports under test.
 vi.mock('server-only', () => ({}));
 
-const ENV_KEYS = ['APP_ENV', 'VERCEL_ENV', 'DISABLE_RETAILER_COLLECTION', 'DISABLE_OUTBOUND_EMAIL', 'NEXT_PUBLIC_BASE_URL', 'NEXT_PUBLIC_SITE_URL'] as const;
+const ENV_KEYS = ['APP_ENV', 'VERCEL_ENV', 'DISABLE_RETAILER_COLLECTION', 'DISABLE_OUTBOUND_EMAIL', 'SUPABASE_READ_ONLY', 'NEXT_PUBLIC_BASE_URL', 'NEXT_PUBLIC_SITE_URL'] as const;
 let saved: Record<string, string | undefined> = {};
 
 function setEnv(values: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>) {
@@ -95,5 +95,19 @@ describe('preview-guard', () => {
     const { retailerCollectionBlocked, outboundEmailBlocked } = await freshGuard();
     expect(retailerCollectionBlocked()).toBe(true);
     expect(outboundEmailBlocked()).toBe(true);
+  });
+
+  it('marks Supabase read-only in preview and via explicit flag', async () => {
+    setEnv({ APP_ENV: 'preview' });
+    const inPreview = await freshGuard();
+    expect(inPreview.supabaseReadOnly()).toBe(true);
+
+    setEnv({ APP_ENV: 'production', VERCEL_ENV: 'production', SUPABASE_READ_ONLY: 'true' });
+    const viaFlag = await freshGuard();
+    expect(viaFlag.supabaseReadOnly()).toBe(true);
+
+    setEnv({ APP_ENV: 'production', VERCEL_ENV: 'production', SUPABASE_READ_ONLY: undefined });
+    const prod = await freshGuard();
+    expect(prod.supabaseReadOnly()).toBe(false);
   });
 });

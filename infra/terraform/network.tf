@@ -4,7 +4,9 @@
 
 locals {
   create = var.create_resources
-  azs    = var.create_resources ? slice(data.aws_availability_zones.available[0].names, 0, var.az_count) : []
+  # Stage-2 gate: ECS task/service only exist once an image has been pushed.
+  deploy_app = var.create_resources && var.deploy_application
+  azs        = var.create_resources ? slice(data.aws_availability_zones.available[0].names, 0, var.az_count) : []
 }
 
 data "aws_availability_zones" "available" {
