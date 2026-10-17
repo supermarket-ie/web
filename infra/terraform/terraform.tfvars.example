@@ -1,0 +1,39 @@
+# Example tfvars for the Supermarket.ie AWS preview. Copy to terraform.tfvars
+# and fill in. NEVER put secret VALUES here — only ARNs that point at
+# Secrets Manager / SSM entries created out of band.
+
+aws_region  = "eu-west-1"
+name_prefix = "smie-preview"
+
+# Master guard. Keep false for review/plan. Set true ONLY after approval to
+# actually provision resources in Supermarket-Prod.
+create_resources = false
+
+# Sizing (preview baseline).
+task_cpu      = 512
+task_memory   = 1024
+desired_count = 1
+
+# Image tag CI pushed to ECR (e.g. the git SHA).
+image_tag = "preview"
+
+# Optional: ACM cert ARN for HTTPS on a preview subdomain you control.
+# Leave empty to smoke-test over HTTP on the ALB hostname first.
+acm_certificate_arn = ""
+
+# Preview must NOT need NAT (no Tesco static egress in preview).
+enable_nat_gateway = false
+
+# Secret env var NAME -> Secrets Manager / SSM ARN. The SUPABASE_SERVICE_ROLE_KEY
+# entry MUST point at a RESTRICTED/READ-ONLY key, never the production key.
+secret_arns = {
+  # NEXT_PUBLIC_SUPABASE_URL      = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/supabase-url"
+  # NEXT_PUBLIC_SUPABASE_ANON_KEY = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/supabase-anon"
+  # SUPABASE_SERVICE_ROLE_KEY     = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/supabase-readonly"
+  # MAGIC_LINK_SECRET             = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/magic-link"
+  # VENDOR_MAGIC_LINK_SECRET      = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/vendor-magic-link"
+  # CRON_SECRET                   = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/cron-secret"
+  # REVALIDATE_SECRET             = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/revalidate-secret"
+  # RESEND_API_KEY                = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/resend"
+  # ANTHROPIC_API_KEY             = "arn:aws:secretsmanager:eu-west-1:ACCOUNT:secret:smie-preview/anthropic"
+}
