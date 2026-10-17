@@ -15,21 +15,21 @@ create_resources = false
 #   Stage 2: deploy_application = true   -> adds the ECS task + service.
 deploy_application = false
 
-# Sizing (preview baseline).
-task_cpu      = 512
-task_memory   = 1024
+# Sizing: 1 vCPU / 2 GB for the two-process container (~$55-65/mo target).
+# Drop to task_cpu=512 / task_memory=1024 to save ~$17/mo once proven.
+task_cpu      = 1024
+task_memory   = 2048
 desired_count = 1
 
 # Image tag CI pushed to ECR (e.g. the git SHA). Set before stage 2.
 image_tag = "preview"
 
-# HTTPS: REQUIRED before deploy_application = true. ACM cert for a preview
-# subdomain you control (ACM cannot cert the raw *.elb.amazonaws.com name).
+# HTTPS: REQUIRED before deploy_application = true. ACM cert (in eu-west-1)
+# covering aws-preview.supermarket.ie. ACM cannot cert the raw ALB hostname.
 acm_certificate_arn = ""
 
-# The https:// preview URL the cert covers. REQUIRED at stage 2 (used for
-# links/cookies/metadata). Example: https://preview.supermarket.ie
-public_base_url = ""
+# The https:// preview URL the cert covers. REQUIRED at stage 2.
+public_base_url = "https://aws-preview.supermarket.ie"
 
 # Stage-1 ONLY: allow an appless HTTP smoke test (fixed 200, forwards nothing).
 # Must be false once deploy_application = true.

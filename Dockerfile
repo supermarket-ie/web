@@ -67,18 +67,20 @@ RUN if [ "$BUILD_MODE" = "deploy" ]; then \
       fi; \
     fi
 
-# Server-only secrets are NOT needed at build (they are injected at runtime by
-# ECS from Secrets Manager). Only import-time guards need to be satisfied, so we
-# pass throwaway non-secret placeholders for those. CI mode also sets CI=true to
-# take the empty-catalogue path; deploy mode does a real (DB-less) prerender and
-# the app degrades gracefully where data is unavailable.
+# Non-secret build environment.
+# - APP_ENV=preview makes the read-only Supabase guard active DURING THE BUILD,
+#   so any prerender DB access is SELECT-only, and sets noindex at build too.
+# - NEXT_PUBLIC_* are inlined (see above).
+# - The server-only secrets below are DUMMY non-secrets that only satisfy
+#   import-time guards for values the build never actually uses (Resend,
+#   Anthropic, JWT secrets). They are NOT real and NOT the service-role key.
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
+    APP_ENV=preview \
     NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL} \
     NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL} \
     NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL} \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY} \
-    SUPABASE_SERVICE_ROLE_KEY=build-placeholder \
     RESEND_API_KEY=re_build_placeholder \
     MAGIC_LINK_SECRET=build-placeholder-secret \
     VENDOR_MAGIC_LINK_SECRET=build-placeholder-secret \
@@ -86,9 +88,25 @@ ENV NODE_ENV=production \
     REVALIDATE_SECRET=build-placeholder-secret \
     ANTHROPIC_API_KEY=sk-ant-build-placeholder
 
-# BUILD_MODE=ci sets CI=true for this one build (empty-catalogue escape hatch);
-# deploy mode builds with CI unset so the real prerender path runs.
-RUN CI=$([ "$BUILD_MODE" = "ci" ] && echo true || echo "") npm run build
+# The Supabase key used during prerender is provided via a BuildKit SECRET MOUNT
+# (id=supabase_service_role_key), never an ARG/ENV — so it is NOT written to any
+# image layer or to image metadata/history. Pass it at build time with:
+#
+#   DOCKER_BUILDKIT=1 docker build \
+#     --secret id=supabase_service_role_key,env=SUPABASE_SERVICE_ROLE_KEY ...
+#
+# For the isolated preview this MUST be the restricted READ-ONLY key. The build
+# only runs SELECTs (catalogue/prices) because APP_ENV=preview forces the
+# read-only guard, so a read-only key is sufficient.
+#
+# BUILD_MODE=ci: CI=true activates the empty-catalogue escape hatch, so no DB and
+# no secret are needed (the secret mount is optional and falls back to a dummy).
+# BUILD_MODE=deploy: the real read-only key is read from the secret file for the
+# duration of this RUN only.
+RUN --mount=type=secret,id=supabase_service_role_key,required=false \
+    CI=$([ "$BUILD_MODE" = "ci" ] && echo true || echo "") \
+    SUPABASE_SERVICE_ROLE_KEY="$(cat /run/secrets/supabase_service_role_key 2>/dev/null || echo build-placeholder)" \
+    npm run build
 
 # ---------------------------------------------------------------------------
 # Stage 3: runner — slim runtime image
@@ -99,6 +117,11 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
+    # Preview defaults baked in (ECS task def also sets these). Guarantees the
+    # read-only Supabase guard, worker/email guards and noindex are ON even if
+    # an env var were omitted at runtime.
+    APP_ENV=preview \
+    SUPABASE_READ_ONLY=true \
     # Eve companion server port. withEve rewrites /eve/v1/* to 127.0.0.1:$EVE_NEXT_PRODUCTION_PORT.
     EVE_NEXT_PRODUCTION_PORT=4274
 

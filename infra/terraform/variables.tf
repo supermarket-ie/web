@@ -44,15 +44,15 @@ variable "container_port" {
 }
 
 variable "task_cpu" {
-  description = "Fargate task CPU units (256 = 0.25 vCPU)."
+  description = "Fargate task CPU units (256 = 0.25 vCPU, 1024 = 1 vCPU). 1024 pairs with 2048 MiB for the 2-process container."
   type        = number
-  default     = 512
+  default     = 1024
 }
 
 variable "task_memory" {
-  description = "Fargate task memory (MiB). 1024 is the preview baseline; bump to 2048 if the 2-process container OOMs."
+  description = "Fargate task memory (MiB). 2048 (1 vCPU/2GB) gives the 2-process container headroom and fits the ~$55-65/mo target; drop to 1024 to save ~$17/mo."
   type        = number
-  default     = 1024
+  default     = 2048
 }
 
 variable "desired_count" {

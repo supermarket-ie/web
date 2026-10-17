@@ -143,18 +143,19 @@ nothing) if `allow_http_only_smoke_test=true` and `deploy_application=false`.
 
 | Item | Assumption | Est. |
 | --- | --- | --- |
-| Fargate | 1× 0.5 vCPU / 1 GB, always-on | ~$18 |
+| Fargate | 1× **1 vCPU / 2 GB**, always-on | ~$35 |
 | ALB | 1 ALB, low LCU | ~$18–22 |
 | ECR | 1 repo, few images | ~$1 |
 | CloudWatch Logs | 14-day retention, low volume | ~$2–5 |
 | Secrets Manager | ~9 secrets | ~$3–4 |
 | ACM | public cert | $0 |
-| Data transfer | low preview traffic | ~$1–3 |
-| **Preview total** | no CloudFront, no NAT | **~$45–55** |
+| S3 state + data transfer | tiny | ~$1–3 |
+| **Preview total** | no CloudFront, no NAT | **~$58–66** |
 
-Not in the preview: NAT Gateway (~$32/mo + data, Tesco egress — production
-phase), SQS, EventBridge, shared ISR cache. If the 2-process container OOMs at
-1 GB, move to 1 vCPU / 2 GB (~+$17/mo).
+This matches the ~$55–65/mo target. Dropping to 0.5 vCPU / 1 GB saves ~$17/mo
+(~$45–55 total) once the container proves comfortable. Not in the preview: NAT
+Gateway (~$32/mo + data, Tesco egress — production phase), SQS, EventBridge,
+shared ISR cache.
 
 ## 6. Rollback / teardown
 

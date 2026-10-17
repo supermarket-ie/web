@@ -97,6 +97,40 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Prove the DEPLOY path builds end to end too: BUILD_MODE=deploy with real-
+      # shaped (NON-production, NON-placeholder) NEXT_PUBLIC_* args and the
+      # service-role key delivered via a BuildKit SECRET MOUNT (never a layer/ARG).
+      # APP_ENV=preview makes the prerender read-only and tolerant of the absent
+      # DB (renders empty), so no real database is needed to validate the build.
+      # A dummy secret value is piped in to exercise the --mount=type=secret path.
+      - name: Build image (deploy-mode validation)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: supermarket-ie:preview-deploy
+          build-args: |
+            BUILD_MODE=deploy
+            NEXT_PUBLIC_SITE_URL=https://aws-preview.supermarket.ie
+            NEXT_PUBLIC_BASE_URL=https://aws-preview.supermarket.ie
+            NEXT_PUBLIC_SUPABASE_URL=https://deploy-verify.supabase.co
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-deploy-verify-anon
+          secrets: |
+            supabase_service_role_key=ci-deploy-verify-readonly-not-a-real-key
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Assert the deploy-mode image does NOT leak any build-arg/secret into
+      # image history/metadata. (No secret should appear; NEXT_PUBLIC_* are
+      # intentionally inlined into the app bundle, not image metadata.)
+      - name: Verify no secret in image metadata
+        run: |
+          if docker history --no-trunc supermarket-ie:preview-deploy 2>/dev/null | grep -q "ci-deploy-verify-readonly-not-a-real-key"; then
+            echo "SECRET LEAKED into image history" >&2; exit 1
+          fi
+          echo "No service-role secret found in image history (ok)."
+
   terraform:
     name: Terraform validate (no apply)
     runs-on: ubuntu-latest

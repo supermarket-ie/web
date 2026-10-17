@@ -8,10 +8,11 @@ terraform {
     }
   }
 
-  # Remote state is intentionally NOT configured here. Before `terraform init`,
-  # set a backend (e.g. S3 + DynamoDB lock) in the Supermarket-Prod account, or
-  # run with local state for review only. Do not apply without approval.
-  # backend "s3" {}
+  # S3 remote state with locking. Values are supplied at init time via
+  # -backend-config (see infra/terraform/backend.hcl.example), so nothing
+  # account-specific is hardcoded. For local review only, run
+  # `terraform init -backend=false`.
+  backend "s3" {}
 }
 
 provider "aws" {
