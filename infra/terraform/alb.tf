@@ -26,9 +26,22 @@ variable "allow_http_only_smoke_test" {
   default     = false
 }
 
+variable "cert_validated" {
+  description = <<-EOT
+    Set true ONLY once the ACM certificate status is ISSUED. While false the
+    HTTPS listener is NOT created (an ALB listener with a pending cert cannot
+    serve TLS), and the HTTP listener returns a fixed 503 "not available" — the
+    application is never exposed over plain HTTP. deploy_application=true
+    requires cert_validated=true.
+  EOT
+  type        = bool
+  default     = false
+}
+
 locals {
-  https_enabled = local.create && length(var.acm_certificate_arn) > 0
-  # HTTP-only is allowed only for the appless stage-1 smoke test.
+  # HTTPS listener exists only when a cert is supplied AND confirmed ISSUED.
+  https_enabled = local.create && length(var.acm_certificate_arn) > 0 && var.cert_validated
+  # HTTP-only appless smoke test (explicit opt-in, stage 1 only).
   http_smoke_only = local.create && !local.deploy_app && var.allow_http_only_smoke_test && !local.https_enabled
 }
 
@@ -43,9 +56,9 @@ resource "aws_lb" "this" {
 
   lifecycle {
     precondition {
-      # Enforce HTTPS whenever the application is deployed.
-      condition     = !local.deploy_app || length(var.acm_certificate_arn) > 0
-      error_message = "acm_certificate_arn is required when deploy_application = true: the application must be served over HTTPS before any authentication or non-public data access."
+      # The application is only ever served over HTTPS with an ISSUED cert.
+      condition     = !local.deploy_app || (length(var.acm_certificate_arn) > 0 && var.cert_validated)
+      error_message = "deploy_application=true requires acm_certificate_arn set AND cert_validated=true (cert ISSUED). The app must never be served over plain HTTP."
     }
     precondition {
       # HTTP-only smoke test and app deployment are mutually exclusive.
@@ -76,10 +89,12 @@ resource "aws_lb_target_group" "app" {
   tags = { Name = "${var.name_prefix}-tg" }
 }
 
-# HTTP listener (port 80).
-# - When HTTPS is enabled: 301-redirect everything to HTTPS.
-# - When HTTP-only smoke test: return a fixed 200 string, forward NOTHING.
-# The app target group is never served over plain HTTP.
+# HTTP listener (port 80). The app target group is NEVER served over plain HTTP.
+# Three mutually-exclusive behaviours:
+#  - HTTPS enabled (cert ISSUED): 301-redirect everything to HTTPS.
+#  - explicit appless smoke test: fixed 200 string (forwards nothing).
+#  - otherwise (e.g. cert still pending): fixed 503 "not available" so nothing
+#    is exposed and there is no redirect to a non-existent HTTPS listener.
 resource "aws_lb_listener" "http" {
   count             = local.create ? 1 : 0
   load_balancer_arn = aws_lb.this[0].arn
@@ -99,13 +114,25 @@ resource "aws_lb_listener" "http" {
   }
 
   dynamic "default_action" {
-    for_each = local.https_enabled ? [] : [1]
+    for_each = (!local.https_enabled && local.http_smoke_only) ? [1] : []
     content {
       type = "fixed-response"
       fixed_response {
         content_type = "text/plain"
         message_body = "preview smoke test ok (HTTP). The application is served over HTTPS only."
         status_code  = "200"
+      }
+    }
+  }
+
+  dynamic "default_action" {
+    for_each = (!local.https_enabled && !local.http_smoke_only) ? [1] : []
+    content {
+      type = "fixed-response"
+      fixed_response {
+        content_type = "text/plain"
+        message_body = "Service not available over HTTP. HTTPS endpoint pending certificate validation."
+        status_code  = "503"
       }
     }
   }
