@@ -234,11 +234,19 @@ cmd_backup() {
   [ -f "$ENV_FILE" ] || { echo "[transfer] run 'pull' first" >&2; exit 1; }
   local dest="${SMIE_BACKUP_PATH:-$HOME/smie-prod-credentials.$(date +%Y%m%d%H%M%S).env.enc}"
   echo "[backup] writing AES-256 encrypted emergency backup to: $dest"
-  echo "[backup] you will be prompted for an encryption passphrase (store it safely)."
-  openssl enc -aes-256-cbc -pbkdf2 -salt -in "$ENV_FILE" -out "$dest"
+  # Passphrase is read from the SMIE_BACKUP_PASSPHRASE env var via openssl's
+  # env: source, so it is NOT interactive and NOT on the command line. Set it in
+  # your own shell invocation so the passphrase never passes through chat/logs.
+  if [ -z "${SMIE_BACKUP_PASSPHRASE:-}" ]; then
+    echo "[backup] ERROR: set SMIE_BACKUP_PASSPHRASE in your shell before running 'backup'." >&2
+    echo "[backup] e.g.:  read -s -r SMIE_BACKUP_PASSPHRASE; export SMIE_BACKUP_PASSPHRASE" >&2
+    echo "[backup] then:  SMIE_SECRETS_WORKDIR=$WORKDIR bash scripts/aws-secrets-transfer.sh backup" >&2
+    exit 1
+  fi
+  openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:SMIE_BACKUP_PASSPHRASE -in "$ENV_FILE" -out "$dest"
   chmod 600 "$dest"
   echo "[backup] encrypted backup written. Decrypt later with:"
-  echo "         openssl enc -d -aes-256-cbc -pbkdf2 -in \"$dest\""
+  echo "         openssl enc -d -aes-256-cbc -pbkdf2 -pass env:SMIE_BACKUP_PASSPHRASE -in \"$dest\""
   echo "[backup] NOTE: plaintext still exists only in $WORKDIR until 'cleanup'."
 }
 
