@@ -1,0 +1,111 @@
+name: Build & push deploy image to ECR
+
+# MANUAL ONLY. Builds the production/test deploy image in GitHub Actions and
+# pushes it to ECR in Supermarket-Prod (eu-west-1). This removes the need for a
+# local Docker or AWS CLI. It does NOT run terraform, does NOT change DNS, and
+# does NOT touch the ECS service — it only publishes an image tag you then point
+# the ECS service at via `terraform apply -var image_tag=<sha>`.
+#
+# Auth is via GitHub OIDC (no long-lived AWS keys). Configure once:
+#   - An IAM role in Supermarket-Prod trusting this repo's OIDC (role ARN below),
+#     with ECR push permissions (ecr:GetAuthorizationToken + push to the repo).
+#   - GitHub repo secrets:
+#       AWS_DEPLOY_ROLE_ARN            (the OIDC role to assume)
+#       PROD_SUPABASE_SERVICE_ROLE_KEY (prod service-role key; used ONLY via the
+#                                       BuildKit secret mount, never inlined)
+#   - GitHub repo variables (non-secret):
+#       PROD_SUPABASE_URL, PROD_SUPABASE_ANON_KEY, ECR_REPOSITORY
+#
+# Prerequisite: the ECR repo must already exist (created by Terraform stage 1).
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_mode:
+        description: "Which hostname to inline (test = aws-preview, prod = www)."
+        type: choice
+        required: true
+        default: test
+        options: [test, prod]
+      aws_region:
+        description: "AWS region"
+        type: string
+        required: true
+        default: eu-west-1
+
+permissions:
+  id-token: write   # for OIDC
+  contents: read
+
+concurrency:
+  group: aws-ecr-deploy-image
+  cancel-in-progress: false
+
+jobs:
+  build-push:
+    name: Build & push (${{ inputs.image_mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: aws-prod   # add a required reviewer on this env for a manual gate
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve image hostname
+        id: host
+        run: |
+          if [ "${{ inputs.image_mode }}" = "prod" ]; then
+            echo "site_url=https://www.supermarket.ie" >> "$GITHUB_OUTPUT"
+            echo "tag_suffix=-prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "site_url=https://aws-preview.supermarket.ie" >> "$GITHUB_OUTPUT"
+            echo "tag_suffix=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create service-role key secret file (BuildKit secret source)
+        run: |
+          # Written to a runner-local file used only as the --secret source; it
+          # is never added to a build layer or image metadata, and the runner is
+          # ephemeral. Masked value, not echoed.
+          printf '%s' "${{ secrets.PROD_SUPABASE_SERVICE_ROLE_KEY }}" > /tmp/svc_key
+          echo "::add-mask::$(cat /tmp/svc_key)"
+
+      - name: Build & push deploy image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.host.outputs.sha }}${{ steps.host.outputs.tag_suffix }}
+          build-args: |
+            BUILD_MODE=deploy
+            NEXT_PUBLIC_SITE_URL=${{ steps.host.outputs.site_url }}
+            NEXT_PUBLIC_BASE_URL=${{ steps.host.outputs.site_url }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.PROD_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.PROD_SUPABASE_ANON_KEY }}
+          secret-files: |
+            supabase_service_role_key=/tmp/svc_key
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Clean up secret file
+        if: always()
+        run: rm -f /tmp/svc_key
+
+      - name: Report pushed tag
+        run: |
+          echo "Pushed: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.host.outputs.sha }}${{ steps.host.outputs.tag_suffix }}"
+          echo "Next: terraform apply -var image_tag=${{ steps.host.outputs.sha }}${{ steps.host.outputs.tag_suffix }}"
