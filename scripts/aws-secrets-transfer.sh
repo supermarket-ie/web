@@ -47,9 +47,12 @@ WORKDIR="${SMIE_SECRETS_WORKDIR:-${WORKROOT%/}/smie-secrets-xfer}"
 ENV_FILE="$WORKDIR/vercel.prod.env"
 
 # Required credential NAME -> AWS Secrets Manager secret NAME.
+# NOTE: NEXT_PUBLIC_SUPABASE_ANON_KEY is intentionally NOT here: it is absent in
+# the Vercel production env and is not read by any app code (the app uses the
+# service-role client server-side). It is therefore neither required nor stored
+# in Secrets Manager. See cmd_github for how the GitHub build-arg is handled.
 MAP=(
   "NEXT_PUBLIC_SUPABASE_URL=smie-prod/supabase-url"
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY=smie-prod/supabase-anon"
   "SUPABASE_SERVICE_ROLE_KEY=smie-prod/supabase-service"
   "MAGIC_LINK_SECRET=smie-prod/magic-link"
   "VENDOR_MAGIC_LINK_SECRET=smie-prod/vendor-magic-link"
@@ -59,7 +62,7 @@ MAP=(
   "ANTHROPIC_API_KEY=smie-prod/anthropic"
 )
 REQUIRED_KEYS=(
-  NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY
+  NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
   MAGIC_LINK_SECRET VENDOR_MAGIC_LINK_SECRET CRON_SECRET REVALIDATE_SECRET
   RESEND_API_KEY ANTHROPIC_API_KEY
 )
@@ -182,11 +185,19 @@ cmd_transfer() {
 cmd_github() {
   cmd_check
   local tmp; tmp="$(mktemp "$WORKDIR/gh.XXXXXX")"
-  # Non-secret anon key -> repo VARIABLE. Piped via STDIN (gh reads the value
-  # from stdin when --body is omitted) so it is not placed in argv either.
-  extract_value_to_file NEXT_PUBLIC_SUPABASE_ANON_KEY "$tmp"
-  gh variable set PROD_SUPABASE_ANON_KEY --repo "$GH_REPO" < "$tmp" >/dev/null
-  echo "[github] set variable PROD_SUPABASE_ANON_KEY"
+  # Anon key -> repo VARIABLE (non-secret; inlined into the client build, but no
+  # app code actually reads it). If present in Vercel, copy it verbatim via
+  # STDIN. If absent (it is not set in production), set a clearly-labelled
+  # non-secret sentinel so the Dockerfile's deploy guard (which only rejects the
+  # literal "build-placeholder") passes — this is NOT a fabricated credential,
+  # the value is unused at runtime.
+  if extract_value_to_file NEXT_PUBLIC_SUPABASE_ANON_KEY "$tmp" && [ -s "$tmp" ]; then
+    gh variable set PROD_SUPABASE_ANON_KEY --repo "$GH_REPO" < "$tmp" >/dev/null
+    echo "[github] set variable PROD_SUPABASE_ANON_KEY (from Vercel)"
+  else
+    printf '%s' "unused-anon-key-not-in-vercel" | gh variable set PROD_SUPABASE_ANON_KEY --repo "$GH_REPO" >/dev/null
+    echo "[github] NEXT_PUBLIC_SUPABASE_ANON_KEY absent in Vercel + unused by code; set non-secret sentinel variable"
+  fi
   : > "$tmp"
   # Service-role key -> SECRET scoped to the protected aws-prod ENVIRONMENT
   # (not a repo-wide secret), via STDIN so it is not in argv.
