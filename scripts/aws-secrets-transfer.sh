@@ -202,7 +202,8 @@ cmd_github() {
   # Service-role key -> SECRET scoped to the protected aws-prod ENVIRONMENT
   # (not a repo-wide secret), via STDIN so it is not in argv.
   extract_value_to_file SUPABASE_SERVICE_ROLE_KEY "$tmp"
-  gh secret set PROD_SUPABASE_SERVICE_ROLE_KEY --repo "$GH_REPO" --env "$GH_ENV" --body-file "$tmp" >/dev/null
+  # gh reads the secret value from STDIN when --body is omitted (keeps it out of argv).
+  gh secret set PROD_SUPABASE_SERVICE_ROLE_KEY --repo "$GH_REPO" --env "$GH_ENV" < "$tmp" >/dev/null
   echo "[github] set environment secret PROD_SUPABASE_SERVICE_ROLE_KEY (env: $GH_ENV)"
   rm -f "$tmp"
 }
@@ -214,9 +215,10 @@ cmd_verify() {
   for pair in "${MAP[@]}"; do
     local vkey="${pair%%=*}" sm_name="${pair#*=}"
     extract_value_to_file "$vkey" "$src" || { echo "[verify] $sm_name : SOURCE MISSING"; ok=0; continue; }
-    aws_sm get-secret-value --secret-id "$sm_name" --query 'SecretString' --output text > "$stored" 2>/dev/null || true
-    # get-secret-value --output text appends a trailing newline; strip it for compare.
-    printf '%s' "$(cat "$stored")" > "$stored.n" && mv "$stored.n" "$stored"
+    # Fetch as JSON and decode with Python so the EXACT bytes are preserved
+    # (an --output text comparison spuriously strips trailing newlines).
+    aws_sm get-secret-value --secret-id "$sm_name" --query 'SecretString' --output json 2>/dev/null \
+      | python3 -c "import sys,json; open('$stored','w').write(json.load(sys.stdin))" 2>/dev/null || : > "$stored"
     if [ "$(sha_of_file "$src")" = "$(sha_of_file "$stored")" ]; then
       echo "[verify] $sm_name : MATCH"
     else
