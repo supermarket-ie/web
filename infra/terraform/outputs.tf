@@ -30,8 +30,8 @@ output "ecs_cluster_name" {
 }
 
 output "ecs_service_name" {
-  description = "ECS service name (for forced redeploys)."
-  value       = local.create ? aws_ecs_service.app[0].name : null
+  description = "ECS service name (for forced redeploys). Null until stage 2 (deploy_application=true)."
+  value       = local.deploy_app ? aws_ecs_service.app[0].name : null
 }
 
 output "log_group" {
