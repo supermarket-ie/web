@@ -38,34 +38,43 @@ DNS registrar login.
 
 ---
 
-## Step 1 — AWS access (IAM Identity Center)
+## Step 1 — AWS access (IAM Identity Center) — DONE
 
-1. In IAM Identity Center for `Supermarket-Prod`, ensure you have a permission
-   set with admin/power-user for the first bring-up, assigned to your user.
-2. Install the AWS CLI on your machine (needed for the Terraform applies and
-   secret creation — NOT for building the image):
-   - macOS: `brew install awscli` (or the official pkg installer).
-3. Configure SSO and verify:
-   ```bash
-   aws configure sso            # start URL, region eu-west-1, account Supermarket-Prod
-   aws sso login --profile smie-prod
-   export AWS_PROFILE=smie-prod AWS_REGION=eu-west-1
-   aws sts get-caller-identity  # must show the Supermarket-Prod account id
-   ```
+- AWS CLI v2 installed; SSO profile `smie-prod` configured against start URL
+  `https://d-936780964e.awsapps.com/start/`, SSO region `eu-west-1`.
+- Authenticated to account **611622961299 (Supermarket-Prod)**,
+  `AdministratorAccess`. Re-auth each session with
+  `aws sso login --sso-session smie` then `export AWS_PROFILE=smie-prod`.
 
-## Step 2 — GitHub → ECR via OIDC (no local Docker)
+## Step 2 — GitHub → ECR via OIDC (no local Docker) — DONE (hardened)
 
-This is how the image gets built and pushed without local Docker (answers
-"should we use GitHub Actions to build & publish to ECR" — yes).
+Image build/push runs in GitHub Actions, not on a local Docker.
 
-1. Create a GitHub OIDC identity provider + an IAM role in `Supermarket-Prod`
-   that trusts this repo and allows ECR push. Minimal policy actions:
-   `ecr:GetAuthorizationToken` (resource `*`) and, on the app repo ARN,
-   `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`,
-   `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`,
-   `ecr:BatchGetImage`. Trust policy conditions:
-   `token.actions.githubusercontent.com:sub = repo:supermarket-ie/web:*`.
-2. In the GitHub repo settings add:
+Provisioned and locked down:
+- GitHub OIDC provider in `Supermarket-Prod`.
+- IAM role `smie-prod-gha-ecr-push` with ECR-push permissions scoped to the
+  `smie-prod` repo. **Trust is restricted to a protected environment**, not the
+  whole repo: `token.actions.githubusercontent.com:sub =
+  repo:supermarket-ie/web:environment:aws-prod` (no wildcard).
+- Protected GitHub environment `aws-prod`: required reviewer + deployments
+  allowed only from branch `infra/aws-migration`. The deploy workflow declares
+  `environment: aws-prod`, so credentials are only issuable from an approved run
+  on the approved branch.
+- GitHub secret `AWS_DEPLOY_ROLE_ARN` and variables `ECR_REPOSITORY=smie-prod`,
+  `PROD_SUPABASE_URL=https://ytyzwiqnobxehdqrnzhx.supabase.co` set.
+
+**Making the workflow dispatchable without merging PR #265:** GitHub only shows
+a `workflow_dispatch` workflow if it exists on the default branch. PR #266 adds
+ONLY `aws-ecr-deploy-image.yml` to `main` (no app/infra change). Merge #266,
+then run the workflow choosing ref `infra/aws-migration` to build the migration
+code. PR #265 (the migration) stays unmerged.
+
+### You still need to add (GitHub repo settings)
+- Variable `PROD_SUPABASE_ANON_KEY` (non-secret anon key).
+- Secret `PROD_SUPABASE_SERVICE_ROLE_KEY` (service-role key; used ONLY via the
+  BuildKit secret mount — never inlined, never logged).
+
+### Original (pre-hardening) notes retained for reference:
    - Secret `AWS_DEPLOY_ROLE_ARN` = that role's ARN.
    - Secret `PROD_SUPABASE_SERVICE_ROLE_KEY` = the production service-role key
      (used ONLY via a BuildKit secret mount — never inlined into the image).
