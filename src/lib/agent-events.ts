@@ -1,5 +1,5 @@
 import 'server-only';
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 
 export const AGENT_PRODUCT_CHANGE_TOPIC = 'agent-product-changes';
 

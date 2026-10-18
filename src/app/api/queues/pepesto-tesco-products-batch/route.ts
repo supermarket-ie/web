@@ -1,4 +1,4 @@
-import { handleCallback } from '@vercel/queue';
+import { handleCallback } from '@/lib/queue';
 import { choosePepestoCandidateFromItems, extractPepestoItems, finalizePepestoProduct, getPepestoCreditsCents, retrievePepestoProducts } from '@/lib/pepesto-tesco';
 import { supabaseAdmin } from '@/lib/supabase';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
@@ -8,7 +8,7 @@ type Message={runUuid:string;runId:string;batchIndex:number;products:TescoQueueP
 async function runActive(runUuid:string){const {data,error}=await supabaseAdmin.from('scrape_runs').select('status').eq('id',runUuid).maybeSingle();if(error)throw new Error(error.message);return data?.status==='running';}
 async function finalized(runUuid:string,storeProductId:string){const {data,error}=await supabaseAdmin.from('scrape_product_receipts').select('store_product_id').eq('run_id',runUuid).eq('store_product_id',storeProductId).maybeSingle();if(error)throw new Error(error.message);return Boolean(data);}
 
-export const POST=handleCallback<Message>(async(message)=>{
+export const POST=handleCallback<Message>('pepesto-tesco-products-batches',async(message)=>{
   if(!message?.runUuid||!Array.isArray(message.products)||!message.products.length) throw new Error('Invalid Pepesto Tesco queue message');
   if(!(await runActive(message.runUuid))) return;
   const {data:existing,error:existingError}=await supabaseAdmin.from('pepesto_tesco_product_batches').select('response_payload,credits_before_cents,credits_after_cents,actual_cost_cents,status').eq('run_uuid',message.runUuid).eq('batch_index',message.batchIndex).maybeSingle();

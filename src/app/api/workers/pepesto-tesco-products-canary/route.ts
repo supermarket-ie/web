@@ -1,4 +1,4 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import { createPepestoProductsRun, getPepestoCreditsCents, selectUntouchedPepestoTescoProducts } from '@/lib/pepesto-tesco';
 import { supabaseAdmin } from '@/lib/supabase';
 import { selectProvenPepestoTescoProducts } from '@/lib/tesco-proven-refresh';

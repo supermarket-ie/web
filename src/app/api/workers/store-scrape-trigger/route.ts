@@ -1,4 +1,4 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import { createDunnesScrapeRun, type DunnesBatchMessage, type DunnesQueueProduct } from '@/lib/dunnes-queue-worker';
 import { createSupervaluScrapeRun, type SupervaluBatchMessage, type SupervaluQueueProduct } from '@/lib/supervalu-direct-worker';
 import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';

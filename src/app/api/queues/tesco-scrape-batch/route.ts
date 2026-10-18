@@ -1,4 +1,4 @@
-import { handleCallback } from '@vercel/queue';
+import { handleCallback } from '@/lib/queue';
 import { supabaseAdmin } from '@/lib/supabase';
 import {
   TransientTescoError,
@@ -66,6 +66,7 @@ async function failRunForBlockedEgress(runUuid: string, label: string) {
 }
 
 export const POST = handleCallback<TescoBatchMessage>(
+  'tesco-scrape-batches',
   async (message, metadata) => {
     if (process.env.TESCO_VERCEL_WORKER_ENABLED !== 'true') {
       throw new Error('TESCO_VERCEL_WORKER_ENABLED is not true');

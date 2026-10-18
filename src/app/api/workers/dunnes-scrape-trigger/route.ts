@@ -1,4 +1,4 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import { createDunnesScrapeRun, selectDunnesProducts, type DunnesBatchMessage } from '@/lib/dunnes-queue-worker-fixed';
 import { supabaseAdmin } from '@/lib/supabase';
 import { resolveRetailerRunScope } from '@/lib/scrape-run-scope';

@@ -1,4 +1,4 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import { createSupervaluScrapeRun, selectSupervaluProducts, type SupervaluBatchMessage } from '@/lib/supervalu-direct-worker-fixed';
 import { supabaseAdmin } from '@/lib/supabase';
 import { resolveRetailerRunScope } from '@/lib/scrape-run-scope';

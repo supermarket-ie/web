@@ -49,6 +49,8 @@ locals {
     { name = "NEXT_TELEMETRY_DISABLED", value = "1" },
     { name = "NEXT_PUBLIC_SITE_URL", value = var.public_base_url },
     { name = "NEXT_PUBLIC_BASE_URL", value = var.public_base_url },
+    # Queue backend: 'sqs' once the AWS worker stack exists, else 'vercel'.
+    { name = "QUEUE_BACKEND", value = local.workers ? "sqs" : "vercel" },
     { name = "DISABLE_RETAILER_COLLECTION", value = local.retailer_blocked ? "true" : "false" },
     { name = "DISABLE_OUTBOUND_EMAIL", value = local.email_blocked ? "true" : "false" },
     { name = "SUPABASE_READ_ONLY", value = local.supabase_read_only ? "true" : "false" },
@@ -59,8 +61,16 @@ locals {
     { name = "NON_TESCO_VERCEL_WORKERS_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
   ]
 
+  # SQS queue URL env vars (SQS_URL_*), present only when the worker stack exists.
+  queue_url_environment = local.workers ? [for name, url in local.queue_urls : { name = name, value = url }] : []
+
+  # Full website env = base + queue URLs.
+  web_environment = concat(local.container_environment, local.queue_url_environment)
+
   # Secrets injected from Secrets Manager / SSM at runtime (names -> ARNs).
   container_secrets = [for name, arn in var.secret_arns : { name = name, valueFrom = arn }]
+
+  worker_image_tag = var.image_tag_worker != "" ? var.image_tag_worker : var.image_tag
 }
 
 resource "aws_ecs_task_definition" "app" {
@@ -93,7 +103,7 @@ resource "aws_ecs_task_definition" "app" {
       image        = "${aws_ecr_repository.app[0].repository_url}:${var.image_tag}"
       essential    = true
       portMappings = [{ containerPort = var.container_port, protocol = "tcp" }]
-      environment  = local.container_environment
+      environment  = local.web_environment
       secrets      = local.container_secrets
       logConfiguration = {
         logDriver = "awslogs"

@@ -1,4 +1,4 @@
-import { handleCallback } from '@vercel/queue';
+import { handleCallback } from '@/lib/queue';
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishAgentProductChange } from '@/lib/agent-events';
 import {
@@ -16,7 +16,7 @@ async function alreadyFinalized(runUuid: string, storeProductId: string) {
   return Boolean(data);
 }
 
-export const POST = handleCallback<SupervaluBatchMessage>(async (message, metadata) => {
+export const POST = handleCallback<SupervaluBatchMessage>('supervalu-scrape-batches', async (message, metadata) => {
   if (process.env.SUPERVALU_VERCEL_WORKER_ENABLED !== 'true') throw new Error('SUPERVALU_VERCEL_WORKER_ENABLED is not true');
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('SuperValu queue worker Supabase credential is not configured');
   if (!message?.runUuid || !Array.isArray(message.products) || message.products.length === 0) throw new Error('Invalid SuperValu queue message');

@@ -1,4 +1,4 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import { supabaseAdmin } from '@/lib/supabase';
 import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 

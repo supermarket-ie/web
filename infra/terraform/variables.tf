@@ -120,6 +120,45 @@ variable "enable_outbound_email_on_aws" {
   default     = false
 }
 
+variable "enable_workers" {
+  description = <<-EOT
+    Provision the AWS background-worker stack: SQS queues (+DLQs), the SQS
+    consumer ECS service, and EventBridge Scheduler cron jobs (as scheduled ECS
+    tasks). DEFAULT FALSE — the website can run on AWS with zero workers while
+    Vercel still runs them, avoiding duplicate retailer collection / emails.
+
+    Provisioning the queues/service/schedules is safe on its own, but the
+    SCHEDULES ARE CREATED DISABLED (schedule_state=DISABLED) and the consumer
+    service desired_count is `worker_desired_count` (default 0), so nothing
+    actually runs until explicitly enabled AND Vercel workers are disabled in the
+    same controlled change.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "worker_desired_count" {
+  description = "Desired count for the SQS consumer service. 0 keeps it provisioned-but-idle until cutover of the background stage."
+  type        = number
+  default     = 0
+}
+
+variable "worker_schedule_state" {
+  description = "EventBridge Scheduler state for the cron jobs: DISABLED (default, safe) or ENABLED. Enable only when Vercel crons are being turned off in the same change."
+  type        = string
+  default     = "DISABLED"
+  validation {
+    condition     = contains(["ENABLED", "DISABLED"], var.worker_schedule_state)
+    error_message = "worker_schedule_state must be ENABLED or DISABLED."
+  }
+}
+
+variable "image_tag_worker" {
+  description = "Image tag for the worker/scheduler tasks (usually same as image_tag)."
+  type        = string
+  default     = ""
+}
+
 variable "public_base_url" {
   description = <<-EOT
     Public base URL the app advertises (links/cookies/metadata) and that the ACM

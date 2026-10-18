@@ -1,4 +1,4 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import {
   createTescoScrapeRun,
   selectTescoProducts,
