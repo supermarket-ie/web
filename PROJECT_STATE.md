@@ -21,6 +21,25 @@ blocked in-app for website AND Eve agent clients), `DISABLE_RETAILER_COLLECTION
 `QUEUE_BACKEND=vercel`. Image `cd9963c` (built+pushed by GitHub Actions →
 ECR `smie-prod` via OIDC role scoped to the protected `aws-prod` environment).
 
+HA upgrade (cutover-readiness, 19 Oct): service now runs **2 tasks across
+eu-west-1a + eu-west-1b**, both HEALTHY, both ALB targets healthy. Target-tracking
+**autoscaling** enabled (min 2, max 6; CPU 60% + ALB 800 req/task). Zero-downtime
+rolling deploys: `deployment_minimum_healthy_percent=50`, max 200%, **deployment
+circuit breaker with auto-rollback**. Target-group `deregistration_delay=30s`.
+Idle utilisation measured: CPU ~1%, memory ~24% of 2 GB — 1 vCPU/2 GB is
+comfortably sized. Second task adds ~$35/mo (running total ~$93–101/mo).
+
+Cutover readiness — REMAINING before production go-live (Plan A):
+1. Fix `www`/apex CAA so Amazon can issue (add `amazon.com` to the CAA, or remove
+   the Vercel-flattened CAA on the www CNAME target). Production DNS change.
+2. Re-request + validate the `www`+apex ACM cert; repoint the HTTPS listener to it.
+3. Rebuild image with `NEXT_PUBLIC_SITE_URL/BASE_URL=https://www.supermarket.ie`,
+   set `test_mode=false` (read-write production), apply.
+4. Verify REAL journeys in production posture on the test host (sign-in with an
+   existing session, build a shop, an agent conversation, a write).
+5. Lower www/apex DNS TTL ~24h ahead; then cut www/apex → ALB (approval-gated);
+   keep Vercel targets noted for instant rollback.
+
 Infrastructure (Terraform, S3 backend `smie-prod-tfstate-611622961299`):
 ECR, VPC (10.42.0.0/16, 2 public + 2 private subnets), ALB
 `smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com`, HTTPS listener, ECS

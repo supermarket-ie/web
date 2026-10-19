@@ -76,6 +76,9 @@ resource "aws_lb_target_group" "app" {
   vpc_id      = aws_vpc.this[0].id
   target_type = "ip"
 
+  # Drain quickly on rolling deploys/scale-in (default 300s is slow).
+  deregistration_delay = 30
+
   health_check {
     enabled             = true
     path                = "/terms" # static page, no DB dependency — reliable health signal

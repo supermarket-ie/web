@@ -73,6 +73,44 @@ variable "log_retention_days" {
   default     = 14
 }
 
+# --- High availability / autoscaling ---------------------------------------
+
+variable "enable_autoscaling" {
+  description = "Register the ECS service for target-tracking autoscaling (CPU + ALB request count)."
+  type        = bool
+  default     = false
+}
+
+variable "autoscale_min" {
+  description = "Minimum task count when autoscaling is enabled (>=2 for AZ redundancy)."
+  type        = number
+  default     = 2
+}
+
+variable "autoscale_max" {
+  description = "Maximum task count under load."
+  type        = number
+  default     = 6
+}
+
+variable "autoscale_cpu_target" {
+  description = "Target average CPU % for scaling."
+  type        = number
+  default     = 60
+}
+
+variable "autoscale_requests_per_target" {
+  description = "Target ALB requests per task before scaling out."
+  type        = number
+  default     = 800
+}
+
+variable "deployment_min_healthy_percent" {
+  description = "ECS rolling-deploy minimum healthy percent. 50 (with >=2 tasks) keeps a task serving during deploys."
+  type        = number
+  default     = 50
+}
+
 # --- Application configuration --------------------------------------------
 
 variable "test_mode" {

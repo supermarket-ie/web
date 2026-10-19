@@ -146,8 +146,21 @@ resource "aws_ecs_service" "app" {
     container_port   = var.container_port
   }
 
-  deployment_minimum_healthy_percent = 0 # single-task preview: allow replace
+  # Zero-downtime rolling deploys: keep at least half the tasks serving while
+  # new ones come up (with desired_count>=2 a task is always live), and allow
+  # surge to 200%. The circuit breaker auto-rolls-back a failed deployment.
+  deployment_minimum_healthy_percent = var.deployment_min_healthy_percent
   deployment_maximum_percent         = 200
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  # Let ECS manage desired_count once autoscaling is attached, so Terraform
+  # doesn't fight the autoscaler on subsequent applies.
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 
   depends_on = [aws_lb_listener.http]
 
