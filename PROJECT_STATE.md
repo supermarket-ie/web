@@ -1,5 +1,54 @@
 # Supermarket.ie — Canonical Project State
 
+## AWS preview operational (website + Eve agent) — 19 October 2026
+
+Branch `infra/aws-migration` (PR #265, still DRAFT — not merged). The website and
+Eve agent now run on AWS ECS Fargate in account `Supermarket-Prod` (611622961299),
+eu-west-1, reading the EXISTING production Supabase. This is a pre-cutover TEST
+deployment; no production DNS, Supabase data, or Vercel config was changed, and
+all AWS background workers/retailer collection/email remain disabled.
+
+Verified live via the ALB (Host `aws-preview.supermarket.ie`, valid HTTPS/TLS1.3):
+`/` 200, `/terms` 200, `/eve/v1/info` 200 (agent proxied), `/api/products` 200
+returning 127 real products from production Supabase; HTTP 80 → 301 HTTPS;
+`X-Robots-Tag: noindex,nofollow` and `robots.txt Disallow: /` (preview not
+indexable). ECS task RUNNING+HEALTHY, ALB target healthy. No email/worker/write
+activity in logs.
+
+Posture (ECS task env): `APP_ENV=preview`, `SUPABASE_READ_ONLY=true` (writes
+blocked in-app for website AND Eve agent clients), `DISABLE_RETAILER_COLLECTION
+=true`, `DISABLE_OUTBOUND_EMAIL=true`, all `*_WORKER_ENABLED=false`,
+`QUEUE_BACKEND=vercel`. Image `cd9963c` (built+pushed by GitHub Actions →
+ECR `smie-prod` via OIDC role scoped to the protected `aws-prod` environment).
+
+Infrastructure (Terraform, S3 backend `smie-prod-tfstate-611622961299`):
+ECR, VPC (10.42.0.0/16, 2 public + 2 private subnets), ALB
+`smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com`, HTTPS listener, ECS
+cluster `smie-prod-cluster` + service `smie-prod-svc` (1 Fargate task,
+1 vCPU/2 GB), IAM exec/task roles, CloudWatch `/ecs/smie-prod`. The 8 production
+credentials were transferred Vercel→AWS Secrets Manager (`smie-prod/*`), verified
+byte-exact incl. `MAGIC_LINK_SECRET` (so sessions survive cutover). Est. cost
+~$58–66/mo.
+
+Key findings / decisions:
+- ACM 3-name cert (`www`+apex+`aws-preview`) FAILED `CAA_ERROR`: `www.supermarket.ie`
+  is a CNAME to Vercel whose CAA authorises sectigo/globalsign/letsencrypt/pki.goog
+  but NOT amazon.com. apex and `aws-preview` validated. Worked around with a
+  single-name ISSUED cert for `aws-preview.supermarket.ie` (`cca36c0b`). The
+  `www`/apex cert is a cutover-time concern (move `www` off Vercel, or add
+  `amazon.com` to the CAA then).
+- Fixed a container bug: Eve server crashed with EACCES creating `/app/.eve`
+  (non-root `node` user vs root-owned `/app`); Dockerfile now pre-creates and
+  chowns `/app/.eve` + `/app`.
+- Vercel Queues/Cron have no customer-facing dependency; SQS/EventBridge
+  replacements exist in the branch but are provisioned OFF (`enable_workers=false`).
+
+Remaining to make `https://aws-preview.supermarket.ie` publicly resolvable:
+add ONE DNS record at Register365 — `aws-preview` CNAME →
+`smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com` (does not touch www/apex/
+production). Production cutover (www/apex → ALB) and enabling AWS workers are
+later, separately-approved steps.
+
 ## Structured identity contradiction guard — 11 October 2026
 
 Final review extended exact-match gates to the newly retained structured
