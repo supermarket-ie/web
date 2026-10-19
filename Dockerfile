@@ -149,6 +149,14 @@ COPY --from=builder --chown=node:node /app/components.json ./components.json
 COPY --chown=node:node docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
+# Eve writes runtime data under <appRoot>/.eve/.workflow-data. The container
+# runs as the non-root `node` user, but WORKDIR /app is root-owned, so `node`
+# cannot create .eve/ at runtime (observed: EACCES, Eve server exits). Give the
+# app root and the Eve data dir to `node` so Eve can initialise its data store.
+RUN mkdir -p /app/.eve/.workflow-data \
+    && chown -R node:node /app/.eve \
+    && chown node:node /app
+
 USER node
 EXPOSE 3000
 

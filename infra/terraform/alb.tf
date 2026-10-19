@@ -101,6 +101,9 @@ resource "aws_lb_listener" "http" {
   port              = 80
   protocol          = "HTTP"
 
+  # Exactly one default_action. When HTTPS is enabled -> 301 redirect to HTTPS.
+  # Otherwise -> a fixed response (200 only for the explicit appless smoke test;
+  # 503 otherwise). The app target group is never served over plain HTTP.
   dynamic "default_action" {
     for_each = local.https_enabled ? [1] : []
     content {
@@ -114,25 +117,13 @@ resource "aws_lb_listener" "http" {
   }
 
   dynamic "default_action" {
-    for_each = (!local.https_enabled && local.http_smoke_only) ? [1] : []
+    for_each = local.https_enabled ? [] : [1]
     content {
       type = "fixed-response"
       fixed_response {
         content_type = "text/plain"
-        message_body = "preview smoke test ok (HTTP). The application is served over HTTPS only."
-        status_code  = "200"
-      }
-    }
-  }
-
-  dynamic "default_action" {
-    for_each = (!local.https_enabled && !local.http_smoke_only) ? [1] : []
-    content {
-      type = "fixed-response"
-      fixed_response {
-        content_type = "text/plain"
-        message_body = "Service not available over HTTP. HTTPS endpoint pending certificate validation."
-        status_code  = "503"
+        message_body = local.http_smoke_only ? "preview smoke test ok (HTTP). The application is served over HTTPS only." : "Service not available over HTTP. HTTPS endpoint pending certificate validation."
+        status_code  = local.http_smoke_only ? "200" : "503"
       }
     }
   }
