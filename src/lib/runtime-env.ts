@@ -34,6 +34,19 @@ export function isPreviewEnv(): boolean {
 export function isNoIndexEnv(baseUrl?: string): boolean {
   const url = (baseUrl ?? process.env.NEXT_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? '').trim();
   if (url.includes('staging')) return true;
+  // Never let a non-canonical host (e.g. the aws-preview test host, or the raw
+  // ALB) be indexed, even in production posture — only the canonical production
+  // hostnames are indexable. Prevents duplicate-content indexing of the preview.
+  if (url) {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      const canonical = host === 'www.supermarket.ie' || host === 'supermarket.ie';
+      if (!canonical) return true;
+    } catch {
+      // Unparseable URL -> treat as non-canonical (noindex) to be safe.
+      return true;
+    }
+  }
   const env = runtimeEnv();
   return env === 'preview' || env === 'development';
 }

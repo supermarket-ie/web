@@ -73,6 +73,17 @@ describe('runtime-env', () => {
     const { isNoIndexEnv } = await freshRuntimeEnv();
     expect(isNoIndexEnv('https://preview.example.awsapprunner.com')).toBe(true);
   });
+
+  it('noindexes any non-canonical host even in production posture', async () => {
+    setEnv({ APP_ENV: 'production', VERCEL_ENV: 'production' });
+    const { isNoIndexEnv } = await freshRuntimeEnv();
+    // The aws-preview test host and the raw ALB must never be indexed...
+    expect(isNoIndexEnv('https://aws-preview.supermarket.ie')).toBe(true);
+    expect(isNoIndexEnv('https://smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com')).toBe(true);
+    // ...only the canonical production hostnames are indexable.
+    expect(isNoIndexEnv('https://www.supermarket.ie')).toBe(false);
+    expect(isNoIndexEnv('https://supermarket.ie')).toBe(false);
+  });
 });
 
 describe('preview-guard', () => {
