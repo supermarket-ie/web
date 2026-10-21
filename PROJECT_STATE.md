@@ -1,5 +1,52 @@
 # Supermarket.ie — Canonical Project State
 
+## AWS read-write verification + CAA finding — 21 October 2026
+
+Image `b5e538c` (adds SEO fix: any non-canonical host, incl. aws-preview and the
+raw ALB, is now `noindex` even in production posture; only www/apex are
+indexable). Built via GitHub Actions and deployed to the HA service (2 tasks).
+
+TEST-MODE verification (`test_mode=true`): `/` 200, `X-Robots-Tag noindex`,
+`robots.txt Disallow: /`, canonical=aws-preview, security headers present,
+`/api/products` 200, `/api/agent/briefing` 401 (clean auth gate), Eve
+`/eve/v1/info` 200.
+
+CONTROLLED READ-WRITE test (`test_mode=false`, APP_ENV=production,
+SUPABASE_READ_ONLY=false; retailer collection + outbound email + workers stayed
+DISABLED; QUEUE_BACKEND=vercel): against production Supabase via the ALB —
+- `POST /api/subscribe` (test email `aws-migration-test+20261021093932@supermarket.ie`)
+  -> 200 `{success, verification_required}`. Email suppressed by the guard (no
+  real send). Wrote an `agent_events` row (`verification_email_sent`). No
+  subscriber row created (verification link not followed), so no customer record.
+- `POST /api/contact` (name "AWS Migration Test", msg marked safe-to-delete)
+  -> 200. Email suppressed. Wrote an `agent_events` row.
+- `POST /api/revalidate` with no secret -> 401 (REVALIDATE_SECRET loaded, route live).
+- noindex remained ON in production posture (SEO fix verified); retailer worker
+  route still 503 blocked; catalogue `/shop` 200.
+After testing, returned the service to `test_mode=true` (read-only) — confirmed
+APP_ENV=preview, SUPABASE_READ_ONLY=true, rollout COMPLETED, 2 tasks.
+
+TEST RECORDS CREATED (await cleanup decision — app is read-only so cannot self-
+delete; deletion is a direct production write held per authorisation rule 7):
+  * `agent_events` row from subscribe: event_type `verification_email_sent`,
+    session_id = the sign_in session, metadata source `sign_in`. (~1 row)
+  * `agent_events` row from contact: identifiable test name/email/message.
+No customers, trusted prices, mappings, or retailer data touched.
+
+CAA finding (production cert CAA_ERROR): apex `supermarket.ie` has NO CAA
+(unrestricted — Amazon may issue; apex SAN validated). `www.supermarket.ie` is a
+CNAME to Vercel `e2ae0df6f59fc39f.vercel-dns-017.com`, whose CAA authorises only
+globalsign/sectigo/letsencrypt/pki.goog — NOT Amazon. Per RFC 8659 the CNAME
+target's CAA governs `www`, and that zone is Vercel-controlled, so NO record in
+the Register365 zone can authorise Amazon for `www` while `www` remains a CNAME
+to Vercel. The `www` cert can only issue once `www` is repointed off Vercel (at
+cutover). At cutover, add at the apex (preserving Let's Encrypt):
+  `supermarket.ie. CAA 0 issue "amazonaws.com"`
+  `supermarket.ie. CAA 0 issue "letsencrypt.org"`
+Production cert `cebaa35e` (www+apex) is requested and waiting; apex validates,
+www blocked until the above. (Earlier `amazon.com` guidance corrected to the
+ACM-correct `amazonaws.com`.)
+
 ## AWS preview operational (website + Eve agent) — 19 October 2026
 
 Branch `infra/aws-migration` (PR #265, still DRAFT — not merged). The website and
