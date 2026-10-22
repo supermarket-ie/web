@@ -38,6 +38,18 @@ variable "cert_validated" {
   default     = false
 }
 
+variable "additional_certificate_arns" {
+  description = <<-EOT
+    Extra ISSUED ACM certs to attach to the HTTPS listener via SNI, so the ALB
+    can serve multiple hostnames (e.g. the production apex / www certs) alongside
+    the default listener cert. Each must be ISSUED. Lets us stage the production
+    certs on the listener BEFORE DNS cutover so valid TLS is served the instant a
+    hostname resolves to the ALB.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 locals {
   # HTTPS listener exists only when a cert is supplied AND confirmed ISSUED.
   https_enabled = local.create && length(var.acm_certificate_arn) > 0 && var.cert_validated
@@ -144,4 +156,12 @@ resource "aws_lb_listener" "https" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app[0].arn
   }
+}
+
+# Additional SNI certs on the HTTPS listener (production apex/www), staged before
+# DNS cutover so valid TLS is served the moment a hostname resolves to the ALB.
+resource "aws_lb_listener_certificate" "extra" {
+  for_each        = local.https_enabled ? toset(var.additional_certificate_arns) : toset([])
+  listener_arn    = aws_lb_listener.https[0].arn
+  certificate_arn = each.value
 }

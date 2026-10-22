@@ -1,5 +1,55 @@
 # Supermarket.ie — Canonical Project State
 
+## AWS production image + apex cert staged; cutover-ready — 21 October 2026
+
+Status: the AWS ECS Fargate environment is cutover-ready for the **apex**
+(`supermarket.ie`) with zero TLS gap; `www.supermarket.ie` must wait for a
+Vercel-exit window (CAA, below). Service is back to READ-ONLY posture. Vercel
+remains live and authoritative for `www`/apex until the user flips DNS.
+
+Production hostname image: `14d960e-prod` — built via GitHub Actions
+(`image_mode=prod`, `NEXT_PUBLIC_*`/base URL baked to `https://www.supermarket.ie`),
+pushed to ECR `smie-prod`, and deployed to the HA service (2 tasks). Verified on
+the ALB: `/` 200, canonical = `https://www.supermarket.ie`, and `X-Robots-Tag:
+noindex` on non-canonical hosts (aws-preview / raw ALB) per the SEO guard — only
+www/apex will be indexable once they serve from AWS.
+
+Apex TLS staged ahead of cutover (zero-gap): apex-only cert
+`a2cf0cf8-54f4-42ec-9d3c-bdb8c898a5fa` (`supermarket.ie`) is ISSUED and attached
+to the HTTPS listener via **SNI** (new `additional_certificate_arns` var +
+`aws_lb_listener_certificate.extra`). The listener now serves valid TLS for BOTH
+`aws-preview.supermarket.ie` (default, `cca36c0b`) and `supermarket.ie` (SNI).
+Verified via the ALB: apex `https` 200, `ssl_verify_result=0`; aws-preview still
+200. So the instant the apex A/ALIAS resolves to the ALB, valid TLS serves — no
+certificate gap. (The earlier www+apex cert `cebaa35e` FAILED again on the `www`
+CAA; apex-only is the cutover vehicle.)
+
+READ-ONLY revert (done): after the controlled read-write test the service was
+returned to `test_mode=true`. Task definition **revision 7** now has
+`APP_ENV=preview` and `SUPABASE_READ_ONLY=true`; rolling deploy COMPLETED, 2/2
+tasks HEALTHY, single deployment. The environment is read-only against the
+production Supabase again. (`test_mode` is runtime-only — it sets APP_ENV +
+SUPABASE_READ_ONLY env, not baked into the image.) Workers, retailer collection,
+and outbound email remain DISABLED.
+
+Cutover plan (apex-first; user drives DNS, agent drives AWS cert/listener):
+1. User lowers www/apex DNS TTL (~60s) ~24h ahead; confirms the apex rollback
+   target (current apex record at Register365) before the window.
+2. At the window: add apex CAA `supermarket.ie. CAA 0 issue "amazonaws.com"` and
+   `0 issue "letsencrypt.org"`; repoint apex `supermarket.ie` → ALB (zero TLS gap
+   via the staged `a2cf0cf8` SNI cert).
+3. Repoint `www.supermarket.ie` → ALB (leaves Vercel). Now re-request the `www`
+   ACM cert (it will validate — `www` no longer governed by Vercel's CAA), poll
+   ISSUED, add it to the listener via `additional_certificate_arns`, apply.
+4. Verify www/apex TLS + real journeys; watch ECS health + CloudWatch; keep
+   Vercel targets noted for instant rollback.
+Do NOT merge PR #265, enable workers, or enable email/collection as part of this.
+
+Open items for the user: (a) lower www/apex TTL + confirm apex rollback target;
+(b) decide the 2 identifiable `agent_events` test rows (leave / delete via
+Supabase SQL / authorise a scoped service-role delete — held per rule 7 as a
+direct production write); (c) choose the cutover window.
+
 ## AWS read-write verification + CAA finding — 21 October 2026
 
 Image `b5e538c` (adds SEO fix: any non-canonical host, incl. aws-preview and the
