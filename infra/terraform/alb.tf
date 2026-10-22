@@ -50,6 +50,25 @@ variable "additional_certificate_arns" {
   default     = []
 }
 
+variable "apex_redirect_host" {
+  description = <<-EOT
+    Apex hostname to 301-redirect to its canonical www host at the ALB edge
+    (e.g. "supermarket.ie" -> "https://www.supermarket.ie"). This replaces the
+    apex->www redirect that Vercel performs today, removing that dependency at
+    cutover. Empty string disables the rule. The matching SNI cert for the apex
+    host must be attached (via additional_certificate_arns) for valid TLS before
+    apex is redirected. Path and query are preserved.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "canonical_www_host" {
+  description = "Canonical www host that apex redirects to (used by apex_redirect_host)."
+  type        = string
+  default     = "www.supermarket.ie"
+}
+
 locals {
   # HTTPS listener exists only when a cert is supplied AND confirmed ISSUED.
   https_enabled = local.create && length(var.acm_certificate_arn) > 0 && var.cert_validated
@@ -164,4 +183,33 @@ resource "aws_lb_listener_certificate" "extra" {
   for_each        = local.https_enabled ? toset(var.additional_certificate_arns) : toset([])
   listener_arn    = aws_lb_listener.https[0].arn
   certificate_arn = each.value
+}
+
+# Apex -> canonical www 301 redirect at the ALB edge (replaces Vercel's apex
+# redirect). Only created when apex_redirect_host is set. Fires solely for the
+# apex Host header, so it is inert until apex DNS points at the ALB; all other
+# hosts (www, aws-preview) fall through to the forward default action.
+resource "aws_lb_listener_rule" "apex_redirect" {
+  count        = local.https_enabled && length(var.apex_redirect_host) > 0 ? 1 : 0
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 10
+
+  condition {
+    host_header {
+      values = [var.apex_redirect_host]
+    }
+  }
+
+  action {
+    type = "redirect"
+    redirect {
+      host  = var.canonical_www_host
+      path  = "/#{path}"
+      query = "#{query}"
+      # Omit an explicit port so the Location is the clean canonical
+      # "https://www.supermarket.ie/..." without a ":443" suffix.
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
 }

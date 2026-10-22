@@ -1,5 +1,68 @@
 # Supermarket.ie — Canonical Project State
 
+## www TLS solved via Let's Encrypt DNS-01 + apex→www edge redirect — 22 October 2026
+
+The `www` TLS blocker is SOLVED without any broken-HTTPS window. ACM could not
+issue for `www` (the Vercel CNAME's CAA excludes Amazon), but that same CAA
+authorises `letsencrypt.org`, so a Let's Encrypt cert was obtained via DNS-01 and
+imported into ACM — all before touching `www` DNS.
+
+What was done (no production DNS changed; Vercel still authoritative/live):
+- **Let's Encrypt cert for `www.supermarket.ie`** via certbot manual DNS-01.
+  Validation record `_acme-challenge.www.supermarket.ie TXT =
+  2R2IJHP7P3mGmOR3qghHii29b96J6XvwXwyZZMbr68o` was added by the user at
+  Register365; confirmed on Google/Cloudflare/Quad9/authoritative NS; cert
+  ISSUED (ECDSA P-256, expires 2027-01-20). Finding: `_acme-challenge.www` is NOT
+  shadowed by the `www` CNAME (it resolves in the Register365 zone), so DNS-01
+  works directly with no alias/delegation.
+- **Imported into ACM eu-west-1** as `a6079f96-c4a9-4a2c-aaf3-3fa602003258`
+  (type IMPORTED, Let's Encrypt, ISSUED). Key material kept in a chmod-700 temp
+  dir OUTSIDE Dropbox/Git/logs; never committed.
+- **Attached to the ALB HTTPS listener via SNI** (added to
+  `additional_certificate_arns`). Listener now serves THREE certs: `cca36c0b`
+  aws-preview (default), `a2cf0cf8` apex (ACM), `a6079f96` www (Let's Encrypt).
+  VERIFIED against both ALB nodes via `curl --resolve` (no prod DNS change):
+  `www.supermarket.ie` HTTP/2 200, `ssl_verify_result=0`, canonical=www. The
+  ECDSA cert took ~45s to propagate across ALB nodes after attach, then solid on
+  TLS 1.2 + 1.3.
+- **apex→www 301 at the ALB edge** (replaces Vercel's apex redirect, removing
+  that dependency): new `aws_lb_listener_rule.apex_redirect` (vars
+  `apex_redirect_host="supermarket.ie"`, `canonical_www_host="www.supermarket.ie"`),
+  priority 10, matches Host `supermarket.ie` only (inert until apex DNS points at
+  the ALB). VERIFIED: `supermarket.ie/shop?x=1` → 301
+  `https://www.supermarket.ie/shop?x=1` (path+query preserved); www + aws-preview
+  unaffected. (ALB echoes a cosmetic `:443` in Location — standards-compliant,
+  browsers normalise it.)
+
+App readiness (image `14d960e-prod`, 2/2 tasks healthy, read-only posture):
+`/`, `/terms`, `/shop`, `/api/products`, `/eve/v1/info` all 200;
+`/api/agent/briefing` + `/api/revalidate` (no secret) 401. Write-capable features
+(auth, registration, transactional email, Eve writes) were proven in the 21 Oct
+controlled read-write test; secrets (Resend/Anthropic/Supabase service-role/
+magic-link) are loaded. At cutover, `test_mode=false` enables writes + email while
+retailer collection + workers + scheduled jobs stay disabled (no duplicate
+execution with Vercel).
+
+APEX CUTOVER CONSTRAINT (must choose a mechanism): Register365 uses plain DNS and
+the apex is currently a plain **A record** to Vercel's stable IP `216.198.79.1`.
+An AWS ALB has **no static IP** (its IPs rotate), so the apex A record must NOT
+point at raw ALB IPs. No Route 53 zone and no Global Accelerator exist yet.
+Supported options (pick one before apex cutover):
+  (A) **AWS Global Accelerator** in front of the ALB → 2 static anycast IPs →
+      apex A → those IPs. ~\$18/mo + data. Keeps Register365 as DNS host.
+  (B) **Migrate the zone to Route 53** → apex ALIAS → ALB (free, auto-tracks ALB
+      IPs). Changes authoritative nameservers (larger change, slower rollback).
+  (C) **Leave apex on Vercel** (apex→www 301 continues there) and move only `www`
+      to AWS now; handle apex later. Smallest blast radius.
+The `www` cutover does NOT depend on this — `www` is a CNAME and can move to the
+ALB immediately with valid TLS already staged.
+
+CURRENT PRODUCTION DNS (rollback baseline, captured 22 Oct):
+  apex `supermarket.ie`  A      216.198.79.1            TTL 86400 (24h — LOWER FIRST)
+  `www.supermarket.ie`   CNAME  e2ae0df6f59fc39f.vercel-dns-017.com  TTL ~34000
+  apex CAA: none (unrestricted). ALB: smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com
+See docs/aws-cutover-runbook.md for the exact cutover + rollback steps.
+
 ## AWS production image + apex cert staged; cutover-ready — 21 October 2026
 
 Status: the AWS ECS Fargate environment is cutover-ready for the **apex**
