@@ -27,3 +27,20 @@ provider "aws" {
     }
   }
 }
+
+# AWS Global Accelerator is a global service whose control plane lives in
+# us-west-2. This aliased provider is used ONLY for the globalaccelerator_*
+# resources; the accelerator still fronts the ALB in eu-west-1.
+provider "aws" {
+  alias  = "global_accelerator"
+  region = "us-west-2"
+
+  default_tags {
+    tags = {
+      Project     = "supermarket-ie"
+      Environment = "preview"
+      ManagedBy   = "terraform"
+      Component   = "aws-migration-preview"
+    }
+  }
+}

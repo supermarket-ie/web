@@ -71,84 +71,140 @@ IPs. No Route 53 zone and no Global Accelerator exist yet. Choose one:
 The **www cutover does not depend on this** — www is a CNAME and can move to the
 ALB immediately with valid TLS already staged.
 
-## 3. Pre-cutover (operator, ~24h ahead) — NON-destructive
+Chosen mechanism: **Option A — Global Accelerator** (keeps Register365 as DNS
+host; apex A records point at two static anycast IPs). Provisioned by the
+`enable_global_accelerator=true` toggle (billable; see Section 7 cost).
 
-1. **Lower TTLs** at Register365 so rollback is fast:
-   - apex `supermarket.ie` A: TTL 86400 → **60**.
-   - `www.supermarket.ie` CNAME: TTL → **60**.
-   Wait for the OLD TTL to expire (apex up to 24h) before cutover so resolvers
-   pick up the short TTL.
-2. **Confirm the apex mechanism** (Section 2). If Option A, tell me to provision
-   Global Accelerator (billable — I will ask for explicit approval) and I will
-   give you the two static IPs for the apex A records.
+### Corrected sequencing principle (IMPORTANT)
 
-Nothing in this step moves traffic.
+Full customer-facing production posture is configured and verified on AWS
+**BEFORE** any production DNS change — NOT after. A previous draft moved www DNS
+first, which would have sent live customers to a read-only app with suppressed
+auth email. The correct order is: configure prod posture → verify via
+`--resolve` → provision/verify Global Accelerator → lower TTLs → flip DNS.
 
-## 4. Cutover window — WWW (operator DNS + agent verification)
+## 3. Configure AWS for full production operation (agent) — BEFORE any DNS change
 
-Order matters: TLS is already valid for www on the ALB, so there is no cert gap.
+The service is only reachable via `--resolve`/the ALB name at this point, so this
+is safe to do ahead of cutover with no customer impact.
 
-1. **Operator:** at Register365, repoint
-   `www.supermarket.ie` CNAME → `smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com`.
-   (Replaces the Vercel CNAME target.)
-2. **Agent/operator verify** as it propagates:
-   - `dig +short www.supermarket.ie CNAME` → the ALB name.
-   - `curl -sI https://www.supermarket.ie/` → 200, valid TLS (no `--resolve`).
-   - homepage, `/shop`, `/api/products`, Eve `/eve/v1/info` all 200.
-3. **Agent:** flip the app to production posture — set `test_mode=false` in
-   `infra/terraform/terraform.tfvars`, `tofu apply`. This sets
-   `APP_ENV=production`, `SUPABASE_READ_ONLY=false` (enables writes + transactional
-   email). Retailer collection, workers and scheduled jobs REMAIN disabled
-   (`enable_workers=false`, `enable_retailer_workers_on_aws=false`,
-   `enable_outbound_email_on_aws=false`, `DISABLE_RETAILER_COLLECTION` stays true)
-   so there is no duplicate execution against the still-live Vercel workers.
-4. **Agent/operator verify** real journeys in production posture on www: a sign-in
-   with an existing session, a subscribe/contact write, an Eve conversation,
-   SEO (`www` now indexable — canonical = www, no `noindex`).
+Set in `infra/terraform/terraform.tfvars`, then `tofu apply`:
+- `test_mode = false` → `APP_ENV=production`, `SUPABASE_READ_ONLY=false`
+  (read-write Supabase; writes enabled for auth/registration/shop/Eve).
+- `enable_outbound_email_on_aws = true` → `DISABLE_OUTBOUND_EMAIL=false`
+  (transactional magic-link + registration-verification email WORK). This is the
+  corrected flag — launching with it false silently suppresses all auth email.
+- `public_base_url = "https://www.supermarket.ie"` (production canonical base URL
+  the app advertises; image `14d960e-prod` already bakes the www canonical).
 
-Rollback (www): set `www` CNAME back to `e2ae0df6f59fc39f.vercel-dns-017.com`.
-Because TTL is 60s, recovery is ~1 min. Optionally revert `test_mode=true`.
+KEEP DISABLED (Vercel keeps running these; no duplicate execution on AWS):
+- `enable_workers = false`, `worker_desired_count = 0` (no SQS consumer).
+- `enable_retailer_workers_on_aws = false` → `DISABLE_RETAILER_COLLECTION=true`,
+  all `*_WORKER_ENABLED=false` (no retailer collection, no scheduled jobs).
+- `QUEUE_BACKEND` stays `vercel`.
 
-## 5. Cutover window — APEX (only after the Section 2 mechanism is chosen)
+Note on duplication: transactional email is triggered only by a user hitting the
+host that serves them; once www is on AWS, Vercel no longer serves those users,
+so there is no double-send. Scheduled/notification email is never *triggered* on
+AWS (no cron runner, consumers off), so enabling outbound email does not cause
+duplicate scheduled sends.
 
-Because the apex cert `a2cf0cf8` is already staged on the listener and the ALB
-apex→www 301 rule is live, the apex serves valid TLS and redirects to www the
-instant it resolves to the ALB — zero TLS gap.
+Verify (via `--resolve www.supermarket.ie:443:<ALB_IP>`), no DNS change:
+- Task def shows `APP_ENV=production`, `SUPABASE_READ_ONLY=false`,
+  `DISABLE_OUTBOUND_EMAIL=false`, `DISABLE_RETAILER_COLLECTION=true`; 2/2 healthy.
+- `/`, `/shop`, `/api/products`, Eve `/eve/v1/info` → 200; canonical = www; `www`
+  host no longer `noindex`.
+- A sign-in / registration email send path reaches Resend (confirm via app
+  response + Resend dashboard / a single controlled address). Retailer worker
+  route still refuses. Avoid creating unnecessary test data.
 
-1. **Operator:** add apex CAA so both issuers used are authorised (keeps future
-   renewals working):
-   ```
-   supermarket.ie.  CAA  0 issue "amazonaws.com"
-   supermarket.ie.  CAA  0 issue "letsencrypt.org"
-   ```
-2. **Operator:** repoint the apex per the chosen mechanism:
-   - Option A: apex `supermarket.ie` A → the two Global Accelerator static IPs.
-   - Option B: switch registrar nameservers to Route 53; apex ALIAS → ALB.
-   - Option C: skip — apex stays on Vercel.
-3. **Agent/operator verify:**
-   - `curl -sI https://supermarket.ie/` → 301 → `https://www.supermarket.ie/`,
-     valid TLS.
-   - `curl -sI https://www.supermarket.ie/` → still 200.
+## 4. Provision + verify Global Accelerator (agent) — BEFORE any DNS change
 
-Rollback (apex): restore apex A → `216.198.79.1` (Option A) or restore the
-previous registrar nameservers (Option B). TTL 60s → ~1 min recovery.
+1. Set `enable_global_accelerator = true`, `tofu apply`. Record the two static
+   IPs from the `global_accelerator_static_ips` output.
+2. Verify against the static IPs (still no production DNS change):
+   - `curl -sI --resolve www.supermarket.ie:443:<GA_IP> https://www.supermarket.ie/`
+     → 200, valid TLS.
+   - `curl -s -D - -o /dev/null --resolve supermarket.ie:443:<GA_IP> https://supermarket.ie/`
+     → 301 → `https://www.supermarket.ie/`, valid TLS.
+   Both GA IPs must pass. The accelerator's endpoint group health check against
+   the ALB must read HEALTHY.
 
-## 6. Post-cutover
+## 5. Lower TTLs (operator, ~24h ahead) — NON-destructive
+
+At Register365, preserving the existing rollback targets:
+- apex `supermarket.ie` A: TTL 86400 → **60** (value stays `216.198.79.1` for now).
+- `www.supermarket.ie` CNAME: TTL → **60** (target stays the Vercel CNAME for now).
+Wait for the OLD apex TTL (up to 24h) to expire so resolvers adopt the short TTL.
+No traffic moves in this step.
+
+## 6. DNS cutover (operator DNS + agent verify) — the only traffic-moving step
+
+Only after Sections 3–5 are done and you give explicit approval. Do www and apex
+together or www-first; both have valid TLS pre-staged so there is no cert gap.
+
+Operator changes at Register365 (exact values in Section 8):
+1. Add apex CAA: `0 issue "amazonaws.com"` and `0 issue "letsencrypt.org"`.
+2. apex `supermarket.ie` A → the two Global Accelerator static IPs (replaces
+   `216.198.79.1`).
+3. `www.supermarket.ie` CNAME →
+   `smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com` (replaces the Vercel
+   target).
+
+Agent/operator verify as it propagates (no `--resolve`):
+- `dig +short www.supermarket.ie CNAME` → the ALB name; `dig +short supermarket.ie A`
+  → the GA IPs.
+- `curl -sI https://www.supermarket.ie/` → 200, valid TLS.
+- `curl -sI https://supermarket.ie/` → 301 → `https://www.supermarket.ie/`.
+- Real journeys: sign-in, registration (auth email now delivered), shop, Eve.
+
+Rollback (TTL 60s → ~1 min):
+- `www` CNAME → `e2ae0df6f59fc39f.vercel-dns-017.com`.
+- apex A → `216.198.79.1`.
+- (CAA additions are harmless; leave them.)
+Vercel stays live and untouched throughout, so rollback is a pure DNS revert.
+
+## 7. Global Accelerator cost
+
+Billable while provisioned (whether enabled or not):
+- Fixed accelerator fee: $0.025/hour ≈ **$18/mo**.
+- Two static IPv4 addresses: $0.005/IP/hour ≈ **$7.30/mo**.
+- DT-Premium data surcharge: a few $/mo at current traffic.
+≈ **$25/mo fixed** + small per-GB. Provisioned only on explicit cost approval.
+
+## 8. Post-cutover
 
 - Watch ECS service events + CloudWatch `/ecs/smie-prod` for errors; confirm 2/2
   tasks healthy and autoscaling steady.
 - Keep Vercel deployment untouched for at least 24–48h as the rollback path.
 - Remove the `_acme-challenge.www` TXT record at Register365 (no longer needed;
   the cert is issued). Keeping it is harmless.
-- Let's Encrypt `www` cert expires **2027-01-20**. It is NOT auto-renewing (manual
-  DNS-01). Set a reminder to re-issue + re-import ~30 days before, OR once `www`
-  points at the ALB, migrate www to an ACM-managed cert (ACM can now validate www
-  because it no longer resolves through Vercel's CAA) and swap the listener SNI
-  cert — removing the manual-renewal burden.
+- **Replace the Let's Encrypt www cert with an ACM-managed cert (REQUIRED
+  follow-up).** The imported LE cert expires **2027-01-20** and does NOT
+  auto-renew. Once `www` resolves to the ALB (no longer through Vercel's CAA),
+  ACM can validate `www` via DNS. Request an ACM cert for `www.supermarket.ie`
+  (DNS validation), add the ACM CNAME at Register365, wait ISSUED, then swap the
+  listener SNI cert from `a6079f96` (LE) to the new ACM ARN in
+  `additional_certificate_arns` and remove the LE one. ACM then auto-renews —
+  removing the manual-renewal burden. Do this soon after cutover, well before
+  the Jan expiry.
 - Do NOT merge PR #265 or enable workers/collection/email as part of this
   cutover; those are separate, independently-approved steps.
 
-## 7. Quick command reference (verification; no mutations)
+## 9. Remaining Vercel dependencies (platform NOT yet fully independent)
+
+The website + Eve run on AWS, but these Vercel-hosted functions remain and MUST
+be migrated before declaring full independence:
+- **Vercel Cron** — scheduled jobs (retailer collection triggers, price
+  finalisation, scheduled notifications). AWS replacement exists in-branch
+  (EventBridge Scheduler → ECS tasks) but is provisioned DISABLED.
+- **Vercel Queues** — background job delivery. AWS replacement exists (SQS +
+  consumer service) but desired_count=0 and `enable_workers=false`.
+Migrating these is the next priority after cutover: enable the AWS worker stack
+AND disable the Vercel workers in the same controlled change to avoid duplicate
+execution.
+
+## 10. Quick command reference (verification; no mutations)
 
 ```bash
 ALBIP=$(dig +short smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com | head -1)

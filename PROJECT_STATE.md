@@ -1,5 +1,54 @@
 # Supermarket.ie — Canonical Project State
 
+## Cutover sequence corrected + Global Accelerator prepared — 22 October 2026
+
+Two correctness bugs in the cutover plan were found (by the user) and fixed:
+
+1. **Sequence bug** — the earlier runbook moved `www` DNS to AWS BEFORE setting
+   `test_mode=false`, which would have sent live customers to a READ-ONLY app
+   (failed sign-ins/registrations). Corrected order: configure full production
+   posture on AWS and verify via `--resolve` FIRST, then provision/verify Global
+   Accelerator, lower TTLs, and only then flip DNS.
+2. **Email-disabled-in-production bug** — `DISABLE_OUTBOUND_EMAIL` is a GLOBAL
+   switch in `src/lib/resend.ts`: when true it short-circuits ALL Resend sends,
+   including TRANSACTIONAL magic-link + registration-verification email, not just
+   scheduled notifications. The Terraform set `email_blocked = test_mode ||
+   !enable_outbound_email_on_aws`, so launching with
+   `enable_outbound_email_on_aws=false` would silently suppress all auth email.
+   Fix: at cutover set `enable_outbound_email_on_aws=true`. No duplicate-email
+   risk — transactional mail is triggered by whichever host serves the user (and
+   Vercel stops serving www post-cutover); scheduled mail is never *triggered* on
+   AWS (no cron runner, consumers off), independent of this flag. Tightened the
+   variable's doc comment in variables.tf to state this.
+
+Apex mechanism chosen: **Option A — AWS Global Accelerator** (keeps Register365
+as DNS host; no nameserver migration). Terraform prepared in
+`infra/terraform/global-accelerator.tf`: accelerator + 443/80 listeners + two
+endpoint groups forwarding to the existing ALB, with client-IP preservation.
+Gated behind `enable_global_accelerator` (DEFAULT FALSE). Uses an aliased
+us-west-2 provider (GA control-plane region). `tofu validate` passes; a plan with
+the toggle on shows **5 to add, 0 change, 0 destroy**. NOT APPLIED — awaiting the
+user's explicit cost approval (BILLABLE).
+
+Global Accelerator cost (billable while provisioned): fixed $0.025/hr (~$18/mo) +
+2 static IPv4 at $0.005/IP/hr (~$7.30/mo) + small DT-Premium per-GB ≈ **~$25/mo
+fixed** + a few $ data. Outputs `global_accelerator_static_ips` (the two apex A
+targets) and `global_accelerator_dns_name`.
+
+Production-posture plan verified as a diff (not applied): `test_mode=false` →
+`APP_ENV=production` + `SUPABASE_READ_ONLY=false`; `enable_outbound_email_on_aws
+=true` → `DISABLE_OUTBOUND_EMAIL=false`; `public_base_url` → www. Workers /
+retailer collection / scheduled jobs stay disabled (`enable_workers=false`,
+`enable_retailer_workers_on_aws=false`, consumer desired_count 0, QUEUE_BACKEND=
+vercel) so Vercel keeps handling them with no duplicate execution.
+
+Post-cutover follow-ups (documented in docs/aws-cutover-runbook.md): (a) replace
+the imported Let's Encrypt www cert with an ACM-managed cert (DNS-validated once
+www is on the ALB) so renewal is automatic — LE cert expires 2027-01-20; (b)
+migrate Vercel Cron + Queues to the in-branch EventBridge/SQS stack (enable AWS
+workers AND disable Vercel workers in one controlled change) — platform is NOT
+fully independent until these are removed.
+
 ## www TLS solved via Let's Encrypt DNS-01 + apex→www edge redirect — 22 October 2026
 
 The `www` TLS blocker is SOLVED without any broken-HTTPS window. ACM could not

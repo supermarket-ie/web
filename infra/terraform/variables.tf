@@ -150,9 +150,21 @@ variable "enable_retailer_workers_on_aws" {
 
 variable "enable_outbound_email_on_aws" {
   description = <<-EOT
-    Keep false during stage 1. Scheduled/notification email stays on Vercel. When
-    false, the AWS task sets DISABLE_OUTBOUND_EMAIL=true so AWS never sends mail,
-    preventing duplicate customer emails across AWS and Vercel.
+    Controls DISABLE_OUTBOUND_EMAIL on the AWS task. This is a GLOBAL email
+    switch in the app (src/lib/resend.ts): when DISABLE_OUTBOUND_EMAIL=true it
+    short-circuits ALL Resend sends, including TRANSACTIONAL auth email
+    (magic-link sign-in, registration verification), not just scheduled
+    notifications.
+
+    Keep false ONLY while AWS is a non-customer-facing preview. At production
+    cutover (when www points at AWS) set this TRUE, otherwise sign-in and
+    registration emails are silently suppressed and customers cannot
+    authenticate. There is no duplicate-email risk for transactional mail: it is
+    triggered by the user hitting whichever host serves them, and once www is on
+    AWS, Vercel no longer serves those users. Duplicate SCHEDULED/notification
+    email is prevented separately — AWS has no cron runner and the queue
+    consumers/`*_WORKER_ENABLED` stay off, so scheduled sends are never triggered
+    on AWS regardless of this flag.
   EOT
   type        = bool
   default     = false
