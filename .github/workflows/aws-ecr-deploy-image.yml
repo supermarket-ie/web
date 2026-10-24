@@ -56,9 +56,14 @@ jobs:
           if [ "${{ inputs.image_mode }}" = "prod" ]; then
             echo "site_url=https://www.supermarket.ie" >> "$GITHUB_OUTPUT"
             echo "tag_suffix=-prod" >> "$GITHUB_OUTPUT"
+            # Build with production posture so build-time SEO (next.config.ts
+            # X-Robots-Tag noindex) bakes the canonical hosts as INDEXABLE. The
+            # prerender stays read-only via BUILD_SUPABASE_READ_ONLY=true.
+            echo "build_app_env=production" >> "$GITHUB_OUTPUT"
           else
             echo "site_url=https://aws-preview.supermarket.ie" >> "$GITHUB_OUTPUT"
             echo "tag_suffix=" >> "$GITHUB_OUTPUT"
+            echo "build_app_env=preview" >> "$GITHUB_OUTPUT"
           fi
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -92,6 +97,8 @@ jobs:
             ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.host.outputs.sha }}${{ steps.host.outputs.tag_suffix }}
           build-args: |
             BUILD_MODE=deploy
+            BUILD_APP_ENV=${{ steps.host.outputs.build_app_env }}
+            BUILD_SUPABASE_READ_ONLY=true
             NEXT_PUBLIC_SITE_URL=${{ steps.host.outputs.site_url }}
             NEXT_PUBLIC_BASE_URL=${{ steps.host.outputs.site_url }}
             NEXT_PUBLIC_SUPABASE_URL=${{ vars.PROD_SUPABASE_URL }}

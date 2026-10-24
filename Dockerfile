@@ -56,6 +56,15 @@ ARG NEXT_PUBLIC_SITE_URL=https://preview.invalid
 ARG NEXT_PUBLIC_BASE_URL=https://preview.invalid
 ARG NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=build-placeholder
+# BUILD-TIME environment posture. Some SEO decisions are evaluated at build, NOT
+# runtime: next.config.ts computes the X-Robots-Tag noindex header from
+# isNoIndexEnv() when the image is built. A prod image MUST build with
+# APP_ENV=production so the canonical www/apex hosts are indexable; a preview
+# image builds with APP_ENV=preview so its noindex header is baked on. The
+# prerender stays READ-ONLY regardless via BUILD_SUPABASE_READ_ONLY=true (the
+# build only runs SELECTs), so a prod-posture build is still DB-safe.
+ARG BUILD_APP_ENV=preview
+ARG BUILD_SUPABASE_READ_ONLY=true
 
 # Fail fast if someone asks for a deploy image but leaves placeholder public vars.
 RUN if [ "$BUILD_MODE" = "deploy" ]; then \
@@ -79,7 +88,8 @@ RUN if [ "$BUILD_MODE" = "deploy" ]; then \
 #   Anthropic, JWT secrets). They are NOT real and NOT the service-role key.
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    APP_ENV=preview \
+    APP_ENV=${BUILD_APP_ENV} \
+    SUPABASE_READ_ONLY=${BUILD_SUPABASE_READ_ONLY} \
     NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL} \
     NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL} \
     NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL} \
