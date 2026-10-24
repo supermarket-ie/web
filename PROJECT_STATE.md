@@ -1,5 +1,44 @@
 # Supermarket.ie — Canonical Project State
 
+## MIGRATION COMPLETE: www + apex serving from AWS — 24 October 2026
+
+Both production domains now serve from AWS ECS Fargate (via ALB; apex via Global
+Accelerator). Customer-facing migration DONE.
+
+- apex `supermarket.ie` A → GA IPs 166.117.14.195 + 166.117.236.132 (propagated
+  to all tested resolvers incl. Google). Over real DNS: apex → 301 →
+  https://www.supermarket.ie (full chain → 200), apex cert = Amazon ACM
+  `supermarket.ie` (verify=0). GA endpoint HEALTHY.
+- www `www.supermarket.ie` → ALB, 200, Let's Encrypt cert (verify=0),
+  indexable, canonical=www.
+- ECS 2/2 healthy; CloudWatch clean (no errors, no read-only write-blocks).
+
+apex CAA: NONE present (user added the two A records; CAA records not added).
+NOT a blocker — CAA governs issuance, not serving; both certs already issued; apex
+was always unrestricted (no regression). The recommended CAA (`amazonaws.com` +
+`letsencrypt.org`) is OPTIONAL hardening for future renewals; add when convenient.
+
+Vercel remains live during residual propagation (apex/www caches expiring on the
+old long TTLs) and as rollback. Rollback: www CNAME →
+e2ae0df6f59fc39f.vercel-dns-017.com; apex A → 216.198.79.1.
+
+REMAINING FOR FULL VERCEL INDEPENDENCE (next priorities, NOT done):
+1. Vercel Cron — scheduled jobs (retailer collection triggers, price
+   finalisation, scheduled notifications). AWS replacement in-branch (EventBridge
+   Scheduler → ECS tasks) provisioned DISABLED. Enable AWS + disable Vercel in ONE
+   controlled change to avoid duplicate execution.
+2. Vercel Queues — background job delivery. AWS replacement (SQS + consumer
+   service) provisioned with desired_count=0, enable_workers=false,
+   QUEUE_BACKEND=vercel. Flip to SQS consumer + QUEUE_BACKEND=sqs in the same
+   controlled change.
+3. Replace imported Let's Encrypt www cert with ACM-managed (DNS-validated now
+   that www is on the ALB) for auto-renew; LE expires 2027-01-20.
+Until (1)+(2) are done, Vercel still runs the background/scheduled workload, so
+the platform is NOT yet fully independent. PR #265 still DRAFT (do not merge as
+part of this).
+
+---
+
 ## www CUT OVER to AWS (apex pending) — 24 October 2026
 
 The user updated the `www.supermarket.ie` CNAME at Register365 →
