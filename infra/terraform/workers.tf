@@ -76,8 +76,11 @@ resource "aws_ecs_task_definition" "sqs_consumer" {
       image     = "${aws_ecr_repository.app[0].repository_url}:${local.worker_image_tag}"
       essential = true
       # Reuse the SAME image; just run the worker entrypoint instead of the web
-      # entrypoint. tsx runs the TS worker directly.
-      command     = ["node", "--import", "tsx", "src/workers/sqs-consumer.ts"]
+      # entrypoint. tsx runs the TS worker directly. --conditions=react-server
+      # resolves the `server-only` marker (pulled in via the route modules'
+      # dependency graph) to its no-op, exactly as Next does server-side; without
+      # it the standalone worker throws at import time.
+      command     = ["node", "--conditions=react-server", "--import", "tsx", "src/workers/sqs-consumer.ts"]
       environment = local.worker_environment
       secrets     = local.container_secrets
       logConfiguration = {
@@ -190,7 +193,7 @@ resource "aws_ecs_task_definition" "scheduled" {
       name        = "scheduled"
       image       = "${aws_ecr_repository.app[0].repository_url}:${local.worker_image_tag}"
       essential   = true
-      command     = ["node", "--import", "tsx", "src/workers/scheduled-runner.ts"]
+      command     = ["node", "--conditions=react-server", "--import", "tsx", "src/workers/scheduled-runner.ts"]
       environment = local.worker_environment
       secrets     = local.container_secrets
       logConfiguration = {
