@@ -103,11 +103,14 @@ KEEP DISABLED (Vercel keeps running these; no duplicate execution on AWS):
   all `*_WORKER_ENABLED=false` (no retailer collection, no scheduled jobs).
 - `QUEUE_BACKEND` stays `vercel`.
 
-Note on duplication: transactional email is triggered only by a user hitting the
-host that serves them; once www is on AWS, Vercel no longer serves those users,
-so there is no double-send. Scheduled/notification email is never *triggered* on
-AWS (no cron runner, consumers off), so enabling outbound email does not cause
-duplicate scheduled sends.
+Note on duplication during the coexistence window: transactional email is
+triggered per user action on whichever host serves that request. A given action
+(one sign-in, one registration) sends exactly one email from exactly one
+environment — the coexistence window does not double-send, since a single
+request is served by a single host. Scheduled/notification email is never
+*triggered* on AWS (no cron runner, consumers off), so it keeps running
+Vercel-only and enabling outbound email on AWS does not create duplicate
+scheduled sends.
 
 Verify (via `--resolve www.supermarket.ie:443:<ALB_IP>`), no DNS change:
 - Task def shows `APP_ENV=production`, `SUPABASE_READ_ONLY=false`,
@@ -130,39 +133,77 @@ Verify (via `--resolve www.supermarket.ie:443:<ALB_IP>`), no DNS change:
    Both GA IPs must pass. The accelerator's endpoint group health check against
    the ALB must read HEALTHY.
 
-## 5. Lower TTLs (operator, ~24h ahead) — NON-destructive
+## 5. TTLs — NO CHANGE (Register365 account cannot edit TTL)
 
-At Register365, preserving the existing rollback targets:
-- apex `supermarket.ie` A: TTL 86400 → **60** (value stays `216.198.79.1` for now).
-- `www.supermarket.ie` CNAME: TTL → **60** (target stays the Vercel CNAME for now).
-Wait for the OLD apex TTL (up to 24h) to expire so resolvers adopt the short TTL.
-No traffic moves in this step.
+TTL lowering is NOT a prerequisite and is NOT performed. The Register365 account
+cannot change TTLs, so cutover proceeds on the EXISTING TTLs:
+- apex `supermarket.ie` A: TTL 86400 (~24h).
+- `www.supermarket.ie` CNAME: TTL ~34000 (~9.4h).
 
-## 6. DNS cutover (operator DNS + agent verify) — the only traffic-moving step
+Consequence: during propagation there is a COEXISTENCE WINDOW where some visitors
+resolve to Vercel and others to AWS. This is SAFE here because both environments
+share one backend and compatible auth:
+- Same production Supabase project (identical `NEXT_PUBLIC_SUPABASE_URL` +
+  `SUPABASE_SERVICE_ROLE_KEY`), so all reads/writes hit the same data.
+- Same `MAGIC_LINK_SECRET` + `VENDOR_MAGIC_LINK_SECRET` (transferred byte-exact
+  Vercel→AWS), so a magic link / session issued by one environment validates on
+  the other. Sign-in and registration work regardless of which host a visitor
+  lands on.
+Because of the long TTLs, plan for a propagation window of up to ~24h (apex) /
+~9.4h (www), and a rollback that similarly takes up to that long to fully drain
+(cached resolvers keep hitting the old target until their TTL expires). Vercel
+stays fully operational the entire time as the rollback path.
 
-Only after Sections 3–5 are done and you give explicit approval. Do www and apex
-together or www-first; both have valid TLS pre-staged so there is no cert gap.
+Pre-cutover gate: before changing DNS, BOTH environments must be fully
+operational on the shared Supabase (Section 3 puts AWS into read-write production
+with working email; Vercel is already live). Verify AWS via `--resolve` first.
 
-Operator changes at Register365 (exact values in Section 8):
+## 6. DNS cutover — WWW FIRST (operator DNS + agent verify)
+
+Only after Sections 3–4 are done and you give explicit approval. www is moved
+first, verified, and monitored before apex. Both hosts have valid TLS pre-staged,
+so there is no cert gap at any point.
+
+### 6a. www first
+
+Operator change at Register365:
+- `www.supermarket.ie` CNAME →
+  `smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com` (replaces the Vercel
+  target). TTL unchanged (~9.4h propagation).
+
+Agent/operator verify as it propagates (both paths serve correctly during the
+window):
+- `dig +short www.supermarket.ie CNAME` → begins returning the ALB name.
+- `curl -sI https://www.supermarket.ie/` → 200, valid TLS.
+- Real journeys on AWS: sign-in with an existing session, registration (auth
+  email now delivered via Resend), shop, Eve conversation.
+- Monitor CloudWatch `/ecs/smie-prod` + ECS events for errors; confirm 2/2 tasks
+  healthy and autoscaling steady through the window.
+
+Hold here and observe for a chosen settle period (ideally past the ~9.4h www TTL
+so most resolvers have moved) before touching apex.
+
+### 6b. apex (after www is confirmed healthy)
+
+Operator changes at Register365:
 1. Add apex CAA: `0 issue "amazonaws.com"` and `0 issue "letsencrypt.org"`.
 2. apex `supermarket.ie` A → the two Global Accelerator static IPs (replaces
-   `216.198.79.1`).
-3. `www.supermarket.ie` CNAME →
-   `smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com` (replaces the Vercel
-   target).
+   `216.198.79.1`). TTL unchanged (~24h propagation).
 
-Agent/operator verify as it propagates (no `--resolve`):
-- `dig +short www.supermarket.ie CNAME` → the ALB name; `dig +short supermarket.ie A`
-  → the GA IPs.
-- `curl -sI https://www.supermarket.ie/` → 200, valid TLS.
-- `curl -sI https://supermarket.ie/` → 301 → `https://www.supermarket.ie/`.
-- Real journeys: sign-in, registration (auth email now delivered), shop, Eve.
+Agent/operator verify:
+- `dig +short supermarket.ie A` → begins returning the GA IPs.
+- `curl -sI https://supermarket.ie/` → 301 → `https://www.supermarket.ie/`,
+  valid TLS.
 
-Rollback (TTL 60s → ~1 min):
+### Rollback (Vercel retained; bounded by the existing TTLs)
+
 - `www` CNAME → `e2ae0df6f59fc39f.vercel-dns-017.com`.
 - apex A → `216.198.79.1`.
-- (CAA additions are harmless; leave them.)
-Vercel stays live and untouched throughout, so rollback is a pure DNS revert.
+- CAA additions are harmless; leave them.
+Because TTLs are not lowered, a rollback takes up to ~9.4h (www) / ~24h (apex) to
+fully drain from caching resolvers, though most traffic shifts back sooner.
+Vercel is never taken down, so already-cached Vercel visitors are unaffected by a
+rollback. This is why www goes first and is observed before apex.
 
 ## 7. Global Accelerator cost
 

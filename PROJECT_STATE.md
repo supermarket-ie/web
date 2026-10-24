@@ -1,5 +1,30 @@
 # Supermarket.ie — Canonical Project State
 
+## TTL-lowering dropped; www-first coexistence cutover — 22 October 2026
+
+Register365 account cannot change DNS TTLs, so TTL lowering is REMOVED as a
+prerequisite. Cutover proceeds on EXISTING TTLs (apex A 86400 / www CNAME
+~34000). This creates a COEXISTENCE WINDOW during propagation (up to ~24h apex /
+~9.4h www) where some visitors hit Vercel and others hit AWS — SAFE because both
+share one backend + compatible auth:
+  - Same production Supabase (identical NEXT_PUBLIC_SUPABASE_URL +
+    SUPABASE_SERVICE_ROLE_KEY) → same data for reads/writes.
+  - Same MAGIC_LINK_SECRET + VENDOR_MAGIC_LINK_SECRET (byte-exact Vercel→AWS) →
+    sessions/magic links issued by either environment validate on the other.
+  (Re-confirmed the AWS secrets exist/match; values not echoed.)
+A single user action is served by a single host, so no double-send of
+transactional email in the window. Scheduled email stays Vercel-only (AWS has no
+cron/queue trigger).
+
+Plan now: www FIRST (CNAME → ALB), verify + monitor AWS through propagation, then
+apex (A → Global Accelerator static IPs) once www is confirmed healthy. Vercel
+stays fully live throughout as rollback. Rollback is bounded by the existing TTLs
+(up to ~9.4h/~24h to fully drain) — accepted, since Vercel is never taken down.
+Runbook (docs/aws-cutover-runbook.md) sections 5–6 rewritten accordingly; the
+pre-cutover production-posture config + GA provisioning/verification still happen
+BEFORE any DNS change. GA still gated on explicit cost approval; no production DNS
+until the user approves the final records.
+
 ## Cutover sequence corrected + Global Accelerator prepared — 22 October 2026
 
 Two correctness bugs in the cutover plan were found (by the user) and fixed:
