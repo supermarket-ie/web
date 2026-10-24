@@ -1,5 +1,45 @@
 # Supermarket.ie — Canonical Project State
 
+## Vercel Cron/Queue migration — PREPARATION done, worker bugs fixed — 24 October 2026
+
+Two activation blockers (user-identified) FIXED + proven:
+1. Worker startup: docker-entrypoint.sh ignored the ECS `command` override (always
+   ran web+Eve). Now execs the command when given; web task (no command) still
+   runs web+Eve. Required a prod image rebuild → `df9f0c1-prod`.
+2. Queue routing coupling: website QUEUE_BACKEND was tied to enable_workers. New
+   `website_queue_backend` var (default "vercel") decouples producer routing from
+   provisioning. Added website task-role SQS SendMessage policy (gated on worker
+   stack) + AWS_REGION env.
+3. (Found during canary) workers import route modules pulling in `server-only`,
+   which throws outside Next. Fixed by running worker tasks with
+   `--conditions=react-server` (resolves server-only to its no-op). CANARY PROVED
+   the consumer starts and long-polls all 6 topics (region eu-west-1), healthy.
+
+PREPARATION STAGE APPLIED (inert): 6 SQS topic queues + 6 DLQs, SQS consumer
+service (desired=0), 10 EventBridge schedules (ALL DISABLED), worker/scheduler
+IAM. Website on `df9f0c1-prod`, 2/2 healthy, STILL routing QUEUE_BACKEND=vercel,
+DISABLE_RETAILER_COLLECTION=true. Vercel continues ALL processing. Nothing runs
+twice.
+
+Reconciliation (read-only SELECT on prod Supabase): NO in-flight work to drain —
+`recent_runs_24h` empty; the 6 `scrape_runs` stuck 'running' are stale (newest
+Oct 9, rest August = orphaned). Tesco egress pool: no lease held (leased_until
+null on both keys); canary key in expired cooldown, other disabled. Safe window.
+
+tfvars now: enable_workers=true, worker_desired_count=0,
+worker_schedule_state=DISABLED, website_queue_backend=vercel,
+enable_retailer_workers_on_aws=false, image_tag(+worker)=df9f0c1-prod.
+
+NEXT (scheduled-jobs stage): user disables Vercel crons (Project Settings → Cron
+Jobs); then enable low-risk AWS schedules (weekly-digest, check-alerts,
+agent-tasks, price-watchdog(+thursday), product-embeddings, scrape-watchdog),
+keeping the 3 retailer-scrape triggers DISABLED until per-retailer canary. Then
+queue stage (consumer up + website_queue_backend=sqs + remove 6 Vercel queue
+triggers), then retailers (Dunnes/SuperValu canary, Tesco separate).
+Vercel retained for rollback; project NOT paused/deleted.
+
+---
+
 ## MIGRATION COMPLETE: www + apex serving from AWS — 24 October 2026
 
 Both production domains now serve from AWS ECS Fargate (via ALB; apex via Global
