@@ -1,7 +1,8 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import { createDunnesScrapeRun, selectDunnesProducts, type DunnesBatchMessage } from '@/lib/dunnes-queue-worker-fixed';
 import { supabaseAdmin } from '@/lib/supabase';
 import { resolveRetailerRunScope } from '@/lib/scrape-run-scope';
+import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 const TOPIC = 'dunnes-scrape-batches';
 
@@ -22,6 +23,9 @@ function parseUuid(value: string | null) {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  if (retailerCollectionBlocked()) {
+    return Response.json({ error: RETAILER_COLLECTION_BLOCKED_REASON, status: 'blocked_preview' }, { status: 503 });
+  }
   if (process.env.DUNNES_VERCEL_WORKER_ENABLED !== 'true') {
     return Response.json({ error: 'Worker disabled' }, { status: 503 });
   }

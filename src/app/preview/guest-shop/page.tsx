@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
+import { isPreviewEnv } from '@/lib/runtime-env';
 
 export const metadata = { robots: { index: false, follow: false } };
 
 /** Preview-only viewport harness: exercises the actual homepage, agent and
  * registration controls at phone width without fixtures or authentication. */
 export default function GuestShopMobilePreview() {
-  if (process.env.VERCEL_ENV !== 'preview') notFound();
+  if (!isPreviewEnv()) notFound();
   return (
     <main className="min-h-screen bg-[#eaf1ec] p-6">
       <h1 className="mb-2 text-lg font-semibold">Guest shop · mobile layout check</h1>

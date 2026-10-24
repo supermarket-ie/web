@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { choosePepestoCandidate, extractPepestoCandidates, extractPepestoItems, finalizePepestoProduct, normalizePepestoCandidate, retrievePepestoSearch } from '@/lib/pepesto-tesco';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
 import { classifyTescoReplacement, type TescoMappingEvidence } from '@/lib/tesco-mapping-audit';
+import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 export const dynamic='force-dynamic'; export const maxDuration=300;
 function authorized(r:Request){const s=process.env.CRON_SECRET;return Boolean(s&&r.headers.get('authorization')===`Bearer ${s}`)}
@@ -87,6 +88,7 @@ async function finalizeCandidateDiscovery(runUuid:string,product:TescoQueueProdu
 }
 
 export async function GET(request:Request){
+ if(retailerCollectionBlocked()) return Response.json({error:RETAILER_COLLECTION_BLOCKED_REASON,status:'blocked_preview'},{status:503});
  if(!authorized(request)) return Response.json({error:'Unauthorized'},{status:401});
  const requested=Number(new URL(request.url).searchParams.get('limit')||50);
  const limit=Math.max(1,Math.min(Number.isFinite(requested)?Math.floor(requested):50,50));

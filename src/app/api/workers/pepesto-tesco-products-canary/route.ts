@@ -1,13 +1,15 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import { createPepestoProductsRun, getPepestoCreditsCents, selectUntouchedPepestoTescoProducts } from '@/lib/pepesto-tesco';
 import { supabaseAdmin } from '@/lib/supabase';
 import { selectProvenPepestoTescoProducts } from '@/lib/tesco-proven-refresh';
+import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 const TOPIC='pepesto-tesco-products-batches';
 
 function authorized(request:Request){const secret=process.env.CRON_SECRET;return Boolean(secret&&request.headers.get('authorization')===`Bearer ${secret}`);}
 
 export async function GET(request:Request){
+  if(retailerCollectionBlocked()) return Response.json({error:RETAILER_COLLECTION_BLOCKED_REASON,status:'blocked_preview'},{status:503});
   if(!authorized(request)) return Response.json({error:'Unauthorized'},{status:401});
   const url=new URL(request.url);
   const cohort=url.searchParams.get('cohort')||'untouched';

@@ -1,0 +1,16 @@
+# S3 backend config for the preview state. Copy to backend.hcl and fill in,
+# then: terraform init -backend-config=backend.hcl
+#
+# Create the bucket + lock table first (see docs/aws-migration-launch.md §2).
+# No secrets here — just resource names in Supermarket-Prod / eu-west-1.
+
+bucket       = "smie-preview-tfstate-<ACCOUNT_ID>"
+key          = "aws-preview/terraform.tfstate"
+region       = "eu-west-1"
+encrypt      = true
+
+# Locking — use ONE of:
+#   (a) native S3 lockfile (Terraform >= 1.10 / OpenTofu >= 1.9):
+use_lockfile = true
+#   (b) DynamoDB table (older versions): comment out use_lockfile above and set:
+# dynamodb_table = "smie-preview-tflock"
