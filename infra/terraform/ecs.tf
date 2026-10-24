@@ -49,8 +49,12 @@ locals {
     { name = "NEXT_TELEMETRY_DISABLED", value = "1" },
     { name = "NEXT_PUBLIC_SITE_URL", value = var.public_base_url },
     { name = "NEXT_PUBLIC_BASE_URL", value = var.public_base_url },
-    # Queue backend: 'sqs' once the AWS worker stack exists, else 'vercel'.
-    { name = "QUEUE_BACKEND", value = local.workers ? "sqs" : "vercel" },
+    # Website producer routing. DECOUPLED from enable_workers: provisioning the
+    # SQS stack does not redirect live producer traffic. Flip website_queue_backend
+    # to "sqs" only after the consumer is running + healthy. (The worker tasks
+    # always use QUEUE_BACKEND=sqs via their own env in workers.tf.)
+    { name = "QUEUE_BACKEND", value = var.website_queue_backend },
+    { name = "AWS_REGION", value = var.aws_region },
     { name = "DISABLE_RETAILER_COLLECTION", value = local.retailer_blocked ? "true" : "false" },
     { name = "DISABLE_OUTBOUND_EMAIL", value = local.email_blocked ? "true" : "false" },
     { name = "SUPABASE_READ_ONLY", value = local.supabase_read_only ? "true" : "false" },

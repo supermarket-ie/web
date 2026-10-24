@@ -209,6 +209,24 @@ variable "image_tag_worker" {
   default     = ""
 }
 
+variable "website_queue_backend" {
+  description = <<-EOT
+    The queue backend the PRODUCTION WEBSITE (producer) routes customer-triggered
+    jobs to: "vercel" (default) or "sqs". DELIBERATELY decoupled from
+    enable_workers so provisioning the SQS queues/consumer does NOT by itself
+    redirect live producer traffic. Flip to "sqs" ONLY once the SQS consumer is
+    running (worker_desired_count>=1) and healthy, so no message is enqueued to a
+    queue nothing is draining. Must be "vercel" while Vercel still delivers queue
+    messages, to avoid split producer routing.
+  EOT
+  type        = string
+  default     = "vercel"
+  validation {
+    condition     = contains(["vercel", "sqs"], var.website_queue_backend)
+    error_message = "website_queue_backend must be \"vercel\" or \"sqs\"."
+  }
+}
+
 variable "public_base_url" {
   description = <<-EOT
     Public base URL the app advertises (links/cookies/metadata) and that the ACM

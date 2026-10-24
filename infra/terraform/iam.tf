@@ -50,5 +50,27 @@ resource "aws_iam_role" "task" {
   name               = "${var.name_prefix}-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume[0].json
   tags               = { Name = "${var.name_prefix}-task" }
-  # No policies attached: the preview app calls no AWS APIs directly.
+  # Base: the app calls no AWS APIs directly. SQS producer rights are added
+  # (below) only when the worker stack exists, so the website can enqueue to SQS
+  # once website_queue_backend=sqs.
+}
+
+# The website (producer) needs SQS SendMessage on the topic queues so it can
+# route customer-triggered jobs to SQS when website_queue_backend=sqs. Added
+# only when the queues exist (enable_workers=true); harmless before the routing
+# switch since the website still routes to Vercel until then.
+data "aws_iam_policy_document" "task_sqs_produce" {
+  count = local.workers ? 1 : 0
+  statement {
+    sid       = "WebsiteSqsProduce"
+    actions   = ["sqs:SendMessage", "sqs:GetQueueUrl", "sqs:GetQueueAttributes"]
+    resources = local.queue_arns
+  }
+}
+
+resource "aws_iam_role_policy" "task_sqs_produce" {
+  count  = local.workers ? 1 : 0
+  name   = "${var.name_prefix}-task-sqs-produce"
+  role   = aws_iam_role.task[0].id
+  policy = data.aws_iam_policy_document.task_sqs_produce[0].json
 }

@@ -37,6 +37,7 @@ locals {
   worker_environment = local.workers ? concat([
     { name = "NODE_ENV", value = "production" },
     { name = "APP_ENV", value = local.effective_app_env },
+    { name = "AWS_REGION", value = var.aws_region },
     { name = "QUEUE_BACKEND", value = "sqs" },
     { name = "NEXT_PUBLIC_SITE_URL", value = var.public_base_url },
     { name = "NEXT_PUBLIC_BASE_URL", value = var.public_base_url },

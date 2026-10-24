@@ -11,6 +11,15 @@
 # Runner) replaces the task instead of serving a half-up app.
 set -eu
 
+# Worker mode: if the container is started with a command (ECS `command`
+# override, e.g. the SQS consumer or scheduled runner), exec it directly and do
+# NOT start the web+Eve servers. The web task starts with NO command, so it
+# falls through to the default web+Eve supervisor below.
+if [ "$#" -gt 0 ]; then
+  echo "[entrypoint] worker mode: exec $*"
+  exec "$@"
+fi
+
 EVE_PORT="${EVE_NEXT_PRODUCTION_PORT:-4274}"
 WEB_PORT="${PORT:-3000}"
 
