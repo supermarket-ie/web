@@ -1,9 +1,31 @@
 # Supermarket.ie — Canonical Project State
 
+## www CUT OVER to AWS (apex pending) — 24 October 2026
+
+The user updated the `www.supermarket.ie` CNAME at Register365 →
+`smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com`. Propagating on existing TTL
+(~9.4h): authoritative Register365 NS + Cloudflare + Quad9 already return the
+ALB; Google still cached on Vercel (coexistence window, expected + safe). VERIFIED
+on AWS via a switched resolver: TLS = Let's Encrypt www cert (valid); /,/shop,
+/terms,/api/products,/eve/v1/info = 200; NO x-robots-tag (indexable); canonical=
+www; revalidate 401 / subscribe(no-email) 400 (write path live, no data created);
+Eve /v1/info full payload; products API real data. ECS 2/2 healthy, rollout
+COMPLETED, both targets healthy, ALB receiving real requests, CloudWatch clean
+(no errors, no PreviewReadOnly write-blocks). Vercel still live for the resolvers
+that haven't switched + as rollback.
+
+NEXT: once www has largely propagated + stayed healthy, user adds apex records
+(CAA amazonaws.com + letsencrypt.org; A → 166.117.14.195 + 166.117.236.132). Then
+post-cutover: swap LE www cert for ACM-managed (auto-renew; LE expires
+2027-01-20), migrate Vercel Cron + Queues.
+
+Rollback (still available): www CNAME → e2ae0df6f59fc39f.vercel-dns-017.com.
+
+---
+
 ## Cutover READY: GA live, production posture live, SEO blocker fixed — 24 October 2026
 
-All pre-DNS readiness checks PASS. Awaiting ONLY the user's Register365 DNS edits
-(agent cannot edit Register365). No production DNS changed yet; Vercel still live.
+All pre-DNS readiness checks PASS. (www now cut over — see entry above.)
 
 Global Accelerator (PROVISIONED, DEPLOYED, approved ~$25/mo): accelerator
 `d829ace4...`, status DEPLOYED, ALB endpoint HEALTHY. **Two static anycast IPs
