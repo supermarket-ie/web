@@ -70,6 +70,9 @@ resource "aws_globalaccelerator_endpoint_group" "https" {
   provider     = aws.global_accelerator
   count        = local.ga_enabled ? 1 : 0
   listener_arn = aws_globalaccelerator_listener.https[0].id
+  # The endpoint (ALB) lives in eu-west-1; the endpoint group's target region
+  # must match it, independent of the us-west-2 control-plane provider alias.
+  endpoint_group_region = var.aws_region
 
   # Health is checked against the ALB listener itself.
   endpoint_configuration {
@@ -83,9 +86,10 @@ resource "aws_globalaccelerator_endpoint_group" "https" {
 }
 
 resource "aws_globalaccelerator_endpoint_group" "http" {
-  provider     = aws.global_accelerator
-  count        = local.ga_enabled ? 1 : 0
-  listener_arn = aws_globalaccelerator_listener.http[0].id
+  provider              = aws.global_accelerator
+  count                 = local.ga_enabled ? 1 : 0
+  listener_arn          = aws_globalaccelerator_listener.http[0].id
+  endpoint_group_region = var.aws_region
 
   endpoint_configuration {
     endpoint_id                    = aws_lb.this[0].arn

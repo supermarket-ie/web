@@ -1,5 +1,60 @@
 # Supermarket.ie — Canonical Project State
 
+## Cutover READY: GA live, production posture live, SEO blocker fixed — 24 October 2026
+
+All pre-DNS readiness checks PASS. Awaiting ONLY the user's Register365 DNS edits
+(agent cannot edit Register365). No production DNS changed yet; Vercel still live.
+
+Global Accelerator (PROVISIONED, DEPLOYED, approved ~$25/mo): accelerator
+`d829ace4...`, status DEPLOYED, ALB endpoint HEALTHY. **Two static anycast IPs
+for the apex A records: 166.117.14.195 and 166.117.236.132.** DNS name
+`ac36b1ed45ae4a060.awsglobalaccelerator.com`. 443 + 80 listeners; endpoint
+groups in eu-west-1 fronting the ALB with client-IP preservation. Fix applied:
+endpoint groups needed explicit `endpoint_group_region=eu-west-1` (they first
+failed because the us-west-2 control-plane provider alias made them default to
+us-west-2). Verified via BOTH GA IPs: apex 301→https://www.supermarket.ie (TLS
+ok), www 200 (TLS ok), http:80→301.
+
+Production posture (LIVE on task def rev 9, image dcacbae-prod, 2/2 healthy):
+APP_ENV=production, SUPABASE_READ_ONLY=false (writes on), DISABLE_OUTBOUND_EMAIL
+=false (transactional email on), NEXT_PUBLIC_SITE_URL=https://www.supermarket.ie.
+Secrets wired: MAGIC_LINK_SECRET (cross-validates Vercel sessions),
+RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY. Retailer collection + workers + queue
+consumers stay DISABLED (DISABLE_RETAILER_COLLECTION=true, enable_workers=false,
+QUEUE_BACKEND=vercel) — Vercel keeps them.
+
+CRITICAL SEO BLOCKER FOUND + FIXED (caught during step-3 verification): next.
+config.ts computes the X-Robots-Tag `noindex` header from isNoIndexEnv() at BUILD
+time, not runtime. Image 14d960e-prod was built with APP_ENV=preview, so it baked
+`noindex,nofollow` permanently on all responses — would have deindexed the site
+at launch. Fix: Dockerfile + aws-ecr-deploy-image.yml now build the prod image
+with BUILD_APP_ENV=production (and BUILD_SUPABASE_READ_ONLY=true so the prerender
+stays SELECT-only). Rebuilt as dcacbae-prod and deployed. VERIFIED: no
+x-robots-tag header, robots.txt now `Allow: /` with sitemap. Commit dcacbae.
+
+Verification summary (via GA IP, no DNS change): routes /,/shop,/terms,
+/api/products,/eve/v1/info = 200; /api/agent/briefing + /api/revalidate(no
+secret) = 401; /api/subscribe (no email) = 400 "Email is required" (write path
+live, no row written); canonical=www; HTTPS valid on www + apex; CloudWatch clean
+(no errors in last 15m). HA: 2 tasks across 2 AZs, autoscaling 2–6.
+
+NEXT = user performs the DNS cutover at Register365 (exact records below /in
+docs/aws-cutover-runbook.md), www first then apex. TTLs NOT lowered (account
+can't) → coexistence window on existing TTLs, safe via shared Supabase + magic-
+link secret. Vercel retained for rollback. Post-cutover: replace imported LE www
+cert with ACM-managed (auto-renew; LE expires 2027-01-20); then migrate Vercel
+Cron + Queues.
+
+FINAL CUTOVER DNS (Register365; TTLs unchanged):
+  1. www.supermarket.ie  CNAME -> smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com
+     (replaces e2ae0df6f59fc39f.vercel-dns-017.com)
+  2. after www healthy — apex:
+     supermarket.ie  CAA  0 issue "amazonaws.com"
+     supermarket.ie  CAA  0 issue "letsencrypt.org"
+     supermarket.ie  A    166.117.14.195    (replaces 216.198.79.1)
+     supermarket.ie  A    166.117.236.132
+Rollback: www CNAME -> vercel-dns target; apex A -> 216.198.79.1.
+
 ## TTL-lowering dropped; www-first coexistence cutover — 22 October 2026
 
 Register365 account cannot change DNS TTLs, so TTL lowering is REMOVED as a
