@@ -1,5 +1,45 @@
 # Supermarket.ie — Canonical Project State
 
+## PROPOSAL: hold-and-continue on ordinary identity mismatch (review only) — 25 October 2026
+
+First supervised recovery batch succeeded: 2 trusted prices + 2 new 3-retailer
+comparisons; the 3rd product was correctly HELD (stored canonical 1kg vs Tesco
+700g = measure mismatch) and the batch stopped. Investigating a scalability
+improvement so one ordinary, well-classified mismatch no longer terminates the
+whole batch. PROPOSAL ONLY — production collector behaviour NOT changed.
+
+Current behaviour: tesco-supervised-collection.ts sets identityStop on ANY reason
+!= 'unavailable_or_no_regular_price' → pageStop → break (ends batch). Key fact:
+the per-product rejection is ALREADY durably checkpointed (page row outcome +
+identity_results + detail; no price finalised) BEFORE the break — so only the
+break-vs-continue decision changes; the hold/evidence mechanism is untouched.
+
+Proposed policy (docs/tesco-batch-continuation-proposal.md): after the durable
+rejection checkpoint commits, CONTINUE (hold this product, skip to next) only when
+EVERY effective reason is an ordinary product-level mismatch (measure/pack/brand/
+variant/formulation/freshFrozen/productType/ownLabel conflicts, raw-vs-prepared,
+ambiguous-generic). STOP (as today) on systemic/mapping-integrity signals
+(different_sku/urlSku, missing_exact_product, duplicate-canonical, acquisition
+snapshot disagreement) and ANY unknown reason (fail-closed). Hard stops unchanged
+(access_block/429/http/network/redirect/parse, lease/owner loss, lost ack, pacing,
+snapshot change). NEW circuit breaker: ≥5 consecutive holds → stop
+(identity_hold_rate_exceeded); an accept resets the counter. NEVER-ACCEPT
+invariant unchanged (accept iff reasons.length==0 && product found). Restarts can't
+duplicate/bypass: the held page row + `held` predicate + completedUrls replay
+already prevent re-request; continue only after a durably-acknowledged checkpoint
+(lost ack → interrupted → stop).
+
+Test evidence (DELIVERED, review-only, NOT wired in): pure classifier
+src/lib/tesco-identity-disposition.ts + src/lib/__tests__/tesco-identity-
+disposition.test.ts — 40 tests PASS (every CONTINUE/STOP reason token, mixed
+reasons, product-not-found, fail-closed default, disjoint sets, never-accept).
+Lint 0 / tsc clean. Full PGlite batch regression plan (interspersed holds+accepts,
+durability ordering, systemic-stop, circuit breaker, transport-stop, lost-ack
+interruption, restart-no-bypass, never-accept) specified in the doc, to be ADDED
+with the implementation PR. No collector/matching/schedule change until reviewed +
+approved.
+
+
 ## Tesco collection ROOT-CAUSE — CORRECTED with uncapped SQL — 25 October 2026
 
 Supersedes the earlier same-day entry, which was WRONG because queries hit the
