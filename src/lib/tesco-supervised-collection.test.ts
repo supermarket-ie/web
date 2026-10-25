@@ -240,10 +240,25 @@ describe('supervised renewal with PostgreSQL finalisation', () => {
     expect((await db.query('select price from latest_prices')).rows[0]).toEqual({ price: '1.15' });
   });
   it('stops on a pack mismatch without requesting the next product or changing either old price', async () => {
+    // A measure mismatch is now an ORDINARY product-level hold: the product is
+    // held (no observation, prior row unchanged) and the batch CONTINUES to the
+    // next eligible product, which renews normally.
     await seed(0, '6 days'); await seed(1); const before = await observations();
-    const fetcher = vi.fn().mockResolvedValue(response(0, { title: 'Tesco Whole Milk 2L', details: { packSize: [{ value: 2, units: 'l' }] } }));
-    expect(await run(fetcher)).toMatchObject({ result: 'identity_validation_anomaly', inserted: 0, completed: 1 });
-    expect(fetcher).toHaveBeenCalledTimes(1); expect(await observations()).toEqual(before);
+    const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(
+      u === url(0)
+        ? response(0, { title: 'Tesco Whole Milk 2L', details: { packSize: [{ value: 2, units: 'l' }] } })
+        : response(1)));
+    expect(await run(fetcher)).toMatchObject({ result: 'complete', inserted: 1, completed: 2 });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    // Held product 0 kept its earlier observation; product 1 gained a new one.
+    const after = await observations();
+    expect(after.filter(o => o.store_product_id === ids[0])).toEqual(before.filter(o => o.store_product_id === ids[0]));
+    expect(after.filter(o => o.store_product_id === ids[1]).length).toBe(2);
+    // The held product's page records the identity reasons and no price write.
+    const heldPage = (await db.query<Record<string, unknown>>(
+      `select outcome, identity_results from tesco_direct_collection_pages where requested_url=$1`, [url(0)])).rows[0];
+    expect(heldPage.outcome).toBe('ok');
+    expect(JSON.stringify(heldPage.identity_results)).toContain('measure');
   });
   it('rejects a different SKU, even when its title and price look correct', async () => {
     await seed();
@@ -362,5 +377,166 @@ describe('supervised renewal with PostgreSQL finalisation', () => {
     const sql = vi.fn();
     await expect(collectTescoSupervised({ mode: 'renewal', limit: 101 }, { execute: sql })).rejects.toThrow('Limit');
     expect(sql).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Batch continuation on ordinary identity mismatches (hold-and-continue).
+// Exercises the REAL collector + PGlite finaliser/evidence schema.
+// ---------------------------------------------------------------------------
+describe('hold-and-continue batch policy (PostgreSQL)', () => {
+  // Seed N expansion candidates: proven (success receipt) + NO fresh price so
+  // expansion mode selects them (observed_at IS NULL).
+  async function seedExpansion(n: number) {
+    for (let i = 0; i < n; i++) {
+      const pid = randomUUID(); const sid = randomUUID();
+      await db.query(`insert into products values($1,'Whole Milk 1L',null)`, [pid]);
+      await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+        values($1,$2,'tesco',$3,$4,'Tesco Whole Milk 1L','TESCO',true,'resolved')`,
+        [sid, pid, String(900000 + i), `https://www.tesco.ie/shop/en-IE/products/${900000 + i}`]);
+      // proven, but NO price_observations row -> expansion-eligible, not renewal.
+      await db.query(`insert into scrape_runs(id,store,run_id,status) values($1,'tesco',$2,'success')`,
+        [randomUUID(), `legacy_${i}`]);
+      await db.query(`insert into scrape_product_receipts(run_id,store_product_id,outcome)
+        select id,$1,'success' from scrape_runs where run_id=$2`, [sid, `legacy_${i}`]);
+    }
+  }
+  const eurl = (i: number) => `https://www.tesco.ie/shop/en-IE/products/${900000 + i}`;
+  const esku = (i: number) => String(900000 + i);
+  // A valid (accepting) response for expansion product i.
+  function eok(i: number): TescoPageResponse {
+    const product = { id: esku(i), tpnc: esku(i), title: 'Tesco Whole Milk 1L', brandName: 'TESCO',
+      price: { actual: 1.29 }, isForSale: true, status: 'AvailableForSale',
+      details: { packSize: [{ value: 1, units: 'l' }] } };
+    return { outcome: 'ok', status: 200, finalUrl: eurl(i), retryAfter: null, elapsedMs: 400,
+      html: `<p>€1.29</p><script type="application/discover+json">${JSON.stringify({ 'mfe-orchestrator': {
+        props: { config: { global: { locale: 'en-IE' } }, apolloCache: {
+          ROOT_QUERY: { [`product({"tpnc":"${esku(i)}"})`]: { __ref: 'p' } }, p: product } } } })}</script>` };
+  }
+  // A measure-mismatch (ordinary hold) response for product i: 2L vs 1L canonical.
+  function emeasure(i: number): TescoPageResponse {
+    const r = eok(i); return { ...r, html: r.html.replace('"value":1,"units":"l"', '"value":2,"units":"l"')
+      .replace('Whole Milk 1L', 'Whole Milk 2L') };
+  }
+  async function runExp(fetchPage: Mock<(u: string) => Promise<TescoPageResponse>>, limit = 25) {
+    return collectTescoSupervised({ mode: 'expansion', limit }, { execute, sleep, fetchPage });
+  }
+  async function summary(runId: string) {
+    const r = (await db.query<Record<string, unknown>>(`select error_summary from scrape_runs where id=$1`, [runId])).rows[0];
+    return JSON.parse(String(r.error_summary));
+  }
+
+  it('holds ordinary mismatches and still finalises the accepted products (interspersed)', async () => {
+    await seedExpansion(4);
+    // products are selected by overlap/id; drive per-URL: 0 accept, 1 hold, 2 accept, 3 hold.
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const i = Number(u.split('/').pop()) - 900000;
+      return Promise.resolve(i === 1 || i === 3 ? emeasure(i) : eok(i));
+    });
+    const result = await runExp(fetcher);
+    expect(result).toMatchObject({ result: 'complete' });
+    // 2 accepted observations; 2 held with no observation.
+    const obs = await db.query(`select store_product_id from price_observations`);
+    expect(obs.rows.length).toBe(2);
+    const held = await db.query(`select requested_url from tesco_direct_collection_pages where outcome='ok'
+      and identity_results::text like '%measure%'`);
+    expect(held.rows.length).toBe(2);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  it('never writes an observation for a held (failed-identity) product', async () => {
+    await seedExpansion(1);
+    const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(emeasure(Number(u.split('/').pop()) - 900000)));
+    await runExp(fetcher);
+    expect((await db.query(`select count(*)::int n from price_observations`)).rows[0]).toEqual({ n: 0 });
+    // The page is checkpointed with the rejection (durable), not left pending.
+    const page = (await db.query<Record<string, unknown>>(`select outcome from tesco_direct_collection_pages`)).rows[0];
+    expect(page.outcome).toBe('ok');
+  });
+
+  it('trips the CONSECUTIVE breaker after 3 holds and stops', async () => {
+    await seedExpansion(6);
+    const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(emeasure(Number(u.split('/').pop()) - 900000)));
+    const result = await runExp(fetcher);
+    expect(result).toMatchObject({ result: 'identity_hold_consecutive_exceeded' });
+    // Exactly 3 attempts before the breaker stops the batch.
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    const runId = String((result as Record<string, unknown>).id);
+    const s = await summary(runId);
+    expect(s.consecutiveHolds).toBe(3);
+    expect(s.stopReason).toBe('identity_hold_consecutive_exceeded');
+  });
+
+  it('resets the consecutive counter on an acceptance (accept between holds)', async () => {
+    await seedExpansion(6);
+    // holds at 2 and 4, accepts elsewhere -> never 3 consecutive -> completes.
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const i = Number(u.split('/').pop()) - 900000;
+      return Promise.resolve(i === 2 || i === 4 ? emeasure(i) : eok(i));
+    });
+    const result = await runExp(fetcher);
+    expect(result).toMatchObject({ result: 'complete' });
+    expect(fetcher).toHaveBeenCalledTimes(6);
+  });
+
+  it('trips the RATE breaker above 40% holds after at least 10 attempts', async () => {
+    await seedExpansion(14);
+    // Deterministic on FETCH ORDER (not product index, whose selection order can
+    // vary): pattern hold,hold,accept repeating = 2/3 holds, consecutive max 2 so
+    // the consecutive breaker (3) never fires; the rate breaker (>40% after >=10)
+    // trips instead. Keyed by call count for a stable sequence.
+    const pattern = [true, true, false]; // hold, hold, accept
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const i = Number(u.split('/').pop()) - 900000;
+      const n = fetcher.mock.calls.length - 1; // 0-based position in this batch
+      return Promise.resolve(pattern[n % 3] ? emeasure(i) : eok(i));
+    });
+    const result = await runExp(fetcher);
+    expect((result as Record<string, unknown>).result).toBe('identity_hold_rate_exceeded');
+    const s = await summary(String((result as Record<string, unknown>).id));
+    expect(s.attempts).toBeGreaterThanOrEqual(10);
+    expect(s.totalHolds / s.attempts).toBeGreaterThan(0.4);
+  });
+
+  it('stops the batch on a SYSTEMIC identity reason (requested SKU absent -> missing_exact_product)', async () => {
+    // The first-selected product's page parses to a VALID but DIFFERENT product
+    // (its structured SKU matches the page URL, but that URL is not the target's).
+    // Served via the target URL, the target SKU is absent from the parsed set ->
+    // 'missing_exact_product' -> systemic stop (fail-closed), NOT an ordinary hold.
+    await seedExpansion(3);
+    let firstUrl = '';
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const i = Number(u.split('/').pop()) - 900000;
+      if (!firstUrl) firstUrl = u;
+      if (u === firstUrl) {
+        // A page whose finalUrl is for a DIFFERENT sku than requested: parser keys
+        // off finalUrl's sku, returns that product; target sku not found.
+        const other = 920000 + i;
+        const product = { id: String(other), tpnc: String(other), title: 'Tesco Whole Milk 1L', brandName: 'TESCO',
+          price: { actual: 1.29 }, isForSale: true, status: 'AvailableForSale',
+          details: { packSize: [{ value: 1, units: 'l' }] } };
+        return Promise.resolve({ outcome: 'ok', status: 200,
+          finalUrl: `https://www.tesco.ie/shop/en-IE/products/${other}`, retryAfter: null, elapsedMs: 400,
+          html: `<p>€1.29</p><script type="application/discover+json">${JSON.stringify({ 'mfe-orchestrator': {
+            props: { config: { global: { locale: 'en-IE' } }, apolloCache: {
+              ROOT_QUERY: { [`product({"tpnc":"${other}"})`]: { __ref: 'p' } }, p: product } } } })}</script>` } as TescoPageResponse);
+      }
+      return Promise.resolve(eok(i));
+    });
+    const result = await runExp(fetcher);
+    expect((result as Record<string, unknown>).result).toBe('identity_validation_anomaly');
+    expect(fetcher).toHaveBeenCalledTimes(1); // stopped on the first product
+    expect((await db.query(`select count(*)::int n from price_observations`)).rows[0]).toEqual({ n: 0 });
+  });
+
+  it('persists breaker counters so resume cannot reset or bypass them', async () => {
+    await seedExpansion(6);
+    const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(emeasure(Number(u.split('/').pop()) - 900000)));
+    const first = await runExp(fetcher);
+    expect(first).toMatchObject({ result: 'identity_hold_consecutive_exceeded' });
+    const runId = String((first as Record<string, unknown>).id);
+    // A terminal (non-interrupted) run cannot be resumed.
+    const resume = await collectTescoSupervised({ mode: 'expansion', resume: runId }, { execute, sleep, fetchPage: fetcher });
+    expect(resume).toMatchObject({ result: 'terminal_run' });
   });
 });

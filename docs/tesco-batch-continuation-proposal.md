@@ -67,12 +67,20 @@ Also unchanged HARD STOPS (independent of identity — never reclassified):
 - Lease/ownership loss, lost acknowledgement / interrupted, pacing failure,
   mapping/acquisition snapshot change under lock, `observation_changed`.
 
-SYSTEMIC-ANOMALY CIRCUIT BREAKER (new, protective): even for CONTINUE reasons,
-stop the batch if consecutive product-level holds exceed a small threshold (e.g.
-≥ N in a row, default proposal N=5) OR the batch-wide hold rate crosses a bound.
-A run of rejections is itself a signal (changed site structure, a bad mapping
-cohort, or a soft block manifesting as "wrong product"), so hold-and-continue is
-bounded, not unlimited. Accepting a price resets the consecutive counter.
+SYSTEMIC-ANOMALY CIRCUIT BREAKER (implemented, protective): even for CONTINUE
+reasons, stop the batch if EITHER (a) **3 consecutive** product-level holds occur
+(`identity_hold_consecutive_exceeded`), or (b) the batch-wide hold RATE **exceeds
+40% after at least 10 attempts** (`identity_hold_rate_exceeded`). A run of
+rejections is itself a signal (changed site structure, a bad mapping cohort, or a
+soft block manifesting as "wrong product"), so hold-and-continue is bounded.
+An acceptance resets the consecutive counter; totalHolds and attempts are
+cumulative. All three counters are PERSISTED in `scrape_runs.error_summary` and
+re-seeded on resume, so interruption/resume cannot reset or bypass the breaker.
+
+REVIEW REFINEMENTS APPLIED: (1) `accept` iff productFound && reasons.length===0;
+`unavailable_or_no_regular_price` is a non-accepting, non-terminal `skip_no_price`.
+(2) `candidate does not establish full exact canonical identity` (ambiguous) is
+STOP, not hold, pending stronger evidence. (3) breaker 3-consecutive + 40%-after-10.
 
 NEVER-ACCEPT invariant (unchanged): `accepted = outcome==='ok' && reasons.length
 === 0 && product != null`. A CONTINUE classification only changes whether we move

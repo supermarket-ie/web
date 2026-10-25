@@ -1,5 +1,53 @@
 # Supermarket.ie — Canonical Project State
 
+## IMPLEMENTED: hold-and-continue on ordinary Tesco identity mismatch — 25 October 2026
+
+Approved from PR #268 with refinements; implemented on branch
+feat/tesco-batch-continuation (separate production-change PR; #268 kept as the
+review record). NOT merged until verified + CI green + no active Work session.
+
+COLLECTOR BEHAVIOUR CHANGE (exact): previously ANY identity rejection set
+pageStop and `break` (ended the batch). Now, per product on a clean HTTP 200,
+`classifyIdentityOutcome(reasons, productFound)` returns:
+- accept (productFound && reasons.length===0) → finalise (unchanged).
+- skip_no_price (only benign unavailable_or_no_regular_price) → non-accepting,
+  non-terminal; move to next product.
+- hold_continue (EVERY effective reason is an ordinary product-level mismatch:
+  measure/pack/brand/variant/formulation/freshFrozen/productType/ownLabel
+  conflicts + raw-vs-prepared) → the product is checkpointed+held (NO observation)
+  and the batch CONTINUES to the next eligible product.
+- stop (ambiguous-generic, different_sku/urlSku, missing_exact_product,
+  duplicate-canonical, acquisition snapshot disagreement, OR any unknown reason —
+  fail-closed) → end the batch (`identity_validation_anomaly`), unchanged.
+All non-identity stops UNCHANGED: access_block(401/403)/429/http/network/
+unsafe_redirect/parse, lease/ownership loss, lost-ack interrupted, pacing,
+mapping/acquisition snapshot change.
+
+CIRCUIT BREAKER (new): stop after 3 CONSECUTIVE holds
+(identity_hold_consecutive_exceeded) OR when hold RATE >40% after ≥10 attempts
+(identity_hold_rate_exceeded). Counters (consecutiveHolds/totalHolds/attempts)
+persisted in scrape_runs.error_summary and re-seeded on resume → cannot be reset
+or bypassed by interruption/resume. Continue only AFTER the rejection checkpoint
+`execute()` resolves (acknowledgement confirmed); a lost ack → caught →
+interrupted → stop (never continue on an unacknowledged checkpoint). NEVER-ACCEPT
+invariant unchanged: a price is finalised only for accept.
+
+SAFETY INVARIANTS VERIFIED: never accept failed identity; SKU/brand/variant/
+quantity/mapping validation untouched; full rejected-product evidence + hold
+preserved (page row outcome + identity_results, no price); restarts cannot
+duplicate requests or bypass holds (held page row + `held` predicate +
+completedUrls replay); pacing/lease/idempotent finalise preserved.
+
+TEST RESULTS: full suite 646 pass (63 files; +53 vs prior 593) incl. 46 classifier
+unit tests + 7 new PGlite integration tests (interspersed accept/hold, no-write
+for held, 3-consecutive breaker, consecutive reset on accept, 40% rate breaker,
+systemic missing_exact_product stop, breaker persistence across resume) + updated
+pack-mismatch test (now hold-and-continue). typecheck:tesco-supervised/discovery/
+branded clean; lint 0 errors/22 warnings (baseline); behavioural gate 16 pass;
+Next build (CI=true) OK. No active supervised Tesco run (5 running rows are known
+orphans, activeSupervisor null; gate no active lease; no recent pending) → safe to
+merge. No Tesco request initiated; no AWS Tesco schedule enabled.
+
 ## PROPOSAL: hold-and-continue on ordinary identity mismatch (review only) — 25 October 2026
 
 First supervised recovery batch succeeded: 2 trusted prices + 2 new 3-retailer
