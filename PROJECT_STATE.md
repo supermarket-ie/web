@@ -1,5 +1,27 @@
 # Supermarket.ie — Canonical Project State
 
+## PR #265 MERGED to main — single source of truth — 25 October 2026
+
+PR #265 (AWS migration) merged to `main` via SQUASH (merge commits disallowed on
+the repo) as commit `0cce714`. `main` is now the single source of truth.
+
+- Conflict resolved: `.github/workflows/aws-ecr-deploy-image.yml` (add/add vs
+  #266) — kept the branch's SEO build args (BUILD_APP_ENV / BUILD_SUPABASE_READ_
+  ONLY); resolution is a strict superset of main's version.
+- CI on the PR and on main post-merge: PASS (lint 0 errors, 593 tests,
+  typechecks, behavioural gate, Next build, Docker validation, Terraform
+  validate). Local build reproduced CI with CI=true (the earlier local build
+  "failure" was only the missing CI=true escape hatch hitting the placeholder
+  Supabase URL — not a regression).
+- Vercel production deploy for the merge commit: SUCCESS. Merged vercel.json has
+  NO crons and NO queue triggers (verified), so the Vercel redeploy introduces no
+  background execution; queue routes kept as plain functions for rollback.
+- AWS post-merge: website 2/2 healthy (rollout complete), SQS consumer 1/1, live
+  www 200 / apex 301. `tofu plan` = No changes (zero drift; deployed infra matches
+  merged Terraform).
+
+NEXT: retailer canaries — Dunnes + SuperValu first, then Tesco recovery.
+
 ## Vercel Cron/Queue migration — crons + queues on AWS; retailers next — 24 October 2026
 
 SCHEDULED JOBS: Vercel crons disabled (dashboard). 7 low-risk AWS schedules
