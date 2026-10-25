@@ -1,60 +1,74 @@
 # Supermarket.ie — Canonical Project State
 
-## Tesco collection ROOT-CAUSE investigation (evidence, no build) — 25 October 2026
+## Tesco collection ROOT-CAUSE — CORRECTED with uncapped SQL — 25 October 2026
 
-Investigation only — no live Tesco request, no schedule, no deploy, no matching
-change. Read-only production queries (page/run/identity/egress history) + docs.
-(No PLATFORM_OVERVIEW.md exists in the repo.)
+Supersedes the earlier same-day entry, which was WRONG because queries hit the
+PostgREST 1000-row cap and I reasoned from truncated data. All figures below are
+from UNCAPPED .range()-paginated read-only queries. No live Tesco request, no
+schedule, no deploy, no matching change.
 
-CONFIRMED causes (production evidence):
-1. The access block is DATACENTER-EGRESS specific, NOT universal. Historical
-   tesco_direct_collection_pages (capped 1000, 29 Sep–12 Oct): 961 `ok`, only 1
-   `access_block`, 27 unsafe_redirect, 4 http_error, 3 network_error. Egress pool
-   contrast is the clincher: `vercel-dub1-canary-20260920` = 2 blocks / 0
-   successes (datacenter IP, blocked); `workspace-supervised-20260929` = 0 blocks
-   / 2 successes (the supervised Work egress reached Tesco). The 25 Oct AWS ECS
-   probe = HTTP 403 from a random AWS public IP. So Akamai blocks Vercel/EC2/AWS
-   datacenter IPs; the supervised Work path uses a different (non-datacenter)
-   egress identity Akamai permits. CONFIRMED.
-2. The dominant YIELD limiter is PRODUCT IDENTITY, not network. On OK pages the
-   identity-reason tally: 853 "does not establish full exact canonical identity",
-   237 measureExactnessFailed, 236 measureConflict, 203 brandConflict, 110
-   formulationConflict, 95 duplicate-SKU review, 156 unavailable/no-price, etc.
-   i.e. most fetched products were correctly REJECTED by the exact-match
-   safeguards (same behaviour as the Dunnes canary). CONFIRMED and BY DESIGN.
-3. Runtime/recovery failures are real but secondary: tesco scrape_runs (last 200)
-   = 41 success, 30 degraded, 21 failed, 5 stuck 'running' (orphans). stopReasons
-   include network_error(5), http_error(4), identity_validation_anomaly(3),
-   interrupted/supervision_lost/stdin-approval-cancelled (several). The "network
-   approval was cancelled" + supervision_lost reasons are SUPERVISED-SESSION
-   fragility (human/connector dropouts), not Tesco blocks. The 8 Oct transport
-   note (docs/tesco-direct-collection.md) confirms null-status timeouts were
-   mis-recorded and cannot be attributed to Tesco. CONFIRMED mixed causes.
-4. Renewal lapse: trusted window = 7 days (interval '7 days'), renewal due at 4
-   days (interval '4 days') → ~3-day renewal window. On 11 Oct: 341 fresh, 285
-   due 12 Oct, 56 due 13 Oct, first expiry 15 Oct 11:28. Current trusted Tesco =
-   0 → the 12–14 Oct supervised renewal sessions were NOT run in the window, so
-   all 341 expired. CONFIRMED: lapse cause is un-sustained MANUAL renewal cadence,
-   not a new block.
+CORRECTIONS to the prior entry:
+- Pages are 1,909 total with 1,861 `ok` (NOT 961). Only 1 access_block ever, 30
+  unsafe_redirect, 6 http_error, 5 network_error, 6 pending.
+- Renewals DID run 12–13 Oct. tesco price_observations per day:
+  1 Oct=22, 8 Oct=285, 9 Oct=56, 12 Oct=234, 13 Oct=54 (all distinct products).
+  So 234+54 = 288 products renewed on 12–13 Oct (your figure, confirmed). The
+  288 refreshed to ~19–20 Oct expiry, NOT 15 Oct.
+- Work's network classification is UNKNOWN — do NOT call it non-datacenter.
+  Evidence only shows the `workspace-supervised` gate succeeded (0 blocks / 2
+  successes) while the `vercel-dub1-canary` datacenter gate blocked (2 blocks / 0
+  successes) and the 25 Oct AWS probe got 403. That shows datacenter egress is
+  blocked and Work's egress worked; it does NOT establish WHY.
 
-HYPOTHESIS (not confirmed): that a single fixed AWS egress (NAT+EIP) would be
-permitted — UNLIKELY (still a datacenter IP); only one access_block is recorded
-so block frequency on datacenter egress is under-measured but directionally clear.
+ACTUAL FAILURE SEQUENCE (uncapped evidence):
+- 14 supervised Tesco runs 12–13 Oct (all run_scope=manual, renewal): 10
+  success/complete (24–25 unchanged each), 3 degraded stop=http_error
+  (0af44937, e1b55a0c, 7478987b), 1 degraded stop=interrupted (0d7fca1f). Bounded
+  25-product batches; the http_error/interrupted ones stopped a batch early so
+  the operator re-ran — explaining why 288 (not the full ~341) renewed.
+- LAST Tesco observation = 2026-10-13T15:23:53Z. ZERO Tesco runs started after
+  13 Oct. Collection simply CEASED after that session.
+- The `workspace-supervised` gate went into a normal 15-min cooldown to
+  13 Oct 15:39:25 (post-http_error pause), 0 blocks total — it was NOT an access
+  block. The gate was healthy and was simply never operated again.
+- Therefore the 288 (and the un-renewed remainder) expired ~19–20 Oct because NO
+  renewal session was run in the 16–19 Oct window. This is an OPERATIONAL-
+  CONTINUITY failure of a HUMAN-OPERATED process (no durable schedule/alert to
+  prompt the next session), NOT a new block and NOT a code fault.
 
-RECOVERY PATH (expired 341): renewal mode will NOT select them (needs a
-latest_prices row; there are none). They are reachable ONLY via EXPANSION mode
-(observed_at IS NULL + proven + resolved + canonical URL + not held), ordered by
-3-retailer overlap (prioritises Dunnes/SuperValu-shared products). Scales by
-raising --limit within bounds and repeated bounded sessions; identity gates
-remain the real throughput cap.
+RECONCILE (read-only; do NOT re-request unknowns):
+- 6 pending (unknown-outcome) pages, never resolved:
+  285859740 (29 Sep), 308853589 (30 Sep), 314109029 (8 Oct), 317854748 (9 Oct),
+  Glenisk listing (10 Oct), 311944507 (12 Oct). Preserve as evidence; reconcile
+  via `--reconcile RUN_UUID`, never mark success or retry.
+- 1 stalled supervised run: tesco_supervised_expansion_a502af52 RUNNING since
+  9 Oct with activeSupervisor=null (orphaned; its pending page is 317854748).
+  Plus 4 ancient pepesto_tesco_eval runs stuck 'running' since 20–21 Aug
+  (unrelated legacy evals). These need reconcile-only closure.
 
-FEASIBILITY: AWS-native autonomous collection is NOT feasible on current egress
-(Akamai blocks it). The supervised collector + its safeguards are sound and work
-wherever egress is permitted. Sustainable options (NOT implemented; policy = no
-IP rotation/proxy): keep supervised Work path (proven egress) but add a reliable
-RENEWAL CADENCE (the missing piece), OR a licensed/approved data source, OR a
-sanctioned non-datacenter fixed egress. Report delivered to user; awaiting
-direction. Tesco schedule stays DISABLED.
+IDENTITY vs RETRIEVAL (uncapped, still the yield cap for EXPANSION growth):
+retrieval overwhelmingly succeeds (1,861 ok); identity rejection is the main
+reason a fetched product is not accepted — on ok pages: 853 "no full exact
+canonical identity", 237 measureExactnessFailed, 236 measureConflict, 203
+brandConflict, etc. Accepted trusted observations are the per-day counts above.
+These are the safeguards working as designed; do NOT weaken them.
+
+RECOVERY of the expired cohort (uncapped eligibility): renewal mode selects
+NONE (no latest_prices rows exist; 0 fresh tesco). EXPANSION mode gates applied
+uncapped: 2,380 resolved+canonical tesco mappings → 1,510 also proven (success
+receipt) → all 1,510 have no fresh price (everything expired) → 1,506 are NOT
+held → **1,506 EXPANSION-ELIGIBLE NOW** (4 held by the pending pages). So the
+recoverable cohort is ~1,506, well beyond the original 341, ordered by
+Dunnes/SuperValu overlap first. At 25/batch and ~10s spacing that is ~60 bounded
+batches; identity rejection means accepted trusted prices per batch will be a
+fraction of fetched, so expect multiple sessions and re-measure yield.
+
+FEASIBILITY: AWS-native autonomous collection remains NOT viable on current
+datacenter egress (403). But the PRIMARY lesson is that the proven supervised
+path STOPPED because the manual renewal cadence was not sustained — fixable with
+DURABLE EXECUTION TRACKING + TIMELY EXPIRY ALERTS, independent of the egress
+question. Tesco schedule stays DISABLED. Policy: no IP rotation/proxy/cooldown
+weakening.
 
 ## AWS-native Tesco collection — FEASIBILITY ASSESSMENT (no build) — 25 October 2026
 
