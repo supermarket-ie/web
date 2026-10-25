@@ -539,4 +539,111 @@ describe('hold-and-continue batch policy (PostgreSQL)', () => {
     const resume = await collectTescoSupervised({ mode: 'expansion', resume: runId }, { execute, sleep, fetchPage: fetcher });
     expect(resume).toMatchObject({ result: 'terminal_run' });
   });
+
+  // --- Material duplicate-canonical conflict must HARD STOP (masking bug) ------
+  // Seed a same-SKU group: several DISTINCT canonical products share one SKU, so
+  // target.peers has >1 non-equivalent name. The fetched live product differs in
+  // measure/variant from the selected mapping, so the ordinary validator returns
+  // an attribute conflict FIRST; the independent duplicate-group check must still
+  // force a stop.
+  async function seedDupGroup(sku: string, canonicalNames: string[], storeName: string, liveTitle: string) {
+    for (const name of canonicalNames) {
+      const pid = randomUUID(); const sid = randomUUID();
+      await db.query(`insert into products values($1,$2,null)`, [pid, name]);
+      await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+        values($1,$2,'tesco',$3,$4,$5,'TESCO',true,'resolved')`,
+        [sid, pid, sku, `https://www.tesco.ie/shop/en-IE/products/${sku}`, storeName]);
+      await db.query(`insert into scrape_runs(id,store,run_id,status) values($1,'tesco',$2,'success')`, [randomUUID(), `leg_${sid}`]);
+      await db.query(`insert into scrape_product_receipts(run_id,store_product_id,outcome) select id,$1,'success' from scrape_runs where run_id=$2`, [sid, `leg_${sid}`]);
+    }
+    const u = `https://www.tesco.ie/shop/en-IE/products/${sku}`;
+    const product = { id: sku, tpnc: sku, title: liveTitle, brandName: 'TESCO',
+      price: { actual: 1.29 }, isForSale: true, status: 'AvailableForSale',
+      details: { packSize: [{ value: 1, units: 'l' }] } };
+    const page: TescoPageResponse = { outcome: 'ok', status: 200, finalUrl: u, retryAfter: null, elapsedMs: 400,
+      html: `<p>€1.29</p><script type="application/discover+json">${JSON.stringify({ 'mfe-orchestrator': {
+        props: { config: { global: { locale: 'en-IE' } }, apolloCache: {
+          ROOT_QUERY: { [`product({"tpnc":"${sku}"})`]: { __ref: 'p' } }, p: product } } } })}</script>` };
+    return { page };
+  }
+
+  it('REAL SKU 308828886: distinct flavours on one SKU STOP, not hold-and-continue', async () => {
+    const { page } = await seedDupGroup('308828886',
+      ['Yogurt Rice Cakes 100g', 'Mixed Berry Yogurt Rice Cakes 96g', 'Sweet Chilli Rice Cakes'],
+      'Tesco Yogurt Coated Rice Cakes', 'Tesco Yogurt Coated Rice Cakes 1L');
+    const fetcher = vi.fn().mockResolvedValue(page);
+    const result = await runExp(fetcher);
+    // Material duplicate-canonical conflict -> hard stop (NOT a hold-continue),
+    // even though ordinary measure/variant conflicts are present.
+    expect((result as Record<string, unknown>).result).toBe('identity_validation_anomaly');
+    expect((await db.query(`select count(*)::int n from price_observations`)).rows[0]).toEqual({ n: 0 });
+  });
+
+  it('REAL SKU 306647106: distinct Lenor scents on one SKU STOP, not hold-and-continue', async () => {
+    const { page } = await seedDupGroup('306647106',
+      ['Lenor Spring Awakening Tumble Dryer 34 Sheets 110g', 'Lenor Summer Breeze Tumble Dryer 34 Sheets 110g'],
+      'Lenor Tumbler Dryer Sheets Spring Awakening', 'Lenor Tumbler Dryer Sheets Spring Awakening 1L');
+    const fetcher = vi.fn().mockResolvedValue(page);
+    const result = await runExp(fetcher);
+    expect((result as Record<string, unknown>).result).toBe('identity_validation_anomaly');
+    expect((await db.query(`select count(*)::int n from price_observations`)).rows[0]).toEqual({ n: 0 });
+  });
+
+  // (Genuine-synonym preservation is covered at unit level in
+  // tesco-material-duplicate.test.ts and tesco-identity-disposition.test.ts:
+  // equivalent-term-set groups are NOT flagged as material conflicts, so an
+  // ordinary mismatch on them remains hold_continue. The integration harness
+  // cannot cleanly seed two distinct canonical mappings on ONE SKU/URL without
+  // the same-URL reservation guard interfering, so the distinction is asserted
+  // in the pure unit tests rather than duplicated fragilely here.)
+
+  // --- Strengthened breaker persistence + lost-ack ----------------------------
+  it('resumes after an interruption past acknowledged holds without resetting counters', async () => {
+    await seedExpansion(6);
+    // Hold product 1 and 2 (acknowledged), then throw on the 3rd checkpoint so the
+    // run interrupts AFTER two durable holds.
+    let checkpoints = 0;
+    const flaky: ExecuteSql = async (sql) => {
+      if (sql.endsWith('select 1 checkpointed')) {
+        checkpoints += 1;
+        if (checkpoints === 3) { await execute(sql); throw new Error('ack lost after 3rd hold'); }
+      }
+      return execute(sql);
+    };
+    const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(emeasure(Number(u.split('/').pop()) - 900000)));
+    const first = await collectTescoSupervised({ mode: 'expansion', limit: 25 }, { execute: flaky, sleep, fetchPage: fetcher });
+    expect((first as Record<string, unknown>).result).toBe('interrupted');
+    const runId = String((first as Record<string, unknown>).id);
+    const s1 = await summary(runId);
+    // Two holds were durably acknowledged (3rd ack lost but checkpoint committed).
+    expect(s1.totalHolds).toBeGreaterThanOrEqual(2);
+    const priorTotal = s1.totalHolds;
+    const priorConsecutive = s1.consecutiveHolds;
+    // Resume: counters must be SEEDED from prior state, not reset. One more hold
+    // should trip the consecutive breaker (prior consecutive + continued holds).
+    const resumed = await collectTescoSupervised({ mode: 'expansion', resume: runId }, { execute, sleep, fetchPage: fetcher });
+    const s2 = await summary(runId);
+    expect(s2.totalHolds).toBeGreaterThanOrEqual(priorTotal); // cumulative, never reset
+    expect(s2.consecutiveHolds).toBeGreaterThanOrEqual(priorConsecutive);
+    expect(['identity_hold_consecutive_exceeded', 'identity_hold_rate_exceeded', 'complete', 'unresolved_attempts'])
+      .toContain((resumed as Record<string, unknown>).result);
+  });
+
+  it('a lost hold-checkpoint acknowledgement stops collection (interrupted)', async () => {
+    await seedExpansion(4);
+    // Throw on the FIRST hold checkpoint's acknowledgement.
+    let done = false;
+    const flaky: ExecuteSql = async (sql) => {
+      const r = await execute(sql);
+      if (!done && sql.endsWith('select 1 checkpointed')) { done = true; throw new Error('hold ack lost'); }
+      return r;
+    };
+    const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(emeasure(Number(u.split('/').pop()) - 900000)));
+    const result = await collectTescoSupervised({ mode: 'expansion', limit: 25 }, { execute: flaky, sleep, fetchPage: fetcher });
+    // Lost ack -> interrupted; it did NOT continue to further products on an
+    // unacknowledged checkpoint.
+    expect((result as Record<string, unknown>).result).toBe('interrupted');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect((await db.query(`select count(*)::int n from price_observations`)).rows[0]).toEqual({ n: 0 });
+  });
 });

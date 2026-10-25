@@ -194,6 +194,30 @@ function mismatchReasons(signals: TescoIdentitySignals) {
     .filter(([key, value]) => value && key.endsWith('Conflict')).map(([key]) => key);
 }
 
+/**
+ * Independently inspect a product's SAME-SKU canonical mapping group for a
+ * MATERIAL duplicate-canonical conflict — distinct canonical identities sharing
+ * one Tesco SKU. Returns true ONLY when the group is a genuine conflict, NOT when
+ * the duplicate group is corroborated as equivalent synonyms (same canonical
+ * term-set across the group) and NOT for a unique mapping.
+ *
+ * This is deliberately isolated from the ordinary attribute checks
+ * (measure/brand/variant/pack) so the batch policy can treat it as a hard stop
+ * even when an ordinary attribute conflict is present and would otherwise mask it.
+ * It mirrors the duplicate branch of classifyTescoMapping without depending on the
+ * attribute-conflict ordering.
+ */
+export function hasMaterialDuplicateCanonicalConflict(mapping: TescoMappingEvidence): boolean {
+  if (!(mapping.duplicateSkuCount > 1)) return false;
+  const expected = [...new Set(terms(mapping.canonicalName))].sort().join('|');
+  const peers = mapping.duplicateCanonicalNames ?? [];
+  // Corroborated synonym group: every peer (and the whole group) shares the same
+  // canonical term-set. That is NOT a material conflict — preserve it.
+  const groupIsCorroborated = peers.length === mapping.duplicateSkuCount
+    && peers.every((name) => [...new Set(terms(name))].sort().join('|') === expected);
+  return !groupIsCorroborated;
+}
+
 export function classifyTescoMapping(mapping: TescoMappingEvidence): TescoMappingAudit {
   const signals = tescoIdentitySignals(mapping);
   const conflicts = mismatchReasons(signals);

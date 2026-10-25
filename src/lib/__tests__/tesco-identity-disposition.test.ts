@@ -108,3 +108,23 @@ describe('policy invariants', () => {
     for (const r of CONTINUE_REASONS) expect(STOP_REASONS.has(r)).toBe(false);
   });
 });
+
+describe('classifyIdentityOutcome — material duplicate-canonical conflict forces stop', () => {
+  it('stops even when an ordinary attribute reason was returned first (masking bug)', () => {
+    // measureConflict alone -> hold_continue; with a material duplicate conflict -> stop.
+    expect(classifyIdentityOutcome(['measureConflict'], true)).toBe('hold_continue');
+    expect(classifyIdentityOutcome(['measureConflict'], true, true)).toBe('stop');
+    expect(classifyIdentityOutcome(['variantConflict'], true, true)).toBe('stop');
+  });
+  it('stops on a material duplicate conflict even with no reasons present', () => {
+    // defensive: the flag alone forces stop regardless of reasons.
+    expect(classifyIdentityOutcome([], true, true)).toBe('stop');
+  });
+  it('does NOT change behaviour when the flag is false (genuine synonyms / unique)', () => {
+    expect(classifyIdentityOutcome(['measureConflict'], true, false)).toBe('hold_continue');
+    expect(classifyIdentityOutcome([], true, false)).toBe('accept');
+  });
+  it('a not-found product still stops before the flag is considered', () => {
+    expect(classifyIdentityOutcome([], false, false)).toBe('stop');
+  });
+});

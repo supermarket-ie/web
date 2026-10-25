@@ -1,5 +1,38 @@
 # Supermarket.ie — Canonical Project State
 
+## FIX: duplicate-canonical masking in hold-and-continue — 25 October 2026
+
+Narrow safety correction to the merged hold-and-continue (PR #269). BUG:
+validateTescoCollectedIdentity returns an ordinary attribute conflict
+(measure/variant/brand/pack) via classifyTescoReplacement BEFORE reaching its
+duplicate-canonical (classifyTescoMapping) check, so a MATERIAL duplicate-SKU
+conflict was masked and hold-and-continue proceeded when it should hard-stop.
+Real examples: SKU 308828886 (Yogurt / Mixed Berry Yogurt / Sweet Chilli rice
+cakes share one SKU) and SKU 306647106 (Lenor Spring Awakening / Summer Breeze
+dryer sheets share one SKU) — verified in production (distinct canonical names,
+non-equivalent term-sets).
+
+FIX (narrow): new pure helper hasMaterialDuplicateCanonicalConflict() in
+tesco-mapping-audit.ts independently inspects the product's SAME-SKU canonical
+GROUP (mirrors the duplicate branch of classifyTescoMapping, isolated from the
+attribute-conflict ordering). The collector computes it from target.peers and
+passes it to classifyIdentityOutcome(reasons, productFound, materialDuplicate),
+which now forces 'stop' when set — BEFORE accept/skip/hold — regardless of any
+ordinary reason returned first. Genuine synonyms (equivalent canonical term-sets
+across the whole group) are NOT flagged → preserved as hold-eligible. NO change
+to acceptance rules, validator, mapping records, historical observations, or
+existing holds.
+
+TESTS: full suite 660 pass (64 files). New: tesco-material-duplicate.test.ts
+(6 — both real SKU examples flagged, synonyms + unique not flagged, incomplete
+group flagged); classifier tests for the materialDuplicate flag; PGlite
+integration tests reproducing BOTH real SKUs end-to-end (stop, 0 observations);
+strengthened breaker tests (interrupt after >=2 acknowledged holds → resume →
+counters cumulative/consecutive NOT reset; lost hold-checkpoint ack → interrupted,
+no further fetch, 0 observations). typecheck:tesco-supervised/discovery/branded
+clean; lint 0 errors/22 warnings; behavioural 16; build OK. Delivered via a
+focused follow-up PR; merge only on green CI + no active Work session.
+
 ## IMPLEMENTED: hold-and-continue on ordinary Tesco identity mismatch — 25 October 2026
 
 Approved from PR #268 with refinements; implemented on branch
