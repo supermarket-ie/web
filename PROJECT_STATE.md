@@ -53,15 +53,20 @@ canonical identity", 237 measureExactnessFailed, 236 measureConflict, 203
 brandConflict, etc. Accepted trusted observations are the per-day counts above.
 These are the safeguards working as designed; do NOT weaken them.
 
-RECOVERY of the expired cohort (uncapped eligibility): renewal mode selects
-NONE (no latest_prices rows exist; 0 fresh tesco). EXPANSION mode gates applied
-uncapped: 2,380 resolved+canonical tesco mappings → 1,510 also proven (success
-receipt) → all 1,510 have no fresh price (everything expired) → 1,506 are NOT
-held → **1,506 EXPANSION-ELIGIBLE NOW** (4 held by the pending pages). So the
-recoverable cohort is ~1,506, well beyond the original 341, ordered by
-Dunnes/SuperValu overlap first. At 25/batch and ~10s spacing that is ~60 bounded
-batches; identity rejection means accepted trusted prices per batch will be a
-fraction of fetched, so expect multiple sessions and re-measure yield.
+RECOVERY eligibility (CORRECTED — exact selectSupervisedCandidates held
+predicate, uncapped; user-verified): 2,461 tesco mappings → 2,380
+resolved+canonical → 1,510 proven → 745 HELD → **765 EXPANSION-ELIGIBLE**.
+My earlier 1,506 was WRONG: it applied only the pending/24h part of `held` and
+OMITTED clause 3 (historical failure / identity holds — any post-observation
+page with outcome<>'ok' OR non-empty identity_results reasons for that product).
+With observed_at NULL (all expired), coalesce(observed_at,'-infinity') makes
+clause 3 evaluate every historical failed/identity-flagged page as a hold → 745.
+Within the ORIGINAL 341 cohort: 325 eligible, 16 held (user-verified). DO NOT
+remove or bypass holds. NOTE: `--reconcile RUN_UUID` only REPORTS run state; it
+does NOT close/resolve pending requests — the 6 pending + orphaned run stay
+preserved until an independently reviewed reconciliation procedure. Recovery is
+supervised EXPANSION on the permitted (Work) egress, overlap-ordered
+(Dunnes/SuperValu peers first), prioritising the 325 original-cohort products.
 
 FEASIBILITY: AWS-native autonomous collection remains NOT viable on current
 datacenter egress (403). But the PRIMARY lesson is that the proven supervised
