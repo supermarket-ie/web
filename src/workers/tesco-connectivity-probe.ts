@@ -8,10 +8,10 @@
 // expected SKU parsed, body length + sha256 prefix) — never raw HTML/body.
 //
 // Run (bounded one-off ECS task): PROBE_URL=<url> node --conditions=react-server \
-//   --import tsx scripts/tesco-connectivity-probe.ts
+//   --import tsx src/workers/tesco-connectivity-probe.ts
 import {
   fetchTescoCollectedPage, isTescoCollectionUrl, parseTescoCollectedPage,
-} from '../src/lib/tesco-direct-collection-core';
+} from '../lib/tesco-direct-collection-core';
 
 async function main() {
   const url = process.env.PROBE_URL ?? '';
