@@ -194,13 +194,27 @@ variable "worker_desired_count" {
 }
 
 variable "worker_schedule_state" {
-  description = "EventBridge Scheduler state for the cron jobs: DISABLED (default, safe) or ENABLED. Enable only when Vercel crons are being turned off in the same change."
+  description = "Default EventBridge Scheduler state for cron jobs NOT listed in enabled_schedules: DISABLED (default, safe) or ENABLED."
   type        = string
   default     = "DISABLED"
   validation {
     condition     = contains(["ENABLED", "DISABLED"], var.worker_schedule_state)
     error_message = "worker_schedule_state must be ENABLED or DISABLED."
   }
+}
+
+variable "enabled_schedules" {
+  description = <<-EOT
+    Per-job allowlist of EventBridge schedules to ENABLE (by job key, matching
+    workers.tf cron_jobs). Any job NOT listed uses worker_schedule_state
+    (default DISABLED). Lets us stage the cron cutover: enable the low-risk jobs
+    first and keep the retailer-scrape triggers (dunnes-scrape-trigger,
+    supervalu-scrape-trigger, pepesto-tesco-retrieve) disabled until each
+    retailer is canaried. Enable a schedule only AFTER the matching Vercel cron
+    is disabled, to avoid duplicate execution.
+  EOT
+  type        = list(string)
+  default     = []
 }
 
 variable "image_tag_worker" {

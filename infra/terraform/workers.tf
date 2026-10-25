@@ -213,8 +213,10 @@ resource "aws_ecs_task_definition" "scheduled" {
 resource "aws_scheduler_schedule" "cron" {
   for_each = local.cron_set
   name     = "${var.name_prefix}-${each.key}"
-  # Created DISABLED by default; flip to ENABLED only when Vercel crons are off.
-  state = var.worker_schedule_state
+  # Per-job state: ENABLED only if this job key is in enabled_schedules;
+  # otherwise fall back to worker_schedule_state (default DISABLED). Enable a job
+  # only after its Vercel counterpart is off, to avoid duplicate execution.
+  state = contains(var.enabled_schedules, each.key) ? "ENABLED" : var.worker_schedule_state
 
   flexible_time_window {
     mode = "OFF"
