@@ -52,12 +52,29 @@ service, no scheduler — plus the ExecuteSql pg-adapter and a fixed-egress
 decision. Cost ≈ a few cents per bounded run (Fargate 0.5vCPU/1GB for minutes);
 the real cost driver is the egress arrangement, not compute.
 
-NEXT (await user decision): do NOT run a connectivity test yet — Phase 2 allows
-ONE authorised non-mutating test; recommend getting explicit go-ahead first given
-the random-IP block risk. If authorised, a single GET to one tesco.ie product via
-a bounded one-off task, honouring stop policy, reporting the outcome. If blocked:
-stop and assess a fixed-egress (NAT+EIP) or approved data-provider option — do
-NOT rotate IPs/proxies/shorten cooldowns.
+CONNECTIVITY TEST RESULT (25 Oct, user-authorised, ONE request): Tesco BLOCKED
+the AWS egress. Single GET via the existing fetchTescoCollectedPage transport to
+https://www.tesco.ie/shop/en-IE/products/306943101 (a previously-'ok' product)
+from a bounded one-off ECS task in a public subnet → **HTTP 403, outcome
+access_block**, 311 ms, body 411 bytes (challenge page, not product JSON),
+expected product NOT accessible, same-origin (no redirect). Egress was a random
+AWS eu-west-1 public IP (observed 18.201.73.122 on an earlier aborted attempt;
+the model is confirmed). The transport's stop rule fired correctly: one attempt,
+no retry/route-switch. NO Supabase writes (probe never touches the DB; task had
+no DB secrets). The probe lives at src/workers/tesco-connectivity-probe.ts;
+throwaway probe task defs deregistered. (Two earlier task attempts failed to
+start / ERR_MODULE_NOT_FOUND and made ZERO Tesco requests — the 403 was the first
+and only request.)
+
+CONCLUSION: the existing supervised collector CANNOT run from the current AWS
+egress — Akamai blocks AWS datacenter IPs (the risk we flagged, now evidenced).
+Per policy: do NOT rotate IPs/proxies/shorten cooldowns. Realistic authorised
+options to report (NOT implemented): (a) a fixed-egress NAT+EIP — but a single
+AWS EIP is still an AWS datacenter IP and likely still blocked, so low-confidence;
+(b) a licensed/approved product-data source or an explicitly sanctioned
+fixed-egress arrangement with a non-datacenter reputation. The supervised runner
+itself remains viable wherever egress is permitted; the blocker is purely
+network identity. Tesco schedule stays DISABLED.
 
 ## Retailer canaries — SuperValu LIVE, Dunnes blocked on matching — 25 October 2026
 
