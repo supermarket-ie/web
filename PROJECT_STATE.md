@@ -1,5 +1,64 @@
 # Supermarket.ie — Canonical Project State
 
+## AWS-native Tesco collection — FEASIBILITY ASSESSMENT (no build) — 25 October 2026
+
+Assessment only; nothing built; Tesco schedule left DISABLED and
+TESCO_VERCEL_WORKER_ENABLED=false (verified unchanged).
+
+Runner (reviewed): entry scripts/tesco-supervised-collect.ts; core
+src/lib/tesco-supervised-collection.ts; fetch/parse/identity/stop in
+src/lib/tesco-direct-collection-core.ts. "Supervised" = human-in-the-loop at the
+DATABASE TRANSPORT layer: the Node process holds NO DB credential and emits each
+SQL query as JSONL on stdout; a human runs it via the authenticated Supabase SQL
+connector and returns rows on stdin ("SQL bridge"). Transport to Tesco is a
+single plain fetch (honest UA, manual redirects, 20s timeout) — NO ScrapingBee,
+NO proxy, NO retries. Safeguards intact: exact SKU + title/brand/pack identity
+(validateTescoCollectedIdentity + classifyTescoReplacement/Mapping), mapping-
+snapshot re-assert under lock, egress lease on gate `workspace-supervised-
+20260929` (must be enabled=false), 10s pacing, idempotent finalise via
+finalize_store_scrape_product + scrape_product_receipts, checkpoint rows in
+tesco_direct_collection_pages. Stop conditions: 401/403/Akamai challenge →
+access_block (48h cooldown); 429 → rate_limited (15m/Retry-After); unsafe_redirect
+/network_error stop the whole batch; one attempt only.
+
+KEY NETWORK FINDING (access risk): ECS tasks run in PUBLIC subnets with
+assignPublicIp=ENABLED and there is NO NAT gateway, so task egress uses a RANDOM
+ephemeral AWS eu-west-1 public IP that changes every launch. The 2 Elastic IPs
+(52.212.195.119 / 54.155.23.179) are bound to the ALB, NOT task egress. Random
+AWS datacenter IPs are the exact profile Akamai (Tesco's protection) tends to
+block — so Tesco access from AWS is UNLIKELY by default and must NOT be assumed
+from the ChatGPT-Work success (different network identity). Private subnets have
+no egress at all (no NAT).
+
+SQL-BRIDGE replacement: autonomy needs a real ExecuteSql adapter. The Supabase
+SERVICE key is an HTTP/PostgREST key, NOT a Postgres password — but the runner's
+DO-blocks are raw PL/pgSQL, so they need a direct least-privileged Postgres
+connection (TLS) to the pooler, scoped to the specific tables/RPCs. This can
+preserve collection/finalisation semantics byte-for-byte (same SQL), only
+swapping the transport from stdin/stdout to a pg client.
+
+ELIGIBILITY (read-only, no mutation): current trusted Tesco prices in
+latest_prices = 0 (the 341 fully expired). RENEWAL mode selects nothing (needs a
+latest_prices row). EXPANSION mode (observed_at IS NULL + proven + resolved +
+canonical URL + not held) is the ONLY path to the expired cohort. Sampled reads
+(capped by PostgREST 1000-row limit) confirmed the direction: proven+canonical
+tesco mappings with no fresh price are expansion-eligible; exact count pending an
+uncapped query. `held` (failed attempt/identity flag in last 24h) may trim a few.
+
+SMALLEST AWS FOOTPRINT (if later approved): one manually-triggered ECS run-task
+on the EXISTING cluster (reuse the `scheduled` task def pattern, command =
+node --conditions=react-server --import tsx scripts/…), bounded --limit, no new
+service, no scheduler — plus the ExecuteSql pg-adapter and a fixed-egress
+decision. Cost ≈ a few cents per bounded run (Fargate 0.5vCPU/1GB for minutes);
+the real cost driver is the egress arrangement, not compute.
+
+NEXT (await user decision): do NOT run a connectivity test yet — Phase 2 allows
+ONE authorised non-mutating test; recommend getting explicit go-ahead first given
+the random-IP block risk. If authorised, a single GET to one tesco.ie product via
+a bounded one-off task, honouring stop policy, reporting the outcome. If blocked:
+stop and assess a fixed-egress (NAT+EIP) or approved data-provider option — do
+NOT rotate IPs/proxies/shorten cooldowns.
+
 ## Retailer canaries — SuperValu LIVE, Dunnes blocked on matching — 25 October 2026
 
 Added per-retailer control: new `enabled_retailers` var gates the per-store
