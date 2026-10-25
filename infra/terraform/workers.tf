@@ -46,10 +46,10 @@ locals {
     { name = "DISABLE_RETAILER_COLLECTION", value = local.retailer_blocked ? "true" : "false" },
     { name = "DISABLE_OUTBOUND_EMAIL", value = local.email_blocked ? "true" : "false" },
     { name = "SUPABASE_READ_ONLY", value = local.supabase_read_only ? "true" : "false" },
-    { name = "TESCO_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
-    { name = "DUNNES_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
-    { name = "SUPERVALU_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
-    { name = "NON_TESCO_VERCEL_WORKERS_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
+    { name = "TESCO_VERCEL_WORKER_ENABLED", value = local.retailer_on["tesco"] },
+    { name = "DUNNES_VERCEL_WORKER_ENABLED", value = local.retailer_on["dunnes"] },
+    { name = "SUPERVALU_VERCEL_WORKER_ENABLED", value = local.retailer_on["supervalu"] },
+    { name = "NON_TESCO_VERCEL_WORKERS_ENABLED", value = local.non_tesco_on },
   ], local.queue_url_environment) : []
 }
 

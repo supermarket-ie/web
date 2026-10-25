@@ -1,5 +1,38 @@
 # Supermarket.ie — Canonical Project State
 
+## Retailer canaries — SuperValu LIVE, Dunnes blocked on matching — 25 October 2026
+
+Added per-retailer control: new `enabled_retailers` var gates the per-store
+*_WORKER_ENABLED flags (ecs.tf + workers.tf), so retailers activate one at a time.
+Set enable_retailer_workers_on_aws=true (DISABLE_RETAILER_COLLECTION=false) and
+enabled_retailers=["dunnes","supervalu"] (Tesco stays OFF).
+
+Canary results (manual limit=3 triggers via the website route + CRON_SECRET; SQS
+→ consumer rev 3 pipeline):
+- **SuperValu: PASS** — run vercel_supervalu_20261025084738: 3 fetched, 3
+  extracted, 0 failed, 100% coverage, inserted 0 / unchanged 3 (prices current;
+  correctly no redundant writes). direct_product_page transport, no Akamai block.
+  → supervalu-scrape-trigger schedule ENABLED.
+- **Dunnes: pipeline OK, collection FAILS** — run vercel_dunnes_20261025083752: 3
+  attempted, 8 fetched, 0 extracted, 3 failed (no_confident_match at the matching
+  stage, is_retryable=false), 0 inserted. The AWS pipeline works end-to-end and
+  reached Dunnes (real candidates+prices returned), but exact-identity matching
+  rejected all 3 — e.g. Carrots: stored SKU 100807381 present in candidates yet
+  rejected. This is a PRE-EXISTING matching-strictness issue (same code ran on
+  Vercel), NOT an AWS/access/migration regression, and crucially 0 bad writes —
+  trusted-price protection held. → dunnes-scrape-trigger schedule stays DISABLED
+  pending a matching-confidence fix (separate work).
+
+Schedules now: 7 low-risk + supervalu-scrape-trigger ENABLED; dunnes-scrape-
+trigger + pepesto-tesco-retrieve DISABLED. Consumer 1/1 on rev 3 (collection
+env). No duplicate execution (Vercel crons off; Vercel queue triggers removed in
+merged vercel.json).
+
+NEXT: (a) investigate/fix Dunnes matching confidence, then canary + enable its
+schedule; (b) Tesco recovery (pepesto-tesco-retrieve) handled separately with
+egress lease/cooldown/Akamai stop conditions. Work continues on branch
+ops/post-merge-retailers (PR to follow; infra changes already applied to prod).
+
 ## PR #265 MERGED to main — single source of truth — 25 October 2026
 
 PR #265 (AWS migration) merged to `main` via SQUASH (merge commits disallowed on
