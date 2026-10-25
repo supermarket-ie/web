@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { DependencyUnavailableError, withSupabaseRetry } from '@/lib/supabase-resilience';
+import { isPreviewEnv } from '@/lib/runtime-env';
 
 export type StoreKey = 'tesco' | 'dunnes' | 'supervalu' | 'aldi';
 
@@ -100,6 +101,14 @@ export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}
     if (error instanceof DependencyUnavailableError) {
       const fallback = getLastKnownGoodPrices();
       if (fallback) return fallback;
+    }
+    // Preview-only: tolerate an unreachable ISOLATED preview DB by returning no
+    // prices (never substitutes data). Production keeps the fail-closed throw.
+    if (isPreviewEnv()) {
+      console.warn('[price-data] preview: latest_prices unavailable, returning empty', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return [];
     }
     throw error;
   }

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { choosePepestoCatalogCandidate, createPepestoRun, finalizePepestoProduct, getPepestoCreditsCents, retrievePepestoCatalog } from '@/lib/pepesto-tesco';
+import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -17,6 +18,7 @@ function requestedLimit(value: string | null) {
 }
 
 export async function GET(request: Request) {
+  if (retailerCollectionBlocked()) return Response.json({ error: RETAILER_COLLECTION_BLOCKED_REASON, status: 'blocked_preview' }, { status: 503 });
   if (!authorized(request)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const limit = requestedLimit(new URL(request.url).searchParams.get('limit'));

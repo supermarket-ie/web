@@ -1,5 +1,6 @@
-import { send } from '@vercel/queue';
+import { send } from '@/lib/queue';
 import { supabaseAdmin } from '@/lib/supabase';
+import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 const TOPIC = 'dunnes-discovery-batches';
 
@@ -25,6 +26,9 @@ function authorized(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (retailerCollectionBlocked()) {
+    return Response.json({ error: RETAILER_COLLECTION_BLOCKED_REASON, status: 'blocked_preview' }, { status: 503 });
+  }
   if (!process.env.CRON_SECRET || !authorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }

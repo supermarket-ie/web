@@ -1,5 +1,501 @@
 # Supermarket.ie — Canonical Project State
 
+## Vercel Cron/Queue migration — crons + queues on AWS; retailers next — 24 October 2026
+
+SCHEDULED JOBS: Vercel crons disabled (dashboard). 7 low-risk AWS schedules
+ENABLED (weekly-digest, check-alerts, agent-tasks, price-watchdog +thursday,
+product-embeddings, scrape-watchdog) via new `enabled_schedules` allowlist; the 3
+retailer-scrape triggers (dunnes/supervalu/pepesto-tesco-retrieve) stay DISABLED.
+Canary: ran scrape-watchdog via the scheduled task → exit 0, route HTTP 200
+against prod Supabase (reported real coverage; emailSent:false). Single execution
+path confirmed.
+
+QUEUES: SQS consumer running (worker_desired_count=1), long-polling all 6 topics;
+website flipped to QUEUE_BACKEND=sqs (web 2/2 healthy, rollout complete). Safe
+because the only live queue producer (agent-events → agent-product-changes) fires
+during scrapes, which are paused; retailer scrape-trigger producers are disabled.
+No in-flight messages (reconciliation). vercel.json queue triggers + crons REMOVED
+on the branch (commit ccf0aef) so a Vercel redeploy can't resume duplicates —
+NEEDS the user to deploy to main (queue routes kept as plain functions for
+rollback).
+
+tfvars now: enable_workers=true, worker_desired_count=1,
+website_queue_backend=sqs, worker_schedule_state=DISABLED,
+enabled_schedules=[7 low-risk], enable_retailer_workers_on_aws=false,
+image_tag(+worker)=df9f0c1-prod.
+
+NEXT — RETAILERS (staged canary): enable_retailer_workers_on_aws=true flips
+DISABLE_RETAILER_COLLECTION→false and the per-store *_WORKER_ENABLED flags.
+Then enable the retailer schedules one retailer at a time via enabled_schedules
+(dunnes + supervalu first via canary, Tesco separately), preserving exact-identity
+validation, trusted-price protection, request limits, egress lease/cooldown,
+Akamai stop conditions. Watch ScrapingBee cost + coverage. Vercel retained for
+rollback; project NOT paused.
+
+WORKER FIX HISTORY (this session): (1) entrypoint execs worker command; (2)
+website_queue_backend decouples producer routing from provisioning (+ website
+task-role SQS SendMessage, AWS_REGION env); (3) workers run with
+--conditions=react-server to neutralise server-only. Prod image df9f0c1-prod.
+Full details in the prior dated entry below.
+
+## Vercel Cron/Queue migration — PREPARATION done, worker bugs fixed — 24 October 2026
+
+Two activation blockers (user-identified) FIXED + proven:
+1. Worker startup: docker-entrypoint.sh ignored the ECS `command` override (always
+   ran web+Eve). Now execs the command when given; web task (no command) still
+   runs web+Eve. Required a prod image rebuild → `df9f0c1-prod`.
+2. Queue routing coupling: website QUEUE_BACKEND was tied to enable_workers. New
+   `website_queue_backend` var (default "vercel") decouples producer routing from
+   provisioning. Added website task-role SQS SendMessage policy (gated on worker
+   stack) + AWS_REGION env.
+3. (Found during canary) workers import route modules pulling in `server-only`,
+   which throws outside Next. Fixed by running worker tasks with
+   `--conditions=react-server` (resolves server-only to its no-op). CANARY PROVED
+   the consumer starts and long-polls all 6 topics (region eu-west-1), healthy.
+
+PREPARATION STAGE APPLIED (inert): 6 SQS topic queues + 6 DLQs, SQS consumer
+service (desired=0), 10 EventBridge schedules (ALL DISABLED), worker/scheduler
+IAM. Website on `df9f0c1-prod`, 2/2 healthy, STILL routing QUEUE_BACKEND=vercel,
+DISABLE_RETAILER_COLLECTION=true. Vercel continues ALL processing. Nothing runs
+twice.
+
+Reconciliation (read-only SELECT on prod Supabase): NO in-flight work to drain —
+`recent_runs_24h` empty; the 6 `scrape_runs` stuck 'running' are stale (newest
+Oct 9, rest August = orphaned). Tesco egress pool: no lease held (leased_until
+null on both keys); canary key in expired cooldown, other disabled. Safe window.
+
+tfvars now: enable_workers=true, worker_desired_count=0,
+worker_schedule_state=DISABLED, website_queue_backend=vercel,
+enable_retailer_workers_on_aws=false, image_tag(+worker)=df9f0c1-prod.
+
+NEXT (scheduled-jobs stage): user disables Vercel crons (Project Settings → Cron
+Jobs); then enable low-risk AWS schedules (weekly-digest, check-alerts,
+agent-tasks, price-watchdog(+thursday), product-embeddings, scrape-watchdog),
+keeping the 3 retailer-scrape triggers DISABLED until per-retailer canary. Then
+queue stage (consumer up + website_queue_backend=sqs + remove 6 Vercel queue
+triggers), then retailers (Dunnes/SuperValu canary, Tesco separate).
+Vercel retained for rollback; project NOT paused/deleted.
+
+---
+
+## MIGRATION COMPLETE: www + apex serving from AWS — 24 October 2026
+
+Both production domains now serve from AWS ECS Fargate (via ALB; apex via Global
+Accelerator). Customer-facing migration DONE.
+
+- apex `supermarket.ie` A → GA IPs 166.117.14.195 + 166.117.236.132 (propagated
+  to all tested resolvers incl. Google). Over real DNS: apex → 301 →
+  https://www.supermarket.ie (full chain → 200), apex cert = Amazon ACM
+  `supermarket.ie` (verify=0). GA endpoint HEALTHY.
+- www `www.supermarket.ie` → ALB, 200, Let's Encrypt cert (verify=0),
+  indexable, canonical=www.
+- ECS 2/2 healthy; CloudWatch clean (no errors, no read-only write-blocks).
+
+apex CAA: NONE present (user added the two A records; CAA records not added).
+NOT a blocker — CAA governs issuance, not serving; both certs already issued; apex
+was always unrestricted (no regression). The recommended CAA (`amazonaws.com` +
+`letsencrypt.org`) is OPTIONAL hardening for future renewals; add when convenient.
+
+Vercel remains live during residual propagation (apex/www caches expiring on the
+old long TTLs) and as rollback. Rollback: www CNAME →
+e2ae0df6f59fc39f.vercel-dns-017.com; apex A → 216.198.79.1.
+
+REMAINING FOR FULL VERCEL INDEPENDENCE (next priorities, NOT done):
+1. Vercel Cron — scheduled jobs (retailer collection triggers, price
+   finalisation, scheduled notifications). AWS replacement in-branch (EventBridge
+   Scheduler → ECS tasks) provisioned DISABLED. Enable AWS + disable Vercel in ONE
+   controlled change to avoid duplicate execution.
+2. Vercel Queues — background job delivery. AWS replacement (SQS + consumer
+   service) provisioned with desired_count=0, enable_workers=false,
+   QUEUE_BACKEND=vercel. Flip to SQS consumer + QUEUE_BACKEND=sqs in the same
+   controlled change.
+3. Replace imported Let's Encrypt www cert with ACM-managed (DNS-validated now
+   that www is on the ALB) for auto-renew; LE expires 2027-01-20.
+Until (1)+(2) are done, Vercel still runs the background/scheduled workload, so
+the platform is NOT yet fully independent. PR #265 still DRAFT (do not merge as
+part of this).
+
+---
+
+## www CUT OVER to AWS (apex pending) — 24 October 2026
+
+The user updated the `www.supermarket.ie` CNAME at Register365 →
+`smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com`. Propagating on existing TTL
+(~9.4h): authoritative Register365 NS + Cloudflare + Quad9 already return the
+ALB; Google still cached on Vercel (coexistence window, expected + safe). VERIFIED
+on AWS via a switched resolver: TLS = Let's Encrypt www cert (valid); /,/shop,
+/terms,/api/products,/eve/v1/info = 200; NO x-robots-tag (indexable); canonical=
+www; revalidate 401 / subscribe(no-email) 400 (write path live, no data created);
+Eve /v1/info full payload; products API real data. ECS 2/2 healthy, rollout
+COMPLETED, both targets healthy, ALB receiving real requests, CloudWatch clean
+(no errors, no PreviewReadOnly write-blocks). Vercel still live for the resolvers
+that haven't switched + as rollback.
+
+NEXT: once www has largely propagated + stayed healthy, user adds apex records
+(CAA amazonaws.com + letsencrypt.org; A → 166.117.14.195 + 166.117.236.132). Then
+post-cutover: swap LE www cert for ACM-managed (auto-renew; LE expires
+2027-01-20), migrate Vercel Cron + Queues.
+
+Rollback (still available): www CNAME → e2ae0df6f59fc39f.vercel-dns-017.com.
+
+---
+
+## Cutover READY: GA live, production posture live, SEO blocker fixed — 24 October 2026
+
+All pre-DNS readiness checks PASS. (www now cut over — see entry above.)
+
+Global Accelerator (PROVISIONED, DEPLOYED, approved ~$25/mo): accelerator
+`d829ace4...`, status DEPLOYED, ALB endpoint HEALTHY. **Two static anycast IPs
+for the apex A records: 166.117.14.195 and 166.117.236.132.** DNS name
+`ac36b1ed45ae4a060.awsglobalaccelerator.com`. 443 + 80 listeners; endpoint
+groups in eu-west-1 fronting the ALB with client-IP preservation. Fix applied:
+endpoint groups needed explicit `endpoint_group_region=eu-west-1` (they first
+failed because the us-west-2 control-plane provider alias made them default to
+us-west-2). Verified via BOTH GA IPs: apex 301→https://www.supermarket.ie (TLS
+ok), www 200 (TLS ok), http:80→301.
+
+Production posture (LIVE on task def rev 9, image dcacbae-prod, 2/2 healthy):
+APP_ENV=production, SUPABASE_READ_ONLY=false (writes on), DISABLE_OUTBOUND_EMAIL
+=false (transactional email on), NEXT_PUBLIC_SITE_URL=https://www.supermarket.ie.
+Secrets wired: MAGIC_LINK_SECRET (cross-validates Vercel sessions),
+RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY. Retailer collection + workers + queue
+consumers stay DISABLED (DISABLE_RETAILER_COLLECTION=true, enable_workers=false,
+QUEUE_BACKEND=vercel) — Vercel keeps them.
+
+CRITICAL SEO BLOCKER FOUND + FIXED (caught during step-3 verification): next.
+config.ts computes the X-Robots-Tag `noindex` header from isNoIndexEnv() at BUILD
+time, not runtime. Image 14d960e-prod was built with APP_ENV=preview, so it baked
+`noindex,nofollow` permanently on all responses — would have deindexed the site
+at launch. Fix: Dockerfile + aws-ecr-deploy-image.yml now build the prod image
+with BUILD_APP_ENV=production (and BUILD_SUPABASE_READ_ONLY=true so the prerender
+stays SELECT-only). Rebuilt as dcacbae-prod and deployed. VERIFIED: no
+x-robots-tag header, robots.txt now `Allow: /` with sitemap. Commit dcacbae.
+
+Verification summary (via GA IP, no DNS change): routes /,/shop,/terms,
+/api/products,/eve/v1/info = 200; /api/agent/briefing + /api/revalidate(no
+secret) = 401; /api/subscribe (no email) = 400 "Email is required" (write path
+live, no row written); canonical=www; HTTPS valid on www + apex; CloudWatch clean
+(no errors in last 15m). HA: 2 tasks across 2 AZs, autoscaling 2–6.
+
+NEXT = user performs the DNS cutover at Register365 (exact records below /in
+docs/aws-cutover-runbook.md), www first then apex. TTLs NOT lowered (account
+can't) → coexistence window on existing TTLs, safe via shared Supabase + magic-
+link secret. Vercel retained for rollback. Post-cutover: replace imported LE www
+cert with ACM-managed (auto-renew; LE expires 2027-01-20); then migrate Vercel
+Cron + Queues.
+
+FINAL CUTOVER DNS (Register365; TTLs unchanged):
+  1. www.supermarket.ie  CNAME -> smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com
+     (replaces e2ae0df6f59fc39f.vercel-dns-017.com)
+  2. after www healthy — apex:
+     supermarket.ie  CAA  0 issue "amazonaws.com"
+     supermarket.ie  CAA  0 issue "letsencrypt.org"
+     supermarket.ie  A    166.117.14.195    (replaces 216.198.79.1)
+     supermarket.ie  A    166.117.236.132
+Rollback: www CNAME -> vercel-dns target; apex A -> 216.198.79.1.
+
+## TTL-lowering dropped; www-first coexistence cutover — 22 October 2026
+
+Register365 account cannot change DNS TTLs, so TTL lowering is REMOVED as a
+prerequisite. Cutover proceeds on EXISTING TTLs (apex A 86400 / www CNAME
+~34000). This creates a COEXISTENCE WINDOW during propagation (up to ~24h apex /
+~9.4h www) where some visitors hit Vercel and others hit AWS — SAFE because both
+share one backend + compatible auth:
+  - Same production Supabase (identical NEXT_PUBLIC_SUPABASE_URL +
+    SUPABASE_SERVICE_ROLE_KEY) → same data for reads/writes.
+  - Same MAGIC_LINK_SECRET + VENDOR_MAGIC_LINK_SECRET (byte-exact Vercel→AWS) →
+    sessions/magic links issued by either environment validate on the other.
+  (Re-confirmed the AWS secrets exist/match; values not echoed.)
+A single user action is served by a single host, so no double-send of
+transactional email in the window. Scheduled email stays Vercel-only (AWS has no
+cron/queue trigger).
+
+Plan now: www FIRST (CNAME → ALB), verify + monitor AWS through propagation, then
+apex (A → Global Accelerator static IPs) once www is confirmed healthy. Vercel
+stays fully live throughout as rollback. Rollback is bounded by the existing TTLs
+(up to ~9.4h/~24h to fully drain) — accepted, since Vercel is never taken down.
+Runbook (docs/aws-cutover-runbook.md) sections 5–6 rewritten accordingly; the
+pre-cutover production-posture config + GA provisioning/verification still happen
+BEFORE any DNS change. GA still gated on explicit cost approval; no production DNS
+until the user approves the final records.
+
+## Cutover sequence corrected + Global Accelerator prepared — 22 October 2026
+
+Two correctness bugs in the cutover plan were found (by the user) and fixed:
+
+1. **Sequence bug** — the earlier runbook moved `www` DNS to AWS BEFORE setting
+   `test_mode=false`, which would have sent live customers to a READ-ONLY app
+   (failed sign-ins/registrations). Corrected order: configure full production
+   posture on AWS and verify via `--resolve` FIRST, then provision/verify Global
+   Accelerator, lower TTLs, and only then flip DNS.
+2. **Email-disabled-in-production bug** — `DISABLE_OUTBOUND_EMAIL` is a GLOBAL
+   switch in `src/lib/resend.ts`: when true it short-circuits ALL Resend sends,
+   including TRANSACTIONAL magic-link + registration-verification email, not just
+   scheduled notifications. The Terraform set `email_blocked = test_mode ||
+   !enable_outbound_email_on_aws`, so launching with
+   `enable_outbound_email_on_aws=false` would silently suppress all auth email.
+   Fix: at cutover set `enable_outbound_email_on_aws=true`. No duplicate-email
+   risk — transactional mail is triggered by whichever host serves the user (and
+   Vercel stops serving www post-cutover); scheduled mail is never *triggered* on
+   AWS (no cron runner, consumers off), independent of this flag. Tightened the
+   variable's doc comment in variables.tf to state this.
+
+Apex mechanism chosen: **Option A — AWS Global Accelerator** (keeps Register365
+as DNS host; no nameserver migration). Terraform prepared in
+`infra/terraform/global-accelerator.tf`: accelerator + 443/80 listeners + two
+endpoint groups forwarding to the existing ALB, with client-IP preservation.
+Gated behind `enable_global_accelerator` (DEFAULT FALSE). Uses an aliased
+us-west-2 provider (GA control-plane region). `tofu validate` passes; a plan with
+the toggle on shows **5 to add, 0 change, 0 destroy**. NOT APPLIED — awaiting the
+user's explicit cost approval (BILLABLE).
+
+Global Accelerator cost (billable while provisioned): fixed $0.025/hr (~$18/mo) +
+2 static IPv4 at $0.005/IP/hr (~$7.30/mo) + small DT-Premium per-GB ≈ **~$25/mo
+fixed** + a few $ data. Outputs `global_accelerator_static_ips` (the two apex A
+targets) and `global_accelerator_dns_name`.
+
+Production-posture plan verified as a diff (not applied): `test_mode=false` →
+`APP_ENV=production` + `SUPABASE_READ_ONLY=false`; `enable_outbound_email_on_aws
+=true` → `DISABLE_OUTBOUND_EMAIL=false`; `public_base_url` → www. Workers /
+retailer collection / scheduled jobs stay disabled (`enable_workers=false`,
+`enable_retailer_workers_on_aws=false`, consumer desired_count 0, QUEUE_BACKEND=
+vercel) so Vercel keeps handling them with no duplicate execution.
+
+Post-cutover follow-ups (documented in docs/aws-cutover-runbook.md): (a) replace
+the imported Let's Encrypt www cert with an ACM-managed cert (DNS-validated once
+www is on the ALB) so renewal is automatic — LE cert expires 2027-01-20; (b)
+migrate Vercel Cron + Queues to the in-branch EventBridge/SQS stack (enable AWS
+workers AND disable Vercel workers in one controlled change) — platform is NOT
+fully independent until these are removed.
+
+## www TLS solved via Let's Encrypt DNS-01 + apex→www edge redirect — 22 October 2026
+
+The `www` TLS blocker is SOLVED without any broken-HTTPS window. ACM could not
+issue for `www` (the Vercel CNAME's CAA excludes Amazon), but that same CAA
+authorises `letsencrypt.org`, so a Let's Encrypt cert was obtained via DNS-01 and
+imported into ACM — all before touching `www` DNS.
+
+What was done (no production DNS changed; Vercel still authoritative/live):
+- **Let's Encrypt cert for `www.supermarket.ie`** via certbot manual DNS-01.
+  Validation record `_acme-challenge.www.supermarket.ie TXT =
+  2R2IJHP7P3mGmOR3qghHii29b96J6XvwXwyZZMbr68o` was added by the user at
+  Register365; confirmed on Google/Cloudflare/Quad9/authoritative NS; cert
+  ISSUED (ECDSA P-256, expires 2027-01-20). Finding: `_acme-challenge.www` is NOT
+  shadowed by the `www` CNAME (it resolves in the Register365 zone), so DNS-01
+  works directly with no alias/delegation.
+- **Imported into ACM eu-west-1** as `a6079f96-c4a9-4a2c-aaf3-3fa602003258`
+  (type IMPORTED, Let's Encrypt, ISSUED). Key material kept in a chmod-700 temp
+  dir OUTSIDE Dropbox/Git/logs; never committed.
+- **Attached to the ALB HTTPS listener via SNI** (added to
+  `additional_certificate_arns`). Listener now serves THREE certs: `cca36c0b`
+  aws-preview (default), `a2cf0cf8` apex (ACM), `a6079f96` www (Let's Encrypt).
+  VERIFIED against both ALB nodes via `curl --resolve` (no prod DNS change):
+  `www.supermarket.ie` HTTP/2 200, `ssl_verify_result=0`, canonical=www. The
+  ECDSA cert took ~45s to propagate across ALB nodes after attach, then solid on
+  TLS 1.2 + 1.3.
+- **apex→www 301 at the ALB edge** (replaces Vercel's apex redirect, removing
+  that dependency): new `aws_lb_listener_rule.apex_redirect` (vars
+  `apex_redirect_host="supermarket.ie"`, `canonical_www_host="www.supermarket.ie"`),
+  priority 10, matches Host `supermarket.ie` only (inert until apex DNS points at
+  the ALB). VERIFIED: `supermarket.ie/shop?x=1` → 301
+  `https://www.supermarket.ie/shop?x=1` (path+query preserved); www + aws-preview
+  unaffected. (ALB echoes a cosmetic `:443` in Location — standards-compliant,
+  browsers normalise it.)
+
+App readiness (image `14d960e-prod`, 2/2 tasks healthy, read-only posture):
+`/`, `/terms`, `/shop`, `/api/products`, `/eve/v1/info` all 200;
+`/api/agent/briefing` + `/api/revalidate` (no secret) 401. Write-capable features
+(auth, registration, transactional email, Eve writes) were proven in the 21 Oct
+controlled read-write test; secrets (Resend/Anthropic/Supabase service-role/
+magic-link) are loaded. At cutover, `test_mode=false` enables writes + email while
+retailer collection + workers + scheduled jobs stay disabled (no duplicate
+execution with Vercel).
+
+APEX CUTOVER CONSTRAINT (must choose a mechanism): Register365 uses plain DNS and
+the apex is currently a plain **A record** to Vercel's stable IP `216.198.79.1`.
+An AWS ALB has **no static IP** (its IPs rotate), so the apex A record must NOT
+point at raw ALB IPs. No Route 53 zone and no Global Accelerator exist yet.
+Supported options (pick one before apex cutover):
+  (A) **AWS Global Accelerator** in front of the ALB → 2 static anycast IPs →
+      apex A → those IPs. ~\$18/mo + data. Keeps Register365 as DNS host.
+  (B) **Migrate the zone to Route 53** → apex ALIAS → ALB (free, auto-tracks ALB
+      IPs). Changes authoritative nameservers (larger change, slower rollback).
+  (C) **Leave apex on Vercel** (apex→www 301 continues there) and move only `www`
+      to AWS now; handle apex later. Smallest blast radius.
+The `www` cutover does NOT depend on this — `www` is a CNAME and can move to the
+ALB immediately with valid TLS already staged.
+
+CURRENT PRODUCTION DNS (rollback baseline, captured 22 Oct):
+  apex `supermarket.ie`  A      216.198.79.1            TTL 86400 (24h — LOWER FIRST)
+  `www.supermarket.ie`   CNAME  e2ae0df6f59fc39f.vercel-dns-017.com  TTL ~34000
+  apex CAA: none (unrestricted). ALB: smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com
+See docs/aws-cutover-runbook.md for the exact cutover + rollback steps.
+
+## AWS production image + apex cert staged; cutover-ready — 21 October 2026
+
+Status: the AWS ECS Fargate environment is cutover-ready for the **apex**
+(`supermarket.ie`) with zero TLS gap; `www.supermarket.ie` must wait for a
+Vercel-exit window (CAA, below). Service is back to READ-ONLY posture. Vercel
+remains live and authoritative for `www`/apex until the user flips DNS.
+
+Production hostname image: `14d960e-prod` — built via GitHub Actions
+(`image_mode=prod`, `NEXT_PUBLIC_*`/base URL baked to `https://www.supermarket.ie`),
+pushed to ECR `smie-prod`, and deployed to the HA service (2 tasks). Verified on
+the ALB: `/` 200, canonical = `https://www.supermarket.ie`, and `X-Robots-Tag:
+noindex` on non-canonical hosts (aws-preview / raw ALB) per the SEO guard — only
+www/apex will be indexable once they serve from AWS.
+
+Apex TLS staged ahead of cutover (zero-gap): apex-only cert
+`a2cf0cf8-54f4-42ec-9d3c-bdb8c898a5fa` (`supermarket.ie`) is ISSUED and attached
+to the HTTPS listener via **SNI** (new `additional_certificate_arns` var +
+`aws_lb_listener_certificate.extra`). The listener now serves valid TLS for BOTH
+`aws-preview.supermarket.ie` (default, `cca36c0b`) and `supermarket.ie` (SNI).
+Verified via the ALB: apex `https` 200, `ssl_verify_result=0`; aws-preview still
+200. So the instant the apex A/ALIAS resolves to the ALB, valid TLS serves — no
+certificate gap. (The earlier www+apex cert `cebaa35e` FAILED again on the `www`
+CAA; apex-only is the cutover vehicle.)
+
+READ-ONLY revert (done): after the controlled read-write test the service was
+returned to `test_mode=true`. Task definition **revision 7** now has
+`APP_ENV=preview` and `SUPABASE_READ_ONLY=true`; rolling deploy COMPLETED, 2/2
+tasks HEALTHY, single deployment. The environment is read-only against the
+production Supabase again. (`test_mode` is runtime-only — it sets APP_ENV +
+SUPABASE_READ_ONLY env, not baked into the image.) Workers, retailer collection,
+and outbound email remain DISABLED.
+
+Cutover plan (apex-first; user drives DNS, agent drives AWS cert/listener):
+1. User lowers www/apex DNS TTL (~60s) ~24h ahead; confirms the apex rollback
+   target (current apex record at Register365) before the window.
+2. At the window: add apex CAA `supermarket.ie. CAA 0 issue "amazonaws.com"` and
+   `0 issue "letsencrypt.org"`; repoint apex `supermarket.ie` → ALB (zero TLS gap
+   via the staged `a2cf0cf8` SNI cert).
+3. Repoint `www.supermarket.ie` → ALB (leaves Vercel). Now re-request the `www`
+   ACM cert (it will validate — `www` no longer governed by Vercel's CAA), poll
+   ISSUED, add it to the listener via `additional_certificate_arns`, apply.
+4. Verify www/apex TLS + real journeys; watch ECS health + CloudWatch; keep
+   Vercel targets noted for instant rollback.
+Do NOT merge PR #265, enable workers, or enable email/collection as part of this.
+
+Open items for the user: (a) lower www/apex TTL + confirm apex rollback target;
+(b) decide the 2 identifiable `agent_events` test rows (leave / delete via
+Supabase SQL / authorise a scoped service-role delete — held per rule 7 as a
+direct production write); (c) choose the cutover window.
+
+## AWS read-write verification + CAA finding — 21 October 2026
+
+Image `b5e538c` (adds SEO fix: any non-canonical host, incl. aws-preview and the
+raw ALB, is now `noindex` even in production posture; only www/apex are
+indexable). Built via GitHub Actions and deployed to the HA service (2 tasks).
+
+TEST-MODE verification (`test_mode=true`): `/` 200, `X-Robots-Tag noindex`,
+`robots.txt Disallow: /`, canonical=aws-preview, security headers present,
+`/api/products` 200, `/api/agent/briefing` 401 (clean auth gate), Eve
+`/eve/v1/info` 200.
+
+CONTROLLED READ-WRITE test (`test_mode=false`, APP_ENV=production,
+SUPABASE_READ_ONLY=false; retailer collection + outbound email + workers stayed
+DISABLED; QUEUE_BACKEND=vercel): against production Supabase via the ALB —
+- `POST /api/subscribe` (test email `aws-migration-test+20261021093932@supermarket.ie`)
+  -> 200 `{success, verification_required}`. Email suppressed by the guard (no
+  real send). Wrote an `agent_events` row (`verification_email_sent`). No
+  subscriber row created (verification link not followed), so no customer record.
+- `POST /api/contact` (name "AWS Migration Test", msg marked safe-to-delete)
+  -> 200. Email suppressed. Wrote an `agent_events` row.
+- `POST /api/revalidate` with no secret -> 401 (REVALIDATE_SECRET loaded, route live).
+- noindex remained ON in production posture (SEO fix verified); retailer worker
+  route still 503 blocked; catalogue `/shop` 200.
+After testing, returned the service to `test_mode=true` (read-only) — confirmed
+APP_ENV=preview, SUPABASE_READ_ONLY=true, rollout COMPLETED, 2 tasks.
+
+TEST RECORDS CREATED (await cleanup decision — app is read-only so cannot self-
+delete; deletion is a direct production write held per authorisation rule 7):
+  * `agent_events` row from subscribe: event_type `verification_email_sent`,
+    session_id = the sign_in session, metadata source `sign_in`. (~1 row)
+  * `agent_events` row from contact: identifiable test name/email/message.
+No customers, trusted prices, mappings, or retailer data touched.
+
+CAA finding (production cert CAA_ERROR): apex `supermarket.ie` has NO CAA
+(unrestricted — Amazon may issue; apex SAN validated). `www.supermarket.ie` is a
+CNAME to Vercel `e2ae0df6f59fc39f.vercel-dns-017.com`, whose CAA authorises only
+globalsign/sectigo/letsencrypt/pki.goog — NOT Amazon. Per RFC 8659 the CNAME
+target's CAA governs `www`, and that zone is Vercel-controlled, so NO record in
+the Register365 zone can authorise Amazon for `www` while `www` remains a CNAME
+to Vercel. The `www` cert can only issue once `www` is repointed off Vercel (at
+cutover). At cutover, add at the apex (preserving Let's Encrypt):
+  `supermarket.ie. CAA 0 issue "amazonaws.com"`
+  `supermarket.ie. CAA 0 issue "letsencrypt.org"`
+Production cert `cebaa35e` (www+apex) is requested and waiting; apex validates,
+www blocked until the above. (Earlier `amazon.com` guidance corrected to the
+ACM-correct `amazonaws.com`.)
+
+## AWS preview operational (website + Eve agent) — 19 October 2026
+
+Branch `infra/aws-migration` (PR #265, still DRAFT — not merged). The website and
+Eve agent now run on AWS ECS Fargate in account `Supermarket-Prod` (611622961299),
+eu-west-1, reading the EXISTING production Supabase. This is a pre-cutover TEST
+deployment; no production DNS, Supabase data, or Vercel config was changed, and
+all AWS background workers/retailer collection/email remain disabled.
+
+Verified live via the ALB (Host `aws-preview.supermarket.ie`, valid HTTPS/TLS1.3):
+`/` 200, `/terms` 200, `/eve/v1/info` 200 (agent proxied), `/api/products` 200
+returning 127 real products from production Supabase; HTTP 80 → 301 HTTPS;
+`X-Robots-Tag: noindex,nofollow` and `robots.txt Disallow: /` (preview not
+indexable). ECS task RUNNING+HEALTHY, ALB target healthy. No email/worker/write
+activity in logs.
+
+Posture (ECS task env): `APP_ENV=preview`, `SUPABASE_READ_ONLY=true` (writes
+blocked in-app for website AND Eve agent clients), `DISABLE_RETAILER_COLLECTION
+=true`, `DISABLE_OUTBOUND_EMAIL=true`, all `*_WORKER_ENABLED=false`,
+`QUEUE_BACKEND=vercel`. Image `cd9963c` (built+pushed by GitHub Actions →
+ECR `smie-prod` via OIDC role scoped to the protected `aws-prod` environment).
+
+HA upgrade (cutover-readiness, 19 Oct): service now runs **2 tasks across
+eu-west-1a + eu-west-1b**, both HEALTHY, both ALB targets healthy. Target-tracking
+**autoscaling** enabled (min 2, max 6; CPU 60% + ALB 800 req/task). Zero-downtime
+rolling deploys: `deployment_minimum_healthy_percent=50`, max 200%, **deployment
+circuit breaker with auto-rollback**. Target-group `deregistration_delay=30s`.
+Idle utilisation measured: CPU ~1%, memory ~24% of 2 GB — 1 vCPU/2 GB is
+comfortably sized. Second task adds ~$35/mo (running total ~$93–101/mo).
+
+Cutover readiness — REMAINING before production go-live (Plan A):
+1. Fix `www`/apex CAA so Amazon can issue (add `amazon.com` to the CAA, or remove
+   the Vercel-flattened CAA on the www CNAME target). Production DNS change.
+2. Re-request + validate the `www`+apex ACM cert; repoint the HTTPS listener to it.
+3. Rebuild image with `NEXT_PUBLIC_SITE_URL/BASE_URL=https://www.supermarket.ie`,
+   set `test_mode=false` (read-write production), apply.
+4. Verify REAL journeys in production posture on the test host (sign-in with an
+   existing session, build a shop, an agent conversation, a write).
+5. Lower www/apex DNS TTL ~24h ahead; then cut www/apex → ALB (approval-gated);
+   keep Vercel targets noted for instant rollback.
+
+Infrastructure (Terraform, S3 backend `smie-prod-tfstate-611622961299`):
+ECR, VPC (10.42.0.0/16, 2 public + 2 private subnets), ALB
+`smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com`, HTTPS listener, ECS
+cluster `smie-prod-cluster` + service `smie-prod-svc` (1 Fargate task,
+1 vCPU/2 GB), IAM exec/task roles, CloudWatch `/ecs/smie-prod`. The 8 production
+credentials were transferred Vercel→AWS Secrets Manager (`smie-prod/*`), verified
+byte-exact incl. `MAGIC_LINK_SECRET` (so sessions survive cutover). Est. cost
+~$58–66/mo.
+
+Key findings / decisions:
+- ACM 3-name cert (`www`+apex+`aws-preview`) FAILED `CAA_ERROR`: `www.supermarket.ie`
+  is a CNAME to Vercel whose CAA authorises sectigo/globalsign/letsencrypt/pki.goog
+  but NOT amazon.com. apex and `aws-preview` validated. Worked around with a
+  single-name ISSUED cert for `aws-preview.supermarket.ie` (`cca36c0b`). The
+  `www`/apex cert is a cutover-time concern (move `www` off Vercel, or add
+  `amazon.com` to the CAA then).
+- Fixed a container bug: Eve server crashed with EACCES creating `/app/.eve`
+  (non-root `node` user vs root-owned `/app`); Dockerfile now pre-creates and
+  chowns `/app/.eve` + `/app`.
+- Vercel Queues/Cron have no customer-facing dependency; SQS/EventBridge
+  replacements exist in the branch but are provisioned OFF (`enable_workers=false`).
+
+Remaining to make `https://aws-preview.supermarket.ie` publicly resolvable:
+add ONE DNS record at Register365 — `aws-preview` CNAME →
+`smie-prod-alb-48303444.eu-west-1.elb.amazonaws.com` (does not touch www/apex/
+production). Production cutover (www/apex → ALB) and enabling AWS workers are
+later, separately-approved steps.
+
 ## Structured identity contradiction guard — 11 October 2026
 
 Final review extended exact-match gates to the newly retained structured

@@ -1,12 +1,13 @@
-import { handleCallback } from '@vercel/queue';
+import { handleCallback } from '@/lib/queue';
 import { evaluateAgentTask } from '@/lib/agent-task-evaluator';
 import { listActiveTasksForProduct } from '@/lib/agent-tasks';
 import { evaluateHouseholdRelevanceForProduct } from '@/lib/household-relevance';
-import type { AgentProductChangeEvent } from '@/lib/agent-events';
+import { AGENT_PRODUCT_CHANGE_TOPIC, type AgentProductChangeEvent } from '@/lib/agent-events';
 
 const MAX_DELIVERIES = 5;
 
 export const POST = handleCallback<AgentProductChangeEvent>(
+  AGENT_PRODUCT_CHANGE_TOPIC,
   async (message, metadata) => {
     if (!message?.canonicalName) throw new Error('Invalid agent product-change event');
 

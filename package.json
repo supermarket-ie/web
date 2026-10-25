@@ -25,6 +25,7 @@
     "@ai-sdk/anthropic": "4.0.38",
     "@ai-sdk/react": "4.0.69",
     "@anthropic-ai/sdk": "^0.98.0",
+    "@aws-sdk/client-sqs": "^3.1152.0",
     "@base-ui/react": "^1.4.1",
     "@supabase/supabase-js": "^2.94.0",
     "@types/jsonwebtoken": "^9.0.10",

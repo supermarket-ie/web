@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { withEve } from "eve/next";
+import { isNoIndexEnv } from "./src/lib/runtime-env";
 
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
@@ -9,7 +10,9 @@ const securityHeaders = [
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
 ];
 
-const IS_STAGING = (process.env.NEXT_PUBLIC_BASE_URL ?? '').includes('staging');
+// Block indexing on staging AND on any preview/development deployment
+// (e.g. the AWS-generated preview URL), via the platform-neutral helper.
+const BLOCK_INDEXING = isNoIndexEnv();
 
 const nextConfig: NextConfig = {
   async redirects() {
@@ -25,8 +28,8 @@ const nextConfig: NextConfig = {
       },
     ];
 
-    // Block indexing on staging
-    if (IS_STAGING) {
+    // Block indexing on staging/preview/development
+    if (BLOCK_INDEXING) {
       headers.push({
         source: '/(.*)',
         headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],

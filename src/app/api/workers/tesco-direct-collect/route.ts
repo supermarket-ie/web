@@ -1,9 +1,11 @@
 import { collectTescoDirect, type TescoCollectionMode } from '@/lib/tesco-direct-collection';
+import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 export const runtime = 'nodejs';
 export const maxDuration = 240;
 
 export async function GET(request: Request) {
+  if (retailerCollectionBlocked()) return Response.json({ error: RETAILER_COLLECTION_BLOCKED_REASON, status: 'blocked_preview' }, { status: 503 });
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   if (process.env.TESCO_VERCEL_WORKER_ENABLED !== 'true' || !process.env.SUPABASE_SERVICE_ROLE_KEY) return Response.json({ status: 'disabled' }, { status: 503 });
