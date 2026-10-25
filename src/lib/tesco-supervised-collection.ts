@@ -6,6 +6,7 @@ import {
 } from './tesco-direct-collection-core';
 import { acquisitionDecision, acquisitionSnapshotSql, selectAcquisitionCandidates, type Acquisition } from './tesco-acquisition-handoff';
 import { classifyIdentityOutcome, holdCircuitTripped } from './tesco-identity-disposition';
+import { hasMaterialDuplicateCanonicalConflict } from './tesco-mapping-audit';
 
 // Operator-only runner. No route, scheduler, migration or automatic retries.
 // Each execute call is one database request. Every mutating DO block is atomic,
@@ -219,11 +220,23 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         reasons.push('acquisition_live_identity_not_exact');
       const unavailable = tescoResourceUnavailable(response);
       const transportStop = outcome !== 'ok' && !unavailable;
+      // Independently inspect the product's SAME-SKU canonical mapping group for a
+      // MATERIAL duplicate-canonical conflict, BEFORE deciding hold-and-continue.
+      // The ordinary validator can return an attribute conflict (measure/variant/
+      // etc) first and mask a material duplicate-SKU conflict; this forces a hard
+      // stop in that case. Genuine equivalent synonyms are NOT flagged.
+      const materialDuplicateConflict = hasMaterialDuplicateCanonicalConflict({
+        storeProductId: target.id, canonicalName: target.canonical_name, canonicalBrand: target.canonical_brand,
+        storeProductName: target.store_product_name, storeBrand: target.store_brand, isOwnBrand: target.is_own_brand,
+        storeSku: target.store_sku, storeUrl: target.store_url, duplicateSkuCount: target.peers.length,
+        duplicateCanonicalNames: target.peers.map(p => p.canonical_name), isFresh: !!target.observed_at,
+      });
       // Per-product identity disposition (only meaningful on a clean ok page).
       // accept: finalise. skip_no_price: benign, move on. hold_continue: hold this
-      // product + continue the batch. stop: systemic/ambiguous/unknown -> end batch.
+      // product + continue the batch. stop: systemic/ambiguous/unknown/material
+      // duplicate-canonical conflict -> end batch.
       const disposition = outcome === 'ok'
-        ? classifyIdentityOutcome(reasons, product != null)
+        ? classifyIdentityOutcome(reasons, product != null, materialDuplicateConflict)
         : 'stop';
       const accepted = outcome === 'ok' && disposition === 'accept' && product != null;
       const isHold = outcome === 'ok' && disposition === 'hold_continue';

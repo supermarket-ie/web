@@ -63,11 +63,27 @@ export const STOP_REASONS: ReadonlySet<string> = new Set([
  * Decide disposition for a product after a clean (ok) fetch + identity check.
  * @param reasons      identity reasons from validateTescoCollectedIdentity (+ handoff)
  * @param productFound whether the requested SKU was present in the parsed page
+ * @param materialDuplicateConflict true when the product's same-SKU canonical
+ *   mapping GROUP has a MATERIAL duplicate-canonical conflict (distinct canonical
+ *   identities sharing one SKU), independently inspected by the caller. This must
+ *   force a hard STOP even when the ordinary validator returned an attribute
+ *   conflict (measure/brand/variant/pack/etc) FIRST and masked it. Genuine
+ *   canonical synonyms (equivalent term-sets) are NOT a material conflict and do
+ *   not set this flag.
  */
-export function classifyIdentityOutcome(reasons: readonly string[], productFound: boolean): IdentityDisposition {
+export function classifyIdentityOutcome(
+  reasons: readonly string[],
+  productFound: boolean,
+  materialDuplicateConflict = false,
+): IdentityDisposition {
   // Requested SKU absent from the page → systemic (soft block / parse / listing
   // anomaly), never an ordinary attribute mismatch.
   if (!productFound) return 'stop';
+  // A material duplicate-canonical conflict is a hard stop regardless of any
+  // ordinary attribute reason that may have been returned first (the masking bug
+  // this guards against). Checked before accept/skip/hold so it cannot be
+  // bypassed — though in practice a material duplicate group also yields reasons.
+  if (materialDuplicateConflict) return 'stop';
   // Strict accept invariant: product found AND no reasons at all.
   if (reasons.length === 0) return 'accept';
   // Benign no-price only (product found): non-accepting, non-terminal skip.
