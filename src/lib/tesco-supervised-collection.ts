@@ -5,6 +5,7 @@ import {
   type TescoCollectedPage, type TescoPageResponse,
 } from './tesco-direct-collection-core';
 import { acquisitionDecision, acquisitionSnapshotSql, selectAcquisitionCandidates, type Acquisition } from './tesco-acquisition-handoff';
+import { classifyIdentityOutcome, holdCircuitTripped } from './tesco-identity-disposition';
 
 // Operator-only runner. No route, scheduler, migration or automatic retries.
 // Each execute call is one database request. Every mutating DO block is atomic,
@@ -25,6 +26,10 @@ export type Candidate = Mapping & {
 type RunState = {
   protocol: string; mode: CollectionMode; selected: Candidate[];
   activeSupervisor: string | null; stopReason?: string; complete?: boolean;
+  // Hold circuit-breaker counters. Persisted so interruption/resume cannot reset
+  // or bypass the breaker. consecutiveHolds resets on an acceptance; totalHolds
+  // and attempts are cumulative over the whole run (across resumes).
+  consecutiveHolds?: number; totalHolds?: number; attempts?: number;
 };
 export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean; acquisitionPages?: string[] };
 export type Dependencies = {
@@ -125,6 +130,11 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   const { execute } = deps;
   let selected: Candidate[];
   let completedUrls: string[] = [];
+  // Circuit-breaker counters. Seeded from prior run state on resume so a restart
+  // cannot reset or bypass the breaker.
+  let consecutiveHolds = 0;
+  let totalHolds = 0;
+  let attempts = 0;
   if (options.resume) {
     const prior = await reconcileSupervisedRun(execute, options.resume);
     const state = prior.summary as RunState;
@@ -133,6 +143,9 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
     if (state.complete || (state.stopReason && state.stopReason !== 'interrupted')) return { ...prior, result: 'terminal_run' };
     selected = state.selected;
     completedUrls = prior.completed_urls as string[];
+    consecutiveHolds = Number(state.consecutiveHolds ?? 0);
+    totalHolds = Number(state.totalHolds ?? 0);
+    attempts = Number(state.attempts ?? 0);
   } else selected = options.acquisitionPages ? await selectAcquisitionCandidates(execute, options.acquisitionPages)
     : await selectSupervisedCandidates(execute, options.mode, limit);
   if (options.dryRun || !selected.length) return { result: options.dryRun ? 'dry_run' : 'no_due_products',
@@ -206,10 +219,31 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         reasons.push('acquisition_live_identity_not_exact');
       const unavailable = tescoResourceUnavailable(response);
       const transportStop = outcome !== 'ok' && !unavailable;
-      const identityStop = outcome === 'ok' && reasons.some(r => r !== 'unavailable_or_no_regular_price');
-      const accepted = outcome === 'ok' && reasons.length === 0 && product != null;
+      // Per-product identity disposition (only meaningful on a clean ok page).
+      // accept: finalise. skip_no_price: benign, move on. hold_continue: hold this
+      // product + continue the batch. stop: systemic/ambiguous/unknown -> end batch.
+      const disposition = outcome === 'ok'
+        ? classifyIdentityOutcome(reasons, product != null)
+        : 'stop';
+      const accepted = outcome === 'ok' && disposition === 'accept' && product != null;
+      const isHold = outcome === 'ok' && disposition === 'hold_continue';
+      // A batch-ending identity stop only when the disposition is 'stop' on an ok
+      // page (systemic/ambiguous/unknown). Holds/skips do NOT end the batch.
+      const identityStop = outcome === 'ok' && disposition === 'stop';
       const pauseUntil = transportStop ? tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter) : null;
+      // pageStop = the per-page recorded stop context (null for accept/hold/skip).
       const pageStop = transportStop ? outcome : identityStop ? 'identity_validation_anomaly' : null;
+      // Update cumulative circuit-breaker counters for ok pages that were
+      // identity-evaluated (accept/hold/skip; NOT transport stops, which don't
+      // reflect identity). Persisted below so resume can't reset them.
+      let breaker: false | 'consecutive' | 'rate' = false;
+      if (outcome === 'ok' && !identityStop) {
+        attempts += 1;
+        if (isHold) { totalHolds += 1; consecutiveHolds += 1; }
+        else if (accepted) { consecutiveHolds = 0; }
+        // skip_no_price leaves consecutiveHolds unchanged (neither accept nor hold)
+        breaker = holdCircuitTripped(consecutiveHolds, totalHolds, attempts);
+      }
       // Quarantine precedes evidence/finalisation: a later database error must not
       // roll back a known access restriction. This operation is owner guarded.
       if (pauseUntil) await execute(`do $runner$ begin ${owned(runId, owner)}
@@ -231,17 +265,34 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
               ...(target.acquisition ? { purpose: 'price_verification', sourceAcquisitionPageId: target.acquisition.pageId,
                 sourceBodySha256: target.acquisition.snapshot.page.body_sha256 } : {}) }))}
             where run_id=${uuid(runId)} and requested_url=${literal(target.store_url)};
-          ${accepted ? `if not (${duePredicate(target, options.mode)}) then raise exception 'observation_changed'; end if;
+          ${accepted && product ? `if not (${duePredicate(target, options.mode)}) then raise exception 'observation_changed'; end if;
             perform finalize_store_scrape_product(p_run_uuid=>${uuid(runId)},p_store=>'tesco',p_store_product_id=>${uuid(target.id)},
               p_success=>true,p_price=>${literal(product.price)}::numeric,p_previous_price=>${literal(target.price)}::numeric,
               p_fetched=>1,p_extracted=>1);` : ''}
           ${pauseUntil ? '' : `update tesco_egress_pool set leased_until=now()+interval '10 minutes',last_success_at=now(),updated_at=now()
                 where egress_key=${literal(SUPERVISED_GATE)};`}
           update scrape_runs set error_summary=(error_summary::jsonb || jsonb_build_object('heartbeatAt',now(),
-            'stopReason',${literal(pageStop)}))::text where id=${uuid(runId)};
+            'stopReason',${literal(pageStop)},
+            'consecutiveHolds',${literal(consecutiveHolds)}::int,
+            'totalHolds',${literal(totalHolds)}::int,
+            'attempts',${literal(attempts)}::int))::text where id=${uuid(runId)};
         end if; end $runner$; select 1 checkpointed`);
-      deps.progress?.({ event: 'checkpoint', runId, productId: target.id, accepted, outcome, reasons });
+      deps.progress?.({ event: 'checkpoint', runId, productId: target.id, accepted, held: isHold, outcome, reasons });
+      // Decide break vs continue ONLY after the rejection/acceptance checkpoint
+      // above has committed AND its acknowledgement is confirmed (this execute()
+      // resolved). A lost acknowledgement throws -> caught -> stopReason =
+      // 'interrupted' (we never continue on an unacknowledged checkpoint).
       if (pageStop) { stopReason = pageStop; break; }
+      // Circuit breaker: a run of ordinary holds is itself a signal. Counters are
+      // persisted (above) so interruption/resume cannot reset or bypass this.
+      if (breaker) {
+        stopReason = breaker === 'consecutive' ? 'identity_hold_consecutive_exceeded' : 'identity_hold_rate_exceeded';
+        await execute(`do $runner$ begin ${owned(runId, owner)}
+          update scrape_runs set error_summary=(error_summary::jsonb || jsonb_build_object('stopReason',${literal(stopReason)}))::text
+            where id=${uuid(runId)}; end $runner$; select 1 breaker`);
+        break;
+      }
+      // accept / skip_no_price / hold_continue → proceed to the next product.
     }
   } catch {
     // Do not print driver/connector errors: these can contain credentials or SQL.
