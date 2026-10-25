@@ -1,5 +1,43 @@
 # Supermarket.ie — Canonical Project State
 
+## Vercel Cron/Queue migration — crons + queues on AWS; retailers next — 24 October 2026
+
+SCHEDULED JOBS: Vercel crons disabled (dashboard). 7 low-risk AWS schedules
+ENABLED (weekly-digest, check-alerts, agent-tasks, price-watchdog +thursday,
+product-embeddings, scrape-watchdog) via new `enabled_schedules` allowlist; the 3
+retailer-scrape triggers (dunnes/supervalu/pepesto-tesco-retrieve) stay DISABLED.
+Canary: ran scrape-watchdog via the scheduled task → exit 0, route HTTP 200
+against prod Supabase (reported real coverage; emailSent:false). Single execution
+path confirmed.
+
+QUEUES: SQS consumer running (worker_desired_count=1), long-polling all 6 topics;
+website flipped to QUEUE_BACKEND=sqs (web 2/2 healthy, rollout complete). Safe
+because the only live queue producer (agent-events → agent-product-changes) fires
+during scrapes, which are paused; retailer scrape-trigger producers are disabled.
+No in-flight messages (reconciliation). vercel.json queue triggers + crons REMOVED
+on the branch (commit ccf0aef) so a Vercel redeploy can't resume duplicates —
+NEEDS the user to deploy to main (queue routes kept as plain functions for
+rollback).
+
+tfvars now: enable_workers=true, worker_desired_count=1,
+website_queue_backend=sqs, worker_schedule_state=DISABLED,
+enabled_schedules=[7 low-risk], enable_retailer_workers_on_aws=false,
+image_tag(+worker)=df9f0c1-prod.
+
+NEXT — RETAILERS (staged canary): enable_retailer_workers_on_aws=true flips
+DISABLE_RETAILER_COLLECTION→false and the per-store *_WORKER_ENABLED flags.
+Then enable the retailer schedules one retailer at a time via enabled_schedules
+(dunnes + supervalu first via canary, Tesco separately), preserving exact-identity
+validation, trusted-price protection, request limits, egress lease/cooldown,
+Akamai stop conditions. Watch ScrapingBee cost + coverage. Vercel retained for
+rollback; project NOT paused.
+
+WORKER FIX HISTORY (this session): (1) entrypoint execs worker command; (2)
+website_queue_backend decouples producer routing from provisioning (+ website
+task-role SQS SendMessage, AWS_REGION env); (3) workers run with
+--conditions=react-server to neutralise server-only. Prod image df9f0c1-prod.
+Full details in the prior dated entry below.
+
 ## Vercel Cron/Queue migration — PREPARATION done, worker bugs fixed — 24 October 2026
 
 Two activation blockers (user-identified) FIXED + proven:
