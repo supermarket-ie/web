@@ -65,8 +65,14 @@ Within the ORIGINAL 341 cohort: 325 eligible, 16 held (user-verified). DO NOT
 remove or bypass holds. NOTE: `--reconcile RUN_UUID` only REPORTS run state; it
 does NOT close/resolve pending requests — the 6 pending + orphaned run stay
 preserved until an independently reviewed reconciliation procedure. Recovery is
-supervised EXPANSION on the permitted (Work) egress, overlap-ordered
-(Dunnes/SuperValu peers first), prioritising the 325 original-cohort products.
+supervised EXPANSION on the permitted (Work) egress, ordered by OVERLAP (fresh
+Dunnes + SuperValu peers first) — commercial priority is three-retailer
+comparisons, then broader Tesco coverage. The selector orders by overlap, NOT the
+341 cohort (verified: first 25 eligible all have both peers; only 13 are
+original-cohort). The 325 original-cohort-eligible are a tracked subset recovered
+as they surface in overlap order, not special-cased. Full Work-session runbook
+(command, eligibility, reconciliation, safety, stop conditions, verification) in
+docs/tesco-recovery-plan.md.
 
 FEASIBILITY: AWS-native autonomous collection remains NOT viable on current
 datacenter egress (403). But the PRIMARY lesson is that the proven supervised
