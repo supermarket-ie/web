@@ -217,6 +217,19 @@ variable "enabled_schedules" {
   default     = []
 }
 
+variable "enabled_retailers" {
+  description = <<-EOT
+    Per-retailer allowlist controlling the *_WORKER_ENABLED flags, so retailer
+    collection can be canaried one retailer at a time (Dunnes/SuperValu first,
+    Tesco separately). Valid entries: "tesco", "dunnes", "supervalu". A retailer's
+    worker runs only if it is in this list AND enable_retailer_workers_on_aws is
+    true AND not test_mode. Empty = no retailer workers (collection still gated by
+    enable_retailer_workers_on_aws for DISABLE_RETAILER_COLLECTION).
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "image_tag_worker" {
   description = "Image tag for the worker/scheduler tasks (usually same as image_tag)."
   type        = string

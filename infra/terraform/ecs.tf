@@ -35,6 +35,14 @@ locals {
   retailer_blocked = var.test_mode || !var.enable_retailer_workers_on_aws
   email_blocked    = var.test_mode || !var.enable_outbound_email_on_aws
 
+  # Per-retailer worker enablement: a store's worker is enabled only if retailer
+  # collection is on (not blocked) AND the store is in enabled_retailers. Lets us
+  # canary one retailer at a time. NON_TESCO covers dunnes+supervalu.
+  retailer_on = { for s in ["tesco", "dunnes", "supervalu"] : s =>
+    !local.retailer_blocked && contains(var.enabled_retailers, s) ? "true" : "false"
+  }
+  non_tesco_on = (!local.retailer_blocked && (contains(var.enabled_retailers, "dunnes") || contains(var.enabled_retailers, "supervalu"))) ? "true" : "false"
+
   # In test_mode the Supabase client is read-only. In production mode writes are
   # allowed (customer-facing functionality needs them).
   supabase_read_only = var.test_mode
@@ -59,10 +67,10 @@ locals {
     { name = "DISABLE_OUTBOUND_EMAIL", value = local.email_blocked ? "true" : "false" },
     { name = "SUPABASE_READ_ONLY", value = local.supabase_read_only ? "true" : "false" },
     # Retailer worker flags: OFF on AWS unless stage-2 worker migration enables them.
-    { name = "TESCO_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
-    { name = "DUNNES_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
-    { name = "SUPERVALU_VERCEL_WORKER_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
-    { name = "NON_TESCO_VERCEL_WORKERS_ENABLED", value = (var.enable_retailer_workers_on_aws && !var.test_mode) ? "true" : "false" },
+    { name = "TESCO_VERCEL_WORKER_ENABLED", value = local.retailer_on["tesco"] },
+    { name = "DUNNES_VERCEL_WORKER_ENABLED", value = local.retailer_on["dunnes"] },
+    { name = "SUPERVALU_VERCEL_WORKER_ENABLED", value = local.retailer_on["supervalu"] },
+    { name = "NON_TESCO_VERCEL_WORKERS_ENABLED", value = local.non_tesco_on },
   ]
 
   # SQS queue URL env vars (SQS_URL_*), present only when the worker stack exists.
