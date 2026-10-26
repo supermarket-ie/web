@@ -3,8 +3,11 @@
   "compilerOptions": { "incremental": false },
   "include": [
     "scripts/tesco-supervised-collect.ts",
+    "scripts/tesco-recovery-campaign.ts",
     "src/lib/tesco-supervised-collection.ts",
-    "src/lib/tesco-supervised-collection.test.ts"
+    "src/lib/tesco-supervised-collection.test.ts",
+    "src/lib/tesco-campaign.ts",
+    "src/lib/tesco-campaign.test.ts"
   ],
   "exclude": ["node_modules"]
 }
