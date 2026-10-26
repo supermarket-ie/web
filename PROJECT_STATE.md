@@ -1,5 +1,46 @@
 # Supermarket.ie — Canonical Project State
 
+## FEATURE: large-tranche Tesco recovery campaign — 26 October 2026
+
+Enables a ChatGPT Work supervised campaign to process the full eligible Tesco
+cohort (hundreds of products) without stopping for known catalogue conflicts or
+re-approval per batch. No live Tesco collection run as part of this work; no AWS
+Tesco schedule enabled.
+
+Pieces (all additive; collection semantics unchanged):
+- selectSupervisedCandidates gains `excludeSharedSku` — defers any product whose
+  SKU is mapped by >1 canonical product (incl. synonyms), applied in the eligible
+  CTE BEFORE the limit (+ JS belt-and-braces). Preserves overlap/oldest-first
+  ordering and the pre-LIMIT URL dedup from #271. The runtime duplicate-canonical
+  hard stop remains an independent safeguard.
+- listExcludedSharedSkuGroups() — read-only enumeration of deferred shared-SKU
+  groups (sku, member canonical names, store_product_ids, reason) for the report.
+  Touches no mappings/holds/observations.
+- src/lib/tesco-campaign.ts (runTescoRecoveryCampaign): loops bounded runs (<=100)
+  up to a request budget (<=1000), re-selecting fresh eligibility each iteration;
+  CONTINUES only on result 'complete'; STOPS + reports on anything else
+  (access_block/429/identity_validation_anomaly/parse/network/redirect/
+  identity_hold_*/interrupted/unresolved_attempts/terminal_run/no_more_eligible/
+  budget_exhausted). Never resumes terminal/interrupted runs or retries unknowns.
+  Reconciles each completed run; the next claim re-checks lease/cooldown/ownership
+  inside collectTescoSupervised (lost gate → non-complete → stop). Emits a single
+  consolidated CampaignReport.
+- scripts/tesco-recovery-campaign.ts — Work CLI (same JSONL SQL bridge, 90s
+  deadline), `--mode --request-budget --max-per-run --dry-run|--confirm-run`.
+
+Safety preserved (unchanged): exact identity, hold-and-continue for ordinary
+mismatches, no-price rejection, pacing, circuit breakers (3 consecutive / >40%
+after 10), Akamai/429 stops, leases/cooldowns, idempotent finalisation, durable
+holds, URL uniqueness. Unexpected structural conflicts still hard-stop.
+
+TESTS 671 pass (65 files; +7 campaign integration): shared-SKU excluded + never
+requested + reported; selection before LIMIT; sequential bounded batches (>1 run,
+no re-approval); budget respected; hold-and-continue across campaign; systemic/
+terminal run stops the campaign (no continue); interruption stops + reports
+unresolved (no retry); consolidated report has all sections. typecheck (incl.
+campaign files added to tsconfig.tesco-supervised) / lint 0 err / behavioural /
+build green. Focused PR; merge on green CI + no active Work session.
+
 ## FIX: batch selection enforces one request per URL/SKU — 26 October 2026
 
 selectSupervisedCandidates is per-mapping, so two canonical mappings sharing one

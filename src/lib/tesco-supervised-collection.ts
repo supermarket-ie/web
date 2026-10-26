@@ -32,7 +32,7 @@ type RunState = {
   // and attempts are cumulative over the whole run (across resumes).
   consecutiveHolds?: number; totalHolds?: number; attempts?: number;
 };
-export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean; acquisitionPages?: string[] };
+export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean; acquisitionPages?: string[]; excludeSharedSku?: boolean };
 export type Dependencies = {
   execute: ExecuteSql;
   fetchPage?: (url: string) => Promise<TescoPageResponse>;
@@ -84,8 +84,21 @@ function owned(runId: string, owner: string, paused = false): string {
     then raise exception 'ownership_or_gate_lost'; end if;`;
 }
 
-export async function selectSupervisedCandidates(execute: ExecuteSql, mode: CollectionMode, limit: number): Promise<Candidate[]> {
+export async function selectSupervisedCandidates(
+  execute: ExecuteSql,
+  mode: CollectionMode,
+  limit: number,
+  options: { excludeSharedSku?: boolean } = {},
+): Promise<Candidate[]> {
   if (!['renewal', 'expansion'].includes(mode) || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid selection');
+  // Pre-selection exclusion of shared-SKU canonical groups. When on, any product
+  // whose Tesco SKU is mapped by more than one canonical product (incl. genuine
+  // synonyms) is conservatively deferred. Applied in the `eligible` CTE — BEFORE
+  // the limit — so batches fill with non-shared candidates. The runtime
+  // duplicate-canonical hard stop remains an independent safeguard.
+  const sharedSkuExclusion = options.excludeSharedSku
+    ? `and (select count(*) from mappings m2 where m2.store_sku=c.store_sku)<=1`
+    : '';
   const rows = await execute(`with mappings as (select ${mappingFields} from store_products s join products p on p.id=s.product_id
     where s.store='tesco'), candidates as (select s.*,l.observed_at,l.price,
     (l.observed_at<=now()-interval '4 days') due,
@@ -101,7 +114,8 @@ export async function selectSupervisedCandidates(execute: ExecuteSql, mode: Coll
     eligible as (select c.*,(select jsonb_agg(to_jsonb(m) order by m.id) from mappings m where m.store_sku=c.store_sku) peers
       from candidates c where url_status='resolved' and proven and not held
         and store_url='https://www.tesco.ie/shop/en-IE/products/'||store_sku
-        and ${mode === 'renewal' ? 'due' : 'observed_at is null'}),
+        and ${mode === 'renewal' ? 'due' : 'observed_at is null'}
+        ${sharedSkuExclusion}),
     -- One row per requested URL: two canonical mappings can share a SKU/URL
     -- (incl. equivalent synonyms). Collapsing to a single representative here —
     -- BEFORE the limit — guarantees a batch never contains the same URL twice,
@@ -115,7 +129,10 @@ export async function selectSupervisedCandidates(execute: ExecuteSql, mode: Coll
     .map((m) => { const copy = { ...m }; delete copy.rn; return copy as Candidate; })
     .filter(m => m.url_status === 'resolved' && !m.held && m.proven
       && isTescoCollectionUrl(m.store_url) && m.store_url === `https://www.tesco.ie/shop/en-IE/products/${m.store_sku}`
-      && (mode === 'renewal' ? m.due === true : !m.observed_at));
+      && (mode === 'renewal' ? m.due === true : !m.observed_at)
+      // Belt-and-braces for the exclusion: never return a shared-SKU product when
+      // excludeSharedSku is set, even if the SQL predicate ever regressed.
+      && (!options.excludeSharedSku || (Array.isArray(m.peers) ? m.peers.length <= 1 : true)));
   // Belt-and-braces: guarantee URL uniqueness in the returned batch even if the
   // SQL dedup ever regressed. Keeps the first (ordering-preferred) per URL.
   const seenUrls = new Set<string>();
@@ -124,6 +141,41 @@ export async function selectSupervisedCandidates(execute: ExecuteSql, mode: Coll
     seenUrls.add(m.store_url);
     return true;
   });
+}
+
+/**
+ * Read-only enumeration of the shared-SKU canonical groups that the bulk
+ * recovery conservatively DEFERS (excludeSharedSku). One entry per shared SKU,
+ * listing the SKU, the member canonical mappings and a reason. Does NOT touch
+ * mappings, holds or observations — purely for the campaign exception report.
+ */
+export type DeferredSharedSkuGroup = {
+  store_sku: string;
+  member_count: number;
+  canonical_names: string[];
+  store_product_ids: string[];
+  reason: string;
+};
+export async function listExcludedSharedSkuGroups(execute: ExecuteSql, mode: CollectionMode): Promise<DeferredSharedSkuGroup[]> {
+  const rows = await execute(`with mappings as (select ${mappingFields} from store_products s join products p on p.id=s.product_id
+    where s.store='tesco'), candidates as (select s.*,l.observed_at,
+    exists(select 1 from scrape_product_receipts r where r.store_product_id=s.id and r.outcome='success') proven
+    from mappings s left join latest_prices l on l.store_product_id=s.id),
+    eligible as (select c.* from candidates c where url_status='resolved' and proven
+      and store_url='https://www.tesco.ie/shop/en-IE/products/'||store_sku
+      and ${mode === 'renewal' ? '(observed_at<=now()-interval \'4 days\')' : 'observed_at is null'})
+    select e.store_sku, count(*) member_count,
+      jsonb_agg(e.canonical_name order by e.id) canonical_names,
+      jsonb_agg(e.id order by e.id) store_product_ids
+    from eligible e group by e.store_sku having count(*)>1
+    order by e.store_sku`);
+  return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+    store_sku: String(r.store_sku),
+    member_count: Number(r.member_count),
+    canonical_names: (r.canonical_names as string[]) ?? [],
+    store_product_ids: ((r.store_product_ids as string[]) ?? []).map(String),
+    reason: 'shared_sku_canonical_group_deferred',
+  }));
 }
 
 export async function reconcileSupervisedRun(execute: ExecuteSql, runId: string) {
@@ -166,7 +218,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
     totalHolds = Number(state.totalHolds ?? 0);
     attempts = Number(state.attempts ?? 0);
   } else selected = options.acquisitionPages ? await selectAcquisitionCandidates(execute, options.acquisitionPages)
-    : await selectSupervisedCandidates(execute, options.mode, limit);
+    : await selectSupervisedCandidates(execute, options.mode, limit, { excludeSharedSku: options.excludeSharedSku });
   if (options.dryRun || !selected.length) return { result: options.dryRun ? 'dry_run' : 'no_due_products',
     mode: options.mode, selected: selected.map(m => ({ id: m.id, name: m.canonical_name, observedAt: m.observed_at })) };
 

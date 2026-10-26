@@ -216,6 +216,35 @@ then id. Neither mode discovers new mappings. Holds are protective; never bypass
 - Expect accepted << fetched (identity gates reject most). Re-measure yield each
   session; do not assume a historical rate or raise `--limit` to chase a target.
 
+## 5b. Large-tranche CAMPAIGN runner (process hundreds per campaign)
+
+For bulk recovery, use the campaign orchestrator instead of re-invoking a single
+batch per operator turn. It runs consecutive bounded supervised runs (<=100 each)
+up to a total request budget, excluding shared-SKU groups, continuing only on a
+clean `complete`, and stopping (reporting) on anything else — never resuming a
+terminal/interrupted run or retrying an unknown request.
+
+Dry run (eligibility + shared-SKU exclusion counts; no request):
+```
+exec node --use-env-proxy --import tsx scripts/tesco-recovery-campaign.ts \
+  --mode expansion --dry-run
+```
+Authorised campaign (up to 1000 requests, <=100 per run, overlap-ordered):
+```
+node --use-env-proxy --import tsx scripts/tesco-recovery-campaign.ts \
+  --mode expansion --request-budget 1000 --max-per-run 100 --confirm-run
+```
+The runner emits `{type:"sql",...}` events (same bridge as §5) and progress; it
+finishes with a single `{type:"campaign_report",...}` object. Shared-SKU groups
+are deferred (reported, not requested); the runtime duplicate-canonical hard stop
+remains an independent safeguard. No further approval is needed between batches.
+
+Consolidated report fields: accepted Tesco prices, excluded shared-SKU groups
+(with member canonical names + reason), per-run records (result/target/inserted/
+completed/reserved/unresolved), total requests issued, remaining eligible
+(non-shared), and unresolved requests. Cross-check accepted prices and
+three-retailer triples before/after; successful retrieval is not trusted coverage.
+
 ## 6. Scope boundary
 
 AWS-native autonomous collection is a SEPARATE investigation: it is blocked at the
