@@ -1,5 +1,34 @@
 # Supermarket.ie — Canonical Project State
 
+## FIX: batch selection enforces one request per URL/SKU — 26 October 2026
+
+selectSupervisedCandidates is per-mapping, so two canonical mappings sharing one
+Tesco SKU (hence one store_url), incl. equivalent synonyms, could BOTH be
+selected. At runtime the second reservation raised attempt_already_recorded and
+interrupted the batch (the avoidable interruption seen in the 5-request session).
+
+FIX (defense-in-depth, independent of the shared-SKU pre-filter): the selector now
+collapses to ONE row per requested URL BEFORE the limit — an added `url_unique`
+CTE with row_number() over (partition by store_url order by id), take rn=1 — then
+applies the existing batch ordering (expansion overlap desc / renewal observed_at
+asc) + limit. So dedup happens pre-LIMIT and the batch is still filled with
+distinct eligible URLs; overlap/oldest-first prioritisation preserved; peers still
+carry the full same-SKU group for the runtime duplicate-canonical hard stop. A
+belt-and-braces JS Set also guarantees URL uniqueness in the returned array.
+No change to acceptance/identity/access rules, mappings, observations or holds.
+
+TESTS (664 pass): new selectSupervisedCandidates URL-uniqueness suite — 3 mappings
+on one SKU return exactly one candidate for that URL; dedup BEFORE limit fills the
+batch with distinct URLs; renewal oldest-first ordering preserved through the
+dedup CTE; a full live run over a shared-SKU group makes ONE request per URL with
+NO attempt_already_recorded interruption. typecheck/lint(0 err)/behavioural/build
+green. Focused PR; merge on green CI + no active Work session.
+
+NOTE: this is the URL-uniqueness safeguard within the larger "large-tranche Tesco
+recovery" objective (shared-SKU PRE-FILTER with consolidated exception reporting
+and bulk consecutive runs). That broader campaign work is tracked separately; this
+PR lands the per-URL uniqueness guarantee it depends on.
+
 ## FIX: duplicate-canonical masking in hold-and-continue — 25 October 2026
 
 Narrow safety correction to the merged hold-and-continue (PR #269). BUG:

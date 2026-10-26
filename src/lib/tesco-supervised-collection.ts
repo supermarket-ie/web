@@ -97,15 +97,33 @@ export async function selectSupervisedCandidates(execute: ExecuteSql, mode: Coll
        or (d.created_at>=coalesce(l.observed_at,'-infinity'::timestamptz) and
          (d.outcome<>'ok' or exists(select 1 from jsonb_array_elements(d.identity_results) i
           where i->>'storeProductId'=s.id::text and jsonb_array_length(i->'reasons')>0))))) held
-    from mappings s left join latest_prices l on l.store_product_id=s.id)
-    select c.*,(select jsonb_agg(to_jsonb(m) order by m.id) from mappings m where m.store_sku=c.store_sku) peers
-    from candidates c where url_status='resolved' and proven and not held
-      and store_url='https://www.tesco.ie/shop/en-IE/products/'||store_sku
-      and ${mode === 'renewal' ? 'due' : 'observed_at is null'}
-    order by ${mode === 'renewal' ? 'observed_at asc' : 'overlap desc'},id limit ${limit}`);
-  return (rows as unknown as Candidate[]).filter(m => m.url_status === 'resolved' && !m.held && m.proven
+    from mappings s left join latest_prices l on l.store_product_id=s.id),
+    eligible as (select c.*,(select jsonb_agg(to_jsonb(m) order by m.id) from mappings m where m.store_sku=c.store_sku) peers
+      from candidates c where url_status='resolved' and proven and not held
+        and store_url='https://www.tesco.ie/shop/en-IE/products/'||store_sku
+        and ${mode === 'renewal' ? 'due' : 'observed_at is null'}),
+    -- One row per requested URL: two canonical mappings can share a SKU/URL
+    -- (incl. equivalent synonyms). Collapsing to a single representative here —
+    -- BEFORE the limit — guarantees a batch never contains the same URL twice,
+    -- so it cannot cause a second request or an attempt_already_recorded
+    -- interruption. The representative is the lowest id; peers retain the full
+    -- same-SKU group for the runtime duplicate-canonical safeguard.
+    url_unique as (select e.*, row_number() over (partition by e.store_url order by e.id) rn from eligible e)
+    select u.* from url_unique u where u.rn=1
+    order by ${mode === 'renewal' ? 'u.observed_at asc' : 'u.overlap desc'},u.id limit ${limit}`);
+  const candidates = (rows as unknown as (Candidate & { rn?: number })[])
+    .map((m) => { const copy = { ...m }; delete copy.rn; return copy as Candidate; })
+    .filter(m => m.url_status === 'resolved' && !m.held && m.proven
       && isTescoCollectionUrl(m.store_url) && m.store_url === `https://www.tesco.ie/shop/en-IE/products/${m.store_sku}`
       && (mode === 'renewal' ? m.due === true : !m.observed_at));
+  // Belt-and-braces: guarantee URL uniqueness in the returned batch even if the
+  // SQL dedup ever regressed. Keeps the first (ordering-preferred) per URL.
+  const seenUrls = new Set<string>();
+  return candidates.filter(m => {
+    if (seenUrls.has(m.store_url)) return false;
+    seenUrls.add(m.store_url);
+    return true;
+  });
 }
 
 export async function reconcileSupervisedRun(execute: ExecuteSql, runId: string) {

@@ -647,3 +647,108 @@ describe('hold-and-continue batch policy (PostgreSQL)', () => {
     expect((await db.query(`select count(*)::int n from price_observations`)).rows[0]).toEqual({ n: 0 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Batch URL/SKU uniqueness: two canonical mappings sharing one SKU/URL must
+// never both be selected (which would cause a second request or an
+// attempt_already_recorded interruption). Dedup happens BEFORE the limit.
+// ---------------------------------------------------------------------------
+describe('selectSupervisedCandidates — one request per URL per batch', () => {
+  // Seed `n` renewal-due products, each a DISTINCT unique SKU.
+  async function seedUnique(n: number, age = '6 days') {
+    for (let i = 0; i < n; i++) {
+      const pid = randomUUID(); const sid = randomUUID();
+      await db.query(`insert into products values($1,$2,null)`, [pid, `Product ${i}`]);
+      await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+        values($1,$2,'tesco',$3,$4,$5,'TESCO',true,'resolved')`,
+        [sid, pid, String(500000 + i), `https://www.tesco.ie/shop/en-IE/products/${500000 + i}`, `Product ${i}`]);
+      await db.query(`insert into price_observations(store_product_id,price,observed_at,source)
+        values($1,1.15,now()-$2::interval,'tesco_direct')`, [sid, age]);
+      await db.query(`insert into scrape_runs(id,store,run_id,status) values($1,'tesco',$2,'success')`, [randomUUID(), `u_${i}`]);
+      await db.query(`insert into scrape_product_receipts(run_id,store_product_id,outcome) select id,$1,'success' from scrape_runs where run_id=$2`, [sid, `u_${i}`]);
+    }
+  }
+  // Add M EXTRA canonical mappings all sharing SKU `sku` (same URL), each
+  // renewal-due + proven -> without dedup they would all be selected.
+  async function addSharedSku(sku: number, m: number, age = '6 days') {
+    for (let k = 0; k < m; k++) {
+      const pid = randomUUID(); const sid = randomUUID();
+      await db.query(`insert into products values($1,$2,null)`, [pid, `Shared ${sku} v${k}`]);
+      await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+        values($1,$2,'tesco',$3,$4,$5,'TESCO',true,'resolved')`,
+        [sid, pid, String(sku), `https://www.tesco.ie/shop/en-IE/products/${sku}`, `Shared ${sku}`]);
+      await db.query(`insert into price_observations(store_product_id,price,observed_at,source)
+        values($1,1.15,now()-$2::interval,'tesco_direct')`, [sid, age]);
+      await db.query(`insert into scrape_runs(id,store,run_id,status) values($1,'tesco',$2,'success')`, [randomUUID(), `s_${sku}_${k}`]);
+      await db.query(`insert into scrape_product_receipts(run_id,store_product_id,outcome) select id,$1,'success' from scrape_runs where run_id=$2`, [sid, `s_${sku}_${k}`]);
+    }
+  }
+
+  it('returns exactly one candidate per URL even when 3 mappings share a SKU', async () => {
+    await seedUnique(2);              // 2 unique products
+    await addSharedSku(500000, 2);    // 2 EXTRA mappings sharing product 0's SKU/URL
+    const sel = await selectSupervisedCandidates(execute, 'renewal', 100);
+    const urls = sel.map(c => c.store_url);
+    expect(new Set(urls).size).toBe(urls.length); // all URLs distinct
+    // product 0's URL appears exactly once despite 3 mappings on it.
+    expect(urls.filter(u => u.endsWith('/500000')).length).toBe(1);
+    expect(urls.length).toBe(2);
+  });
+
+  it('dedups BEFORE the limit so the batch is filled with distinct URLs', async () => {
+    // 3 shared mappings on one URL + 3 unique URLs; a limit of 3 must return 3
+    // DISTINCT URLs, not be partly consumed by duplicates of a single URL.
+    await addSharedSku(500000, 3);
+    await seedUnique(3);
+    const sel = await selectSupervisedCandidates(execute, 'renewal', 3);
+    expect(sel.length).toBe(3);
+    expect(new Set(sel.map(c => c.store_url)).size).toBe(3);
+  });
+
+  it('preserves renewal ordering (oldest observed_at first) after dedup', async () => {
+    async function one(sku: number, age: string) {
+      const pid = randomUUID(); const sid = randomUUID();
+      await db.query(`insert into products values($1,$2,null)`, [pid, `P${sku}`]);
+      await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+        values($1,$2,'tesco',$3,$4,$5,'TESCO',true,'resolved')`, [sid, pid, String(sku), `https://www.tesco.ie/shop/en-IE/products/${sku}`, `P${sku}`]);
+      await db.query(`insert into price_observations(store_product_id,price,observed_at,source) values($1,1.15,now()-$2::interval,'tesco_direct')`, [sid, age]);
+      await db.query(`insert into scrape_runs(id,store,run_id,status) values($1,'tesco',$2,'success')`, [randomUUID(), `o_${sku}`]);
+      await db.query(`insert into scrape_product_receipts(run_id,store_product_id,outcome) select id,$1,'success' from scrape_runs where run_id=$2`, [sid, `o_${sku}`]);
+      return sid;
+    }
+    await one(510001, '6 days'); // older, still within the 7-day fresh window + due
+    await one(510002, '5 days'); // newer
+    const sel = await selectSupervisedCandidates(execute, 'renewal', 100);
+    // oldest observed_at first; ordering preserved through the dedup CTE.
+    expect(sel.length).toBe(2);
+    expect(sel[0].store_url.endsWith('/510001')).toBe(true);
+    expect(sel[1].store_url.endsWith('/510002')).toBe(true);
+    const t0 = Date.parse(String(sel[0].observed_at));
+    const t1 = Date.parse(String(sel[1].observed_at));
+    expect(t0).toBeLessThan(t1);
+  });
+
+  it('a full batch over a shared-SKU group makes ONE request per URL (no attempt_already_recorded)', async () => {
+    // Two mappings share one SKU/URL + one unique product. A live run must request
+    // each URL once and finalise the valid ones, with NO interruption.
+    await addSharedSku(520000, 2);   // shared URL /520000 (two canonical mappings)
+    await seedUnique(1);             // unique URL /500000
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const skuStr = u.split('/').pop()!;
+      const product = { id: skuStr, tpnc: skuStr, title: skuStr.startsWith('52') ? 'Shared 520000' : 'Product 0',
+        brandName: 'TESCO', price: { actual: 1.29 }, isForSale: true, status: 'AvailableForSale',
+        details: { packSize: [{ value: 1, units: 'l' }] } };
+      return Promise.resolve({ outcome: 'ok', status: 200, finalUrl: u, retryAfter: null, elapsedMs: 400,
+        html: `<p>€1.29</p><script type="application/discover+json">${JSON.stringify({ 'mfe-orchestrator': {
+          props: { config: { global: { locale: 'en-IE' } }, apolloCache: {
+            ROOT_QUERY: { [`product({"tpnc":"${skuStr}"})`]: { __ref: 'p' } }, p: product } } } })}</script>` } as TescoPageResponse);
+    });
+    const result = await collectTescoSupervised({ mode: 'renewal', limit: 25 }, { execute, sleep, fetchPage: fetcher });
+    // No attempt_already_recorded interruption: result is a clean terminal state.
+    expect((result as Record<string, unknown>).result).not.toBe('interrupted');
+    // Each distinct URL requested at most once.
+    const requested = fetcher.mock.calls.map(c => c[0]);
+    expect(new Set(requested).size).toBe(requested.length);
+    expect(requested.filter(u => u.endsWith('/520000')).length).toBe(1);
+  });
+});
