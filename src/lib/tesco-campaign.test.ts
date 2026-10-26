@@ -177,17 +177,63 @@ describe('Tesco recovery campaign (PGlite)', () => {
     expect(report.runs).toHaveLength(1);
   });
 
+  it('quarantines the Heinz product across the campaign and reports it separately (no termination)', async () => {
+    // Heinz: unique SKU, ambiguous canonical identity -> quarantine_continue.
+    const hpid = randomUUID(); const hsid = randomUUID();
+    await db.query(`insert into products values($1,'Heinz By Nature Chicken Dinner 7+ Months 200g',null)`, [hpid]);
+    await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+      values($1,$2,'tesco','264880549','https://www.tesco.ie/shop/en-IE/products/264880549','Heinz Dinner','Heinz',false,'resolved')`, [hsid, hpid]);
+    await db.query(`insert into scrape_runs(id,store,run_id,status) values($1,'tesco','hz','success')`, [randomUUID()]);
+    await db.query(`insert into scrape_product_receipts(run_id,store_product_id,outcome) select id,$1,'success' from scrape_runs where run_id='hz'`, [hsid]);
+    await seedUnique(993001); // one clean product after Heinz
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const sku = u.split('/').pop()!;
+      if (sku === '264880549') {
+        const product = { id: sku, tpnc: sku, title: 'Heinz Sunday Chicken Dinner Baby Food Jar 200g', brandName: 'Heinz',
+          price: { actual: 1.89 }, isForSale: true, status: 'AvailableForSale', details: { packSize: [{ value: 200, units: 'g' }] } };
+        return Promise.resolve({ outcome: 'ok', status: 200, finalUrl: u, retryAfter: null, elapsedMs: 400,
+          html: `<p>€1.89</p><script type="application/discover+json">${JSON.stringify({ 'mfe-orchestrator': {
+            props: { config: { global: { locale: 'en-IE' } }, apolloCache: {
+              ROOT_QUERY: { [`product({"tpnc":"${sku}"})`]: { __ref: 'p' } }, p: product } } } })}</script>` } as TescoPageResponse);
+      }
+      return Promise.resolve(okPage(sku));
+    });
+    const report = await runTescoRecoveryCampaign({ mode: 'expansion', requestBudget: 1000, maxPerRun: 100 }, deps(fetcher));
+    expect(report.stoppedReason).toBe('no_more_eligible');  // did NOT terminate on Heinz
+    expect(report.quarantinedProducts).toBe(1);
+    expect(report.acceptedPrices).toBe(1);                   // the clean product
+    expect(report.ordinaryHolds).toBe(0);
+  });
+
   it('produces a consolidated report with all required sections', async () => {
     await seedUnique(992000, 2); // overlap=2 (fresh dunnes+supervalu peers)
     await seedShared(992500, ['A 1kg', 'B 2kg']);
     const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(okPage(u.split('/').pop()!)));
     const report = await runTescoRecoveryCampaign({ mode: 'expansion', requestBudget: 1000, maxPerRun: 100 }, deps(fetcher));
     expect(report).toMatchObject({ mode: 'expansion' });
-    expect(report).toHaveProperty('acceptedPrices');
-    expect(report).toHaveProperty('excludedSharedSkuGroups');
-    expect(report).toHaveProperty('remainingEligible');
-    expect(report).toHaveProperty('unresolvedRequests');
+    // All required report sections (requirement 6): accepted, ordinary holds,
+    // quarantined, shared-SKU exclusions, systemic flag, actual remaining count.
+    for (const k of ['acceptedPrices', 'ordinaryHolds', 'quarantinedProducts',
+      'excludedSharedSkuGroups', 'excludedSharedSkuMappings', 'stoppedSystemic',
+      'remainingEligible', 'unresolvedRequests']) {
+      expect(report).toHaveProperty(k);
+    }
     expect(report.runs.length).toBeGreaterThanOrEqual(1);
     expect(report.excludedSharedSkuGroups.map(g => g.store_sku)).toContain('992500');
+    expect(report.excludedSharedSkuMappings).toBeGreaterThanOrEqual(2); // 2 members in 992500
+    expect(report.stoppedSystemic).toBe(false); // clean exhaustion is not systemic
+    // remainingEligible is an ACTUAL count, not capped at 100.
+    expect(typeof report.remainingEligible).toBe('number');
+  });
+
+  it('reports a systemic terminal stop distinctly (stoppedSystemic=true)', async () => {
+    for (let i = 0; i < 3; i++) await seedUnique(994000 + i);
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const sku = u.split('/').pop()!; const other = String(Number(sku) + 500000);
+      return Promise.resolve({ ...okPage(other), finalUrl: `https://www.tesco.ie/shop/en-IE/products/${other}` });
+    });
+    const report = await runTescoRecoveryCampaign({ mode: 'expansion', requestBudget: 1000, maxPerRun: 100 }, deps(fetcher));
+    expect(report.stoppedReason).toBe('identity_validation_anomaly');
+    expect(report.stoppedSystemic).toBe(true);
   });
 });

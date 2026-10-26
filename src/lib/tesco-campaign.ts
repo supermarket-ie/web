@@ -29,7 +29,7 @@
  */
 import {
   collectTescoSupervised, reconcileSupervisedRun, selectSupervisedCandidates,
-  listExcludedSharedSkuGroups, type CollectionMode, type Dependencies,
+  listExcludedSharedSkuGroups, countEligibleCandidates, type CollectionMode, type Dependencies,
   type DeferredSharedSkuGroup,
 } from './tesco-supervised-collection';
 
@@ -45,21 +45,38 @@ export type CampaignRunRecord = {
   runId: string | null;
   result: string;
   target: number;
-  inserted: number;
+  inserted: number;        // accepted trusted observations this run
+  held: number;            // ordinary product-level holds this run
+  quarantined: number;     // quarantined ambiguous products this run
   completed: number;
   reserved: number;
   unresolved: string[];
 };
 
+// Terminal/systemic results that stop the campaign AND indicate a non-ordinary
+// condition the operator should review (as opposed to the clean exhaustion of
+// eligible work or the request budget).
+const SYSTEMIC_STOP_RESULTS = new Set([
+  'access_block', 'rate_limited', 'http_error', 'network_error', 'unsafe_redirect',
+  'parse_error', 'identity_validation_anomaly',
+  'identity_hold_consecutive_exceeded', 'identity_hold_rate_exceeded',
+  'identity_quarantine_consecutive_exceeded', 'identity_quarantine_rate_exceeded',
+  'interrupted', 'unresolved_attempts', 'terminal_run', 'gate_unavailable',
+]);
+
 export type CampaignReport = {
   mode: CollectionMode;
   stoppedReason: string;            // why the campaign stopped iterating
+  stoppedSystemic: boolean;         // true when the stop was a systemic/terminal condition
   runs: CampaignRunRecord[];
   requestsIssued: number;           // sum of reserved pages across runs
   acceptedPrices: number;           // sum of successful receipts across runs
+  ordinaryHolds: number;            // sum of ordinary product-level holds across runs
+  quarantinedProducts: number;      // sum of quarantined ambiguous products across runs
   // Snapshot taken at campaign end (read-only):
   excludedSharedSkuGroups: DeferredSharedSkuGroup[];
-  remainingEligible: number;        // non-shared eligible still awaiting collection
+  excludedSharedSkuMappings: number; // total mappings deferred via shared-SKU groups
+  remainingEligible: number;        // ACTUAL non-shared eligible count (not capped at 100)
   unresolvedRequests: string[];     // any pending/unknown-outcome URLs seen
 };
 
@@ -78,6 +95,8 @@ export async function runTescoRecoveryCampaign(options: CampaignOptions, deps: D
   const runs: CampaignRunRecord[] = [];
   let requestsIssued = 0;
   let acceptedPrices = 0;
+  let ordinaryHolds = 0;
+  let quarantinedProducts = 0;
   const unresolvedRequests: string[] = [];
   let stoppedReason = 'budget_exhausted';
 
@@ -96,35 +115,40 @@ export async function runTescoRecoveryCampaign(options: CampaignOptions, deps: D
     const reconciled = runId ? await reconcileSupervisedRun(execute, runId) as Record<string, unknown> : null;
     const reserved = Number(reconciled?.reserved ?? 0);
     const inserted = Number(reconciled?.inserted ?? 0);
+    const held = Number(reconciled?.held ?? 0);
+    const quarantined = Number(reconciled?.quarantined ?? 0);
     const completed = Number(reconciled?.completed ?? 0);
     const unresolved = Array.isArray(reconciled?.unresolved) ? reconciled!.unresolved as string[] : [];
 
-    runs.push({ runId, result: String(result.result), target: next.length, inserted, completed, reserved, unresolved });
+    runs.push({ runId, result: String(result.result), target: next.length, inserted, held, quarantined, completed, reserved, unresolved });
     requestsIssued += reserved;
     acceptedPrices += inserted;
+    ordinaryHolds += held;
+    quarantinedProducts += quarantined;
     for (const u of unresolved) if (!unresolvedRequests.includes(u)) unresolvedRequests.push(u);
 
     // Continue ONLY on a clean complete. Any other result stops the campaign:
     // we never resume a terminal/interrupted run or retry an unknown request.
     if (String(result.result) !== CONTINUE_RESULT) { stoppedReason = String(result.result); break; }
-
-    // If the completed run reserved fewer than its target (e.g. pacing/limit
-    // edge), still loop: the next select re-derives eligibility and will end the
-    // loop cleanly when nothing remains.
   }
 
   // Final read-only snapshot for the consolidated report.
   const excludedSharedSkuGroups = await listExcludedSharedSkuGroups(execute, mode);
-  const remaining = await selectSupervisedCandidates(execute, mode, 100, { excludeSharedSku: true });
+  const excludedSharedSkuMappings = excludedSharedSkuGroups.reduce((n, g) => n + g.member_count, 0);
+  const remainingEligible = await countEligibleCandidates(execute, mode, { excludeSharedSku: true });
 
   return {
     mode,
     stoppedReason,
+    stoppedSystemic: SYSTEMIC_STOP_RESULTS.has(stoppedReason),
     runs,
     requestsIssued,
     acceptedPrices,
+    ordinaryHolds,
+    quarantinedProducts,
     excludedSharedSkuGroups,
-    remainingEligible: remaining.length,
+    excludedSharedSkuMappings,
+    remainingEligible,
     unresolvedRequests,
   };
 }

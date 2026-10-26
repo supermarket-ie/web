@@ -1,5 +1,51 @@
 # Supermarket.ie — Canonical Project State
 
+## FEATURE: product quarantine-and-continue (Heinz case) — 26 October 2026
+
+A 1000-request campaign terminated after 6 requests on one product: Tesco SKU
+264880549, canonical "Heinz By Nature Chicken Dinner 7+ Months 200g" vs live
+"Heinz Sunday Chicken Dinner Baby Food Jar 200g" → reason "candidate does not
+establish full exact canonical identity". Investigation (read-only, prod) confirmed
+PRODUCT-CONFINED: outcome=ok, http 200, final_url==requested (no redirect), body
+hash present (clean parse), identity SKU==requested SKU (found+corroborated), SKU
+group size=1 (not shared), single ambiguous reason, NO new tesco_direct observation
+(hold worked). A genuinely different product, correctly rejected — but it should
+not kill the campaign.
+
+Narrow quarantine-and-continue: new disposition `quarantine_continue`
+(tesco-identity-disposition.ts) returned ONLY when productFound && no
+materialDuplicateConflict && EVERY effective reason is in the narrow
+QUARANTINE_REASONS set (currently just the ambiguous-canonical reason; disjoint
+from CONTINUE and STOP). NOT a blanket allow-list: mixed/systemic/unknown reasons,
+product-not-found, or a material duplicate-canonical conflict all remain
+fail-closed STOP. The quarantined product is durably checkpointed/held (outcome=ok,
+identity_results reasons, detail.quarantined=true) with NO price observation; the
+batch continues.
+
+SEPARATE quarantine breaker (req 5): own axis
+(consecutiveQuarantines/totalQuarantines, persisted in run state, reset on accept);
+thresholds 8 consecutive / >60% after 20 attempts — more tolerant than the ordinary
+hold breaker (3 / >40% after 10) but bounded; trips →
+identity_quarantine_consecutive_exceeded/_rate_exceeded. Independent of the hold
+breaker.
+
+Campaign report upgraded (req 6): per-run inserted/held/quarantined + totals
+acceptedPrices/ordinaryHolds/quarantinedProducts/excludedSharedSkuGroups(+mappings)/
+stoppedSystemic/ACTUAL remainingEligible via new countEligibleCandidates() (not
+capped at 100)/unresolvedRequests.
+
+Preserved unchanged: exact acceptance (accept iff found && reasons.length==0), all
+historical holds, leases, cooldowns, pacing, idempotency, lost-ack→interrupted
+(continue only after a durably-acknowledged checkpoint), access-block/429 stops,
+URL uniqueness, shared-SKU pre-filter, material duplicate-canonical hard stop.
+
+TESTS 685 pass (65 files; +14): classifier quarantine + disjoint + separate breaker
+units; Heinz integration (durably held, never accepted, next requested); quarantine
+breaker (8) distinct from hold breaker; systemic+ambiguous still hard-stops;
+campaign quarantines Heinz without terminating + reports separately; stoppedSystemic
+flagged. typecheck/lint 0 err/behavioural/build green. Focused PR; merge on green CI
++ no active Work session.
+
 ## FEATURE: large-tranche Tesco recovery campaign — 26 October 2026
 
 Enables a ChatGPT Work supervised campaign to process the full eligible Tesco

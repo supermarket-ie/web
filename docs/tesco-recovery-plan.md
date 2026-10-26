@@ -241,9 +241,26 @@ remains an independent safeguard. No further approval is needed between batches.
 
 Consolidated report fields: accepted Tesco prices, excluded shared-SKU groups
 (with member canonical names + reason), per-run records (result/target/inserted/
-completed/reserved/unresolved), total requests issued, remaining eligible
-(non-shared), and unresolved requests. Cross-check accepted prices and
-three-retailer triples before/after; successful retrieval is not trusted coverage.
+held/quarantined/completed/reserved/unresolved), total requests issued,
+acceptedPrices, ordinaryHolds, quarantinedProducts (ambiguous products requiring
+review), excludedSharedSkuMappings, a stoppedSystemic flag (systemic terminal stop
+vs clean exhaustion), the ACTUAL remainingEligible count (not capped at 100), and
+unresolvedRequests. Cross-check accepted prices and three-retailer triples
+before/after; successful retrieval is not trusted coverage.
+
+### Quarantine-and-continue (isolated canonical-identity rejections)
+
+A product whose live Tesco item is a genuinely DIFFERENT product than the stored
+canonical (e.g. SKU 264880549 "Heinz By Nature Chicken Dinner" mapped to live
+"Heinz Sunday Chicken Dinner") is QUARANTINED: durably rejected/held, no price
+written, and the campaign continues to the next product instead of terminating.
+This applies ONLY with positive evidence (clean ok page, requested SKU found +
+corroborated, mapping snapshot consistent, no material duplicate-canonical
+conflict, single ambiguous-canonical reason). Mixed/systemic/unknown reasons and
+material duplicate-SKU conflicts still HARD-STOP. A separate quarantine circuit
+breaker (8 consecutive, or >60% after 20 attempts) stops the campaign if
+quarantines become pervasive (a bad cohort signal). Quarantined products are
+reported for review, not collected.
 
 ## 6. Scope boundary
 
