@@ -2,12 +2,17 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyIdentityOutcome,
   holdCircuitTripped,
+  quarantineCircuitTripped,
   CONTINUE_REASONS,
   STOP_REASONS,
+  QUARANTINE_REASONS,
   BENIGN_REASON,
   MAX_CONSECUTIVE_HOLDS,
   HOLD_RATE_MIN_ATTEMPTS,
   HOLD_RATE_THRESHOLD,
+  MAX_CONSECUTIVE_QUARANTINES,
+  QUARANTINE_RATE_MIN_ATTEMPTS,
+  QUARANTINE_RATE_THRESHOLD,
 } from '../tesco-identity-disposition';
 
 // Classification-policy evidence for docs/tesco-batch-continuation-proposal.md,
@@ -57,10 +62,6 @@ describe('classifyIdentityOutcome — stop (systemic / ambiguous / fail-closed)'
       expect(classifyIdentityOutcome([reason], true)).toBe('stop');
     });
   }
-  it('keeps the ambiguous-generic reason as STOP (refinement 2)', () => {
-    expect(classifyIdentityOutcome(['candidate does not establish full exact canonical identity'], true)).toBe('stop');
-    expect(CONTINUE_REASONS.has('candidate does not establish full exact canonical identity')).toBe(false);
-  });
   it('stops (fail-closed) on any unknown/novel reason token', () => {
     expect(classifyIdentityOutcome(['some_future_reason'], true)).toBe('stop');
   });
@@ -126,5 +127,58 @@ describe('classifyIdentityOutcome — material duplicate-canonical conflict forc
   });
   it('a not-found product still stops before the flag is considered', () => {
     expect(classifyIdentityOutcome([], false, false)).toBe('stop');
+  });
+});
+
+describe('classifyIdentityOutcome — quarantine-and-continue (isolated canonical identity)', () => {
+  const AMBIGUOUS = 'candidate does not establish full exact canonical identity';
+  it('quarantines the Heinz-type confined canonical-identity rejection (product found, no dup conflict)', () => {
+    expect(classifyIdentityOutcome([AMBIGUOUS], true, false)).toBe('quarantine_continue');
+  });
+  it('does NOT quarantine when the product was not found (systemic -> stop)', () => {
+    expect(classifyIdentityOutcome([AMBIGUOUS], false, false)).toBe('stop');
+  });
+  it('does NOT quarantine when there is a material duplicate-canonical conflict (-> stop)', () => {
+    expect(classifyIdentityOutcome([AMBIGUOUS], true, true)).toBe('stop');
+  });
+  it('does NOT quarantine when mixed with a systemic reason (-> stop)', () => {
+    expect(classifyIdentityOutcome([AMBIGUOUS, 'different_sku_requires_mapping_review'], true, false)).toBe('stop');
+  });
+  it('does NOT quarantine when mixed with an ordinary attribute reason (-> stop, fail-closed)', () => {
+    // A mix of ambiguous + ordinary is not purely-quarantine and not purely-ordinary.
+    expect(classifyIdentityOutcome([AMBIGUOUS, 'measureConflict'], true, false)).toBe('stop');
+  });
+  it('still quarantines when combined only with the benign no-price reason', () => {
+    expect(classifyIdentityOutcome([AMBIGUOUS, BENIGN_REASON], true, false)).toBe('quarantine_continue');
+  });
+  it('never accepts a quarantined product', () => {
+    expect(classifyIdentityOutcome([AMBIGUOUS], true, false)).not.toBe('accept');
+  });
+  it('QUARANTINE_REASONS is disjoint from CONTINUE and STOP sets', () => {
+    for (const r of QUARANTINE_REASONS) {
+      expect(CONTINUE_REASONS.has(r)).toBe(false);
+      expect(STOP_REASONS.has(r)).toBe(false);
+    }
+  });
+});
+
+describe('quarantineCircuitTripped — separate axis from ordinary holds', () => {
+  it('trips at the consecutive-quarantine threshold', () => {
+    expect(MAX_CONSECUTIVE_QUARANTINES).toBe(8);
+    expect(quarantineCircuitTripped(7, 7, 7)).toBe(false);
+    expect(quarantineCircuitTripped(8, 8, 8)).toBe('consecutive');
+  });
+  it('trips on quarantine rate only above threshold after the minimum attempts', () => {
+    expect(QUARANTINE_RATE_MIN_ATTEMPTS).toBe(20);
+    expect(QUARANTINE_RATE_THRESHOLD).toBe(0.6);
+    expect(quarantineCircuitTripped(2, 12, 19)).toBe(false);        // below min attempts
+    expect(quarantineCircuitTripped(2, 12, 20)).toBe(false);        // exactly 60% not > 60%
+    expect(quarantineCircuitTripped(2, 13, 20)).toBe('rate');       // 65% > 60%
+  });
+  it('is independent of the ordinary-hold breaker thresholds (more tolerant)', () => {
+    // 4 consecutive quarantines would trip the HOLD breaker (3) but NOT the
+    // quarantine breaker (8) — proving they are counted on separate axes.
+    expect(holdCircuitTripped(4, 4, 4)).toBe('consecutive');
+    expect(quarantineCircuitTripped(4, 4, 4)).toBe(false);
   });
 });

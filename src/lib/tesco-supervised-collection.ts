@@ -5,7 +5,7 @@ import {
   type TescoCollectedPage, type TescoPageResponse,
 } from './tesco-direct-collection-core';
 import { acquisitionDecision, acquisitionSnapshotSql, selectAcquisitionCandidates, type Acquisition } from './tesco-acquisition-handoff';
-import { classifyIdentityOutcome, holdCircuitTripped } from './tesco-identity-disposition';
+import { classifyIdentityOutcome, holdCircuitTripped, quarantineCircuitTripped } from './tesco-identity-disposition';
 import { hasMaterialDuplicateCanonicalConflict } from './tesco-mapping-audit';
 
 // Operator-only runner. No route, scheduler, migration or automatic retries.
@@ -31,6 +31,10 @@ type RunState = {
   // or bypass the breaker. consecutiveHolds resets on an acceptance; totalHolds
   // and attempts are cumulative over the whole run (across resumes).
   consecutiveHolds?: number; totalHolds?: number; attempts?: number;
+  // SEPARATE quarantine counters (isolated product-level canonical-identity
+  // quarantines), counted independently of ordinary holds and persisted the same
+  // way. consecutiveQuarantines resets on an acceptance; totalQuarantines cumulative.
+  consecutiveQuarantines?: number; totalQuarantines?: number;
 };
 export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean; acquisitionPages?: string[]; excludeSharedSku?: boolean };
 export type Dependencies = {
@@ -178,11 +182,50 @@ export async function listExcludedSharedSkuGroups(execute: ExecuteSql, mode: Col
   }));
 }
 
+/**
+ * ACTUAL count of eligible candidates (not capped at a batch limit), applying
+ * the same gates as selectSupervisedCandidates including optional shared-SKU
+ * exclusion and per-URL uniqueness. Read-only; for the campaign report's true
+ * "remaining eligible" figure.
+ */
+export async function countEligibleCandidates(
+  execute: ExecuteSql,
+  mode: CollectionMode,
+  options: { excludeSharedSku?: boolean } = {},
+): Promise<number> {
+  const sharedSkuExclusion = options.excludeSharedSku
+    ? `and (select count(*) from mappings m2 where m2.store_sku=c.store_sku)<=1`
+    : '';
+  const [row] = await execute(`with mappings as (select ${mappingFields} from store_products s join products p on p.id=s.product_id
+    where s.store='tesco'), candidates as (select s.*,l.observed_at,
+    exists(select 1 from scrape_product_receipts r where r.store_product_id=s.id and r.outcome='success') proven,
+    exists(select 1 from tesco_direct_collection_pages d where d.requested_url=s.store_url and
+      (d.outcome='pending' or d.created_at>now()-interval '24 hours'
+       or (d.created_at>=coalesce(l.observed_at,'-infinity'::timestamptz) and
+         (d.outcome<>'ok' or exists(select 1 from jsonb_array_elements(d.identity_results) i
+          where i->>'storeProductId'=s.id::text and jsonb_array_length(i->'reasons')>0))))) held
+    from mappings s left join latest_prices l on l.store_product_id=s.id),
+    eligible as (select c.* from candidates c where url_status='resolved' and proven and not held
+      and store_url='https://www.tesco.ie/shop/en-IE/products/'||store_sku
+      and ${mode === 'renewal' ? "(observed_at<=now()-interval '4 days')" : 'observed_at is null'}
+      ${sharedSkuExclusion})
+    select count(distinct store_url)::int n from eligible`);
+  return Number((row as Record<string, unknown>)?.n ?? 0);
+}
+
 export async function reconcileSupervisedRun(execute: ExecuteSql, runId: string) {
   const [row] = await execute(`select r.id,r.status,r.error_summary::jsonb summary,
     (select count(*) from tesco_direct_collection_pages where run_id=r.id) reserved,
     (select count(*) from tesco_direct_collection_pages where run_id=r.id and outcome<>'pending') completed,
     (select count(*) from scrape_product_receipts where run_id=r.id and outcome='success') inserted,
+    -- Quarantined products this run (durably rejected, canonical-identity
+    -- confined, no price) — from the per-page disposition recorded in detail.
+    (select count(*) from tesco_direct_collection_pages
+      where run_id=r.id and outcome='ok' and detail::jsonb->>'quarantined'='true') quarantined,
+    -- Ordinary product-level holds this run (ok page, identity reasons, NOT
+    -- quarantined, NOT accepted).
+    (select count(*) from tesco_direct_collection_pages d
+      where d.run_id=r.id and d.outcome='ok' and coalesce(d.detail::jsonb->>'disposition','')='hold_continue') held,
     coalesce((select jsonb_agg(requested_url order by created_at) from tesco_direct_collection_pages
       where run_id=r.id and outcome='pending'),'[]'::jsonb) unresolved,
     coalesce((select jsonb_agg(requested_url) from tesco_direct_collection_pages
@@ -206,6 +249,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   let consecutiveHolds = 0;
   let totalHolds = 0;
   let attempts = 0;
+  let consecutiveQuarantines = 0;
+  let totalQuarantines = 0;
   if (options.resume) {
     const prior = await reconcileSupervisedRun(execute, options.resume);
     const state = prior.summary as RunState;
@@ -217,6 +262,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
     consecutiveHolds = Number(state.consecutiveHolds ?? 0);
     totalHolds = Number(state.totalHolds ?? 0);
     attempts = Number(state.attempts ?? 0);
+    consecutiveQuarantines = Number(state.consecutiveQuarantines ?? 0);
+    totalQuarantines = Number(state.totalQuarantines ?? 0);
   } else selected = options.acquisitionPages ? await selectAcquisitionCandidates(execute, options.acquisitionPages)
     : await selectSupervisedCandidates(execute, options.mode, limit, { excludeSharedSku: options.excludeSharedSku });
   if (options.dryRun || !selected.length) return { result: options.dryRun ? 'dry_run' : 'no_due_products',
@@ -310,22 +357,31 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         : 'stop';
       const accepted = outcome === 'ok' && disposition === 'accept' && product != null;
       const isHold = outcome === 'ok' && disposition === 'hold_continue';
+      // Quarantine-and-continue: an isolated, product-confined canonical-identity
+      // rejection on a clean ok page with the SKU found + no duplicate conflict.
+      // Durably rejected/held like a hold (NO price accepted), but counted on a
+      // SEPARATE axis from ordinary holds and from systemic stops.
+      const isQuarantine = outcome === 'ok' && disposition === 'quarantine_continue';
       // A batch-ending identity stop only when the disposition is 'stop' on an ok
-      // page (systemic/ambiguous/unknown). Holds/skips do NOT end the batch.
+      // page (systemic/unknown/mixed/material-duplicate). Holds/quarantines/skips
+      // do NOT end the batch.
       const identityStop = outcome === 'ok' && disposition === 'stop';
       const pauseUntil = transportStop ? tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter) : null;
-      // pageStop = the per-page recorded stop context (null for accept/hold/skip).
+      // pageStop = the per-page recorded stop context (null for accept/hold/quarantine/skip).
       const pageStop = transportStop ? outcome : identityStop ? 'identity_validation_anomaly' : null;
       // Update cumulative circuit-breaker counters for ok pages that were
-      // identity-evaluated (accept/hold/skip; NOT transport stops, which don't
-      // reflect identity). Persisted below so resume can't reset them.
+      // identity-evaluated (accept/hold/quarantine/skip; NOT transport stops,
+      // which don't reflect identity). Persisted below so resume can't reset them.
       let breaker: false | 'consecutive' | 'rate' = false;
+      let quarantineBreaker: false | 'consecutive' | 'rate' = false;
       if (outcome === 'ok' && !identityStop) {
         attempts += 1;
-        if (isHold) { totalHolds += 1; consecutiveHolds += 1; }
-        else if (accepted) { consecutiveHolds = 0; }
-        // skip_no_price leaves consecutiveHolds unchanged (neither accept nor hold)
+        if (isHold) { totalHolds += 1; consecutiveHolds += 1; consecutiveQuarantines = 0; }
+        else if (isQuarantine) { totalQuarantines += 1; consecutiveQuarantines += 1; consecutiveHolds = 0; }
+        else if (accepted) { consecutiveHolds = 0; consecutiveQuarantines = 0; }
+        // skip_no_price leaves both consecutive counters unchanged.
         breaker = holdCircuitTripped(consecutiveHolds, totalHolds, attempts);
+        quarantineBreaker = quarantineCircuitTripped(consecutiveQuarantines, totalQuarantines, attempts);
       }
       // Quarantine precedes evidence/finalisation: a later database error must not
       // roll back a known access restriction. This operation is owner guarded.
@@ -345,6 +401,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
             identity_results=${literal([{ storeProductId: target.id, sku: target.store_sku, reasons }])}::jsonb,
             detail=${literal(JSON.stringify({ transport: response.transport, stopReason: pageStop,
               resourceUnavailable: unavailable, redirectUrl: response.redirectUrl,
+              disposition: outcome === 'ok' ? disposition : undefined,
+              quarantined: isQuarantine || undefined,
               ...(target.acquisition ? { purpose: 'price_verification', sourceAcquisitionPageId: target.acquisition.pageId,
                 sourceBodySha256: target.acquisition.snapshot.page.body_sha256 } : {}) }))}
             where run_id=${uuid(runId)} and requested_url=${literal(target.store_url)};
@@ -358,9 +416,11 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
             'stopReason',${literal(pageStop)},
             'consecutiveHolds',${literal(consecutiveHolds)}::int,
             'totalHolds',${literal(totalHolds)}::int,
-            'attempts',${literal(attempts)}::int))::text where id=${uuid(runId)};
+            'attempts',${literal(attempts)}::int,
+            'consecutiveQuarantines',${literal(consecutiveQuarantines)}::int,
+            'totalQuarantines',${literal(totalQuarantines)}::int))::text where id=${uuid(runId)};
         end if; end $runner$; select 1 checkpointed`);
-      deps.progress?.({ event: 'checkpoint', runId, productId: target.id, accepted, held: isHold, outcome, reasons });
+      deps.progress?.({ event: 'checkpoint', runId, productId: target.id, accepted, held: isHold, quarantined: isQuarantine, outcome, reasons });
       // Decide break vs continue ONLY after the rejection/acceptance checkpoint
       // above has committed AND its acknowledgement is confirmed (this execute()
       // resolved). A lost acknowledgement throws -> caught -> stopReason =
@@ -375,7 +435,16 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
             where id=${uuid(runId)}; end $runner$; select 1 breaker`);
         break;
       }
-      // accept / skip_no_price / hold_continue → proceed to the next product.
+      // SEPARATE quarantine breaker: a long run / high rate of isolated
+      // quarantines indicates a bad cohort or a subtle systemic issue -> stop.
+      if (quarantineBreaker) {
+        stopReason = quarantineBreaker === 'consecutive' ? 'identity_quarantine_consecutive_exceeded' : 'identity_quarantine_rate_exceeded';
+        await execute(`do $runner$ begin ${owned(runId, owner)}
+          update scrape_runs set error_summary=(error_summary::jsonb || jsonb_build_object('stopReason',${literal(stopReason)}))::text
+            where id=${uuid(runId)}; end $runner$; select 1 qbreaker`);
+        break;
+      }
+      // accept / skip_no_price / hold_continue / quarantine_continue → next product.
     }
   } catch {
     // Do not print driver/connector errors: these can contain credentials or SQL.

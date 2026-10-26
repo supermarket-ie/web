@@ -752,3 +752,119 @@ describe('selectSupervisedCandidates — one request per URL per batch', () => {
     expect(requested.filter(u => u.endsWith('/520000')).length).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Quarantine-and-continue: an isolated, product-confined canonical-identity
+// rejection (the Heinz case) is durably rejected/held and skipped, and the next
+// eligible product is still requested. Systemic anomalies must still hard-stop.
+// ---------------------------------------------------------------------------
+describe('quarantine-and-continue (PostgreSQL, Heinz case)', () => {
+  // Seed an expansion-eligible product with an arbitrary canonical name + sku.
+  async function seedProduct(sku: number, canonicalName: string) {
+    const pid = randomUUID(); const sid = randomUUID();
+    await db.query(`insert into products values($1,$2,null)`, [pid, canonicalName]);
+    await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+      values($1,$2,'tesco',$3,$4,$5,'TESCO',false,'resolved')`,
+      [sid, pid, String(sku), `https://www.tesco.ie/shop/en-IE/products/${sku}`, canonicalName]);
+    await db.query(`insert into scrape_runs(id,store,run_id,status) values($1,'tesco',$2,'success')`, [randomUUID(), `q_${sku}`]);
+    await db.query(`insert into scrape_product_receipts(run_id,store_product_id,outcome) select id,$1,'success' from scrape_runs where run_id=$2`, [sid, `q_${sku}`]);
+    return sid;
+  }
+  // A clean ok page whose live title is a DIFFERENT product than the canonical,
+  // so the live title does not cover the canonical terms -> ambiguous canonical
+  // identity ('candidate does not establish full exact canonical identity').
+  function pageWithTitle(sku: number, title: string): TescoPageResponse {
+    const s = String(sku);
+    const product = { id: s, tpnc: s, title, brandName: 'Heinz', price: { actual: 1.89 },
+      isForSale: true, status: 'AvailableForSale', details: { packSize: [{ value: 200, units: 'g' }] } };
+    return { outcome: 'ok', status: 200, finalUrl: `https://www.tesco.ie/shop/en-IE/products/${sku}`, retryAfter: null, elapsedMs: 400,
+      html: `<p>€1.89</p><script type="application/discover+json">${JSON.stringify({ 'mfe-orchestrator': {
+        props: { config: { global: { locale: 'en-IE' } }, apolloCache: {
+          ROOT_QUERY: { [`product({"tpnc":"${s}"})`]: { __ref: 'p' } }, p: product } } } })}</script>` };
+  }
+  function cleanMilk(sku: number): TescoPageResponse {
+    const s = String(sku);
+    const product = { id: s, tpnc: s, title: 'Tesco Whole Milk 1L', brandName: 'TESCO', price: { actual: 1.29 },
+      isForSale: true, status: 'AvailableForSale', details: { packSize: [{ value: 1, units: 'l' }] } };
+    return { outcome: 'ok', status: 200, finalUrl: `https://www.tesco.ie/shop/en-IE/products/${sku}`, retryAfter: null, elapsedMs: 400,
+      html: `<p>€1.29</p><script type="application/discover+json">${JSON.stringify({ 'mfe-orchestrator': {
+        props: { config: { global: { locale: 'en-IE' } }, apolloCache: {
+          ROOT_QUERY: { [`product({"tpnc":"${s}"})`]: { __ref: 'p' } }, p: product } } } })}</script>` };
+  }
+  const run = (f: Mock<(u: string) => Promise<TescoPageResponse>>, limit = 25) =>
+    collectTescoSupervised({ mode: 'expansion', limit }, { execute, sleep, fetchPage: f });
+
+  it('quarantines the Heinz product (durably held, never accepted) and continues to the next', async () => {
+    // Heinz: canonical "By Nature Chicken Dinner 7+ Months" vs live "Sunday
+    // Chicken Dinner" -> ambiguous canonical identity. Unique SKU (not shared).
+    const heinz = await seedProduct(264880549, 'Heinz By Nature Chicken Dinner 7+ Months 200g');
+    await seedProduct(264880550, 'Whole Milk 1L'); // a clean next product
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const sku = Number(u.split('/').pop());
+      return Promise.resolve(sku === 264880549
+        ? pageWithTitle(sku, 'Heinz Sunday Chicken Dinner Baby Food Jar 200g')
+        : cleanMilk(sku));
+    });
+    const result = await run(fetcher);
+    // Campaign-safe: the batch completed (did NOT terminate on the Heinz quarantine).
+    expect((result as Record<string, unknown>).result).toBe('complete');
+    // Both products were requested (Heinz quarantined, next one accepted).
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    // The clean milk product produced a trusted observation; Heinz did NOT.
+    const obs = await db.query<Record<string, unknown>>(`select store_product_id from price_observations where source='tesco_direct'`);
+    expect(obs.rows.map(r => r.store_product_id)).not.toContain(heinz);
+    expect(obs.rows.length).toBe(1);
+    // Heinz page durably checkpointed as a quarantine with the identity reason.
+    const page = (await db.query<Record<string, unknown>>(
+      `select outcome, detail, identity_results from tesco_direct_collection_pages where requested_url=$1`,
+      ['https://www.tesco.ie/shop/en-IE/products/264880549'])).rows[0];
+    expect(page.outcome).toBe('ok');
+    const detail = typeof page.detail === 'string' ? JSON.parse(page.detail) : page.detail;
+    expect(detail.quarantined).toBe(true);
+    expect(detail.disposition).toBe('quarantine_continue');
+    expect(JSON.stringify(page.identity_results)).toContain('full exact canonical identity');
+  });
+
+  it('a long run of quarantines trips the SEPARATE quarantine breaker (not the hold breaker)', async () => {
+    // 8 distinct ambiguous-canonical products -> 8 consecutive quarantines ->
+    // quarantine breaker (MAX_CONSECUTIVE_QUARANTINES=8). The hold breaker (3)
+    // must NOT be what stops it.
+    for (let i = 0; i < 9; i++) await seedProduct(265000000 + i, `Heinz By Nature Variant ${i} 7+ Months 200g`);
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const sku = Number(u.split('/').pop());
+      return Promise.resolve(pageWithTitle(sku, 'Heinz Sunday Chicken Dinner Baby Food Jar 200g'));
+    });
+    const result = await run(fetcher);
+    expect((result as Record<string, unknown>).result).toBe('identity_quarantine_consecutive_exceeded');
+    expect(fetcher).toHaveBeenCalledTimes(8); // stopped at the 8th consecutive quarantine
+    const s = await summaryQ(String((result as Record<string, unknown>).id));
+    expect(s.consecutiveQuarantines).toBe(8);
+    // No observations written for any quarantined product.
+    expect((await db.query(`select count(*)::int n from price_observations where source='tesco_direct'`)).rows[0]).toEqual({ n: 0 });
+  });
+
+  it('a SYSTEMIC reason alongside the ambiguous one still hard-stops (fail-closed)', async () => {
+    // A shared-SKU group (material duplicate-canonical) with distinct identities
+    // -> material conflict forces stop even though each is also ambiguous.
+    const pid1 = randomUUID(), pid2 = randomUUID(), s1 = randomUUID(), s2 = randomUUID();
+    await db.query(`insert into products values($1,'Heinz By Nature Chicken Dinner 7+ Months 200g',null)`, [pid1]);
+    await db.query(`insert into products values($1,'Heinz Sunday Beef Dinner 7+ Months 200g',null)`, [pid2]);
+    for (const [sid, pid] of [[s1, pid1], [s2, pid2]] as const) {
+      await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+        values($1,$2,'tesco','265999999',$3,'Heinz Dinner','Heinz',false,'resolved')`,
+        [sid, pid, 'https://www.tesco.ie/shop/en-IE/products/265999999']);
+      await db.query(`insert into scrape_runs(id,store,run_id,status) values($1,'tesco',$2,'success')`, [randomUUID(), `qs_${sid}`]);
+      await db.query(`insert into scrape_product_receipts(run_id,store_product_id,outcome) select id,$1,'success' from scrape_runs where run_id=$2`, [sid, `qs_${sid}`]);
+    }
+    const fetcher = vi.fn().mockResolvedValue(pageWithTitle(265999999, 'Heinz Sunday Chicken Dinner Baby Food Jar 200g'));
+    const result = await run(fetcher);
+    // Material duplicate-canonical conflict -> hard stop, NOT a quarantine.
+    expect((result as Record<string, unknown>).result).toBe('identity_validation_anomaly');
+    expect((await db.query(`select count(*)::int n from price_observations where source='tesco_direct'`)).rows[0]).toEqual({ n: 0 });
+  });
+
+  async function summaryQ(runId: string) {
+    const r = (await db.query<Record<string, unknown>>(`select error_summary from scrape_runs where id=$1`, [runId])).rows[0];
+    return JSON.parse(String(r.error_summary));
+  }
+});
