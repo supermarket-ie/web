@@ -844,20 +844,18 @@ describe('quarantine-and-continue (PostgreSQL, Heinz case)', () => {
   });
 
   it('STOPS (reconcilable) if the mapping snapshot changes after reservation, before a quarantine checkpoint', async () => {
-    // Heinz quarantine candidate (unique SKU, ambiguous canonical identity) plus a
-    // clean next product. The fetch of the Heinz URL mutates its same-SKU mapping
-    // (store_product_name) AFTER reservation but BEFORE checkpoint, so the
-    // checkpoint's assertSnapshot must raise mapping_changed and interrupt.
+    // A single Heinz quarantine candidate (unique SKU, ambiguous canonical
+    // identity). The fetch of its URL mutates its same-SKU mapping
+    // (store_product_name, part of the snapshot) AFTER reservation but BEFORE
+    // checkpoint, so the checkpoint's assertSnapshot must raise mapping_changed
+    // and interrupt. Seeding ONLY this product keeps the batch deterministic (a
+    // second product's accept/skip ordering is irrelevant to what this proves).
     const heinz = await seedProduct(264880549, 'Heinz By Nature Chicken Dinner 7+ Months 200g');
-    await seedProduct(264880550, 'Whole Milk 1L');
     const fetcher = vi.fn().mockImplementation(async (u: string) => {
       const sku = Number(u.split('/').pop());
-      if (sku === 264880549) {
-        // Change the mapping evidence mid-flight (part of the snapshot `peers`).
-        await db.query(`update store_products set store_product_name='Changed After Reservation' where id=$1`, [heinz]);
-        return pageWithTitle(sku, 'Heinz Sunday Chicken Dinner Baby Food Jar 200g');
-      }
-      return cleanMilk(sku);
+      // Change the mapping evidence mid-flight (part of the snapshot).
+      await db.query(`update store_products set store_product_name='Changed After Reservation' where id=$1`, [heinz]);
+      return pageWithTitle(sku, 'Heinz Sunday Chicken Dinner Baby Food Jar 200g');
     });
     const result = await run(fetcher) as Record<string, unknown>;
     // The run INTERRUPTS instead of quarantining-and-continuing.
@@ -870,7 +868,7 @@ describe('quarantine-and-continue (PostgreSQL, Heinz case)', () => {
       ['https://www.tesco.ie/shop/en-IE/products/264880549'])).rows[0];
     expect(page.outcome).toBe('pending');
     expect(result.unresolved).toContain('https://www.tesco.ie/shop/en-IE/products/264880549');
-    // No price written for anything (the clean product was never reached).
+    // No price written: the checkpoint aborted before any finalisation.
     expect((await db.query(`select count(*)::int n from price_observations where source='tesco_direct'`)).rows[0]).toEqual({ n: 0 });
     // Resume returns unresolved_attempts and performs no request (reconcilable).
     const resume = await collectTescoSupervised({ mode: 'expansion', resume: String(result.id) }, { execute, sleep, fetchPage: vi.fn() });
