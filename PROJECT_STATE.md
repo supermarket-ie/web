@@ -1,5 +1,51 @@
 # Supermarket.ie — Canonical Project State
 
+## FIX: quarantine_continue re-asserts mapping/acquisition snapshot at checkpoint — 17 October 2026
+
+Narrow correction to the merged quarantine-and-continue (PR #273). BUG: in
+tesco-supervised-collection.ts the final checkpoint re-asserted the mapping +
+acquisition snapshot only when `accepted` —
+`accepted ? assertSnapshot(target) + assertAcquisition(target, runId) : ''`. For a
+`quarantine_continue` disposition this skipped the independent re-check, so the
+underlying mapping or acquisition evidence could change AFTER reservation but
+BEFORE checkpoint without being detected; a quarantine decision could be committed
+against stale evidence.
+
+FIX (one line, reuses the proven accept-path guard): the checkpoint condition is
+now `accepted || isQuarantine ?`. If the mapping/acquisition snapshot changed since
+reservation, assertSnapshot/assertAcquisition raise
+`mapping_changed`/`acquisition_or_peer_changed`, abort the atomic checkpoint DO
+block, and leave the reservation row `pending` → the request is INTERRUPTED and
+fully reconcilable, never continued on stale state. No new quarantine-specific
+assertion was needed. Behaviour preserved exactly for accepted prices (already
+asserted), ordinary holds, transport stops and lost acknowledgements (still not
+asserted, as before). `isQuarantine` is in scope well before the checkpoint.
+
+TESTS 686 pass (65 files; +1): new PGlite integration test "STOPS (reconcilable)
+if the mapping snapshot changes after reservation, before a quarantine checkpoint"
+— seeds a SINGLE Heinz-type quarantine candidate, mutates store_product_name
+mid-fetch, and asserts result=interrupted, the Heinz page row stays `pending`, the
+Heinz URL is in `unresolved`, 0 tesco_direct observations, and resume returns
+`unresolved_attempts`. typecheck:tesco-supervised/discovery/branded clean; lint 0
+errors/22 warnings (baseline); behavioural 16 pass; Next build (CI=true) OK.
+
+MERGED: PR #274 squash-merged after green CI (validate) and a verified no-active-
+supervised-session check (0 of 5 running tesco runs have activeSupervisor; 0 active
+egress leases on gate workspace-supervised-20260929). New main SHA
+**98454ec8dd70b55f67086026a06a5b6dabac25a8**; post-merge CI on main green. Vercel
+commit-status shows "Account is blocked" — expected/known post-migration state
+(production serves from AWS ECS Fargate; Vercel no longer gates), NOT a regression
+from this change. No live Tesco collection run; no AWS Tesco schedule enabled.
+
+FOLLOW-UP (PR #275): the new integration test as first merged seeded TWO products;
+with both expansion-eligible and no peers the batch ordering was a UUID-`id` tie,
+so when the clean product sorted first it was accepted (1 observation) BEFORE the
+Heinz checkpoint interrupted — a latent flake that failed `validate` on #275. Fixed
+by seeding ONLY the Heinz candidate so the batch is deterministic (the interrupt
+path is unchanged; the second product proved nothing). Verified stable over
+repeated runs. The code fix itself was always correct; only the test was
+non-deterministic.
+
 ## FEATURE: product quarantine-and-continue (Heinz case) — 26 October 2026
 
 A 1000-request campaign terminated after 6 requests on one product: Tesco SKU
