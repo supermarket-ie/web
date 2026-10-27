@@ -843,6 +843,40 @@ describe('quarantine-and-continue (PostgreSQL, Heinz case)', () => {
     expect((await db.query(`select count(*)::int n from price_observations where source='tesco_direct'`)).rows[0]).toEqual({ n: 0 });
   });
 
+  it('STOPS (reconcilable) if the mapping snapshot changes after reservation, before a quarantine checkpoint', async () => {
+    // Heinz quarantine candidate (unique SKU, ambiguous canonical identity) plus a
+    // clean next product. The fetch of the Heinz URL mutates its same-SKU mapping
+    // (store_product_name) AFTER reservation but BEFORE checkpoint, so the
+    // checkpoint's assertSnapshot must raise mapping_changed and interrupt.
+    const heinz = await seedProduct(264880549, 'Heinz By Nature Chicken Dinner 7+ Months 200g');
+    await seedProduct(264880550, 'Whole Milk 1L');
+    const fetcher = vi.fn().mockImplementation(async (u: string) => {
+      const sku = Number(u.split('/').pop());
+      if (sku === 264880549) {
+        // Change the mapping evidence mid-flight (part of the snapshot `peers`).
+        await db.query(`update store_products set store_product_name='Changed After Reservation' where id=$1`, [heinz]);
+        return pageWithTitle(sku, 'Heinz Sunday Chicken Dinner Baby Food Jar 200g');
+      }
+      return cleanMilk(sku);
+    });
+    const result = await run(fetcher) as Record<string, unknown>;
+    // The run INTERRUPTS instead of quarantining-and-continuing.
+    expect(result.result).toBe('interrupted');
+    // The Heinz request remains reconcilable: its page row is still 'pending'
+    // (the aborted checkpoint rolled back) -> an unknown-outcome request, not a
+    // silently-skipped quarantine.
+    const page = (await db.query<Record<string, unknown>>(
+      `select outcome from tesco_direct_collection_pages where requested_url=$1`,
+      ['https://www.tesco.ie/shop/en-IE/products/264880549'])).rows[0];
+    expect(page.outcome).toBe('pending');
+    expect(result.unresolved).toContain('https://www.tesco.ie/shop/en-IE/products/264880549');
+    // No price written for anything (the clean product was never reached).
+    expect((await db.query(`select count(*)::int n from price_observations where source='tesco_direct'`)).rows[0]).toEqual({ n: 0 });
+    // Resume returns unresolved_attempts and performs no request (reconcilable).
+    const resume = await collectTescoSupervised({ mode: 'expansion', resume: String(result.id) }, { execute, sleep, fetchPage: vi.fn() });
+    expect((resume as Record<string, unknown>).result).toBe('unresolved_attempts');
+  });
+
   it('a SYSTEMIC reason alongside the ambiguous one still hard-stops (fail-closed)', async () => {
     // A shared-SKU group (material duplicate-canonical) with distinct identities
     // -> material conflict forces stop even though each is also ambiguous.
