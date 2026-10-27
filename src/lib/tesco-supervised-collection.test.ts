@@ -454,29 +454,67 @@ describe('hold-and-continue batch policy (PostgreSQL)', () => {
     expect(page.outcome).toBe('ok');
   });
 
-  it('trips the CONSECUTIVE breaker after 3 holds and stops', async () => {
-    await seedExpansion(6);
-    const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(emeasure(Number(u.split('/').pop()) - 900000)));
+  it('tolerates 3 consecutive ordinary holds and continues (below the raised threshold)', async () => {
+    // 3 holds then 2 accepts: with MAX_CONSECUTIVE_HOLDS=5 this no longer trips the
+    // consecutive breaker, and 3/5=60% hold rate is NOT evaluated (below 10 attempts)
+    // -> the batch COMPLETES. (Under the old limit of 3 this would have stopped.)
+    await seedExpansion(5);
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const n = fetcher.mock.calls.length - 1; // 0-based position
+      const i = Number(u.split('/').pop()) - 900000;
+      return Promise.resolve(n < 3 ? emeasure(i) : eok(i));
+    });
     const result = await runExp(fetcher);
-    expect(result).toMatchObject({ result: 'identity_hold_consecutive_exceeded' });
-    // Exactly 3 attempts before the breaker stops the batch.
-    expect(fetcher).toHaveBeenCalledTimes(3);
-    const runId = String((result as Record<string, unknown>).id);
-    const s = await summary(runId);
-    expect(s.consecutiveHolds).toBe(3);
-    expect(s.stopReason).toBe('identity_hold_consecutive_exceeded');
+    expect(result).toMatchObject({ result: 'complete' });
+    expect(fetcher).toHaveBeenCalledTimes(5);
+    const s = await summary(String((result as Record<string, unknown>).id));
+    expect(s.totalHolds).toBe(3);
   });
 
-  it('resets the consecutive counter on an acceptance (accept between holds)', async () => {
+  it('tolerates 4 consecutive ordinary holds and continues (below the raised threshold)', async () => {
+    // 4 holds then 2 accepts: still below MAX_CONSECUTIVE_HOLDS=5, and 4/6=67% hold
+    // rate is NOT evaluated (6 < 10 attempts) -> COMPLETES.
     await seedExpansion(6);
-    // holds at 2 and 4, accepts elsewhere -> never 3 consecutive -> completes.
     const fetcher = vi.fn().mockImplementation((u: string) => {
+      const n = fetcher.mock.calls.length - 1;
       const i = Number(u.split('/').pop()) - 900000;
-      return Promise.resolve(i === 2 || i === 4 ? emeasure(i) : eok(i));
+      return Promise.resolve(n < 4 ? emeasure(i) : eok(i));
     });
     const result = await runExp(fetcher);
     expect(result).toMatchObject({ result: 'complete' });
     expect(fetcher).toHaveBeenCalledTimes(6);
+    const s = await summary(String((result as Record<string, unknown>).id));
+    expect(s.totalHolds).toBe(4);
+  });
+
+  it('trips the CONSECUTIVE breaker after 5 holds and stops', async () => {
+    await seedExpansion(8);
+    const fetcher = vi.fn().mockImplementation((u: string) => Promise.resolve(emeasure(Number(u.split('/').pop()) - 900000)));
+    const result = await runExp(fetcher);
+    expect(result).toMatchObject({ result: 'identity_hold_consecutive_exceeded' });
+    // Exactly 5 attempts before the breaker stops the batch (rate breaker needs
+    // >=10 attempts, so consecutive fires first).
+    expect(fetcher).toHaveBeenCalledTimes(5);
+    const runId = String((result as Record<string, unknown>).id);
+    const s = await summary(runId);
+    expect(s.consecutiveHolds).toBe(5);
+    expect(s.stopReason).toBe('identity_hold_consecutive_exceeded');
+  });
+
+  it('resets the consecutive counter on an acceptance (accept between holds)', async () => {
+    await seedExpansion(9);
+    // Pattern keyed by fetch order: hold,hold,hold,hold,accept,hold,... -> an accept
+    // at position 5 resets the run of 4 holds, so 5 consecutive is never reached and
+    // the hold rate stays below 10 attempts -> COMPLETES.
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const n = fetcher.mock.calls.length - 1;
+      const i = Number(u.split('/').pop()) - 900000;
+      const hold = n !== 4 && n !== 8; // accept only at positions 4 and 8
+      return Promise.resolve(hold ? emeasure(i) : eok(i));
+    });
+    const result = await runExp(fetcher);
+    expect(result).toMatchObject({ result: 'complete' });
+    expect(fetcher).toHaveBeenCalledTimes(9);
   });
 
   it('trips the RATE breaker above 40% holds after at least 10 attempts', async () => {
@@ -827,7 +865,7 @@ describe('quarantine-and-continue (PostgreSQL, Heinz case)', () => {
 
   it('a long run of quarantines trips the SEPARATE quarantine breaker (not the hold breaker)', async () => {
     // 8 distinct ambiguous-canonical products -> 8 consecutive quarantines ->
-    // quarantine breaker (MAX_CONSECUTIVE_QUARANTINES=8). The hold breaker (3)
+    // quarantine breaker (MAX_CONSECUTIVE_QUARANTINES=8). The hold breaker (5)
     // must NOT be what stops it.
     for (let i = 0; i < 9; i++) await seedProduct(265000000 + i, `Heinz By Nature Variant ${i} 7+ Months 200g`);
     const fetcher = vi.fn().mockImplementation((u: string) => {

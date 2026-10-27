@@ -1,5 +1,48 @@
 # Supermarket.ie — Canonical Project State
 
+## TUNING: ordinary-hold consecutive breaker raised 3 → 5 — 17 October 2026
+
+Supervised campaign f3df7f34-2484-472c-b9a1-925bbfeb892b stopped after 19 requests
+on `identity_hold_consecutive_exceeded` (8 accepted trusted prices, 7 ordinary
+holds, 4 quarantines, 0 new unresolved; the three final holds were ordinary
+formulation / brand-own-label / formulation conflicts). The preceding 71-request
+run stopped on the SAME three-consecutive threshold despite accepting 49 trusted
+prices. Ordinary attribute holds cluster naturally in the catalogue, so a limit of
+3 was throttling otherwise-safe throughput. Fresh Tesco coverage is 77; 509
+unique-SKU candidates remain eligible.
+
+CHANGE (focused, one constant): `MAX_CONSECUTIVE_HOLDS` 3 → 5 in
+tesco-identity-disposition.ts. Everything else UNCHANGED:
+- Ordinary-hold RATE breaker retained: >40% after >=10 attempts
+  (`identity_hold_rate_exceeded`).
+- Separate quarantine breakers retained: 8 consecutive / >60% after 20 attempts
+  (`identity_quarantine_consecutive_exceeded`/`_rate_exceeded`), own axis.
+- All identity acceptance checks, mapping-snapshot assertion (pre-request AND at
+  checkpoint, incl. the quarantine_continue re-assert), shared-SKU exclusions,
+  durable holds (no price for a held product), pacing, cooldowns, leases,
+  idempotency and systemic hard-stops preserved. No rejected product is converted
+  to an accepted observation. Identity verification is NOT weakened; only the
+  tolerance for short isolated clusters of ordinary holds increases.
+
+Counters (consecutiveHolds/totalHolds/attempts) remain persisted in
+scrape_runs.error_summary and re-seeded on resume, so interruption/resume cannot
+reset or bypass the breaker; an acceptance still resets the consecutive counter.
+
+TESTS 690 pass (65 files; +4 net): disposition unit breaker now proves 3 and 4
+consecutive CONTINUE and 5 STOPS, consecutive-takes-precedence and
+quarantine-independence updated to the new threshold; supervised PGlite tests add
+"tolerates 3 consecutive" + "tolerates 4 consecutive" (complete), "trips after 5
+holds" (stops at the 5th), rate breaker still trips, resume keeps counters durable;
+campaign tests add a CONSECUTIVE-threshold stop and a RATE-threshold stop each
+reported distinctly (stoppedSystemic=true, quarantinedProducts=0), distinct from an
+identity_validation_anomaly or quarantine stop. typecheck:tesco-supervised/
+discovery/branded clean; lint 0 errors/22 warnings; behavioural 16; Next build
+(CI=true) OK. docs/tesco-recovery-plan.md updated (new breaker section + date). No
+live Tesco collection run; no AWS Tesco schedule enabled.
+
+MERGED: <SHA + PR filled in after merge> — green CI (validate) + verified no active
+supervised session.
+
 ## FIX: quarantine_continue re-asserts mapping/acquisition snapshot at checkpoint — 17 October 2026
 
 Narrow correction to the merged quarantine-and-continue (PR #273). BUG: in

@@ -71,14 +71,18 @@ describe('classifyIdentityOutcome — stop (systemic / ambiguous / fail-closed)'
   });
 });
 
-describe('holdCircuitTripped — consecutive breaker (3)', () => {
+describe('holdCircuitTripped — consecutive breaker (5)', () => {
   it('trips at exactly MAX_CONSECUTIVE_HOLDS consecutive holds', () => {
-    expect(MAX_CONSECUTIVE_HOLDS).toBe(3);
-    expect(holdCircuitTripped(2, 2, 2)).toBe(false);
-    expect(holdCircuitTripped(3, 3, 3)).toBe('consecutive');
+    expect(MAX_CONSECUTIVE_HOLDS).toBe(5);
+    // 3 and 4 consecutive ordinary holds are now TOLERATED (continue).
+    expect(holdCircuitTripped(3, 3, 3)).toBe(false);
+    expect(holdCircuitTripped(4, 4, 4)).toBe(false);
+    // 5 consecutive stops.
+    expect(holdCircuitTripped(5, 5, 5)).toBe('consecutive');
   });
-  it('does not trip on consecutive<3 even with holds present', () => {
+  it('does not trip on consecutive<5 even with holds present (below rate min attempts)', () => {
     expect(holdCircuitTripped(1, 5, 9)).toBe(false);
+    expect(holdCircuitTripped(4, 4, 9)).toBe(false);
   });
 });
 
@@ -100,7 +104,8 @@ describe('holdCircuitTripped — rate breaker (40% after 10 attempts)', () => {
     expect(holdCircuitTripped(2, 7, 15)).toBe('rate');
   });
   it('consecutive breaker takes precedence when both would trip', () => {
-    expect(holdCircuitTripped(3, 9, 12)).toBe('consecutive');
+    // 5 consecutive AND 9/12=75% rate both qualify -> consecutive reported.
+    expect(holdCircuitTripped(5, 9, 12)).toBe('consecutive');
   });
 });
 
@@ -176,9 +181,9 @@ describe('quarantineCircuitTripped — separate axis from ordinary holds', () =>
     expect(quarantineCircuitTripped(2, 13, 20)).toBe('rate');       // 65% > 60%
   });
   it('is independent of the ordinary-hold breaker thresholds (more tolerant)', () => {
-    // 4 consecutive quarantines would trip the HOLD breaker (3) but NOT the
+    // 6 consecutive quarantines would trip the HOLD breaker (5) but NOT the
     // quarantine breaker (8) — proving they are counted on separate axes.
-    expect(holdCircuitTripped(4, 4, 4)).toBe('consecutive');
-    expect(quarantineCircuitTripped(4, 4, 4)).toBe(false);
+    expect(holdCircuitTripped(6, 6, 6)).toBe('consecutive');
+    expect(quarantineCircuitTripped(6, 6, 6)).toBe(false);
   });
 });

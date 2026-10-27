@@ -1,7 +1,8 @@
 # Tesco trusted-coverage recovery & renewal-continuity plan
 
-Last updated: 25 October 2026. Operational plan only — no Tesco requests, no
-hold changes, no pending-record closure, no schedules, no infrastructure.
+Last updated: 17 October 2026 (ordinary-hold consecutive breaker raised 3 → 5).
+Operational plan only — no Tesco requests, no hold changes, no pending-record
+closure, no schedules, no infrastructure.
 
 ## 0. Why coverage lapsed (confirmed, uncapped evidence)
 
@@ -261,6 +262,24 @@ material duplicate-SKU conflicts still HARD-STOP. A separate quarantine circuit
 breaker (8 consecutive, or >60% after 20 attempts) stops the campaign if
 quarantines become pervasive (a bad cohort signal). Quarantined products are
 reported for review, not collected.
+
+### Ordinary-hold circuit breaker (consecutive threshold raised 3 → 5)
+
+An ordinary product-level mismatch (measure/pack/brand/variant/formulation/
+own-label etc.) is HELD (no price written) and the campaign continues. Two bounded
+breakers still protect against a genuinely bad cohort: **5 consecutive** ordinary
+holds (`identity_hold_consecutive_exceeded`), OR a hold **rate above 40% after at
+least 10 attempts** (`identity_hold_rate_exceeded`). The consecutive limit was
+raised from 3 to 5 because ordinary attribute holds cluster naturally in the
+catalogue and a limit of 3 stopped otherwise-safe runs prematurely (e.g. a
+71-request run that had accepted 49 trusted prices). An acceptance resets the
+consecutive counter; `totalHolds`/`attempts` are cumulative and all counters are
+persisted in `scrape_runs.error_summary` and re-seeded on resume, so
+interruption/resume cannot reset or bypass the breaker. The rate breaker is
+UNCHANGED — identity verification is not weakened; only tolerance for short,
+isolated clusters of ordinary holds increased. The campaign report surfaces each
+stop reason distinctly (consecutive vs rate vs quarantine vs systemic anomaly),
+all flagged `stoppedSystemic`.
 
 ## 6. Scope boundary
 
