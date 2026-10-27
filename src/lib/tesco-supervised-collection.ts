@@ -394,7 +394,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       await execute(`do $runner$ begin ${owned(runId, owner, !!pauseUntil)}
         if exists(select 1 from tesco_direct_collection_pages where run_id=${uuid(runId)}
           and requested_url=${literal(target.store_url)} and outcome='pending') then
-          ${accepted ? assertSnapshot(target) + assertAcquisition(target, runId) : ''}
+          ${accepted || isQuarantine ? assertSnapshot(target) + assertAcquisition(target, runId) : ''}
           update tesco_direct_collection_pages set final_url=${literal(response.finalUrl)},outcome=${literal(outcome)},
             http_status=${literal(response.status)}::int,retry_after=${literal(response.retryAfter)},elapsed_ms=${literal(response.elapsedMs)}::int,
             body_sha256=${literal(createHash('sha256').update(response.html).digest('hex'))},parsed=${literal(parsed)}::jsonb,
