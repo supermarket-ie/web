@@ -118,15 +118,21 @@ export function classifyIdentityOutcome(
 }
 
 /**
- * Circuit-breaker bounds (review refinement 3):
+ * Circuit-breaker bounds (review refinement 3; consecutive threshold raised
+ * 3 -> 5 after supervised campaigns showed ordinary attribute holds cluster
+ * naturally in the catalogue and a limit of 3 was stopping otherwise-safe
+ * throughput prematurely — e.g. a 71-request run that had accepted 49 trusted
+ * prices still stopped on three consecutive ordinary holds):
  *  - stop after this many CONSECUTIVE product-level identity holds, and
  *  - stop once the batch-wide hold RATE exceeds the threshold after a minimum
  *    number of attempts.
  * An acceptance resets the consecutive counter; the rate is cumulative over the
  * run and (together with the consecutive counter) is persisted in run state so
- * interruption/resume cannot reset or bypass it.
+ * interruption/resume cannot reset or bypass it. The rate breaker (>40% after
+ * >=10 attempts) is UNCHANGED, so a genuinely bad cohort still trips quickly;
+ * only the tolerance for short, isolated clusters of ordinary holds increases.
  */
-export const MAX_CONSECUTIVE_HOLDS = 3;
+export const MAX_CONSECUTIVE_HOLDS = 5;
 export const HOLD_RATE_MIN_ATTEMPTS = 10;
 export const HOLD_RATE_THRESHOLD = 0.4;
 

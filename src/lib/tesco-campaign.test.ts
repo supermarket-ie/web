@@ -147,6 +147,42 @@ describe('Tesco recovery campaign (PGlite)', () => {
     expect(report.acceptedPrices).toBe(3); // 3 accepted, 1 held
   });
 
+  it('reports a CONSECUTIVE-hold-threshold stop distinctly from other systemic stops', async () => {
+    // 5 unique products, all ordinary measure mismatches -> 5 consecutive holds
+    // trips the (raised) consecutive breaker. The campaign report must surface
+    // this as its own stoppedReason, flagged systemic, distinct from an identity
+    // validation anomaly or a quarantine stop.
+    for (let i = 0; i < 6; i++) await seedUnique(995100 + i);
+    const fetcher = vi.fn().mockImplementation((u: string) =>
+      Promise.resolve(okPage(u.split('/').pop()!, 'Tesco Whole Milk 2L', 'l', 2)));
+    const report = await runTescoRecoveryCampaign({ mode: 'expansion', requestBudget: 1000, maxPerRun: 100 }, deps(fetcher));
+    expect(report.stoppedReason).toBe('identity_hold_consecutive_exceeded');
+    expect(report.stoppedSystemic).toBe(true);
+    expect(report.acceptedPrices).toBe(0);
+    expect(report.ordinaryHolds).toBe(5);         // 5 holds recorded before the stop
+    expect(report.quarantinedProducts).toBe(0);   // distinct from a quarantine stop
+    expect(fetcher).toHaveBeenCalledTimes(5);      // stopped at the 5th consecutive hold
+  });
+
+  it('reports a hold-RATE-threshold stop distinctly from the consecutive stop', async () => {
+    // hold,hold,accept repeating keeps consecutive <= 2 (never trips the
+    // consecutive breaker) but drives the hold rate above 40% after >=10 attempts
+    // -> identity_hold_rate_exceeded, a DISTINCT stoppedReason.
+    for (let i = 0; i < 14; i++) await seedUnique(995200 + i);
+    const pattern = [true, true, false]; // hold, hold, accept
+    const fetcher = vi.fn().mockImplementation((u: string) => {
+      const sku = u.split('/').pop()!;
+      const n = fetcher.mock.calls.length - 1;
+      return Promise.resolve(pattern[n % 3]
+        ? okPage(sku, 'Tesco Whole Milk 2L', 'l', 2)
+        : okPage(sku));
+    });
+    const report = await runTescoRecoveryCampaign({ mode: 'expansion', requestBudget: 1000, maxPerRun: 100 }, deps(fetcher));
+    expect(report.stoppedReason).toBe('identity_hold_rate_exceeded');
+    expect(report.stoppedSystemic).toBe(true);
+    expect(report.quarantinedProducts).toBe(0);
+  });
+
   it('STOPS the campaign on a systemic/terminal run and does not continue', async () => {
     for (let i = 0; i < 4; i++) await seedUnique(990000 + i);
     // Every product returns a page whose structured SKU differs (missing exact) ->
