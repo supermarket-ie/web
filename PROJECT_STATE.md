@@ -1,5 +1,61 @@
 # Supermarket.ie — Canonical Project State
 
+## HOUSEKEEPING: Vercel decommissioned from CI/CD + repo; AWS is authoritative — 28 October 2026
+
+Infrastructure/CI housekeeping (separate from Tesco collector work). No
+production deploy or service restart; read-only AWS + GitHub verification only.
+
+PRODUCTION ARCHITECTURE (verified live, read-only): AWS eu-west-1 account
+611622961299. Website+Eve on ECS Fargate `smie-prod-svc` (2/2) on cluster
+`smie-prod-cluster` behind ALB `smie-prod-alb` (active); SQS consumer
+`smie-prod-sqs-consumer` (1/1); ECR repo `smie-prod`; `QUEUE_BACKEND=sqs` on both
+services. `www.supermarket.ie` → ALB (HTTP/2 200, x-powered-by Next.js), apex →
+301 via awselb/2.0; apex static IPs 166.117.14.195 / 166.117.236.132 (Global
+Accelerator). No Vercel on the customer path or DNS. Authoritative reference now
+in `docs/aws-production.md`.
+
+RELEASE GATE (verified): the only required check on `main` is the GitHub Actions
+**`validate`** job, enforced by the repository RULESET "Protect main" (id
+22401766, active): squash-only merges, review-thread resolution, `validate`
+required (integration_id 15368 = GitHub Actions), non-fast-forward + deletion
+protection. Vercel is NOT a required check — the `vercel[bot]` "Account is
+blocked" commit status is cosmetic and never gated merges. The ruleset was left
+UNCHANGED (not weakened) — confirming this was an explicit task constraint.
+
+REMOVED from the repo (demonstrably unused; no AWS/build impact): `vercel.json`
+(Vercel-only deploy directives — `dub1` region + per-route maxDuration; not read
+by the Docker/standalone build, irrelevant on ECS) and `public/vercel.svg`
+(unused Next template asset). Stale "Vercel" comment in next.config.ts corrected;
+`docs/vercel-independence.md` banner-marked HISTORICAL/superseded.
+
+RETAINED (still wired — removal would be a behavioural change, not housekeeping):
+`@vercel/queue` dependency + the `vercel` branch of the queue facade
+(src/lib/queue/index.ts). Inert in production (only `await import()`-ed when
+QUEUE_BACKEND=vercel; prod is sqs), kept as a code-level fallback. Flagged for
+optional future removal with that branch.
+
+AGENTS.md UPDATED: added an explicit "Production platform: AWS (Vercel is
+decommissioned)" section; the old instruction to "verify Vercel production" now
+says verify the AWS ECS/ALB services, and tells future sessions to ignore any
+`vercel[bot]` status and treat `validate` as the sole production gate.
+
+ACCOUNT-LEVEL CLEANUP STILL REQUIRED (manual — NOT possible from the repo or the
+CI token): the `vercel[bot]` GitHub commit statuses + Deployment objects come
+from the Vercel GitHub App integration still linked to this repo at the
+`supermarket-ie` ACCOUNT level (the repo has NO webhooks; this is the App, not a
+workflow). Stop it by EITHER (a) Vercel dashboard → project → Settings → Git →
+Disconnect the GitHub repo (and optionally delete/pause the project), OR (b)
+GitHub account Settings → Applications → Installed GitHub Apps → Vercel → remove
+access to supermarket-ie/web. Until then the Vercel status is expected/harmless.
+Neither CI nor the current token has the app-management / Vercel-dashboard access
+to do this automatically.
+
+VERIFICATION: neither AWS deploy workflow auto-deploys — `aws-ecr-deploy-image.yml`
+is workflow_dispatch-only (gated on the `aws-prod` environment) and only pushes an
+ECR image (ECS rollout is a separate manual `terraform apply`);
+`aws-preview-build.yml` is build/validate-only. So this cleanup cannot trigger an
+AWS deployment. Full CI gate re-run green after the changes (see this PR).
+
 ## TUNING: ordinary-hold consecutive breaker raised 3 → 5 — 17 October 2026
 
 Supervised campaign f3df7f34-2484-472c-b9a1-925bbfeb892b stopped after 19 requests
@@ -40,8 +96,11 @@ discovery/branded clean; lint 0 errors/22 warnings; behavioural 16; Next build
 (CI=true) OK. docs/tesco-recovery-plan.md updated (new breaker section + date). No
 live Tesco collection run; no AWS Tesco schedule enabled.
 
-MERGED: <SHA + PR filled in after merge> — green CI (validate) + verified no active
-supervised session.
+MERGED: PR #276, squash-merged to main as
+**815355cbb53cb418c3a2db26e972b1627c7e10b9** — green CI (validate) + verified no
+active supervised session (0 of 5 running tesco runs with activeSupervisor; 0
+active egress leases). Post-merge CI on main green. The production-approved
+collector now uses MAX_CONSECUTIVE_HOLDS=5; all other protections unchanged.
 
 ## FIX: quarantine_continue re-asserts mapping/acquisition snapshot at checkpoint — 17 October 2026
 

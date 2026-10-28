@@ -1,9 +1,23 @@
 # Supermarket.ie — Vercel independence & emergency continuity
 
-Operational-continuity plan for a possible Vercel account suspension. Covers:
-what breaks on suspension (Priority 1), the fastest path to AWS (Priority 2),
-AWS replacements for Vercel background services (Priority 3), and
-Vercel-independent disaster recovery (Priority 4).
+> **HISTORICAL (superseded 28 October 2026).** The Vercel → AWS migration is
+> complete: production now runs entirely on AWS ECS Fargate behind the
+> `smie-prod-alb` ALB, with EventBridge Scheduler (crons) and SQS + an SQS
+> consumer service (queues). `www` and the apex resolve to AWS; Vercel is NOT on
+> the customer path, is NOT a deploy target, and is NOT a release gate. See
+> `PROJECT_STATE.md` and `docs/aws-production.md` for the authoritative current
+> architecture and deploy process.
+>
+> This document is retained for its disaster-recovery reasoning (what lived where
+> before cutover, and the AWS-only recovery path, which remains valid). References
+> to "Vercel is live / rollback to Vercel" are OBSOLETE — there is no Vercel
+> rollback; recovery is a prior ECR image + S3 Terraform state (Priority 4 below,
+> which is already AWS-only).
+
+Operational-continuity plan originally written for a possible Vercel account
+suspension during migration. Covers: what broke on suspension (Priority 1), the
+fastest path to AWS (Priority 2), AWS replacements for Vercel background services
+(Priority 3), and Vercel-independent disaster recovery (Priority 4).
 
 Guardrails: no production DNS change, no merge to main, no disabling Vercel
 workers, no duplicate jobs, and no billable AWS provisioning until approved.

@@ -40,6 +40,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-// Eve mounts the durable shopping agent at /eve/v1/* while preserving the
-// existing Next.js application and Vercel project as a single deployment.
+// Eve mounts the durable shopping agent at /eve/v1/*. In production the Next.js
+// app and the Eve server run as two processes inside one AWS ECS container (see
+// Dockerfile + docker-entrypoint.sh); withEve rewrites /eve/v1/* to the Eve
+// process. Production is AWS ECS/ALB — there is no Vercel deployment.
 export default withEve(nextConfig);
