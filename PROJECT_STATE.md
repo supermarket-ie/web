@@ -1,5 +1,71 @@
 # Supermarket.ie — Canonical Project State
 
+## PILOT (approved; discovery-only code + runner + 50-product report) — Tesco mapping recovery — 30 October 2026
+
+Approved 50-product discovery + identity-verification pilot. Built the
+discovery-ONLY code (no mapping/price/hold changes), addressing the three review
+improvements. Report: `docs/tesco-mapping-recovery-pilot-report.md`. No production
+data changed; no live discovery launched here.
+
+IMPROVEMENT 1 — REPRESENTATIVE sampling (was alphabetical): `pilotCohortSql` now
+returns the FULL both-peer held set; `selectRepresentativeSample` round-robins
+across every identity-failure defect category and prioritises likely recoveries
+(recoverability high>medium>low, then both-peers) within each — so the 50 cover
+all failure modes, not 50 of the biggest bucket.
+
+IMPROVEMENT 2 — TWO-TIER verification: `classifySearchCandidates` →
+`search_matched_unverified` (a Pepesto-search proposal); `verifyAgainstLivePage` →
+`exact_verified` ONLY after a FRESH Tesco product-page corroboration via
+`validateTescoCollectedIdentity` (live SKU/brand/quantity/pack/variant/
+formulation). Search-only matches are never "fully verified" and never a price.
+
+IMPROVEMENT 3 — COMPLETE runner: `runDiscoveryPilot` (DI, unit-tested) does per
+product search→classify→persist evidence→optional tier-2 live check→cost tracking→
+per-product report; stops on access/execution failure (no relaxed matching); has
+NO finalise/price-write hook by construction (structural guarantee).
+
+COHORT (read-only prod validation): 476 qualify (139 both-peers / 337 one-peer);
+pilot samples 50 across defect categories, all both-peers → up to 50 potential NEW
+three-retailer comparisons. Live evidence: most are the Tesco SKU resolving to a
+genuinely different SIZE/VARIANT (needs rediscovery, NOT a canonical rename); a few
+(Broccoli, Cucumber) are correct-mapping/generic-name.
+
+OPERABILITY: Pepesto discovery path works (prior runs classified 48 candidates:
+26 material_mismatch / 12 ambiguous / 10 exact; ~12c/product → ≈€6 for 50). Prior
+run-level 'failed' = coverage threshold, not access failure.
+
+PENDING: authoritative 6 pending = the 6 historical unresolved; the cohort
+excludes all 6; never retries/closes them.
+
+BOUNDARY (unchanged): `finalize_tesco_candidate_discovery` must NOT be generalised
+to apply corrections+trusted-prices as-is. A correction-ONLY pathway (apply
+approved SKU/URL with audit trail, NO price) + fresh live re-verification is a
+SEPARATE later release, gated on the live pilot's yield. No canonical overwrite,
+no cleared holds, no retried unknowns, no price without exact identity
+verification, no AWS direct Tesco assumption.
+
+RENEWALS (separate + urgent): the 323 trusted prices renew via the proven ChatGPT
+Work supervised renewal path ONLY, kept fully separate from discovery. Status
+(read-only, 29 Oct ~21:46 UTC): 323 fresh; 7 now due (≥4d); 0 expiring <24h;
+soonest expiry 2026-11-01 ~20:00 UTC. Run a supervised renewal session as the
+window opens to protect the 323.
+
+FOLLOW-UP (same PR #285): (a) TITLE/QUANTITY fix — Pepesto returns US
+`milliliters` (3/48 persisted candidates) but validators read UK `millilitres`,
+so ml products had NO extractable volume and bypassed the measure check; new pure
+`pepestoStructuredQuantity` (`src/lib/pepesto-quantity.ts`) accepts both spellings
+(+litres/kg) and is used by the retrieve worker and the pilot runner. (b) runner
+now ENFORCES a 50-request hard cap (`PILOT_MAX_REQUESTS`), CHECKPOINTS per product
+(resume without re-spend), and reports cost from the credit delta. (c) cohort SQL
+validated vs prod: 139 both-peer, 0 pending leak. (d) DRY RUN demonstrated (unit
+test): fully-stubbed run, 0 cost, 0 mutations, complete report. Tier-2 fresh
+Tesco-page verification wired ONLY via the authorised supervised collection
+environment (omitted otherwise). Live discovery still STOPS for approval before
+any credit spend.
+
+GATE: 742 tests, lint 0 errors/22 warnings, typecheck clean (new files in
+tsconfig.tesco-supervised), behavioural 16, build OK.
+
 ## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
 
 Read-only investigation (SELECT-only against prod Supabase via the service key
