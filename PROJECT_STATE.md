@@ -1,5 +1,43 @@
 # Supermarket.ie — Canonical Project State
 
+## OPERATION: Dunnes Mon/Thu EventBridge schedule RE-ENABLED — 29 October 2026
+
+Authorised re-enable of `smie-prod-dunnes-scrape-trigger` after the one-off
+catch-up succeeded on the identical AWS path. Only the schedule's STATE changed
+(DISABLED → ENABLED); no scraper, matching, provenance, task def, networking or
+SQS routing change.
+
+VERIFIED IDENTICAL to the successful one-off run before enabling: task def
+`smie-prod-scheduled:3` (FARGATE), cluster `smie-prod-cluster`, role
+`smie-prod-scheduler`, subnets subnet-0ff02da22ebe91794 + subnet-07c3dc58ad255b5bc,
+SG sg-0f382e9d266cbb4dc, AssignPublicIp ENABLED, container override
+`CRON_JOB=dunnes-scrape-trigger`. Env on the task (DUNNES_VERCEL_WORKER_ENABLED=
+true, DISABLE_RETAILER_COLLECTION=false, SUPABASE_READ_ONLY=false, QUEUE_BACKEND=
+sqs, APP_ENV=production) and the SQS consumer polling `dunnes-scrape-batches` are
+unchanged. Preflight: no active Dunnes scrape run (the lone 22-Aug
+`discovery`-scope running row holds no lock), Dunnes queue+DLQ empty.
+
+RESULT (verified): state ENABLED (LastModified 2026-10-29T10:38:06Z), cron
+`cron(10 5 ? * MON,THU *)` UTC → **next run Mon 2 Nov 2026 05:10 UTC**, then Thu
+5 Nov, continuing Mon/Thu. SuperValu schedule still ENABLED, Tesco
+(`pepesto-tesco-retrieve`) still DISABLED — both UNAFFECTED. Continuity: the one-off
+catch-up's 857 fresh Dunnes prices expire ~5 Nov; the 2 Nov run precedes that, so
+coverage stays continuous.
+
+IaC / DRIFT NOTE (action for whoever runs terraform): the schedule state is
+Terraform-managed via `state = contains(var.enabled_schedules, key) ? ENABLED :
+worker_schedule_state(DISABLED)`. `infra/terraform/terraform.tfvars` is
+GITIGNORED (not version-controlled), so enablement state does not live in the
+repo. I updated the LOCAL tfvars to add `dunnes-scrape-trigger` to
+`enabled_schedules`, and set the LIVE state to ENABLED via
+`aws scheduler update-schedule` so it is active now. A future `terraform apply`
+run from any tfvars that does NOT include `dunnes-scrape-trigger` in
+`enabled_schedules` would REVERT the schedule to DISABLED. The canonical tfvars
+used for applies must include it to keep live state and IaC consistent.
+
+The permanent re-enable does NOT resolve the underlying ~14% `no_confident_match`
+matching tail (investigated separately); matching thresholds are unchanged.
+
 ## HOUSEKEEPING: Vercel decommissioned from CI/CD + repo; AWS is authoritative — 28 October 2026
 
 Infrastructure/CI housekeeping (separate from Tesco collector work). No
