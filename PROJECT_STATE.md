@@ -1,5 +1,82 @@
 # Supermarket.ie — Canonical Project State
 
+## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
+
+Read-only investigation (SELECT-only against prod Supabase via the service key
+from Secrets Manager; no mutation, no collection, no schedule change, no mapping
+edit). Figures from uncapped, paginated reads.
+
+CAMPAIGN (5 expansion runs, 28 Oct 07:07–09:41 UTC): 421 requests, 246 trusted
+prices recovered (success receipts 51+70+62+60+3). Runs 1–4 completed 100 each;
+run 5 `5394fe7b-1b75-41dd-9891-fb3c4d27eade` stopped after 21 on
+`identity_quarantine_rate_exceeded` (13/21 = 62% quarantine, >60% after ≥20). All
+five runs reconcile clean: reserved=completed, **0 pending**, activeSupervisor
+null, leases expired. No new unresolved requests created; the 6 historical pending
++ orphaned `a502af52` run from the §2 runbook are untouched and preserved. A later
+`6fef1810` run (28 Oct 19:36) stopped on `identity_hold_rate_exceeded` (7 holds /
+17) — same tail-of-cohort pattern, not in the 421 campaign.
+
+RELIABILITY TREND (accept% / quarantine%): run1 51/15, run2 70/14, run3 62/6,
+run4 60/24, run5 14/62. Acceptance is STABLE across runs 1–4 (no monotonic
+decline); run 5 is a LOCALISED low-quality cluster at the overlap-poor tail, not
+gradual degradation. The breaker worked as intended.
+
+RUN-5 QUARANTINES (13, all reason `candidate does not establish full exact
+canonical identity`; all product-confined: clean ok page, requested SKU found,
+unique SKU, no price written — none indicate access/systemic problems). Root
+cause is mostly STORED-CANONICAL-METADATA deficiency, not a live mismatch:
+- Canonical too generic / missing brand / typo / extra word (mapping likely
+  correct, name can't PROVE identity): 250220748 Clonakilty "Chubb"→"Chub";
+  250830769 "Strong White Bread Flour"→Odlums 2Kg; 252408242 extra "Chunky";
+  252681688 "Regular"→"In Tomato Sauce"; 253225519 Dentastix phrasing;
+  283197863 missing "John West"; 305432039 Jumbone phrasing; 320559610 "Floor".
+- Genuine product mismatch (mapping suspect): 304126185 "Beer Battered Chips"→
+  live Donegal Catch Beer Battered COD; 315955603 "Green Sliced Jalapeños"→live
+  Green Isle Sliced GREEN BEANS; 318184067 Colgate "Bluey 3+Years"→live "Total
+  Active Prevention 7-12 Years"; and measure/pack mismatches 277662327 (7 pack
+  Thickcut vs 10 Cap Unsmoked), 313599590 (12 pack vs 40x85g). The quarantine
+  (durable hold, no price) is the correct outcome for all 13.
+
+ELIGIBILITY (uncapped, mirrors selectSupervisedCandidates gates): 2,461 tesco
+mappings. Expansion universe (resolved+proven+canonical URL+no fresh price) =
+1,077 unique URLs, of which: **71 non-shared ELIGIBLE now**, 92 shared-SKU
+deferred, 40 pending/historical-failure held, 874 identity-flagged held (durable
+holds from prior rejections/quarantines — correctly protected). The <24h cooldown
+is NOT the limiter (durable view = 71). CRUCIALLY all 71 remaining eligible have
+**overlap=0** (no Dunnes/SuperValu peer) — the overlap-desc ordering already
+consumed every high-overlap candidate, so further expansion adds Tesco-ONLY
+coverage, not new three-retailer triples.
+
+COMMERCIAL OUTCOME: current fresh Tesco = 323; **170 genuine three-retailer
+triples** (tesco+supervalu+dunnes), 147 tesco+1, 6 tesco-only. The campaign
+materially grew triples.
+
+RENEWAL (7-day trusted window; DUE at ≥4 days old): renewalDue right now = **0**
+(all 323 fresh prices are <4 days old — recovered today). Soonest expiry
+2026-11-01T~20:00Z, latest 2026-11-04T~09:40Z. So the renewal window opens
+~1 Nov; the first meaningful renewal tranche is ~1–4 Nov. Renewing is
+append-only and idempotent: `--mode renewal` selects `observed_at ≤ now-4d`,
+orders oldest-first, re-asserts the fresh-observation `duePredicate` under lock
+at finalisation (a price refreshed since selection raises `observation_changed`),
+and honours all historical holds via the same `held` predicate — so renewing the
+246 just-recovered prices is safe and will not double-write or regress holds.
+Renewal shares the identical safeguards (exact identity, snapshot assertion,
+pacing, lease/cooldown, idempotency, circuit breakers).
+
+RECOMMENDATIONS (evidence-based; NOT auto-applied; breakers NOT changed):
+1. Fix the stored CANONICAL NAMES for the ~8 metadata-deficient quarantines
+   (add brand/size, remove stray words) — a data-quality edit, reviewed
+   separately; would convert several future quarantines into accepts WITHOUT
+   weakening validation. The ~5 genuine mismatches need mapping review, not a
+   name fix.
+2. Expansion is near exhaustion for triple-building: the 71 remaining are all
+   overlap=0. Prioritise RENEWAL from ~1 Nov to RETAIN the 170 triples +246
+   prices over chasing low-value expansion. Consider an optional
+   overlap-threshold filter so expansion batches skip overlap=0 candidates when
+   the commercial goal is triples (selection-only, no mapping/validation change).
+3. Implement the §3 renewal-continuity report/alert so the ~1 Nov window is not
+   missed (the original lapse cause).
+
 ## HOUSEKEEPING: Vercel decommissioned from CI/CD + repo; AWS is authoritative — 28 October 2026
 
 Infrastructure/CI housekeeping (separate from Tesco collector work). No
