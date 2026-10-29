@@ -1,5 +1,76 @@
 # Supermarket.ie — Canonical Project State
 
+## PLAN (revised): Tesco mapping-recovery pilot — 30 October 2026
+
+Read-only investigation + REVISED recovery plan after review of PR #284 (full
+details in `docs/tesco-mapping-recovery-plan.md`). No data/code change; 323
+protected by renewal; Tesco renewals out of scope.
+
+REVISIONS vs the first draft: (a) REMOVED the "45–50 of the last 57 eligible"
+projection — recent expansion results don't support it; the 57 are listed with no
+yield claim. (b) Canonical-name enrichment is NO LONGER the default. (c) Corrected
+pending count 4 → 6.
+
+BACKLOG (2,461 mappings, 1 canonical each; 685 duplicate shared-SKU): 323 fresh;
+870 unproven; 813 held-on-identity-reason; 313 shared-SKU deferred; 81 url-failed
+(80 audit-invalidated); 57 eligible-never-attempted; 6 pending (preserve).
+
+PILOT COHORT: 143 held, unique-SKU canonicals with FRESH Dunnes AND SuperValu
+prices (502 have ≥1 peer) — each recovered Tesco price is an instant 3-retailer
+triple. Top-50 ranked (easiest first) in the doc with live evidence. Reason mix
+of the 143: measureExactnessFailed 52, "full exact canonical identity" 37,
+measureConflict 14, brandConflict 13, unavailable 10 (not recoverable),
+formulation 7, pack 5, missing 4, transport 9, ownLabel 2, variant 1.
+
+KEY EVIDENCE FINDING (reshapes the fix): most held both-peer cases are NOT
+"master name too generic". The live Tesco title usually MATCHES the stored
+mapping but (i) the stored retailer descriptor lacks the size the live page has
+(fix = validate against LIVE title+quantity or a retailer-scoped accepted
+descriptor, NOT a master-canonical edit), or (ii) the Tesco SKU is a genuinely
+different pack size/variant/brand than the canonical (fix = REDISCOVER the correct
+SKU; renaming the master would corrupt cross-retailer joins). Only ~13/143 are
+truly generic-name-with-correct-mapping. So canonical-name enrichment is a
+last-resort minority route, not the default.
+
+RPC SAFETY AUDIT (req 5): `finalize_tesco_candidate_discovery` safely corrects
+SKU/URL ONLY for `url_status='failed' + url_last_error like 'tesco_mapping_audit:%'`
+rows, one distinct exact candidate, with an audit trail; cannot touch
+resolved/accepted mappings or the master canonical. GAP: it writes a TRUSTED price
+from the discovery (pepesto_search) candidate with NO fresh live re-verification.
+Generalising scope is safe ONLY with (1) a correction-ONLY mode (apply SKU/URL, no
+price) so the corrected mapping re-enters the supervised collector for fresh live
+verification before any trusted price, and (2) keeping the reviewed-invalidation
+marker guard so discovery never runs on a resolved/accepted mapping. No hold
+bypass (RPC doesn't touch collection-page rows; cohort excludes the 6 pending).
+
+PENDING RECONCILIATION (req 6): authoritative live count is 6 pending
+tesco_direct_collection_pages = the 6 historical runbook unresolved (285859740,
+308853589, 314109029, 317854748, 311944507 + Glenisk search). PR #284's "4" was an
+eligibility-gated reporting artifact. 3 of those SKUs also have later `ok` rows
+(separate attempts) but the original pending rows stay preserved. Orphaned
+a502af52 + 4 ancient pepesto_tesco_eval runs remain. Cohort selection excludes all
+6; never retries/closes them.
+
+PILOT (req 7): 50 high-value canonicals, DISCOVERY + identity-verification ONLY —
+no automatic mapping updates, no trusted-price writes, no cleared holds, 6 pending
+excluded. Stages: select 50 → one Pepesto single-query each → persist candidates +
+deterministic classifyTescoReplacement classification → classify
+confirmed_equivalent/plausible/genuine_mismatch/none → operator review report.
+Corrections (correction-only RPC) + re-collection happen only post-approval,
+separately.
+
+METRICS (req 8): candidates_discovered, exact_verified, corrections_approved,
+trusted_prices_recovered (0 in discovery-only pilot), new_three_retailer_
+comparisons, errors, cost_per_accepted_price. Baseline exact rate ~28% (10/36
+historically).
+
+ENGINEERING FOR PILOT (req 9): (1) read-only `selectHeldTescoRecoveryCandidates`
+cohort selector (peer-ranked, excludes pending/shared-SKU; no hard-wired audit
+batch); (2) correction-only mode in the finalisation RPC (SKU/URL + audit trail,
+NO price write); (3) guarded-SQL reviewed-invalidation batch for the genuinely-
+wrong subset only; (4) unit tests; (5) NO change to products table, held
+predicate, renewal, breakers, or the collector's live-verification gate.
+
 ## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
 
 Read-only investigation (SELECT-only against prod Supabase via the service key
