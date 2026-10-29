@@ -1,5 +1,53 @@
 # Supermarket.ie — Canonical Project State
 
+## OPERATION: durable schedule config + retailer-refresh alerting — 30 October 2026
+
+Two operational hardening changes after the Dunnes re-enable; no scraper,
+matching-confidence, rejection or provenance change.
+
+TERRAFORM DRIFT RESOLVED (authoritative, no secrets committed): `enabled_schedules`
+is now governed by the version-controlled DEFAULT of `var.enabled_schedules` in
+`infra/terraform/variables.tf` (7 low-risk jobs + supervalu-scrape-trigger +
+dunnes-scrape-trigger; Tesco pepesto-tesco-retrieve intentionally omitted). The
+override was REMOVED from the gitignored `terraform.tfvars` so the committed
+default governs — a future `terraform apply` from any tfvars keeps Dunnes +
+SuperValu enabled and cannot silently disable a retailer (the 29-Oct failure
+mode). `terraform.tfvars` holds no secrets (ARNs/config only) but is gitignored;
+the schedule intent now lives in git regardless. VERIFIED: `tofu plan` shows NO
+schedule changes and NO State flips from this (live state already matches); full
+plan was drift-neutral before the alerting wiring was added.
+
+RETAILER-REFRESH ALERTING IMPLEMENTED (reuses scrape-watchdog + Resend):
+- `src/lib/retailer-health-alerts.ts` (pure, 14 unit tests) — typed issues with
+  high/medium severity for: (1) MISSED scheduled run (no scheduled_full for the
+  previous Mon/Thu 05:10 UTC slot within 26h grace, actively-scheduled stores
+  only), (2) DEGRADED/FAILED STREAK (last 3 scheduled_full unhealthy) plus the
+  existing stuck/failed/single-degraded checks, (3) COVERAGE low / expiring-24h /
+  regression (from retailer_coverage_current + snapshots), (4) three-retailer
+  COMPARISON low floor AND significant decline (≥10pp or ≥30% vs baseline). Tesco
+  excluded from "missed" via SCHEDULED_RETAILERS.
+- `src/app/api/cron/scrape-watchdog/route.ts` rewired to the pure function; now
+  DELIVERS via Resend and returns channelConfigured + deliveryError so an
+  unconfigured channel is explicit (never a silent no-send). Stale "Vercel logs"
+  wording replaced with the AWS path.
+- Terraform: SCRAPE_ALERT_EMAIL (`scrape_alert_email`) + SCHEDULED_RETAILERS
+  (`scheduled_retailers`) wired into the worker task env; delivery uses the
+  existing RESEND_API_KEY secret.
+
+GATE: 704 tests (was 690; +14), lint 0 errors/22 warnings, behavioural 16, build
+OK, tofu fmt/validate clean.
+
+DELIVERY GAP FOUND: in prod the scheduled task has RESEND_API_KEY but
+SCRAPE_ALERT_EMAIL was UNSET, so the watchdog's email branch was silently skipped
+(log-only). The code now surfaces this as channelConfigured=false; full delivery
+requires an OPERATOR to (a) set scrape_alert_email in the apply-time tfvars to the
+ops recipient, and (b) deploy a new image containing this watchdog code, then
+`terraform apply -var image_tag=<new>` (the plan replaces the scheduled +
+sqs-consumer task defs to add the env vars and rolls every schedule's
+task_definition_arn to the new revision — NO schedule State change). Not applied
+here: the current worker image (df9f0c1-prod) predates this code, so an env-only
+apply would deploy vars onto old code.
+
 ## OPERATION: Dunnes Mon/Thu EventBridge schedule RE-ENABLED — 29 October 2026
 
 Authorised re-enable of `smie-prod-dunnes-scrape-trigger` after the one-off

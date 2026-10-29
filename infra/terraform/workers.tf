@@ -50,6 +50,13 @@ locals {
     { name = "DUNNES_VERCEL_WORKER_ENABLED", value = local.retailer_on["dunnes"] },
     { name = "SUPERVALU_VERCEL_WORKER_ENABLED", value = local.retailer_on["supervalu"] },
     { name = "NON_TESCO_VERCEL_WORKERS_ENABLED", value = local.non_tesco_on },
+    # Retailer-refresh health alerting (scrape-watchdog). The recipient is a
+    # non-secret address; delivery uses the existing RESEND_API_KEY secret. When
+    # unset, scrape-watchdog reports channelConfigured=false instead of silently
+    # not sending. SCHEDULED_RETAILERS tracks the enabled retailer-scrape
+    # schedules so a deliberately-disabled retailer is not alerted as "missed".
+    { name = "SCRAPE_ALERT_EMAIL", value = var.scrape_alert_email },
+    { name = "SCHEDULED_RETAILERS", value = join(",", var.scheduled_retailers) },
   ], local.queue_url_environment) : []
 }
 
