@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { selectStoreProductsForRefresh } from '@/lib/store-refresh-selector';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
 import { pepestoSearchQuery } from '@/lib/pepesto-query';
+import { pepestoStructuredQuantity } from '@/lib/pepesto-quantity';
 
 const BASE = 'https://s.pepesto.com/api';
 export const PEPESTO_BATCH_SIZE = 10;
@@ -45,8 +46,13 @@ export function normalizePepestoCandidate(candidate:PepestoCandidate){
     sku:skuFromUrl(url),
     priceCents:candidatePriceCents(candidate),
     promotion:candidatePromotion(candidate),
+    structuredQuantity:pepestoStructuredQuantity((candidate as Record<string,unknown>).quantity),
   };
 }
+
+// Re-exported (imported above from the pure, server-only-free module) so existing
+// importers of pepesto-tesco keep working; tests import pepesto-quantity directly.
+export { pepestoStructuredQuantity };
 
 async function key(){ const {data,error}=await supabaseAdmin.rpc('get_pepesto_api_key'); if(error||typeof data!=='string'||!data) throw new Error('Pepesto API key unavailable'); return data; }
 async function post(path:string,body:unknown): Promise<unknown> { const k=await key(); const r=await fetch(`${BASE}${path}`,{method:'POST',headers:{authorization:`Bearer ${k}`,'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body),cache:'no-store'}); const text=await r.text(); if(!r.ok) throw new Error(`Pepesto ${path} failed (${r.status}): ${text.slice(0,180)}`); return JSON.parse(text) as unknown; }

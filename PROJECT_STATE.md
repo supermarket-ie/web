@@ -50,8 +50,21 @@ Work supervised renewal path ONLY, kept fully separate from discovery. Status
 soonest expiry 2026-11-01 ~20:00 UTC. Run a supervised renewal session as the
 window opens to protect the 323.
 
-GATE: 733 tests (+15 across pilot+runner), lint 0 errors/22 warnings, typecheck
-clean (new files in tsconfig.tesco-supervised), behavioural 16, build OK.
+FOLLOW-UP (same PR #285): (a) TITLE/QUANTITY fix — Pepesto returns US
+`milliliters` (3/48 persisted candidates) but validators read UK `millilitres`,
+so ml products had NO extractable volume and bypassed the measure check; new pure
+`pepestoStructuredQuantity` (`src/lib/pepesto-quantity.ts`) accepts both spellings
+(+litres/kg) and is used by the retrieve worker and the pilot runner. (b) runner
+now ENFORCES a 50-request hard cap (`PILOT_MAX_REQUESTS`), CHECKPOINTS per product
+(resume without re-spend), and reports cost from the credit delta. (c) cohort SQL
+validated vs prod: 139 both-peer, 0 pending leak. (d) DRY RUN demonstrated (unit
+test): fully-stubbed run, 0 cost, 0 mutations, complete report. Tier-2 fresh
+Tesco-page verification wired ONLY via the authorised supervised collection
+environment (omitted otherwise). Live discovery still STOPS for approval before
+any credit spend.
+
+GATE: 742 tests, lint 0 errors/22 warnings, typecheck clean (new files in
+tsconfig.tesco-supervised), behavioural 16, build OK.
 
 ## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
 

@@ -39,10 +39,23 @@ export type RunnerDeps = {
    * access/execution failure.
    */
   fetchLiveProduct?: (sku: string, url: string) => Promise<{ ok: boolean; product: TescoCollectedProduct | null }>;
+  /**
+   * OPTIONAL durable checkpoint after each product: persist progress (index,
+   * running cost, per-product result) so a crash/restart resumes without
+   * re-spending. Invoked after each product's evidence persist + classification.
+   */
+  onCheckpoint?: (state: { index: number; discoveryRequests: number; costCents: number; result: PilotProductResult }) => Promise<void>;
   /** Pacing between products (ms). */
   sleep?: (ms: number) => Promise<void>;
   spacingMs?: number;
 };
+
+/**
+ * Hard upper bound on live discovery requests per pilot run. Enforced in the
+ * runner regardless of the cohort size passed in — a defence-in-depth cap on
+ * credit spend (one Pepesto /search per product).
+ */
+export const PILOT_MAX_REQUESTS = 50;
 
 export type PilotProductResult = {
   storeProductId: string;
@@ -70,6 +83,7 @@ export type PilotRunReport = {
   creditsAfter: number;
   stoppedEarly: boolean;
   stopReason: string | null;
+  requestCapReached: boolean; // cohort exceeded PILOT_MAX_REQUESTS (truncated)
   results: PilotProductResult[];
 };
 
@@ -98,8 +112,17 @@ export async function runDiscoveryPilot(cohort: PilotCandidate[], deps: RunnerDe
   let candidateYield = 0;
   let stoppedEarly = false;
   let stopReason: string | null = null;
+  let requestCapReached = false;
 
-  for (const product of cohort) {
+  // Enforced hard cap on live discovery requests, independent of cohort size.
+  const bounded = cohort.slice(0, PILOT_MAX_REQUESTS);
+  if (cohort.length > PILOT_MAX_REQUESTS) requestCapReached = true;
+
+  let index = 0;
+  for (const product of bounded) {
+    // Defence-in-depth: never exceed the request cap even if bounded changed.
+    if (discoveryRequests >= PILOT_MAX_REQUESTS) { requestCapReached = true; break; }
+    index += 1;
     let candidates: DiscoveredCandidate[] = [];
     let accessFailure = false;
     try {
@@ -143,7 +166,7 @@ export async function runDiscoveryPilot(cohort: PilotCandidate[], deps: RunnerDe
     }
 
     outcomes[outcome] += 1;
-    results.push({
+    const result: PilotProductResult = {
       storeProductId: product.storeProductId,
       canonicalName: product.canonicalName,
       storeSku: product.storeSku,
@@ -156,7 +179,15 @@ export async function runDiscoveryPilot(cohort: PilotCandidate[], deps: RunnerDe
       candidateCount: candidates.length,
       tier2Checked,
       reasons,
-    });
+    };
+    results.push(result);
+
+    // Durable checkpoint after each product (resume without re-spending).
+    if (deps.onCheckpoint) {
+      const costSoFar = Math.max(0, creditsBefore - (await deps.creditsCents()));
+      try { await deps.onCheckpoint({ index, discoveryRequests, costCents: costSoFar, result }); }
+      catch { /* checkpoint is best-effort; never block or roll back discovery */ }
+    }
 
     // Stop on an access/execution failure — never relax matching to continue.
     if (accessFailure) { stoppedEarly = true; break; }
@@ -167,7 +198,7 @@ export async function runDiscoveryPilot(cohort: PilotCandidate[], deps: RunnerDe
   const expectedNewThreeRetailerComparisons = results.filter((r) => r.outcome === 'exact_verified' && r.bothPeers).length;
 
   return {
-    target: cohort.length,
+    target: Math.min(cohort.length, PILOT_MAX_REQUESTS),
     discoveryRequests,
     candidateYield,
     outcomes,
@@ -177,6 +208,7 @@ export async function runDiscoveryPilot(cohort: PilotCandidate[], deps: RunnerDe
     creditsAfter,
     stoppedEarly,
     stopReason,
+    requestCapReached,
     results,
   };
 }

@@ -20,7 +20,29 @@ SKUs are produced by the live discovery run (a separate supervised step).
 3. COMPLETE runner: `runDiscoveryPilot` (dependency-injected, unit-tested) does
    per-product search → classify → persist evidence → optional tier-2 live check →
    cost tracking → per-product report, stopping on access/execution failure and
-   NEVER calling the finalise RPC / writing a trusted price.
+   NEVER calling the finalise RPC / writing a trusted price. It ENFORCES a
+   50-request hard cap (`PILOT_MAX_REQUESTS`) independent of cohort size,
+   CHECKPOINTS after each product (index + running cost + result, resume without
+   re-spending), and reports cost from the Pepesto credit delta.
+
+4. TITLE/QUANTITY extraction FIX: Pepesto returns US `milliliters` (confirmed in
+   prod: 3/48 persisted candidates) but the identity validators read UK
+   `millilitres`, so millilitre products previously carried NO extractable
+   volume and bypassed the measure check. `pepestoStructuredQuantity`
+   (`src/lib/pepesto-quantity.ts`) now accepts both spellings (+ litres/kg
+   conversion); the existing retrieve worker and the pilot runner both use it.
+
+5. COHORT validated against prod: the both-peer held set is 139 (matches the
+   earlier count); 0 pending URLs leak into the cohort.
+
+6. DRY RUN demonstrated (no external requests, no mutations): a fully-stubbed
+   `runDiscoveryPilot` completes with 0 cost, 0 writes, and a complete report
+   (unit test "DRY RUN: a fully-stubbed run makes zero external requests + zero
+   mutations").
+
+Tier-2 fresh Tesco-page verification (`fetchLiveProduct`) is wired ONLY in the
+authorised supervised collection environment; it is omitted here, so no Tesco
+page is fetched outside that environment.
 
 ## Scope + safety posture (as approved)
 

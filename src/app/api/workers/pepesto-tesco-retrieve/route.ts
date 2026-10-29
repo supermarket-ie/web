@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { choosePepestoCandidate, extractPepestoCandidates, extractPepestoItems, finalizePepestoProduct, normalizePepestoCandidate, retrievePepestoSearch } from '@/lib/pepesto-tesco';
+import { pepestoStructuredQuantity } from '@/lib/pepesto-quantity';
 import type { TescoQueueProduct } from '@/lib/tesco-queue-worker';
 import { classifyTescoReplacement, type TescoMappingEvidence } from '@/lib/tesco-mapping-audit';
 import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
@@ -14,13 +15,7 @@ function responseState(payload: unknown) {
 function structuredQuantity(candidate: unknown) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
   const row=candidate as Record<string,unknown>;
-  const raw=(row.quantity && typeof row.quantity === 'object' ? row.quantity : null) as Record<string,unknown>|null;
-  if(!raw) return null;
-  return {
-    grams:Number(raw.grams)||undefined,
-    millilitres:Number(raw.millilitres)||undefined,
-    pieces:Number(raw.pieces)||undefined,
-  };
+  return pepestoStructuredQuantity(row.quantity);
 }
 
 async function finalizeCandidateDiscovery(runUuid:string,product:TescoQueueProduct,payload:unknown){

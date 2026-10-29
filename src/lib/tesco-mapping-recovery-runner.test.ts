@@ -94,4 +94,68 @@ describe('runDiscoveryPilot — bounded discovery-only orchestration', () => {
     expect(keys).not.toContain('writePrice');
     expect(keys.sort()).toEqual(['creditsCents', 'persistEvidence', 'searchCandidates', 'sleep', 'spacingMs'].sort());
   });
+
+  it('enforces the 50-request hard cap regardless of cohort size', async () => {
+    const search = vi.fn(async () => [exactCand('222')]);
+    const d = deps({ searchCandidates: search, creditsCents: vi.fn().mockResolvedValue(10000) });
+    const cohort = Array.from({ length: 80 }, (_, i) => product(i));
+    const report = await runDiscoveryPilot(cohort, d);
+    expect(report.requestCapReached).toBe(true);
+    expect(report.target).toBe(50);
+    expect(search).toHaveBeenCalledTimes(50); // never 80
+    expect(report.discoveryRequests).toBe(50);
+  });
+
+  it('checkpoints after each product with running cost + result', async () => {
+    const checkpoints: Array<{ index: number; costCents: number }> = [];
+    const d = deps({
+      creditsCents: vi.fn().mockResolvedValueOnce(10000).mockResolvedValueOnce(9988).mockResolvedValueOnce(9976).mockResolvedValue(9976),
+      onCheckpoint: vi.fn(async (s) => { checkpoints.push({ index: s.index, costCents: s.costCents }); }),
+    });
+    await runDiscoveryPilot([product(1), product(2)], d);
+    expect(checkpoints.map((c) => c.index)).toEqual([1, 2]);
+    expect(checkpoints[0].costCents).toBeGreaterThanOrEqual(0);
+  });
+
+  it('a failing checkpoint never blocks or rolls back discovery', async () => {
+    const d = deps({ onCheckpoint: vi.fn(async () => { throw new Error('checkpoint store down'); }) });
+    const report = await runDiscoveryPilot([product(1)], d);
+    expect(report.stoppedEarly).toBe(false);
+    expect(report.results.length).toBe(1);
+  });
+
+  it('DRY RUN: a fully-stubbed run makes zero external requests + zero mutations and yields a complete report', async () => {
+    // Dry run = the real orchestration with offline stubs standing in for the
+    // search API, evidence store, credit meter and (omitted) live fetcher. If the
+    // runner ever reached out directly (network/DB) this would throw/ hang; it
+    // does not — all I/O is via injected deps, which here are pure in-memory.
+    const persisted: unknown[] = [];
+    const dry: RunnerDeps = {
+      searchCandidates: async (p) => [exactCand(String(Number(p.storeSku) + 900000))],
+      persistEvidence: async (input) => { persisted.push(input); }, // in-memory, not the DB
+      creditsCents: async () => 10000, // flat meter -> cost 0 in a dry run
+      sleep: async () => {},
+      spacingMs: 0,
+      // fetchLiveProduct intentionally omitted: tier-2 stays in the authorised
+      // supervised environment only.
+    };
+    const cohort = [
+      product(1, { defect: 'wrong_pack_or_quantity' }),
+      product(2, { defect: 'canonical_ambiguous', canonicalName: 'Heinz Tomato Ketchup 460g' }),
+    ];
+    const report = await runDiscoveryPilot(cohort, dry);
+    expect(report.target).toBe(2);
+    expect(report.discoveryRequests).toBe(2);
+    expect(report.costCents).toBe(0);              // no credits spent
+    expect(report.stoppedEarly).toBe(false);
+    expect(report.requestCapReached).toBe(false);
+    expect(report.results).toHaveLength(2);
+    // Tier-2 omitted -> nothing reaches exact_verified in the dry run.
+    expect(report.outcomes.exact_verified).toBe(0);
+    expect(persisted).toHaveLength(2);             // evidence captured in-memory only
+    // Report shape is complete for the operator.
+    for (const k of ['target', 'discoveryRequests', 'candidateYield', 'outcomes', 'costCents', 'results', 'requestCapReached']) {
+      expect(report).toHaveProperty(k);
+    }
+  });
 });

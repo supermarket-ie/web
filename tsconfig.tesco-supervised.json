@@ -12,7 +12,9 @@
     "src/lib/tesco-mapping-recovery-pilot.ts",
     "src/lib/tesco-mapping-recovery-pilot.test.ts",
     "src/lib/tesco-mapping-recovery-runner.ts",
-    "src/lib/tesco-mapping-recovery-runner.test.ts"
+    "src/lib/tesco-mapping-recovery-runner.test.ts",
+    "src/lib/pepesto-quantity.ts",
+    "src/lib/pepesto-structured-quantity.test.ts"
   ],
   "exclude": ["node_modules"]
 }
