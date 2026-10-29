@@ -1,11 +1,26 @@
 # Tesco mapping-recovery pilot — 50-product deliverable
 
-Approved bounded, supervised discovery + identity-verification pilot. This is the
-reconciled 50-product deliverable prepared from CURRENT evidence (read-only). It
-does NOT apply any mapping correction, write any trusted price, clear any hold, or
-launch a collection campaign. Proposed Tesco SKUs are filled in by the live
-discovery run (a separate supervised execution step); none exists yet for this
-cohort, so every row is "pending live discovery".
+Approved bounded, supervised discovery + identity-verification pilot. Prepared
+from CURRENT evidence (read-only). It does NOT apply any mapping correction, write
+any trusted price, clear any hold, or launch a collection campaign. Proposed Tesco
+SKUs are produced by the live discovery run (a separate supervised step).
+
+## Review-round improvements (this revision)
+
+1. REPRESENTATIVE sampling (not alphabetical): `selectRepresentativeSample`
+   round-robins across every identity-failure category present and, within each,
+   prioritises the likeliest recoveries (recoverability high>medium>low, then
+   both-peers). So the 50 cover wrong_pack/qty, canonical_ambiguous, brand/
+   ownlabel, variant/formulation, missing_on_page, etc. — not 50 of the biggest
+   bucket. The cohort SQL now returns the FULL both-peer held set for sampling.
+2. TWO-TIER verification: a Pepesto SEARCH match is `search_matched_unverified`
+   (a proposal). `exact_verified` requires an ADDITIONAL fresh Tesco product-page
+   corroboration (`validateTescoCollectedIdentity`: live SKU, brand, structured
+   quantity, pack, variant, formulation). Only tier 2 is "fully verified".
+3. COMPLETE runner: `runDiscoveryPilot` (dependency-injected, unit-tested) does
+   per-product search → classify → persist evidence → optional tier-2 live check →
+   cost tracking → per-product report, stopping on access/execution failure and
+   NEVER calling the finalise RPC / writing a trusted price.
 
 ## Scope + safety posture (as approved)
 
@@ -133,9 +148,20 @@ access_or_execution_failure; do not relax matching to raise the rate.
 ## Next steps (gated on this report + the live run)
 
 1. Operator reviews this cohort; approves the live discovery run (≈€6 Pepesto).
-2. Run discovery-only (no corrections/prices); produce the metrics + per-product
-   verdict with proposed SKUs for `exact_verified` rows.
+2. Run discovery-only via `runDiscoveryPilot` (no corrections/prices); produce the
+   metrics + per-product verdict with proposed SKUs for `search_matched`/
+   `exact_verified` rows.
 3. SEPARATELY (own PR/release): build the correction-only pathway (apply approved
    SKU/URL with a full audit trail, NO price), then re-collect via the supervised
    collector which re-verifies identity on a fresh live fetch before any trusted
    price. Only then do recovered prices + new triples materialise.
+
+## Separate + urgent: Tesco RENEWALS (not part of discovery)
+
+The 323 trusted prices renew on their own window and are handled ONLY through the
+proven ChatGPT Work supervised renewal path (`tesco:supervised --mode renewal`),
+never through this discovery work. Current status (read-only, 29 Oct ~21:46 UTC):
+323 fresh; **7 now due (≥4 days old)**; 0 expiring within 24h; soonest expiry
+2026-11-01 ~20:00 UTC, latest 2026-11-04 ~09:40 UTC. ACTION: run a supervised
+renewal session as the window opens (first expiries ~2 days out) to protect the
+323; keep it fully separate from the discovery pilot.

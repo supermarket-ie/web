@@ -1,49 +1,57 @@
 # Supermarket.ie — Canonical Project State
 
-## PILOT (approved, discovery-only code + 50-product report) — Tesco mapping recovery — 30 October 2026
+## PILOT (approved; discovery-only code + runner + 50-product report) — Tesco mapping recovery — 30 October 2026
 
 Approved 50-product discovery + identity-verification pilot. Built the
-discovery-ONLY code (no mapping/price/hold changes) + a reconciled 50-product
-deliverable from current evidence. Report: `docs/tesco-mapping-recovery-pilot-report.md`.
-No production data changed; no live discovery launched here.
+discovery-ONLY code (no mapping/price/hold changes), addressing the three review
+improvements. Report: `docs/tesco-mapping-recovery-pilot-report.md`. No production
+data changed; no live discovery launched here.
 
-CODE (new, `src/lib/tesco-mapping-recovery-pilot.ts` + 14 unit tests): (1)
-`pilotCohortSql(≤50)` read-only selector — held-on-identity-reason, unique-SKU,
-proven, canonical-URL, no-fresh-price Tesco mappings with a fresh peer, both-peers
-first; EXCLUDES shared-SKU, recent-24h, and all pending/unknown URLs (verified 0
-pending leak). (2) `classifyPilotDiscovery` — reuses the deterministic
-`classifyTescoReplacement`; returns exact_verified / plausible_more_evidence /
-wrong_product_variant_pack / no_reliable_candidate / access_or_execution_failure +
-a PROPOSED SKU for review. It NEVER calls `finalize_tesco_candidate_discovery`
-(no store_products SKU/URL change, no trusted price). Tests assert SELECT-only SQL,
-pending/shared-SKU exclusion, the five outcomes, two-exact→not-exact, and
-no-price-trust.
+IMPROVEMENT 1 — REPRESENTATIVE sampling (was alphabetical): `pilotCohortSql` now
+returns the FULL both-peer held set; `selectRepresentativeSample` round-robins
+across every identity-failure defect category and prioritises likely recoveries
+(recoverability high>medium>low, then both-peers) within each — so the 50 cover
+all failure modes, not 50 of the biggest bucket.
+
+IMPROVEMENT 2 — TWO-TIER verification: `classifySearchCandidates` →
+`search_matched_unverified` (a Pepesto-search proposal); `verifyAgainstLivePage` →
+`exact_verified` ONLY after a FRESH Tesco product-page corroboration via
+`validateTescoCollectedIdentity` (live SKU/brand/quantity/pack/variant/
+formulation). Search-only matches are never "fully verified" and never a price.
+
+IMPROVEMENT 3 — COMPLETE runner: `runDiscoveryPilot` (DI, unit-tested) does per
+product search→classify→persist evidence→optional tier-2 live check→cost tracking→
+per-product report; stops on access/execution failure (no relaxed matching); has
+NO finalise/price-write hook by construction (structural guarantee).
 
 COHORT (read-only prod validation): 476 qualify (139 both-peers / 337 one-peer);
-pilot top-50 all both-peers → up to 50 potential NEW three-retailer comparisons.
-Top-50 defect mix: 22 wrong_pack/qty, 13 canonical_ambiguous, 6 variant/
-formulation, 5 brand/ownlabel, 2 missing_on_page, 2 out_of_stock. Recoverability
-estimate: 2 high, 33 medium, 13 low, 2 n/a. Live evidence shows most are the Tesco
-SKU resolving to a genuinely different SIZE/VARIANT (needs rediscovery, NOT a
-canonical rename); a few (Broccoli, Cucumber) are correct-mapping/generic-name.
+pilot samples 50 across defect categories, all both-peers → up to 50 potential NEW
+three-retailer comparisons. Live evidence: most are the Tesco SKU resolving to a
+genuinely different SIZE/VARIANT (needs rediscovery, NOT a canonical rename); a few
+(Broccoli, Cucumber) are correct-mapping/generic-name.
 
-OPERABILITY: Pepesto discovery path works (prior runs classified candidates:
-26 material_mismatch / 12 ambiguous / 10 exact of 48; ~12c/product → ≈€6 for 50).
-Prior runs show run-level 'failed' = coverage-threshold, not access failure.
+OPERABILITY: Pepesto discovery path works (prior runs classified 48 candidates:
+26 material_mismatch / 12 ambiguous / 10 exact; ~12c/product → ≈€6 for 50). Prior
+run-level 'failed' = coverage threshold, not access failure.
 
-PENDING RECONCILIATION (carried from the revised plan): authoritative 6 pending
-tesco_direct_collection_pages = the 6 historical unresolved; the pilot cohort
+PENDING: authoritative 6 pending = the 6 historical unresolved; the cohort
 excludes all 6; never retries/closes them.
 
 BOUNDARY (unchanged): `finalize_tesco_candidate_discovery` must NOT be generalised
 to apply corrections+trusted-prices as-is. A correction-ONLY pathway (apply
-approved SKU/URL with audit trail, NO price) + fresh live re-verification in the
-supervised collector is a SEPARATE later implementation/release, gated on the
-live pilot's yield. No canonical overwrite, no cleared holds, no retried unknowns,
-no price without exact identity verification, no AWS direct Tesco assumption.
+approved SKU/URL with audit trail, NO price) + fresh live re-verification is a
+SEPARATE later release, gated on the live pilot's yield. No canonical overwrite,
+no cleared holds, no retried unknowns, no price without exact identity
+verification, no AWS direct Tesco assumption.
 
-GATE: 718 tests (704 + 14), lint 0 errors/22 warnings, typecheck clean,
-behavioural 16, build OK.
+RENEWALS (separate + urgent): the 323 trusted prices renew via the proven ChatGPT
+Work supervised renewal path ONLY, kept fully separate from discovery. Status
+(read-only, 29 Oct ~21:46 UTC): 323 fresh; 7 now due (≥4d); 0 expiring <24h;
+soonest expiry 2026-11-01 ~20:00 UTC. Run a supervised renewal session as the
+window opens to protect the 323.
+
+GATE: 733 tests (+15 across pilot+runner), lint 0 errors/22 warnings, typecheck
+clean (new files in tsconfig.tesco-supervised), behavioural 16, build OK.
 
 ## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
 
