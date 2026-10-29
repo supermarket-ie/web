@@ -148,6 +148,53 @@ MONITORING GAP: no CloudWatch alarm for scrape staleness/degradation; detection
 relies solely on the in-app `scrape-watchdog` cron (which DID flag both). Consider
 an alarm or alert wired to watchdog output so a disabled/failing retailer surfaces
 without manual inspection.
+## OPERATION: authorised one-off Dunnes catch-up refresh — triples restored 0 → 162 — 29 October 2026
+
+Authorised, supervised, manual one-off Dunnes `scheduled_full` refresh (≤1000) to
+recover the trusted coverage lost when the EventBridge schedule stayed DISABLED
+and the 22 Oct observations aged out of the 7-day window. Ran on the EXISTING AWS
+path (no Vercel, no new method); the permanent schedule was NOT re-enabled or
+changed.
+
+EXECUTION (identical to the 22 Oct scheduled run): one-off `aws ecs run-task` of
+the SAME `smie-prod-scheduled:3` task definition the EventBridge schedule uses,
+with container override `CRON_JOB=dunnes-scrape-trigger`, same cluster
+`smie-prod-cluster`, same subnets/SG/public-IP as the SuperValu schedule. The
+task's `scheduled-runner` called `/api/workers/dunnes-scrape-trigger?limit=1000&
+scope=scheduled_full` → enqueued 200 SQS batches of 5 to `dunnes-scrape-batches`
+→ the `smie-prod-sqs-consumer` processed them. Task 5eef47ff, exit 0.
+
+PREFLIGHT (all clear): task env DUNNES_VERCEL_WORKER_ENABLED=true,
+DISABLE_RETAILER_COLLECTION=false, SUPABASE_READ_ONLY=false, QUEUE_BACKEND=sqs,
+APP_ENV=production (Tesco flag false → untouched; SuperValu untouched). Consumer
+ACTIVE 1/1 polling dunnes-scrape-batches; main+DLQ empty. No active Dunnes SCRAPE
+run (one stale 22 Aug `discovery`-scope run holds no lock — selection is the
+stateless `select_store_products_for_refresh` RPC — and its queue is empty, so no
+conflict).
+
+SAFEGUARDS (unchanged, verified in code): direct exact SKU/URL match else
+`matchCandidate` with hard gates (size compat, no type/variant conflict) + score
+≥0.55, canonical coverage ≥0.6, candidate coverage ≥0.5; below threshold →
+`no_confident_match` FAILURE with no price write and NO remap; price + `dunnes_
+direct` provenance + receipt written only on verified success via
+`finalize_store_scrape_product`; idempotent via `scrape_product_receipts`
+(`alreadyFinalized` skip). No unverified acceptance, no automatic remap.
+
+OUTCOME (run `vercel_dunnes_20261029102250` /
+7c667559-54cb-4590-a783-36ab6ffc98a7, status SUCCESS): attempted 1000, extracted/
+verified 857, inserted 27 (genuine price changes), unchanged 830 (re-verified
+fresh), failed 143, coverage 85.7% (threshold 75%, not breached). Failures =
+96 `matching|no_confident_match` + 47 `parsing|no_search_results`, all
+retryable=false → held, zero bad writes. RESTORED: Dunnes trusted/fresh coverage
+0 → 857; **three-retailer triples 0 → 162**. latest_prices now dunnes 857 /
+supervalu 1,252 / tesco 323. (The low insert count vs 22 Oct's 281 is expected —
+most prices unchanged over the shorter gap; 857 were re-verified fresh.)
+
+STILL OPEN (per authorisation — NOT done here): the permanent Mon/Thu Dunnes
+EventBridge schedule remains DISABLED pending understanding the underlying
+matching blocker (the ~96 no_confident_match per run is the long-standing ~14%
+tail, not a new fault). A staleness ALERT so a disabled schedule can't silently
+zero a retailer's coverage is proposed separately (see PR #279 diagnosis).
 
 ## HOUSEKEEPING: Vercel decommissioned from CI/CD + repo; AWS is authoritative — 28 October 2026
 
