@@ -1,38 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { resend } from '@/lib/resend';
+import {
+  evaluateRetailerHealth,
+  summariseSeverity,
+  type ScrapeRunRow,
+  type RetailerHealthInput,
+} from '@/lib/retailer-health-alerts';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+// Stores to evaluate for health/coverage.
 const STORES = ['supervalu', 'dunnes', 'aldi'] as const;
-const STALE_HOURS = 120; // current Mon/Thu cadence can legitimately span four days
-const STUCK_HOURS = 3;
+
+// Actively-scheduled retailer scrape triggers. Defaults to dunnes + supervalu
+// (Tesco's automated collection is intentionally disabled). Overridable via
+// SCHEDULED_RETAILERS (comma-separated) so it tracks enabled_schedules without a
+// code change. A store NOT listed here is never alerted as "missed".
+function scheduledStores(): string[] {
+  const raw = process.env.SCHEDULED_RETAILERS?.trim();
+  if (raw) return raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return ['dunnes', 'supervalu'];
+}
 
 function authorized(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   return Boolean(secret && request.headers.get('authorization') === `Bearer ${secret}`);
 }
 
-type RunRow = {
-  id: string;
-  store: string;
-  run_id: string;
-  status: string;
-  started_at: string;
-  finished_at: string | null;
-  coverage_pct: number | null;
-  threshold_pct: number | null;
-  error_summary: string | null;
-  run_scope: string;
-};
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
 
 export async function GET(request: NextRequest) {
   if (!authorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const since = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+  const now = Date.now();
+  const since = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabaseAdmin
     .from('scrape_runs')
     .select('id, store, run_id, run_scope, status, started_at, finished_at, coverage_pct, threshold_pct, error_summary')
@@ -45,92 +52,80 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to query scrape health' }, { status: 500 });
   }
 
-  const rows = (data ?? []) as RunRow[];
-  const now = Date.now();
-  const issues: string[] = [];
-  const stores: Record<string, { latest: RunRow | null; lastHealthy: RunRow | null }> = {};
-
-  for (const store of STORES) {
-    const storeRows = rows.filter((row) => row.store === store && (
-      (store !== 'supervalu' && store !== 'dunnes') || row.run_scope === 'scheduled_full'
-    ));
-    const latest = storeRows[0] ?? null;
-    const lastHealthy = storeRows.find((row) => row.status === 'success' || row.status === 'degraded') ?? null;
-    stores[store] = { latest, lastHealthy };
-
-    if (!latest) {
-      issues.push(`${store}: no scrape run recorded in the last 8 days`);
-      continue;
-    }
-
-    const latestAgeHours = (now - new Date(latest.started_at).getTime()) / 3_600_000;
-    if (latest.status === 'running' && latestAgeHours > STUCK_HOURS) {
-      issues.push(`${store}: run ${latest.run_id} has been running for ${latestAgeHours.toFixed(1)}h`);
-    } else if (latest.status === 'failed') {
-      issues.push(`${store}: latest run ${latest.run_id} failed${latest.error_summary ? ` — ${latest.error_summary}` : ''}`);
-    } else if (latest.status === 'degraded') {
-      const coverage = latest.coverage_pct == null ? 'unknown' : `${Number(latest.coverage_pct).toFixed(1)}%`;
-      const threshold = latest.threshold_pct == null ? 'configured threshold' : `${Number(latest.threshold_pct).toFixed(1)}% threshold`;
-      issues.push(`${store}: latest run ${latest.run_id} degraded — ${coverage} coverage vs ${threshold}`);
-    }
-
-    if (!lastHealthy) {
-      issues.push(`${store}: no successful/degraded run recorded in the last 8 days`);
-      continue;
-    }
-
-    const healthyAgeHours = (now - new Date(lastHealthy.started_at).getTime()) / 3_600_000;
-    if (healthyAgeHours > STALE_HOURS) {
-      issues.push(`${store}: last healthy run is ${healthyAgeHours.toFixed(0)}h old (${lastHealthy.run_id})`);
-    }
-  }
+  const runs = (data ?? []) as ScrapeRunRow[];
 
   const [{ data: coverage, error: coverageError }, { data: comparison, error: comparisonError }, { data: snapshots, error: snapshotError }] = await Promise.all([
     supabaseAdmin.from('retailer_coverage_current').select('store, live_coverage_pct, expiring_within_24h'),
     supabaseAdmin.from('retailer_comparison_coverage_current').select('both_live_pct').single(),
-    supabaseAdmin.from('retailer_coverage_snapshots').select('store, live_coverage_pct, captured_at').order('captured_at', { ascending: false }).limit(4),
+    supabaseAdmin.from('retailer_coverage_snapshots').select('store, live_coverage_pct, captured_at').order('captured_at', { ascending: false }).limit(8),
   ]);
 
-  if (coverageError || comparisonError || snapshotError) {
+  const telemetryUnavailable = Boolean(coverageError || comparisonError || snapshotError);
+  if (telemetryUnavailable) {
     console.error('[scrape-watchdog] coverage telemetry unavailable', { coverageError, comparisonError, snapshotError });
-    issues.push('retailer coverage telemetry could not be loaded');
-  } else {
-    for (const row of coverage ?? []) {
-      const liveCoverage = Number(row.live_coverage_pct);
-      if (liveCoverage < 50) issues.push(`${row.store}: trusted catalogue coverage is ${liveCoverage.toFixed(1)}% (target 50%)`);
-      if (Number(row.expiring_within_24h) > 0) issues.push(`${row.store}: ${row.expiring_within_24h} trusted prices expire within 24h`);
-
-      const history = (snapshots ?? []).filter((snapshot) => snapshot.store === row.store);
-      if (history.length >= 2) {
-        const regression = Number(history[1].live_coverage_pct) - Number(history[0].live_coverage_pct);
-        if (regression >= 3) issues.push(`${row.store}: catalogue coverage fell ${regression.toFixed(1)} percentage points`);
-      }
-    }
-    if (Number(comparison?.both_live_pct) < 40) {
-      issues.push(`cross-retailer: only ${Number(comparison?.both_live_pct).toFixed(1)}% of products are live at both retailers (target 40%)`);
-    }
   }
+
+  const input: RetailerHealthInput = {
+    now,
+    scheduledStores: scheduledStores(),
+    stores: [...STORES],
+    runs,
+    coverage: (coverage ?? []).map((r) => ({ store: String(r.store), live_coverage_pct: r.live_coverage_pct as number | null, expiring_within_24h: r.expiring_within_24h as number | null })),
+    coverageSnapshots: (snapshots ?? []).map((s) => ({ store: String(s.store), live_coverage_pct: s.live_coverage_pct as number | null, captured_at: String(s.captured_at) })),
+    comparison: comparison ? { both_live_pct: (comparison as { both_live_pct: number | null }).both_live_pct } : null,
+    telemetryUnavailable,
+  };
+
+  const issues = evaluateRetailerHealth(input);
 
   if (issues.length === 0) {
     console.log('[scrape-watchdog] all stores healthy');
-    return NextResponse.json({ healthy: true, issues: [], stores });
+    return NextResponse.json({ healthy: true, issues: [], severity: { high: 0, medium: 0 } });
   }
 
-  console.error('[scrape-watchdog] issues detected', { issues });
+  const severity = summariseSeverity(issues);
+  console.error('[scrape-watchdog] issues detected', { severity, issues: issues.map((i) => i.message) });
 
+  // Deliver via the configured notification channel (Resend). Requirement:
+  // alerts must be DELIVERED, not merely logged. If the channel is not
+  // configured, say so explicitly in the response so monitoring of the monitor
+  // is possible (and so a silent no-send is never mistaken for "healthy").
   const alertEmail = process.env.SCRAPE_ALERT_EMAIL?.trim();
+  const channelConfigured = Boolean(alertEmail && process.env.RESEND_API_KEY);
   let emailSent = false;
-  if (alertEmail && process.env.RESEND_API_KEY) {
-    const list = issues.map((issue) => `<li>${issue.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)}</li>`).join('');
+  let deliveryError: string | null = null;
+
+  if (channelConfigured) {
+    const list = issues
+      .map((i) => `<li><strong>[${i.severity.toUpperCase()}]</strong> ${escapeHtml(i.message)}</li>`)
+      .join('');
     const result = await resend.emails.send({
       from: 'supermarket.ie operations <hello@mail.supermarket.ie>',
-      to: alertEmail,
-      subject: `Scrape alert — ${issues.length} issue${issues.length === 1 ? '' : 's'}`,
-      html: `<h2>supermarket.ie scrape health alert</h2><ul>${list}</ul><p>Review the scrape health dashboard and Vercel runtime logs before retrying blocked transports.</p>`,
+      to: alertEmail!,
+      subject: `Scrape alert — ${severity.high} high / ${severity.medium} medium`,
+      html: `<h2>supermarket.ie retailer refresh health</h2>
+        <p>${issues.length} issue${issues.length === 1 ? '' : 's'} detected across the Mon/Thu retailer refresh.</p>
+        <ul>${list}</ul>
+        <p>Runs execute on AWS ECS (EventBridge → smie-prod-scheduled → SQS → smie-prod-sqs-consumer).
+        Review CloudWatch logs for the <code>scheduled</code> / <code>sqs-consumer</code> streams and the
+        retailer coverage views before acting. Do not lower matching-confidence thresholds.</p>`,
     });
     emailSent = !result.error;
-    if (result.error) console.error('[scrape-watchdog] email alert failed', result.error);
+    if (result.error) {
+      deliveryError = String(result.error);
+      console.error('[scrape-watchdog] email alert failed', result.error);
+    }
+  } else {
+    deliveryError = 'alert channel not configured (SCRAPE_ALERT_EMAIL and/or RESEND_API_KEY missing)';
+    console.error('[scrape-watchdog] ALERT NOT DELIVERED — channel unconfigured', { severity });
   }
 
-  return NextResponse.json({ healthy: false, issues, emailSent, stores });
+  return NextResponse.json({
+    healthy: false,
+    severity,
+    issues: issues.map((i) => ({ store: i.store, kind: i.kind, severity: i.severity, message: i.message })),
+    channelConfigured,
+    emailSent,
+    deliveryError,
+  });
 }
