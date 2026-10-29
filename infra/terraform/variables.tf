@@ -203,18 +203,61 @@ variable "worker_schedule_state" {
   }
 }
 
+variable "scrape_alert_email" {
+  description = <<-EOT
+    Recipient for retailer-refresh health alerts from the scrape-watchdog cron
+    (missed/degraded runs, coverage nearing expiry, three-retailer comparison
+    decline). Non-secret; delivery uses the existing RESEND_API_KEY secret. Set
+    to the ops recipient in terraform.tfvars. If empty, scrape-watchdog reports
+    channelConfigured=false rather than silently not alerting.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "scheduled_retailers" {
+  description = <<-EOT
+    Retailers whose scrape schedule is ENABLED, so the watchdog knows which
+    stores to alert as "missed" when a Mon/Thu run does not occur. Keep in sync
+    with the retailer-scrape entries in enabled_schedules. Tesco is omitted
+    (automated collection disabled).
+  EOT
+  type        = list(string)
+  default     = ["dunnes", "supervalu"]
+}
+
 variable "enabled_schedules" {
   description = <<-EOT
     Per-job allowlist of EventBridge schedules to ENABLE (by job key, matching
     workers.tf cron_jobs). Any job NOT listed uses worker_schedule_state
-    (default DISABLED). Lets us stage the cron cutover: enable the low-risk jobs
-    first and keep the retailer-scrape triggers (dunnes-scrape-trigger,
-    supervalu-scrape-trigger, pepesto-tesco-retrieve) disabled until each
-    retailer is canaried. Enable a schedule only AFTER the matching Vercel cron
-    is disabled, to avoid duplicate execution.
+    (default DISABLED).
+
+    This DEFAULT is the authoritative, version-controlled production allowlist:
+    the 7 low-risk jobs plus the two canaried retailer scrape triggers
+    (dunnes-scrape-trigger, supervalu-scrape-trigger). It is set here — not only
+    in the gitignored terraform.tfvars — so that a `terraform apply` from ANY
+    tfvars keeps Dunnes and SuperValu enabled and cannot silently disable a
+    retailer schedule (the 29 Oct incident). This file contains NO secrets, so
+    the enablement intent is safely tracked in git.
+
+    Tesco's pepesto-tesco-retrieve is intentionally OMITTED (automated Tesco
+    collection stays DISABLED). To change the set, edit THIS default (reviewed in
+    a PR); avoid overriding enabled_schedules in the local tfvars, which would
+    reintroduce the drift risk. Enable a schedule only after its collection path
+    is verified.
   EOT
   type        = list(string)
-  default     = []
+  default = [
+    "weekly-digest",
+    "check-alerts",
+    "agent-tasks",
+    "price-watchdog",
+    "price-watchdog-thursday",
+    "product-embeddings",
+    "scrape-watchdog",
+    "supervalu-scrape-trigger",
+    "dunnes-scrape-trigger",
+  ]
 }
 
 variable "enabled_retailers" {

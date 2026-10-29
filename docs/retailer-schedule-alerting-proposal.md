@@ -1,6 +1,7 @@
 # Proposal — retailer refresh alerting (missed / degraded / expiring)
 
-Status: PROPOSAL (not implemented). Written 29 October 2026 after a disabled
+Status: IMPLEMENTED 30 October 2026 (see "Implementation" at the end). Originally
+written 29 October 2026 as a proposal after a disabled
 Dunnes EventBridge schedule silently let all trusted Dunnes coverage expire,
 collapsing three-retailer comparisons 170 → 0 before anyone noticed. Goal: no
 retailer can silently lose trusted coverage again, without changing the scraper,
@@ -97,3 +98,35 @@ Implement as a focused PR extending `scrape-watchdog` + a small
 freshness fixtures (missed, degraded-streak, expiring, healthy → no alert),
 wired to the existing Resend path behind the established secret. No schedule or
 threshold change ships without review.
+
+## Implementation (30 October 2026)
+
+Delivered as described, reusing the existing `scrape-watchdog` cron + Resend:
+
+- `src/lib/retailer-health-alerts.ts` — pure, unit-tested `evaluateRetailerHealth`
+  returning typed issues with `high`/`medium` severity. Conditions implemented:
+  (1) `missed_run` for actively-scheduled stores when no `scheduled_full` ran for
+  the previous Mon/Thu 05:10 UTC slot within a 26h grace; (2) `degraded_streak`
+  when the last 3 `scheduled_full` runs are degraded/failed (plus the existing
+  single-degraded/failed/stuck checks); (3) `coverage_low` / `coverage_expiring`
+  / `coverage_regression` from `retailer_coverage_current` +
+  `retailer_coverage_snapshots`; (4) `comparison_low` + `comparison_drop`
+  (three-retailer `both_live_pct` floor AND a ≥10pp / ≥30% fall vs baseline).
+  `scheduledStores` is supplied from `SCHEDULED_RETAILERS` so a deliberately
+  disabled retailer (Tesco) is never alerted as "missed".
+- `src/lib/retailer-health-alerts.test.ts` — 14 unit tests (each condition fires
+  and, critically, does NOT fire when healthy / not scheduled / streak broken).
+- `src/app/api/cron/scrape-watchdog/route.ts` — rewired to call the pure
+  function; DELIVERS via Resend and now returns `channelConfigured` +
+  `deliveryError` so an unconfigured channel is explicit, never a silent no-send.
+  Stale "Vercel logs" wording replaced with the AWS path.
+- Terraform: `SCRAPE_ALERT_EMAIL` (var `scrape_alert_email`) + `SCHEDULED_RETAILERS`
+  (var `scheduled_retailers`) wired into the worker task env in `workers.tf`.
+  Delivery uses the existing `RESEND_API_KEY` secret.
+
+Thresholds unchanged from the proposal. No scraper/matching/mapping change.
+
+OPERATOR ACTION to complete delivery: set `scrape_alert_email` in the apply-time
+tfvars to the ops recipient and deploy a new image (the watchdog code must ship in
+the image the task defs reference). Until then the watchdog runs and reports
+`channelConfigured=false` rather than emailing.
