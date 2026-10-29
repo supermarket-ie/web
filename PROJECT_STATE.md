@@ -1,5 +1,52 @@
 # Supermarket.ie — Canonical Project State
 
+## PLAN: Tesco mapping-recovery (grow trusted coverage beyond 323) — 30 October 2026
+
+Read-only investigation + quantified recovery plan (full details in
+`docs/tesco-mapping-recovery-plan.md`). No data/code change; existing 323
+protected by renewal. Objective: recover hundreds more trusted Tesco prices by
+REPAIRING/DISCOVERING mappings, not more expansion runs or breaker tweaks.
+
+BACKLOG (2,461 Tesco mappings, 1 canonical each; 685 duplicate shared-SKU): 323
+fresh trusted; 870 unproven-never-succeeded; 813 held on an identity reason; 313
+shared-SKU deferred; 81 url-failed (80 audit-invalidated); 45 eligible-never-
+attempted; 12 eligible-other; 4 pending (preserve).
+
+HELD (813) by recoverability: 318 canonical_metadata_ambiguous, 311 wrong_pack/
+quantity, 62 unavailable_or_no_regular_price (NOT mapping-recoverable), 54 brand/
+own-label, 39 variant/formulation, 17 transport/unknown, 12 missing/absent.
+Prioritisation by fresh peers: ~460 held canonicals have ≥1 fresh Dunnes/SuperValu
+peer, ~130 have BOTH (→ three-retailer triples). Richest: wrong_pack_or_quantity
+(210 with a peer / 71 both) and canonical_metadata_ambiguous (160 / 37).
+
+KEY FINDING: the metadata_ambiguous cases split into (a) Tesco mapping CORRECT but
+canonical name too generic ("Broccoli"→live "Tesco Family Pack Broccoli";
+"Cucumber"/"Courgette"/"Fusilli"/Odlums scones) — unblocked by a REVIEWED
+canonical-name enrichment (never a Tesco-mapping change); and (b) genuine
+mismatch ("Cheddar Cheese Block"→live Applewood Smoked; "Frozen Chips"→Strong
+Roots) — needs rediscovery.
+
+REUSE (near-complete pipeline already exists; gap = hard-wired to one audit
+batch): candidate discovery (`tesco-candidate-discovery.ts` + Pepesto single-query
++ `pepesto-tesco-candidate-discovery`/`-retrieve` workers +
+`tesco_candidate_discovery_evidence`); identity verification
+(`classifyTescoReplacement` etc.); the GUARDED correction RPC
+`finalize_tesco_candidate_discovery` (updates store_sku/url ONLY for
+`url_last_error like 'tesco_mapping_audit:%'` rows, requires exactly one distinct
+exact candidate, writes an audit trail); acquisition handoff /price_verification.
+GAPS: no general mapping-correction route; discovery cohort fixed to
+`tesco-risk-audit-2026-09-20-v1`; no canonical-name enrichment path.
+
+FASTEST +100 trusted prices (no slow build): (1) run existing supervised
+collection over the 57 eligible-never-attempted → ~45–50 now, zero code; (2) ship
+a reviewed canonical-name enrichment batch for the generic-name held products with
+peers (~37 both-peer → instant triples, ~160 ≥1-peer) via the established
+guarded-SQL evidence pattern, then re-collect. Generalised discovery (generalise
+the cohort + extend the RPC guard to a new audit batch) is the scalable follow-on
+for the ~700 genuinely-mismapped held products (~25–30% historical exact-candidate
+rate → ~150–200 over time). Invariants preserved: no auto canonical overwrite, no
+cleared holds, no retried unknowns, no price without exact identity verification.
+
 ## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
 
 Read-only investigation (SELECT-only against prod Supabase via the service key
