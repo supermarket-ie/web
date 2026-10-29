@@ -76,6 +76,78 @@ RECOMMENDATIONS (evidence-based; NOT auto-applied; breakers NOT changed):
    the commercial goal is triples (selection-only, no mapping/validation change).
 3. Implement the §3 renewal-continuity report/alert so the ~1 Nov window is not
    missed (the original lapse cause).
+## DIAGNOSIS: Dunnes schedule DISABLED → triples collapsed to 0; SuperValu degraded is catalogue-drift — 29 October 2026
+
+Read-only investigation (EventBridge/ECS/SQS/CloudWatch + prod Supabase SELECTs;
+no config change, no collection, no mutation). Confirms the Mon/Thu automation
+runs on AWS, isolates two issues, and flags identifier/monitoring hygiene.
+
+EXECUTION PATH (verified on AWS, NOT Vercel): EventBridge Scheduler
+`smie-prod-{supervalu,dunnes}-scrape-trigger` → `smie-prod-scheduled` ECS Fargate
+task (`scheduled-runner.ts`, CRON_JOB override) → calls the in-app
+`/api/workers/<store>-scrape-trigger` route → enqueues SQS batches →
+`smie-prod-sqs-consumer` processes them. Proven by the scheduled-runner log
+(stream d5b8a52e invoking supervalu-scrape-trigger → run
+vercel_supervalu_20261029052100) and the AWS scrape-watchdog flagging both
+stores. SQS queues + DLQs all EMPTY (no stuck/dead-lettered work).
+
+IDENTIFIER HYGIENE (requirement 7 — the labels are MISLEADING but harmless):
+the `vercel_<store>_<ts>` run_id prefix is HARDCODED in the trigger routes
+(`{dunnes,supervalu}-scrape-trigger/route.ts`, `store-scrape-trigger/route.ts`)
+and `retrieval_method='vercel_direct_product_page'` /
+`'vercel_queue_dunnes_api_resolved_first'` are hardcoded in
+`supervalu-direct-worker-base.ts` and matched verbatim in
+`branded-intersection.ts` + the `trusted_retailer_offers` provenance view. So a
+run labelled `vercel_*` TODAY still executes on AWS. These legacy labels are load-
+bearing in the provenance SQL (source mapping dunnes_direct/supervalu_direct), so
+they CANNOT be blindly renamed — a rename needs a coordinated code+view change.
+Recommend documenting this and, later, decoupling the provenance tag from the
+"vercel" wording.
+
+ISSUE 1 — DUNNES: no Monday 26 Oct run because the AWS schedule
+`smie-prod-dunnes-scrape-trigger` is **DISABLED** (created 25 Oct 00:05, disabled
+25 Oct 08:34; SuperValu enabled 25 Oct 08:55). This matches the 25 Oct decision
+to hold Dunnes pending a matching-confidence fix after its canary returned
+`no_confident_match`. The 22 Oct Dunnes run (`vercel_dunnes_20261022051036`,
+281 inserted) predates the AWS schedules → it was the LAST legacy Vercel-cron run.
+No Dunnes run has happened since. CRITICAL CONSEQUENCE: the 859 dunnes_direct
+observations' newest is 22 Oct 05:20 — as of ~29 Oct 10:14 UTC they crossed the
+7-day `trusted_retailer_offers` freshness cutoff, so **Dunnes trusted/live
+coverage = 0** and **three-retailer triples dropped from 170 (28 Oct) to 0**
+(latest_prices: tesco 323 / supervalu 1,252 / dunnes 0; 284 tesco+supervalu-only,
+39 tesco-only, 0 triples). NOTE: "dunnes 859" is the RAW observation count; the
+TRUSTED+fresh count is 0. No Dunnes matching fix has landed since (git log clean
+on dunnes/store-refresh paths), so re-enabling or a catch-up reproduces the same
+`no_confident_remap` rejections.
+
+ISSUE 2 — SUPERVALU degraded (NOT an AWS regression): every scheduled_full
+finishes `degraded` at ~73–75% coverage vs an 85% threshold, back to September on
+Vercel too. Latest run (vercel_supervalu_20261029052100) 266 failures =
+142 `parsing|empty_product_state` (delisted/empty live pages) + 124
+`matching|no_confident_remap` (can't confidently remap the fetched candidate),
+both retryable=false. Low inserts (10 on Mon 26) are mostly because prices were
+UNCHANGED (729), not failures. This is catalogue drift + matching strictness, not
+infra — trusted-price protection correctly refuses low-confidence writes (0 bad
+writes). Supervalu trusted coverage is healthy (1,252).
+
+THURSDAY 29 OCT: SuperValu already RAN today (degraded, as above). Dunnes did NOT
+and will NOT until its schedule is enabled. Trigger path verified working.
+
+CATCH-UP (requirement 6 — appropriate but GATED, not initiated): a Dunnes
+scheduled_full is the single highest-leverage action to restore triples (now 0).
+But it is blocked by the same unfixed matching issue that disabled the schedule;
+running it today would insert only the high-confidence subset (the 22 Oct run
+inserted 281/1000 at 85.9% coverage, i.e. it DID write a large fresh set) and
+would at minimum restore Dunnes freshness for those. Recommend: (a) land the
+Dunnes matching-confidence fix first for best yield, OR (b) authorise a one-off
+Dunnes scheduled_full now to re-establish freshness for the confidently-matched
+cohort and restore triples, accepting reduced coverage. EITHER needs explicit
+authorisation — NOT done here. No schedule config changed.
+
+MONITORING GAP: no CloudWatch alarm for scrape staleness/degradation; detection
+relies solely on the in-app `scrape-watchdog` cron (which DID flag both). Consider
+an alarm or alert wired to watchdog output so a disabled/failing retailer surfaces
+without manual inspection.
 
 ## HOUSEKEEPING: Vercel decommissioned from CI/CD + repo; AWS is authoritative — 28 October 2026
 
