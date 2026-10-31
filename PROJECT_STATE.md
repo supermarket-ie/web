@@ -1,5 +1,39 @@
 # Supermarket.ie — Canonical Project State
 
+## CUTOVER: Eve agent production model switched to Amazon Bedrock — 31 October 2026
+
+The customer-facing agent now runs on Amazon Bedrock (`eu.anthropic.claude-sonnet-4-6`)
+via the ECS task role. Done after the Bedrock Anthropic use-case form cleared
+(admin `converse` returned "Pong!") AND a full 3-turn Bedrock conversation passed
+isolated-preview validation. Env-only change, no rebuild. Tesco/Dunnes/SuperValu
+pipelines untouched.
+
+HOW: set `agent_model_provider = "bedrock"` in apply-time `terraform.tfvars`, then
+TARGETED `tofu apply -var image_tag=606477f-prod -target=aws_ecs_task_definition.app[0]
+-target=aws_ecs_service.app[0]` — flipped only `AGENT_MODEL_PROVIDER anthropic→bedrock`
+on the website task def. Image unchanged (`606477f-prod`; it already carried the
+Bedrock code + credentialProvider). IAM `smie-prod-task-bedrock-invoke` was already
+attached from the prior deploy.
+
+RESULT (verified): service on `smie-prod:14`, 2/2 RUNNING, rollout COMPLETED,
+steady state, `www.supermarket.ie` HTTP 200. Live Bedrock turns on
+https://www.supermarket.ie completed with REAL data (butter prices across 3
+retailers; `present_household_shop` bolognese list). CloudWatch since cutover: 0
+transport failures, 0 model/SigV4/use-case/AccessDenied errors; AWS/Bedrock
+`Invocations` for `eu.anthropic.claude-sonnet-4-6` registering real traffic (16 in
+15 min). Collection stack unchanged (sqs-consumer:3, scheduled:3 @ df9f0c1-prod,
+Dunnes+SuperValu schedules ENABLED).
+
+ROLLBACK (fast, env-only): set `agent_model_provider = "anthropic"` + targeted
+`tofu apply` — reverts to the direct Anthropic key (`ANTHROPIC_API_KEY` still
+wired). The one image serves both providers.
+
+FOLLOW-UP: `ANTHROPIC_API_KEY` (`smie-prod/anthropic`) is retained as the rollback
+path; retire it only after Bedrock has run clean for a sustained period. The
+pre-existing PR #283 Terraform drift (SCHEDULED_RETAILERS/SCRAPE_ALERT_EMAIL on the
+scheduled + sqs-consumer task defs, same image) is still pending a deliberate
+untargeted apply.
+
 ## IMPLEMENTATION (preview-validated; NOT deployed): restore Eve agent + Bedrock — 31 October 2026
 
 Fixes the broken customer-facing agent and migrates model access to Amazon
