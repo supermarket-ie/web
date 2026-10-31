@@ -1,11 +1,31 @@
 # Supermarket.ie — Canonical Project State
 
-## IMPLEMENTATION (preview-validated; NOT deployed): restore Eve agent + Bedrock — 30 October 2026
+## IMPLEMENTATION (preview-validated; NOT deployed): restore Eve agent + Bedrock — 31 October 2026
 
 Fixes the broken customer-facing agent and migrates model access to Amazon
 Bedrock. On branch `fix/eve-agent-bedrock`; validated in an isolated preview ECS
 task. NO production change; awaiting approval to deploy. Tesco/Dunnes/SuperValu
 pipelines untouched. Full plan + results: `docs/eve-agent-bedrock-migration.md`.
+
+PREVIEW VALIDATION (isolated one-off ECS task, branch image, dedicated preview
+task role w/ least-priv Bedrock): transport fix CONFIRMED (turns reach the model;
+no more `world-local`/`fetch failed`); Bedrock SigV4 via task role CONFIRMED (no
+credential error; requests reach bedrock-runtime converse-stream with full prompt
++ tools); a full 3-turn customer conversation COMPLETED end-to-end with REAL
+Supermarket.ie data (real butter prices across 3 retailers; milk/bread/eggs
+comparison that refused a single-cheapest on incomplete coverage and separated
+promo flags from confirmed savings; present_household_shop bolognese list, 6
+lines €9.42) — proven via the Anthropic rollback path, which exercises the
+identical transport/tools/data. Preview resources removed after.
+
+BLOCKER (account-level, NOT code/IAM): Bedrock returns ResourceNotFoundException
+"Model use case details have not been submitted for this account" for ALL
+Anthropic models (Sonnet 4.5/4.6, Haiku 4.5) in acct 611622961299. The one-time
+Bedrock Anthropic use-case form (console → Model access) must be submitted by the
+account owner before any Anthropic model can be invoked. So the first prod
+rollout defaults AGENT_MODEL_PROVIDER=anthropic (works now); flip to bedrock
+(env-only apply) after the form clears. The earlier admin Converse "Pong!" slipped
+through before the gate propagated.
 
 ROOT CAUSE (verified against the compiled Eve runtime, not assumed): Eve's
 `configureProductionNitroRoutes` registers the IN-PROCESS turn-queue handler
