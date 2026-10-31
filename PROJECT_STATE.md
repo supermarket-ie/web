@@ -1,5 +1,84 @@
 # Supermarket.ie — Canonical Project State
 
+## IMPLEMENTATION (preview-validated; NOT deployed): restore Eve agent + Bedrock — 31 October 2026
+
+Fixes the broken customer-facing agent and migrates model access to Amazon
+Bedrock. On branch `fix/eve-agent-bedrock`; validated in an isolated preview ECS
+task. NO production change; awaiting approval to deploy. Tesco/Dunnes/SuperValu
+pipelines untouched. Full plan + results: `docs/eve-agent-bedrock-migration.md`.
+
+PREVIEW VALIDATION (isolated one-off ECS task, branch image, dedicated preview
+task role w/ least-priv Bedrock): transport fix CONFIRMED (turns reach the model;
+no more `world-local`/`fetch failed`); Bedrock SigV4 via task role CONFIRMED (no
+credential error; requests reach bedrock-runtime converse-stream with full prompt
++ tools); a full 3-turn customer conversation COMPLETED end-to-end with REAL
+Supermarket.ie data (real butter prices across 3 retailers; milk/bread/eggs
+comparison that refused a single-cheapest on incomplete coverage and separated
+promo flags from confirmed savings; present_household_shop bolognese list, 6
+lines €9.42) — proven via the Anthropic rollback path, which exercises the
+identical transport/tools/data. Preview resources removed after.
+
+BLOCKER (account-level, NOT code/IAM): Bedrock returns ResourceNotFoundException
+"Model use case details have not been submitted for this account" for ALL
+Anthropic models (Sonnet 4.5/4.6, Haiku 4.5) in acct 611622961299. The one-time
+Bedrock Anthropic use-case form (console → Model access) must be submitted by the
+account owner before any Anthropic model can be invoked. So the first prod
+rollout defaults AGENT_MODEL_PROVIDER=anthropic (works now); flip to bedrock
+(env-only apply) after the form clears. The earlier admin Converse "Pong!" slipped
+through before the gate propagated.
+
+ROOT CAUSE (verified against the compiled Eve runtime, not assumed): Eve's
+`configureProductionNitroRoutes` registers the IN-PROCESS turn-queue handler
+ONLY when `experimental.workflow.world` is defined. `agent/agent.ts` declared no
+workflow world, so no direct handler was registered and every turn fell back to
+the `world-local` HTTP self-delivery to `/flow`. An isolated two-process probe
+(Next :3000 + Eve Nitro :4274, same image) confirmed `/flow` is served by
+NEITHER port (both 404), so the HTTP delivery can never succeed → every turn
+died with `TypeError: fetch failed`, 0 completed turns.
+
+FIX (code, `agent/agent.ts`): (1) set `experimental: { workflow: { world:
+'local' } }` so the production build registers the in-process handler and turns
+run in-process (no HTTP self-hop). Durable household state lives in Supabase
+(rebuilt per turn), not the workflow store, so this is correct across multiple
+ECS tasks for the stateless request→turn→response flow. (2) Model is now
+configurable: `AGENT_MODEL_PROVIDER` (`bedrock` default | `anthropic`),
+`AGENT_MODEL_ID` (default `eu.anthropic.claude-sonnet-4-6`), with Anthropic kept
+as a one-env-flag rollback. (3) `modelContextWindowTokens: 200000` supplied
+because a direct Bedrock model has no AI-Gateway window metadata (Eve build
+errors without it). Added dep `@ai-sdk/amazon-bedrock@5.0.130` (its
+`@ai-sdk/provider` is 4.x, matching `ai@7.0.66`/`@ai-sdk/anthropic@4.0.38`).
+
+GATE (green): 742 tests, 16 behavioural, lint 0 errors/22 warnings, 3
+typechecks, `eve build` OK.
+
+IAM (required for prod, least-privilege): task role `smie-prod-task` currently
+has NO Bedrock permission (only inline `smie-prod-task-sqs-produce`). Prod needs
+`bedrock:InvokeModel`+`bedrock:InvokeModelWithResponseStream` scoped to the EU
+Claude inference profile + the foundation model(s) it routes to.
+
+RELIABILITY NOTE (requirement): `world-local` keeps only in-flight turn state
+locally and ephemerally per task; a turn interrupted by a task restart is lost
+(user retries) and there is no cross-task workflow resumption. Acceptable for a
+chat turn; the durable-world upgrade path (shared Supabase/SQS-backed world) is
+documented for future scale.
+
+## DIAGNOSIS: customer-facing Eve agent broken on AWS — `world-local` workflow transport self-delivery fails (NOT Anthropic credits) — 30 October 2026
+
+Read-only investigation (code read + CloudWatch `/ecs/smie-prod` + read-only
+one-off ECS probe tasks; no production change). The homepage/shopping agent has
+produced NO successful turn since the AWS cutover window (~25 Oct). The agent is
+the **Eve** framework (`eve@0.39.0`, AI SDK `ai@7`), `agent/agent.ts` previously
+`model: anthropic('claude-sonnet-5')` via `@ai-sdk/anthropic` + `ANTHROPIC_API_KEY`
+(no Bedrock). Container runs TWO processes: Next on `0.0.0.0:3000` (ALB) and Eve
+Nitro on `127.0.0.1:4274`.
+
+RULED OUT WITH EVIDENCE — NOT credits/key/model/networking: a one-off ECS task
+(live `smie-prod:12` task def, same subnets/SG, real injected key) called
+`api.anthropic.com` → **HTTP 200** with `model: claude-sonnet-5` and real usage.
+Key well-formed; SG allows all egress; subnets public; `localhost`→127.0.0.1.
+Site healthy (200, 2/2). See the IMPLEMENTATION entry above for the confirmed
+root cause and fix.
+
 ## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
 
 Read-only investigation (SELECT-only against prod Supabase via the service key
