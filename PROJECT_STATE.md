@@ -1,6 +1,45 @@
 # Supermarket.ie — Canonical Project State
 
-## IMPLEMENTATION (preview-validated; NOT deployed): restore Eve agent + Bedrock — 31 October 2026
+## DEPLOYED: Eve agent restored in production (Anthropic path) — 31 October 2026
+
+PR #287 squash-merged to main (`606477f`); CI `validate` green. Built prod image
+`606477f-prod` via the ECR workflow (`image_mode=prod`) and rolled ONLY the
+website via a TARGETED `tofu apply` (`-target` app task def + app service +
+bedrock IAM policy) so the Tesco/Dunnes/SuperValu collection stack was untouched.
+
+RESULT: `smie-prod-svc` now on task def `smie-prod:13`, image `606477f-prod`,
+env `AGENT_MODEL_PROVIDER=anthropic` + `AGENT_MODEL_ID=eu.anthropic.claude-sonnet-4-6`;
+IAM policy `smie-prod-task-bedrock-invoke` added to `smie-prod-task`
+(least-privilege, ready for the later Bedrock switch). Rollout COMPLETED, 2/2
+tasks RUNNING + HEALTHY, service steady state, `www.supermarket.ie` HTTP 200.
+
+LIVE VALIDATION (guest `eve invoke` against https://www.supermarket.ie): product
+search (real butter prices across 3 retailers), retailer comparison (SuperValu
+cheapest €7.85 basket, correctly excluded Tesco on incomplete milk coverage,
+promo-flag caveat), and a `present_household_shop` chicken-curry list (6 priced
+SuperValu lines ≈€6.20, honestly flagged unresolved items) all COMPLETED with
+REAL data. Multi-turn resume worked (turn 1→2). CloudWatch since deploy: 0
+`world-local`/`fetch failed`, 0 model/tool-loop errors. (The transport defect
+that broke every turn pre-deploy is gone.)
+
+COLLECTION PIPELINES UNAFFECTED (verified): `smie-prod-sqs-consumer:3` (1/1),
+`smie-prod-scheduled:3` (image `df9f0c1-prod`), Dunnes + SuperValu schedules
+ENABLED on their Mon/Thu cron — none re-registered or changed.
+
+TERRAFORM DRIFT NOTE (action for whoever next runs a full apply): because the
+rollout used `-target`, a later UNTARGETED `tofu apply` still shows the
+pre-existing PR #283 drift — it would add `SCHEDULED_RETAILERS`/`SCRAPE_ALERT_EMAIL`
+env to `smie-prod-scheduled` + `smie-prod-sqs-consumer` (SAME image `df9f0c1-prod`,
+so collection behaviour is unchanged; this also finally enables watchdog email if
+`scrape_alert_email` is set). Apply that deliberately, separately from the agent
+change. The apply-time `terraform.tfvars` must keep `image_tag=606477f-prod` (now
+live) so a future apply does not revert the website image.
+
+BEDROCK (deferred per instruction): NOT switched on. Blocked by the account
+use-case form (see below). Flip is env-only: set `agent_model_provider=bedrock`
+and `tofu apply` once the form clears and a full Bedrock conversation passes.
+
+## IMPLEMENTATION (preview-validated): restore Eve agent + Bedrock — 31 October 2026
 
 Fixes the broken customer-facing agent and migrates model access to Amazon
 Bedrock. On branch `fix/eve-agent-bedrock`; validated in an isolated preview ECS
