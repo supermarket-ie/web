@@ -5,6 +5,7 @@ import {
   type TescoCollectedPage, type TescoPageResponse,
 } from './tesco-direct-collection-core';
 import { acquisitionDecision, acquisitionSnapshotSql, selectAcquisitionCandidates, type Acquisition } from './tesco-acquisition-handoff';
+import { assertReentry, consumeReentry, independentExactIdentity, selectReviewedCandidates, type Reentry } from './tesco-hold-reentry';
 import { classifyIdentityOutcome, holdCircuitTripped, quarantineCircuitTripped } from './tesco-identity-disposition';
 import { hasMaterialDuplicateCanonicalConflict } from './tesco-mapping-audit';
 
@@ -22,7 +23,7 @@ type Mapping = {
 };
 export type Candidate = Mapping & {
   observed_at: string | null; price: number | null; due: boolean; held: boolean;
-  proven: boolean; overlap: number; peers: Mapping[]; acquisition?: Acquisition;
+  proven: boolean; overlap: number; peers: Mapping[]; acquisition?: Acquisition; reentry?: Reentry;
 };
 type RunState = {
   protocol: string; mode: CollectionMode; selected: Candidate[];
@@ -36,7 +37,8 @@ type RunState = {
   // way. consecutiveQuarantines resets on an acceptance; totalQuarantines cumulative.
   consecutiveQuarantines?: number; totalQuarantines?: number;
 };
-export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean; acquisitionPages?: string[]; excludeSharedSku?: boolean };
+export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean;
+  acquisitionPages?: string[]; reviewedCandidates?: string[]; excludeSharedSku?: boolean };
 export type Dependencies = {
   execute: ExecuteSql;
   fetchPage?: (url: string) => Promise<TescoPageResponse>;
@@ -241,6 +243,9 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Limit must be 1–100');
   if (options.acquisitionPages && (options.mode !== 'expansion' || options.resume || options.acquisitionPages.length > limit))
     throw new Error('Acquisition handoff requires a new bounded expansion run');
+  if (options.reviewedCandidates && (options.mode !== 'expansion' || options.resume ||
+    options.acquisitionPages || options.reviewedCandidates.length > limit))
+    throw new Error('Reviewed hold re-entry requires a separate new bounded expansion run');
   const { execute } = deps;
   let selected: Candidate[];
   let completedUrls: string[] = [];
@@ -264,7 +269,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
     attempts = Number(state.attempts ?? 0);
     consecutiveQuarantines = Number(state.consecutiveQuarantines ?? 0);
     totalQuarantines = Number(state.totalQuarantines ?? 0);
-  } else selected = options.acquisitionPages ? await selectAcquisitionCandidates(execute, options.acquisitionPages)
+  } else selected = options.reviewedCandidates ? await selectReviewedCandidates(execute, options.reviewedCandidates)
+    : options.acquisitionPages ? await selectAcquisitionCandidates(execute, options.acquisitionPages)
     : await selectSupervisedCandidates(execute, options.mode, limit, { excludeSharedSku: options.excludeSharedSku });
   if (options.dryRun || !selected.length) return { result: options.dryRun ? 'dry_run' : 'no_due_products',
     mode: options.mode, selected: selected.map(m => ({ id: m.id, name: m.canonical_name, observedAt: m.observed_at })) };
@@ -310,16 +316,20 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         (now()-last_success_at))*1000)::int wait_ms from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}`);
       await (deps.sleep ?? (ms => new Promise(r => setTimeout(r, ms))))(Number(spacing?.wait_ms ?? 0));
       await execute(`do $runner$ begin ${owned(runId, owner)} ${assertSnapshot(target)} ${assertAcquisition(target, runId)}
+        ${assertReentry(target, runId, false)}
         if not (${duePredicate(target, options.mode)}) then raise exception 'not_due_or_observation_changed'; end if;
         if exists(select 1 from tesco_direct_collection_pages where requested_url=${literal(target.store_url)}
           ${target.acquisition ? `and id<>${uuid(target.acquisition.pageId)}` : ''}
           and (outcome='pending' or created_at>now()-interval '24 hours')) then raise exception 'attempt_already_recorded'; end if;
         if exists(select 1 from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}
           and last_success_at>now()-interval '10 seconds') then raise exception 'pacing_not_elapsed'; end if;
+        ${consumeReentry(target, runId)}
         insert into tesco_direct_collection_pages(run_id,egress_key,requested_url,mode,outcome,detail)
           values(${uuid(runId)},${literal(SUPERVISED_GATE)},${literal(target.store_url)},'products','pending',
           ${literal(target.acquisition ? JSON.stringify({ purpose: 'price_verification', sourceAcquisitionPageId: target.acquisition.pageId,
-            sourceBodySha256: target.acquisition.snapshot.page.body_sha256 }) : null)});
+            sourceBodySha256: target.acquisition.snapshot.page.body_sha256 }) : target.reentry
+            ? JSON.stringify({ purpose: 'audited_hold_reentry', reviewId: target.reentry.reviewId,
+              sourcePageId: target.reentry.sourcePageId, sourceBodySha256: target.reentry.evidence.page.body_sha256 }) : null)});
         end $runner$; select 1 reserved`);
 
       const response = await (deps.fetchPage ?? fetchTescoCollectedPage)(target.store_url);
@@ -335,6 +345,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         duplicateCanonicalNames: target.peers.map(p => p.canonical_name), isFresh: !!target.observed_at }, product) : ['missing_exact_product'];
       if (target.acquisition && product && !acquisitionDecision(target.acquisition.snapshot, product))
         reasons.push('acquisition_live_identity_not_exact');
+      if (target.reentry && product && !independentExactIdentity(target.reentry.evidence, product))
+        reasons.push('variantConflict');
       const unavailable = tescoResourceUnavailable(response);
       const transportStop = outcome !== 'ok' && !unavailable;
       // Independently inspect the product's SAME-SKU canonical mapping group for a
@@ -394,7 +406,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       await execute(`do $runner$ begin ${owned(runId, owner, !!pauseUntil)}
         if exists(select 1 from tesco_direct_collection_pages where run_id=${uuid(runId)}
           and requested_url=${literal(target.store_url)} and outcome='pending') then
-          ${accepted || isQuarantine ? assertSnapshot(target) + assertAcquisition(target, runId) : ''}
+          ${accepted || isQuarantine ? assertSnapshot(target) + assertAcquisition(target, runId) + assertReentry(target, runId, true) : ''}
           update tesco_direct_collection_pages set final_url=${literal(response.finalUrl)},outcome=${literal(outcome)},
             http_status=${literal(response.status)}::int,retry_after=${literal(response.retryAfter)},elapsed_ms=${literal(response.elapsedMs)}::int,
             body_sha256=${literal(createHash('sha256').update(response.html).digest('hex'))},parsed=${literal(parsed)}::jsonb,
@@ -404,7 +416,10 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
               disposition: outcome === 'ok' ? disposition : undefined,
               quarantined: isQuarantine || undefined,
               ...(target.acquisition ? { purpose: 'price_verification', sourceAcquisitionPageId: target.acquisition.pageId,
-                sourceBodySha256: target.acquisition.snapshot.page.body_sha256 } : {}) }))}
+                sourceBodySha256: target.acquisition.snapshot.page.body_sha256 } : {}),
+              ...(target.reentry ? { purpose: 'audited_hold_reentry', reviewId: target.reentry.reviewId,
+                sourcePageId: target.reentry.sourcePageId, sourceBodySha256: target.reentry.evidence.page.body_sha256,
+                independentlyExact: !!product && independentExactIdentity(target.reentry.evidence, product) } : {}) }))}
             where run_id=${uuid(runId)} and requested_url=${literal(target.store_url)};
           ${accepted && product ? `if not (${duePredicate(target, options.mode)}) then raise exception 'observation_changed'; end if;
             perform finalize_store_scrape_product(p_run_uuid=>${uuid(runId)},p_store=>'tesco',p_store_product_id=>${uuid(target.id)},
