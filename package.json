@@ -21,6 +21,10 @@
     "branded:infer": "node --import tsx scripts/branded-intersection-infer.ts",
     "typecheck:branded": "tsc --project tsconfig.branded-intersection.json"
   },
+  "overrides": {
+    "@ai-sdk/provider": "4.0.35",
+    "@ai-sdk/provider-utils": "5.0.72"
+  },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "5.0.130",
     "@ai-sdk/anthropic": "4.0.38",
