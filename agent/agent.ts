@@ -18,9 +18,24 @@ function resolveModel(): LanguageModel {
   if (provider === 'anthropic') {
     return anthropic(process.env.AGENT_ANTHROPIC_MODEL ?? 'claude-sonnet-5');
   }
-  // Bedrock auth uses the default AWS credential chain (ECS task-role creds);
-  // no access keys are set in the task. Region follows AWS_REGION (eu-west-1).
-  const bedrock = createAmazonBedrock({ region: process.env.AWS_REGION ?? 'eu-west-1' });
+  // The @ai-sdk/amazon-bedrock provider signs requests with SigV4 via aws4fetch
+  // and does NOT use the AWS SDK default credential chain on its own, so it does
+  // not pick up ECS task-role credentials automatically. Wire the AWS SDK node
+  // provider chain (resolves the ECS container-credentials endpoint, i.e. the
+  // task role) as the credentialProvider. No static access keys are set in the
+  // task. Region follows AWS_REGION (eu-west-1).
+  const bedrock = createAmazonBedrock({
+    region: process.env.AWS_REGION ?? 'eu-west-1',
+    credentialProvider: async () => {
+      const { defaultProvider } = await import('@aws-sdk/credential-provider-node');
+      const creds = await defaultProvider()();
+      return {
+        accessKeyId: creds.accessKeyId,
+        secretAccessKey: creds.secretAccessKey,
+        sessionToken: creds.sessionToken,
+      };
+    },
+  });
   return bedrock(process.env.AGENT_MODEL_ID ?? 'eu.anthropic.claude-sonnet-4-6');
 }
 
