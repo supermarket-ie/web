@@ -1,7 +1,49 @@
 # Eve agent: failure diagnosis + Bedrock / AgentCore migration plan
 
-Status: investigation complete, read-only. No production change made.
-Date: 30 October 2026. Region: eu-west-1, account 611622961299.
+Status: Phase 4 implemented on branch `fix/eve-agent-bedrock` and validated in an
+isolated preview ECS task. NO production change. Awaiting approval to deploy.
+Date: 30–31 October 2026. Region: eu-west-1, account 611622961299.
+
+---
+
+## 0. Phase 4 result (TL;DR)
+
+- **Root cause verified against the compiled Eve runtime (not assumed):** the
+  production Nitro build registers the in-process turn-queue handler only when
+  `experimental.workflow.world` is defined. It was undefined, so every turn fell
+  back to a `world-local` HTTP self-delivery to `/flow` — a route served by
+  neither the Next (:3000) nor the Eve Nitro (:4274) process (both 404, proven
+  by an isolated two-process probe). Every turn died with `TypeError: fetch
+  failed`.
+- **Fix:** declare `experimental: { workflow: { world: 'local' } }` so turns run
+  in-process. Make the model configurable and default it to Amazon Bedrock
+  (`eu.anthropic.claude-sonnet-4-6`) via the ECS task role; keep Anthropic as a
+  one-env-flag rollback. Supply ECS task-role creds to the Bedrock SigV4 signer
+  via `@aws-sdk/credential-provider-node`. Dedupe `@ai-sdk/provider` to 4.0.35.
+- **Preview validation (isolated ECS task, new image, Bedrock task role):**
+  - Transport fix CONFIRMED — turns now reach the model call (no `fetch
+    failed`); the earlier `[world-local] Queue delivery failed` is gone.
+  - Bedrock SigV4 task-role auth CONFIRMED — the credential error is gone and
+    requests reach `bedrock-runtime.eu-west-1.amazonaws.com/.../converse-stream`
+    with the full system prompt + tools.
+  - IAM CONFIRMED least-privilege and sufficient (no AccessDenied).
+  - **A full 3-turn customer conversation COMPLETED end-to-end** (via the
+    Anthropic rollback path, which exercises the identical transport, tools and
+    data) with **real Supermarket.ie data**: real butter prices across
+    Tesco/Dunnes/SuperValu; a milk/bread/eggs comparison that correctly refused
+    to call a single store cheapest on incomplete coverage and separated
+    retailer promo flags from confirmed savings; and a `present_household_shop`
+    spaghetti-bolognese list (6 priced lines, €9.42). Multi-turn session resume
+    worked.
+- **One remaining BLOCKER, account-level (not code/IAM):** Amazon Bedrock
+  returns `ResourceNotFoundException: Model use case details have not been
+  submitted for this account` for ALL Anthropic models (Sonnet 4.5, 4.6, Haiku
+  4.5) from account 611622961299. This is the one-time Bedrock **Anthropic
+  "use case details" form** (Bedrock console → Model access). It must be
+  submitted by the account owner before any Anthropic model can be invoked; it
+  cannot be done from code/CLI. Until then, deploy with
+  `AGENT_MODEL_PROVIDER=anthropic` (proven working today) and flip to Bedrock
+  once the form clears — a one-env change, no rebuild.
 
 ---
 
@@ -249,3 +291,93 @@ Tesco, Dunnes, SuperValu collection pipelines, schedules, mapping/price data.
   `smie-prod/anthropic` until Bedrock is proven, then retire it.
 - **No** VPC/NAT change (egress already open); **no** new service; **no**
   AgentCore resources.
+
+---
+
+## 7. AS-BUILT (Phase 4) — supersedes the planning details above where they differ
+
+### What changed in code (branch `fix/eve-agent-bedrock`)
+- `agent/agent.ts`:
+  - `experimental: { workflow: { world: 'local' } }` — THE transport fix. Runs
+    each turn in-process (registers the direct queue handler), eliminating the
+    broken HTTP self-delivery. No `WORKFLOW_LOCAL_BASE_URL` is needed; that env
+    var is NOT the fix (the delivery route is not served on any port).
+  - Configurable model: `AGENT_MODEL_PROVIDER` (`bedrock` default | `anthropic`),
+    `AGENT_MODEL_ID` (default `eu.anthropic.claude-sonnet-4-6`),
+    `AGENT_ANTHROPIC_MODEL` (anthropic rollback), `AGENT_MODEL_CONTEXT_WINDOW`.
+  - `modelContextWindowTokens: 200000` — required because a direct Bedrock model
+    has no AI-Gateway window metadata (eve build errors without it).
+  - Bedrock `credentialProvider` wired to `@aws-sdk/credential-provider-node`
+    `defaultProvider()` so the SigV4 signer uses ECS task-role creds.
+- `package.json`: add `@ai-sdk/amazon-bedrock@5.0.130`,
+  `@aws-sdk/credential-provider-node@3.972.86`; `overrides` pin
+  `@ai-sdk/provider@4.0.35` + `@ai-sdk/provider-utils@5.0.72` so Bedrock and
+  `ai@7` share one provider type (fixes a `next build` type clash).
+- `infra/terraform/iam.tf` + `variables.tf`: least-privilege
+  `smie-prod-task-bedrock-invoke` policy (InvokeModel+stream on the EU profile +
+  its regional foundation-model ARNs), governed by
+  `var.bedrock_invoke_resource_arns`.
+
+Gate green: 742 tests, 16 behavioural, lint 0/22, 3 typechecks, `eve build` +
+`next build` OK.
+
+### Account prerequisite (MUST be done before Bedrock will work)
+Submit the Bedrock **Anthropic "use case details" form** for account
+611622961299 (Bedrock console → Model access). Until then EVERY Anthropic model
+on Bedrock returns `ResourceNotFoundException: Model use case details have not
+been submitted`. Verify it cleared with:
+`aws bedrock-runtime converse --region eu-west-1 --model-id eu.anthropic.claude-sonnet-4-6 --messages '[{"role":"user","content":[{"text":"ping"}]}]' --inference-config '{"maxTokens":5}'`
+
+### Production deploy steps (after approval)
+1. Open a PR from `fix/eve-agent-bedrock`; green `validate` CI; squash-merge to
+   `main` (ruleset "Protect main"). (If a `validate` build fails only on the
+   known Turbopack/Google-fonts flake, re-run it.)
+2. Build the prod image: run `Build & push deploy image to ECR`
+   (`workflow_dispatch`, `image_mode=prod`) on `main` → tag `<sha>-prod`.
+   Approve the `aws-prod` environment gate.
+3. Apply IAM + task env + image via Terraform in `infra/terraform`:
+   - The website task env now carries `AGENT_MODEL_PROVIDER`
+     (`var.agent_model_provider`, default `anthropic`) and `AGENT_MODEL_ID`
+     (`var.agent_model_id`) via `ecs.tf`. For the FIRST production rollout keep
+     the default `anthropic` (proven working now) so the agent is restored
+     immediately even if the Bedrock use-case form has not yet cleared.
+   - `tofu apply -var image_tag=<sha>-prod` — adds
+     `smie-prod-task-bedrock-invoke` to the task role and rolls `smie-prod-svc`.
+4. Verify: `www.supermarket.ie` chat answers a real query; CloudWatch
+   `/ecs/smie-prod` shows `[eve-session-context]` and NO `world-local`/`fetch
+   failed`; a completed turn with real prices.
+5. Switch to Bedrock once the use-case form has cleared: set
+   `AGENT_MODEL_PROVIDER=bedrock` (+ `AGENT_MODEL_ID=eu.anthropic.claude-sonnet-4-6`)
+   and `tofu apply` (env-only; no rebuild). Confirm Bedrock usage in CloudWatch
+   + Bedrock metrics, then optionally retire `smie-prod/anthropic`.
+
+### Rollback
+- **Fastest (model path):** set `AGENT_MODEL_PROVIDER=anthropic` and `tofu
+  apply` (env-only, no rebuild) — reverts to the direct Anthropic key. The one
+  image serves both providers.
+- **Full:** `tofu apply -var image_tag=<previous-sha>-prod` to roll
+  `smie-prod-svc` back to the prior task definition. The prior image lacks the
+  transport fix (agent stays broken), so prefer the env rollback unless the new
+  image itself is the problem.
+- The Bedrock IAM policy is additive and safe to leave; set
+  `var.bedrock_invoke_resource_arns = []` and apply to remove it.
+
+### Reliability / scale note (requirement 6)
+`world-local` keeps in-flight turn state locally and ephemerally per task. A
+turn self-completes within one task (the ALB routes a request to one task; the
+turn runs in that process), so it is correct across the 2 running tasks for the
+stateless request→turn→response flow, and durable household data lives in
+Supabase (shared, rebuilt per turn). Limits: a turn interrupted by a task
+restart is lost (the user retries) and there is no cross-task workflow
+resumption. If future requirements need durable cross-task/long-running
+workflows, move to a shared workflow world (a Supabase/SQS-backed world module)
+— a `experimental.workflow.world` change, no agent rewrite.
+
+### Preview validation method (for reproducibility)
+Built the branch image via the ECR workflow (`image_mode=test`), registered a
+throwaway `smie-preview-eve` task def (new image, a dedicated preview task role
+with only the Bedrock policy, `SUPABASE_READ_ONLY=true`, `APP_ENV=preview`,
+retailer collection + email disabled), and ran it as a one-off ECS task whose
+container override started the real two-process entrypoint and drove 3 turns
+with `eve invoke --url … --resume`. All preview-only resources (task defs,
+preview IAM role, temp env branch policy) were removed afterwards.

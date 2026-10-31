@@ -373,3 +373,29 @@ variable "bedrock_invoke_resource_arns" {
     "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-sonnet-4-6"
   ]
 }
+
+variable "agent_model_provider" {
+  description = <<-EOT
+    Model provider for the customer-facing Eve agent: "bedrock" (Amazon Bedrock
+    via the ECS task role) or "anthropic" (direct Anthropic API via the
+    ANTHROPIC_API_KEY secret). Default "anthropic" so the agent is restored on
+    first rollout without depending on the Bedrock Anthropic use-case form;
+    switch to "bedrock" (env-only apply) once that form has cleared.
+  EOT
+  type        = string
+  default     = "anthropic"
+  validation {
+    condition     = contains(["bedrock", "anthropic"], var.agent_model_provider)
+    error_message = "agent_model_provider must be \"bedrock\" or \"anthropic\"."
+  }
+}
+
+variable "agent_model_id" {
+  description = <<-EOT
+    Bedrock model/inference-profile id used when agent_model_provider = bedrock.
+    Default is the EU regional Claude Sonnet 4.6 profile. Keep in sync with
+    var.bedrock_invoke_resource_arns (the IAM grant).
+  EOT
+  type        = string
+  default     = "eu.anthropic.claude-sonnet-4-6"
+}
