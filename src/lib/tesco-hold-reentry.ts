@@ -118,6 +118,10 @@ function independentPackConflict(e: ReentryEvidence, source: TescoCollectedProdu
   // Fresh third-party equivalents do not independently prove *brand*, but
   // known explicit units/pack sizes must not contradict the Tesco identity.
   for (const peer of e.peers) {
+    // Peer formulation is independently relevant to a *genuine* three-way
+    // comparison: a juice drink cannot corroborate juice, nor an unadvertised
+    // citrus/vanilla variant. The reviewer checks the remaining semantics.
+    if (canonicalVariantConflict(source.name, peer.store_product_name)) return true;
     const other = declaredPack(peer.store_product_name);
     if (tesco.amount && other.amount && tesco.amount !== other.amount) return true;
     if (tesco.units != null && other.units != null && tesco.units !== other.units) return true;
@@ -156,6 +160,24 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
     && JSON.stringify(live.quantity) === JSON.stringify(source.quantity)
     && (source.gtin == null || live.gtin === source.gtin)
     && !canonicalVariantConflict(m.canonical_name, live.name);
+}
+
+// The legacy lexical validator can reject an exact, independently evidenced
+// held product solely because the canonical description is incomplete or uses
+// a different measurement convention. These TWO negative predicates may be
+// resolved only by an approved, evidence-bound hold re-entry, and only after
+// the original source and NEW live product pass the stronger positive gate.
+// In particular, no conflict, missing price, SKU ambiguity or ordinary
+// expansion/renewal may use this exception.
+const REVIEWED_CANONICAL_EVIDENCE_GAPS = new Set([
+  'candidate does not establish full exact canonical identity',
+  'measureExactnessFailed',
+]);
+export function reviewedCanonicalEvidenceGap(
+  evidence: ReentryEvidence, live: TescoCollectedProduct, reasons: readonly string[],
+): boolean {
+  return reasons.length > 0 && reasons.every(reason => REVIEWED_CANONICAL_EVIDENCE_GAPS.has(reason))
+    && independentExactIdentity(evidence, live);
 }
 
 // Review approval is a separate two-person act, never inferred by this runner.

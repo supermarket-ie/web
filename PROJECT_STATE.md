@@ -1,5 +1,33 @@
 # Supermarket.ie — Canonical Project State
 
+## PROPOSED (NOT DEPLOYED): full held-mapping AI review and narrow collection repair — 31 October 2026
+
+Completed a read-only, individual evidence-supported assessment of **all 183**
+held, unique Tesco SKU mappings with two fresh retailer peers, including the
+original 23 hypotheses. **61 verified Tesco identities**, **73 rejected
+genuine mismatches**, **49 uncertain**. Initial 23: **20 / 1 / 2**. Of 61,
+**51** have genuinely equivalent Dunnes/SuperValu peers; five known peer
+mismatches and five unresolved peers are excluded from triple estimates.
+The per-product audit is `tesco-183-identity-review-2026-10-31-v2.jsonl`
+(separate evidence artifact, not deployed to the repository). Each row
+contains mapping/product identity, retained page hash and parsed identity,
+historical observations, peer details, validator history, judgment and
+rationale. These AI-assisted decisions are **not** signed human approvals.
+
+Preflight on the proposed PR #286 exact-source/live gate: **35 verified
+identities pass** (of which **33** have genuine comparable peers, the
+other two stay pending peer-equivalence review); the
+unchanged lexical validator accepts only nine of those 33. Feature branch
+therefore adds a narrow *audited-reviewed-candidate-only* exception for
+the two lexical-only false-negative reasons (generic canonical identity and
+measure exactness), conditional on the stronger independent identity guard.
+All genuine identity conflicts, changed source/peer snapshots, old holds,
+six unresolved requests, shared SKU, lease/pacing/cooldown/circuit breakers
+and guarded one-use finalisation stay protected. No production write,
+schema deployment, held collection or new trusted price was made.
+Human review, approval/deployment and a separately authorised bounded
+collection run remain material prerequisites.
+
 ## PROPOSED (NOT DEPLOYED): audited Tesco hold re-entry — 31 October 2026
 
 Feature branch `feat/tesco-audited-hold-reentry` adds a review-only operator

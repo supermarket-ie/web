@@ -5,7 +5,7 @@ import {
   type TescoCollectedPage, type TescoPageResponse,
 } from './tesco-direct-collection-core';
 import { acquisitionDecision, acquisitionSnapshotSql, selectAcquisitionCandidates, type Acquisition } from './tesco-acquisition-handoff';
-import { assertReentry, consumeReentry, independentExactIdentity, selectReviewedCandidates, type Reentry } from './tesco-hold-reentry';
+import { assertReentry, consumeReentry, independentExactIdentity, reviewedCanonicalEvidenceGap, selectReviewedCandidates, type Reentry } from './tesco-hold-reentry';
 import { classifyIdentityOutcome, holdCircuitTripped, quarantineCircuitTripped } from './tesco-identity-disposition';
 import { hasMaterialDuplicateCanonicalConflict } from './tesco-mapping-audit';
 
@@ -338,11 +338,14 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       try { if (outcome === 'ok') parsed = parseTescoCollectedPage(response.html, response.finalUrl); }
       catch { outcome = 'parse_error'; }
       const product = parsed?.products.find(p => p.sku === target.store_sku);
-      const reasons = product ? validateTescoCollectedIdentity({ storeProductId: target.id,
+      const legacyReasons = product ? validateTescoCollectedIdentity({ storeProductId: target.id,
         canonicalName: target.canonical_name, canonicalBrand: target.canonical_brand,
         storeProductName: target.store_product_name, storeBrand: target.store_brand, isOwnBrand: target.is_own_brand,
         storeSku: target.store_sku, storeUrl: target.store_url, duplicateSkuCount: target.peers.length,
         duplicateCanonicalNames: target.peers.map(p => p.canonical_name), isFresh: !!target.observed_at }, product) : ['missing_exact_product'];
+      const auditedEvidenceGap = !!(target.reentry && product
+        && reviewedCanonicalEvidenceGap(target.reentry.evidence, product, legacyReasons));
+      const reasons = auditedEvidenceGap ? [] : [...legacyReasons];
       if (target.acquisition && product && !acquisitionDecision(target.acquisition.snapshot, product))
         reasons.push('acquisition_live_identity_not_exact');
       if (target.reentry && product && !independentExactIdentity(target.reentry.evidence, product))
@@ -419,7 +422,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
                 sourceBodySha256: target.acquisition.snapshot.page.body_sha256 } : {}),
               ...(target.reentry ? { purpose: 'audited_hold_reentry', reviewId: target.reentry.reviewId,
                 sourcePageId: target.reentry.sourcePageId, sourceBodySha256: target.reentry.evidence.page.body_sha256,
-                independentlyExact: !!product && independentExactIdentity(target.reentry.evidence, product) } : {}) }))}
+                independentlyExact: !!product && independentExactIdentity(target.reentry.evidence, product),
+                auditedEvidenceGap, legacyValidatorReasons: legacyReasons } : {}) }))}
             where run_id=${uuid(runId)} and requested_url=${literal(target.store_url)};
           ${accepted && product ? `if not (${duePredicate(target, options.mode)}) then raise exception 'observation_changed'; end if;
             perform finalize_store_scrape_product(p_run_uuid=>${uuid(runId)},p_store=>'tesco',p_store_product_id=>${uuid(target.id)},

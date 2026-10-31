@@ -23,6 +23,44 @@ The actual read-only ranking output was 23 `likely_exact` hypotheses,
 109 `conflict` and 51 `needs_evidence`; the 23 are **not** approvals
 or promised future three-retailer comparisons.
 
+### Completed independent AI-assisted identity review, 31 October
+
+The **183 product-level reviews** are recorded in the separate
+`tesco-183-identity-review-2026-10-31-v2.jsonl` audit deliverable; the
+assessment made **no** production database writes. Each record binds the
+mapping UUID and Tesco SKU to retained source-page UUID, body SHA-256,
+source-run status, exact parsed identity, prior validator output, historical
+price observations and the two current retailer peers. The assessment
+records positive/negative reasons and distinguishes Tesco identity from
+genuine same-product three-retailer comparability.
+
+- **61 evidence-supported Tesco identities**, **73 demonstrated mapping/product
+  mismatches**, **49 unresolved**. Among the original 23 high-ranked:
+  **20 verified, 1 rejected, 2 uncertain**.
+- Of the 61 Tesco identities, **51** have genuine Dunnes and SuperValu
+  equivalents; five have a demonstrated peer mismatch, and five have
+  insufficient peer-equivalence evidence.
+- Under the source-page/receipt/pack/variant requirements already in this PR,
+  **35 of the 61** pass the strict independent evidence gate, including
+  **33 genuine three-retailer comparables**. The other two have unresolved
+  cross-retailer identity evidence and are **excluded** from the proposed
+  collection cohort. Thus **33**, not 35, is the largest fully peer-supported
+  cohort for privileged human approval, before fresh Tesco fetch.
+- The branch ships `docs/tesco-hold-reentry-reviewed-cohort-20261031.jsonl`
+  with the **33 proposed** mapping IDs, source-page IDs/hashes, two peer
+  identifiers, and independent reasoning. It contains **no** review UUIDs,
+  signatures or approved ledger entries and does not authorize collection.
+- The unchanged lexical validator accepts just **nine** of those 33
+  three-retailer source identities; the remainder fail generic canonical
+  identity or lexical measurement exactness, while still satisfying the
+  stricter positive evidence gate. This is a false-negative in the
+  historically held cohort, not grounds to relax real product conflicts.
+
+**No ledger approval is issued by the AI assessment.** Two distinct
+privileged reviewers are required after deployment and separate collection
+authorisation. New peer observations or mapping/source changes invalidate
+the evidence snapshot and require re-review.
+
 ## Read-only ranking and AI review
 
 From the reviewed branch and authenticated Work SQL bridge:
@@ -106,10 +144,19 @@ approval/evidence snapshot, canonical mapping and peer observations
 **before** reserving a request. It consumes that approval in the same
 transaction as pending-page insertion. The normal Irish Tesco fetcher
 must then retrieve a **new** live page. The old deterministic validator
-must pass **and** an independent, strict live comparison to the reviewed
+runs unchanged. A separately approved, reviewed candidate may resolve
+**only** its legacy `candidate does not establish full exact canonical
+identity` and `measureExactnessFailed` rejections, and only when **all**
+legacy reasons are in that set **and** the retained source and freshly
+fetched live identity pass the strict positive identity gate. The new
+page audit retains the original validator reasons and exception decision.
+Actual brand/formulation/type/variant/pack/measure conflicts, missing
+prices and every other failure stay fail-closed; ordinary renewal/expansion
+cannot use this exception. Independent live comparison to the reviewed
 source's exact SKU, name, brand, pack, barcode (when available) and
 canonical formulation must pass. The independent check also compares
-canonical and peer-declared units/pack counts against the retained source,
+canonical and peer-declared units/pack counts and material variant qualifiers
+against the retained source,
 rejecting e.g. 4 versus 24 rolls and a single 110g pack versus 3x110g.
 Source GTIN must agree with any canonical mapping GTIN. A variant change
 is held without a price.
