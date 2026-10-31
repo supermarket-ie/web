@@ -1,5 +1,57 @@
 # Supermarket.ie — Canonical Project State
 
+## PROPOSED (NOT DEPLOYED): full held-mapping AI review and narrow collection repair — 31 October 2026
+
+Completed a read-only, individual evidence-supported assessment of **all 183**
+held, unique Tesco SKU mappings with two fresh retailer peers, including the
+original 23 hypotheses. **61 verified Tesco identities**, **73 rejected
+genuine mismatches**, **49 uncertain**. Initial 23: **20 / 1 / 2**. Of 61,
+**51** have genuinely equivalent Dunnes/SuperValu peers; five known peer
+mismatches and five unresolved peers are excluded from triple estimates.
+The per-product audit is `tesco-183-identity-review-2026-10-31-v2.jsonl`
+(separate evidence artifact, not deployed to the repository). Each row
+contains mapping/product identity, retained page hash and parsed identity,
+historical observations, peer details, validator history, judgment and
+rationale. These AI-assisted decisions are **not** signed human approvals.
+
+Preflight on the proposed PR #286 exact-source/live gate: **35 verified
+identities pass** (of which **33** have genuine comparable peers, the
+other two stay pending peer-equivalence review); the
+unchanged lexical validator accepts only nine of those 33. Feature branch
+therefore adds a narrow *audited-reviewed-candidate-only* exception for
+the two lexical-only false-negative reasons (generic canonical identity and
+measure exactness), conditional on the stronger independent identity guard.
+All genuine identity conflicts, changed source/peer snapshots, old holds,
+six unresolved requests, shared SKU, lease/pacing/cooldown/circuit breakers
+and guarded one-use finalisation stay protected. No production write,
+schema deployment, held collection or new trusted price was made.
+Human review, approval/deployment and a separately authorised bounded
+collection run remain material prerequisites.
+
+## PROPOSED (NOT DEPLOYED): audited Tesco hold re-entry — 31 October 2026
+
+Feature branch `feat/tesco-audited-hold-reentry` adds a review-only operator
+workflow, independently approved evidence ledger, one-time hold-re-entry
+candidate selection and live identity revalidation to the existing supervised
+collector, with no changes to fetcher/SQL bridge/guarded finaliser. No
+production mapping, hold, price, collection gate or evidence rows were edited.
+Approval/deployment and collection remain separate decisions. See
+`docs/tesco-audited-hold-reentry.md`.
+
+Read-only production snapshot: **183 held unique-SKU Tesco products** lack a
+fresh Tesco price but have fresh Dunnes + SuperValu peers; **143** have historic
+successful Tesco receipts, **180** a retained parsed product-page source,
+**142** both and no recent/pending attempt; **40** lack historic success,
+**3** lack a parsed source, **1** has a pending attempt. These overlap
+categories; they are not independently approved identity matches.
+The feature branch's read-only, AI-review triage ran across all 183 rows:
+**23 likely-exact hypotheses, 109 conflict signals, 51 needs-evidence**.
+These are intentionally non-binding rankings; no row has passed the new
+two-person audited approval gate.
+No evidence-bound, two-person review approval is being inserted into production
+by this PR. Baseline protection remains 323 fresh Tesco observations after
+20 supervised renewals on 31 October; no held collection initiated.
+
 ## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
 
 Read-only investigation (SELECT-only against prod Supabase via the service key
