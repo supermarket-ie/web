@@ -164,6 +164,23 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     expect(result.result).toBe('no_due_products');
     expect((await selectReviewedCandidates(execute,[review]))).toEqual([]);
   });
+  it.each([
+    ['4 rolls versus 24 standard rolls', 'Andrex Complete Clean Toilet Tissue 4 Roll',
+      'Andrex Complete Clean Toilet Tissue 24 Standard Rolls', 'Andrex', 24, 'each'],
+    ['single 110g versus 3x110g', 'John West Tuna Steak 110g',
+      'John West Tuna Steak 3x110g', 'John West', 110, 'g'],
+  ])('blocks held-pack identity mismatch at review selection: %s',
+    async (_label, canonical, title, brand, packSize, units) => {
+      const { page, live } = await heldEvidence({ title, brandName: brand,
+        details: {packSize:[{value:packSize,units}]} });
+      await db.query(`update products set canonical_name=$1,brand=$2 where id=$3`,[canonical,brand,products[0]]);
+      await db.query(`update store_products set store_product_name=$1,brand=$2,is_own_brand=false where id=$3`,
+        [title,brand,ids[0]]);
+      await db.query(`update store_products set store_product_name=$1 where store in ('dunnes','supervalu')`,[canonical]);
+      const review=await approve(page), {result,fetchPage}=await collect(review,live);
+      expect(result.result).toBe('no_due_products');
+      expect(fetchPage).not.toHaveBeenCalled();
+    });
   it.each(['different canonical identity', 'equivalent synonym', 'new shared mapping after approval'])(
     'rejects shared-SKU validator concern: %s', async scenario => {
       const { page, live } = await heldEvidence();

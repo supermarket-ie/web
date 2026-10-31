@@ -108,7 +108,11 @@ transaction as pending-page insertion. The normal Irish Tesco fetcher
 must then retrieve a **new** live page. The old deterministic validator
 must pass **and** an independent, strict live comparison to the reviewed
 source's exact SKU, name, brand, pack, barcode (when available) and
-canonical formulation must pass. A variant change is held without a price.
+canonical formulation must pass. The independent check also compares
+canonical and peer-declared units/pack counts against the retained source,
+rejecting e.g. 4 versus 24 rolls and a single 110g pack versus 3x110g.
+Source GTIN must agree with any canonical mapping GTIN. A variant change
+is held without a price.
 Before the *existing* guarded finaliser runs, the review, revocation,
 one-time use, source hash, canonical mapping and peers are rechecked in
 the **same** checkpoint/finalisation transaction.

@@ -64,6 +64,10 @@ function reentryEvidenceSqlWithRefs(storeIdSql: string, sourcePageSql: string, o
 function normalized(input: string | null | undefined) {
   return (input ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
+function sameBrand(a: string, b: string) {
+  // Retailer structured brands vary in separator spacing (7UP / 7 UP).
+  return normalized(a).replaceAll(' ', '') === normalized(b).replaceAll(' ', '');
+}
 function qualifiers(name: string) {
   // Safety-first invariant attributes. The deterministic validator previously
   // missed "orange juice" vs "orange juice drink" and unadvertised citrus.
@@ -78,6 +82,47 @@ function qualifiers(name: string) {
 function canonicalVariantConflict(canonical: string, tesco: string) {
   const a = qualifiers(canonical), b = qualifiers(tesco);
   return a.some((flag, index) => flag !== b[index]);
+}
+function declaredPack(name: string) {
+  const n = normalized(name);
+  const multi = n.match(/\b(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\b/);
+  const measure = multi ?? n.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\b/);
+  let amount: string | null = null;
+  if (measure) {
+    const value = Number(multi ? measure[2] : measure[1]);
+    const unit = multi ? measure[3] : measure[2];
+    amount = unit === 'kg' ? `g:${value * 1000}` : unit === 'l' || unit.startsWith('litre')
+      ? `ml:${value * 1000}` : `${unit}:${value}`;
+  }
+  const count = multi ? Number(multi[1])
+    : n.match(/\b(\d+)\s+(?:standard\s+)?(?:rolls?|sheets?|pieces?|packs?|pk|pairs?)\b/);
+  // If a product has a stated unit size and no explicit multipack, treat it
+  // conservatively as a single unit. "110g" must not silently match "3x110g".
+  const units = typeof count === 'number' ? count : count ? Number(count[1]) : amount ? 1 : null;
+  return { amount, units };
+}
+function structuredMeasure(quantity: TescoCollectedProduct['quantity']) {
+  if (!quantity) return null;
+  const entries = Object.entries(quantity).filter(([, value]) => Number(value) > 0);
+  if (entries.length !== 1) return null;
+  const [unit, value] = entries[0];
+  return `${unit === 'grams' ? 'g' : unit === 'millilitres' ? 'ml' : 'piece'}:${value}`;
+}
+function independentPackConflict(e: ReentryEvidence, source: TescoCollectedProduct) {
+  const canonical = declaredPack(e.mapping.canonical_name), tesco = declaredPack(source.name);
+  const structured = structuredMeasure(source.quantity);
+  if (canonical.amount && tesco.amount && canonical.amount !== tesco.amount) return true;
+  if (canonical.amount && structured && canonical.amount !== structured
+    && tesco.units === 1) return true;
+  if (canonical.units != null && tesco.units != null && canonical.units !== tesco.units) return true;
+  // Fresh third-party equivalents do not independently prove *brand*, but
+  // known explicit units/pack sizes must not contradict the Tesco identity.
+  for (const peer of e.peers) {
+    const other = declaredPack(peer.store_product_name);
+    if (tesco.amount && other.amount && tesco.amount !== other.amount) return true;
+    if (tesco.units != null && other.units != null && tesco.units !== other.units) return true;
+  }
+  return false;
 }
 export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollectedProduct): boolean {
   const m = e.mapping, source = e.page?.parsed?.products?.[0];
@@ -95,6 +140,10 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
     || e.peers.some(p => !p.observed_at || !p.store_product_name || !(Number(p.price) > 0))
     || source.sku !== m.store_sku || source.url !== m.store_url
     || !source.name || !source.brand || !source.quantity
+    || (m.gtin != null && m.gtin !== source.gtin)
+    || (m.store_brand != null && !sameBrand(m.store_brand, source.brand))
+    || (m.canonical_brand != null && !sameBrand(m.canonical_brand, source.brand))
+    || independentPackConflict(e, source)
     || canonicalVariantConflict(m.canonical_name, source.name)) return false;
   // The source's exact brand, pack, barcode and variant become immutable
   // constraints on the NEW live page. A changed SKU/name/pack/brand/GTIN
