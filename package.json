@@ -22,6 +22,7 @@
     "typecheck:branded": "tsc --project tsconfig.branded-intersection.json"
   },
   "dependencies": {
+    "@ai-sdk/amazon-bedrock": "5.0.130",
     "@ai-sdk/anthropic": "4.0.38",
     "@ai-sdk/react": "4.0.69",
     "@anthropic-ai/sdk": "^0.98.0",
