@@ -1,5 +1,78 @@
 # Supermarket.ie — Canonical Project State
 
+## IMPLEMENTATION (branch only; NOT deployed): lightweight stateless Bedrock agent PoC — 1 November 2026
+
+A lightweight, stateless, Bedrock-powered shopping-agent proof of concept that
+lives ALONGSIDE the Eve runtime (does NOT replace it). On branch
+`feat/lightweight-agent-poc`. No production change, no infra/Eve/collector edits,
+no deploy. Verified locally: 22 new vitest tests pass, `npm run lint` clean
+(0 errors / 22 warnings baseline), `tsc --noEmit` 0 errors. Full build + deploy
+NOT run.
+
+WHAT IT IS: a single App-Router SSE route `POST /api/agent/chat`
+(`runtime='nodejs'`) that emits the SAME AI SDK UIMessage stream the frontend
+already consumes via `toUIMessageStreamResponse()`. It REUSES existing shopping
+logic (no business-logic rewrites): `resolveCatalogueProduct` → `get_current_price`;
+`groundHouseholdShop` + the exact batch-resolution query from
+`agent/tools/present_household_shop.ts` → `present_household_shop`;
+`compareBasketStores` → `compare_shop_stores`; epicure `getSubstitutes` +
+`groundIngredient` + dietary screen → `find_substitutes`. All new code is under
+`src/lib/agent/` (model, tools, context, limits, safeguards, supabase), the new
+route, a new Supabase migration, and tests. `agent/**`, the Tesco/Dunnes/SuperValu
+collectors and `infra/**` are UNTOUCHED.
+
+UIMessage `dynamic-tool` CONTRACT: `present_household_shop` is defined with the
+AI SDK `dynamicTool(...)` and returns exactly `{ kind:'household_shop', shop }`.
+A dynamic tool streams as `tool-input-available`/`tool-output-available` chunks
+with `dynamic:true`, which the client (`useChat`/`readUIMessageStream`)
+reconstructs into a `message.parts` entry of
+`{ type:'dynamic-tool', toolName:'present_household_shop',
+state:'output-available', output:{ kind:'household_shop', shop } }` — the exact
+part the frontend renders. The route test asserts this at the reconstructed-part
+layer (not the raw wire), the layer the UI actually reads.
+
+STATELESS + SAFEGUARDS (atomic, fail-closed): no per-session/in-process state —
+all durable state is in Supabase, so ≥2 ECS tasks with no sticky routing enforce
+identical limits. New migration
+`supabase/migrations/20261101120000_agent_poc_safeguards.sql` adds
+`agent_conversations`, `agent_turns` (token counts/outcomes only — NO prompt
+text), `agent_guest_limits`, `agent_bedrock_spend_ledger` +
+`agent_bedrock_spend_reservations`, an `agent_usage_daily` view, and six
+`security definer` plpgsql RPCs that are atomic via `SELECT ... FOR UPDATE` /
+`UPDATE ... RETURNING`: `agent_guest_rate_check` (≤10/hour, ≤30/day,
+≤1 concurrent lock with 5-min stale auto-release, ≤15/conversation),
+`agent_guest_release`, `agent_conversation_ensure`,
+`agent_bedrock_spend_reserve` ($10/day UTC ceiling, reserve BEFORE the model
+call), `agent_bedrock_spend_settle` (reconcile to actuals, idempotent),
+`agent_turn_record`. Every safeguard wrapper FAILS CLOSED: any RPC error/throw
+rejects the turn with a customer-friendly streamed assistant message and no model
+call. Client IP (`x-forwarded-for` first hop) is a SECONDARY log/metric signal
+only, never a hard block. Guest identity is a signed `sm_guest` HMAC cookie
+(`AGENT_GUEST_COOKIE_SECRET`, falls back to `MAGIC_LINK_SECRET`); signed-in
+callers use the existing `sm_session` cookie via `verifySessionToken`.
+
+SUPABASE CLIENTS: catalogue/price reads go through the SHARED read-only-guarded
+`agentSupabase` (stays read-only under APP_ENV=preview / SUPABASE_READ_ONLY=true,
+preserving price truth). The PoC's OWN safeguard tables use a SEPARATE raw
+service-role client so conversations/usage/limits stay writable even in preview.
+
+MODEL: `src/lib/agent/model.ts` copies `agent/agent.ts` resolveModel() exactly
+(Bedrock default `eu.anthropic.claude-sonnet-4-6` via the ECS task-role
+`credentialProvider`; `anthropic` one-flag rollback) under the same env contract
+(`AGENT_MODEL_PROVIDER`/`AGENT_MODEL_ID`/`AGENT_ANTHROPIC_MODEL`). Per-turn caps
+in `limits.ts`: `MAX_OUTPUT_TOKENS=2000`, `MAX_STEPS=5` (`stepCountIs`), 60s
+AbortSignal wall-clock, input trimmed to ~24k chars. The same Bedrock account
+gate from the Eve-agent entry still applies (Anthropic use-case form) before the
+bedrock provider can be invoked in prod.
+
+TESTS (`src/lib/agent/__tests__/`, run with
+`npx vitest run src/lib/agent/__tests__`): safeguards decision/fail-closed +
+guest-cookie signing (18); present_household_shop output validates against
+`householdShopToolOutputSchema` with the catalogue client mocked (1); route
+dry-run with a MOCKED `MockLanguageModelV4` (no Bedrock/AWS) asserting a
+reconstructed `dynamic-tool` part, reserve+settle called, and a blocked guest
+getting the friendly message with NO model call (3).
+
 ## IMPLEMENTATION (preview-validated; NOT deployed): restore Eve agent + Bedrock — 31 October 2026
 
 Fixes the broken customer-facing agent and migrates model access to Amazon
