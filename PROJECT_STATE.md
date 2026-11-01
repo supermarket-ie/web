@@ -1,5 +1,30 @@
 # Supermarket.ie — Canonical Project State
 
+## 1 November 2026, 12:51 UTC — Tesco renewal campaign paused at access safeguard
+
+The approved supervised collector commit `815355cbb53cb418c3a2db26e972b1627c7e10b9`
+completed **116 live product requests**, producing **113 successful existing
+price renewals** and **zero net new Tesco products or three-retailer comparisons**.
+Run `749d24f1-4019-4f9a-9de7-a3ac4e24ab49` reconciled successfully:
+100 completed, 98 renewal receipts, two live pages without regular prices,
+zero holds/quarantines/pending. It resumed its original lease-bound run
+safely after a transient supervisor disconnect at 29 receipts.
+Run `e3f79371-5e09-461a-8320-14ff14615efe` stopped terminally as
+`degraded/network_error` after 16 completed requests and 15 renewal receipts.
+The last Tesco request `315397543` timed out before HTTP headers
+(`AbortError`); the approved egress gate is disabled, lease released, and
+cooldown set to **13:05:29 UTC**. No new run is started under this
+access stop. Exactly **six** historical unresolved requests remain; neither
+new run left any pending pages.
+
+Production still contains **323 fresh trusted Tesco prices**. Unrenewed
+expiry exposure is **one** on 3 November, **189** on 4 November and
+**20** on 7 November UTC. **187** additional unique-SKU products remain
+currently eligible by the approved renewal selector, but collection is
+halted by the actual network-error safeguard. Product-level audit:
+`docs/tesco-supervised-renewal-20261101.jsonl`. The separate PR #286
+held-review cohort remains **93 unsigned candidates**, not live prices.
+
 ## 1 November 2026 — authorised renewals started; held recovery still review-only
 
 The owner expressly authorised **303** eligible existing Tesco renewals
