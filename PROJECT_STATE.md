@@ -35,7 +35,25 @@ checks; **17** source pages were previously unpriced/unavailable.
 material legacy conflict or unresolved peer equivalence. AI review is not
 an authenticated privileged approval: **zero signed review rows, zero new
 trusted Tesco prices**. Current trusted baseline remains the last
-verified **323**; do not treat it as an independently re-queried live count.
+verified **323**; a fresh 1 November read-only query confirms **323**.
+
+Separate **ordinary non-held expansion** eligibility under the *existing*
+collector predicate is **57** unique one-to-one mapped products
+(23 with one fresh peer, 34 with none, zero dual-peer). Of these,
+**12** have a retained exact source page and **two** pass the stronger
+independent source identity check (SKUs `282485161`, `297708302`).
+**55** are selector-eligible but not independently source-verified:
+do not count them as secured trusted price recoveries. Product-level
+read-only audit: `docs/tesco-nonheld-expansion-preflight-20261101.jsonl`.
+Future expansion request pool is **up to 146** (89 held contingent on
+authenticated approval, 57 ordinary), of which **91** are independently
+source-supported. Expected genuine new triples remain **at most 33**.
+Read-only renewal check: **303/323 existing Tesco prices** are already
+eligible for proactive 4-day supervised renewal; earliest seven-day
+expiry **3 November** (57 expire 3 Nov, 246 on 4 Nov,
+20 on 7 Nov UTC). This no-production-write task did **not** renew
+them. Prioritise the normal authorised renewal lane at the next
+production operations window.
 
 The 980 held mapping audit is persisted and reconciled (78 verified,
 107 rejected, 795 uncertain); the original 183 cohort is 61 verified,

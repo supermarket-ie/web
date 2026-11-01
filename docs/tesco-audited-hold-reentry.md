@@ -78,6 +78,38 @@ or have unresolved competitor equivalence; they remain excluded.
 The independently reviewed 980-product audit, 73 original correction
 proposals and all rejected/uncertain product evidence remain preserved.
 
+### Separate non-held expansion and renewal lanes — 1 November
+
+The **unchanged ordinary supervised expansion selector** currently reports
+**57** non-held, one-to-one, historically successful, resolved-URL candidates
+eligible after the shared-SKU and attempt exclusions: **23** have one
+fresh retailer peer, **34** have none, and **zero** have both. They are
+*not* part of the 89 held-review candidates and do not promise any immediate
+new triples. The product-level read-only ordinary selector list is
+`docs/tesco-nonheld-expansion-preflight-20261101.jsonl`.
+An exact retained page could be located for **12**; **two** additionally
+passed the strict independent source-identity test (SKU `282485161`
+and `297708302`), while **55** lack that independent preflight. All 57
+must pass normal live identity checks; do **not** present selector eligibility
+as proof of independently verified exact identity or automatic trusted price.
+Thus the wider *requestable* future expansion pool is **up to 146**
+(89 reviewed-held candidates **only after Auth approval**, plus 57 ordinary),
+but only **91** have independent source support so far (89+2). The
+55 ordinary mappings need stronger exact identity evidence before being
+counted in a trusted recovery forecast.
+
+A fresh read-only renewal query confirms **323** trusted Tesco prices and
+**303** already eligible under the collector's four-day proactive renewal
+threshold, with earliest seven-day price expiry on **3 November**. The
+expiry exposure by UTC date is **57 on 3 November, 246 on 4 November,
+20 on 7 November**. The
+existing approved renewal path needs operational priority ahead of expansion;
+the current instruction prohibits initiating any production collection,
+so none was run here. Recovered held products subsequently return to
+**ordinary** supervised renewal after a newly trusted observation overtakes
+the prior hold; a regression test verifies no repeat human hold re-entry
+approval is required for a normal live-validated renewal.
+
 ## Authenticated single-reviewer security model
 
 The original two-name-string check was **not** evidence of two independent
