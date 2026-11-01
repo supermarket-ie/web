@@ -50,8 +50,11 @@ describe('Tesco transport stop rules', () => {
       }));
       const pending = fetchTescoCollectedPage(tescoProductUrl(sku), fetcher);
       await vi.advanceTimersByTimeAsync(20_000);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(10_000);
       const response = await pending;
-      expect(response).toMatchObject({ outcome: 'network_error', status: null, elapsedMs: 20_000,
+      expect(response).toMatchObject({ outcome: 'network_error', status: null, elapsedMs: 30_000,
         transport: { phase: 'headers', timedOut: true, headersElapsedMs: null, redirectCount: 0, errorName: 'AbortError', errorCode: null } });
       expect(JSON.stringify(response)).not.toContain('private diagnostic');
       expect(fetcher).toHaveBeenCalledTimes(1);
@@ -80,7 +83,7 @@ describe('Tesco transport stop rules', () => {
         start(controller) { init!.signal!.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')), { once: true }); },
       }), { status: 200 }));
       const pending = fetchTescoCollectedPage(tescoProductUrl(sku), fetcher);
-      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(await pending).toMatchObject({ outcome: 'network_error', status: 200,
         transport: { phase: 'body', timedOut: true, headersElapsedMs: 0 } });
       expect(fetcher).toHaveBeenCalledTimes(1);
