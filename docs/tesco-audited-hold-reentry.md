@@ -4,6 +4,103 @@
 SKU may be collected or finalised under this mechanism until a separate
 deployment, evidence-review and collection authorisation.
 
+## Complete held inventory reconciliation — 31 October 2026
+
+Fresh read-only queries reconciled **1,163** held unique-SKU Tesco mappings:
+183 with two fresh Dunnes/SuperValu peers, 521 with one and 459 with none.
+This is **34 more** than the earlier 1,129 held figure; that figure should
+not be used as a current execution total without matching the collector's
+hold predicate and query timestamp.
+
+The additional **980** have a preserved product-level, read-only audit:
+**78 independently evidence-supported Tesco identities**, **107 explicit
+retained-page barcode/pack-count mismatches**, and **795 uncertain**.
+The 78 comprise **69 with one fresh retailer peer** and **nine with neither**;
+their reviewed SKU/mapping/page-hash evidence is in
+`docs/tesco-hold-reentry-additional-verified-20261031.jsonl`.
+The complete audit and 73 original wrong-mapping correction proposals are
+separate owner-visible reports. The previous provisional **76** candidates
+were reclassified from recovered records; the lost transient list of 76
+identifiers cannot truthfully be diffed row-for-row.
+
+**None of the 78 is selectable through this PR.** The unchanged
+`independentExactIdentity` gate requires both fresh retailer peers.
+They are a **deferred recovery queue**, not an excuse to weaken this gate.
+Before adding a one/no-peer path, a separately reviewed, policy-explicit
+identity rule must require stronger canonical/retained source evidence
+(including barcode or independent corroboration), and exact live checking
+before finalisation. Do not treat price recency or brand alone as identity.
+Those 78 could add at most 78 fresh Tesco prices after a future approved
+path; with fewer than two fresh peers, they add **zero immediate genuine
+three-retailer comparisons**.
+
+The parser's decimal and counted-pack correction now identifies one
+additional exact-source/peer identity, Dr Oetker Gelatine 3x12g,
+Tesco SKU `280932920`, among the original 61 verified. However its
+unchanged lexical validator reports `brandConflict` and `measureConflict`;
+the reviewed-only exception **must not** waive those reasons. The safe
+initial cohort remains **33**, not 34.
+
+## Security-review finding: two reviewer names are not two authenticated people
+
+Migration `20261101000000_tesco_hold_reentry_reviews.sql` stores
+`assessed_by` and `approved_by` as freely supplied `text`. Its CHECK
+constraint and collector require different strings but do **not**
+authenticate two distinct privileged humans. A single operator with the
+existing privileged SQL connection could supply both. This is a
+**release-blocking authentication gap**, not evidence of two-person control.
+
+**Smallest robust two-person implementation, if that requirement is retained:**
+
+1. Reuse existing Supabase Auth operator identities. Grant a narrowly scoped
+   `tesco_reentry_reviewer` permission in server-controlled membership or
+   `app_metadata`; never trust user-editable metadata or a submitted name.
+2. Expose an explicitly restricted, evidence-bound approval RPC to authenticated
+   reviewers. The database derives `assessor_user_id` and
+   `approver_user_id` from separate verified `auth.uid()` sessions,
+   checks the permission and distinct IDs, and stores the exact product,
+   mapping/source/peer snapshot hash and expiry. Do not accept client-supplied
+   reviewer IDs. Restrict direct ledger INSERT to a dedicated controlled role;
+   do not let the collector create approvals.
+3. Support signing a **bounded manifest batch** (up to 100 individual immutable
+   evidence hashes) in one reviewed operation per person. Each candidate
+   retains an independently justified exact-product decision, revocation,
+   one-use claim and live-check semantics. A second review is one batch action,
+   not 33 manual database operations.
+4. Add SQL/RLS/permission and PGlite regressions for a forged reviewer,
+   same identity using two labels, non-reviewer JWT, stale evidence, batch
+   changes, and collector privilege separation.
+
+A **single authenticated, accountable evidence-bound reviewer** together
+with the existing exact live/source verification may be a defensible simpler
+policy. It is **not the currently proposed two-person policy** and has
+**not been implemented or authorised**. A conscious security-policy decision
+is required before replacing the two-person condition.
+
+## Exact release sequence (not yet authorised)
+
+1. Complete GitHub code/security review of PR #286 and required CI.
+   The identity-parser fix is narrow and keeps all real conflicts blocked;
+   the authenticated-approval concern above must be resolved before
+   describing the approval process as two-person enforced.
+2. Separately authorise and apply the Supabase migration, with verified
+   table/RLS/grants and the authenticated reviewer entrypoint. The three new
+   ledger tables are **not deployed** at this review checkpoint.
+3. Merge/pin the reviewed collector revision in the existing ChatGPT Work
+   supervised Node 24 + `npm ci` environment, retaining its authenticated
+   SQL bridge, Irish Tesco fetcher, leases, 10-second pacing, cooldowns,
+   circuit breakers, six unresolved historical requests and guarded
+   finaliser. Reviewers then sign the 33 exact evidence snapshots.
+4. After **separate collection authorisation**, refresh production preflight,
+   select up to 33 *approved review UUIDs*, check non-stale peers/hold
+   conditions and run a supervised batch with fresh live identity evidence.
+   Reconcile 33 requests versus **actual** finalised prices and triples.
+5. The existing GitHub AWS ECR image workflow may ship any website-side
+   code, followed by the normal separately controlled ECS rollout. **It does
+   not run this Work-supervised CLI or apply Supabase migrations.** An AWS
+   ECS website deployment is not inherently required merely to use the
+   Work collector's reviewed code. Vercel is not a production release gate.
+
 ## Scope and priority
 
 The existing supervised SQL bridge, Irish Tesco page fetcher, page parser,

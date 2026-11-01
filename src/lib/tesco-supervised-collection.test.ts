@@ -213,6 +213,12 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
       'Andrex Complete Clean Toilet Tissue 24 Standard Rolls', 'Andrex', 24, 'each'],
     ['single 110g versus 3x110g', 'John West Tuna Steak 110g',
       'John West Tuna Steak 3x110g', 'John West', 110, 'g'],
+    ['7 pack versus 4 sticks', 'Pedigree Rodeo Beef 7 Pack',
+      'Pedigree Rodeo Beef 4 Sticks 70G', 'Pedigree', 70, 'g'],
+    ['4 pack versus 21 dental sticks', 'Pedigree Dentastix Daily Large Dog 4 Pack',
+      'Pedigree Dentastix Daily Large Dog Treats 21 Dental Sticks', 'Pedigree', 21, 'each'],
+    ['single 18g bar versus 4x18g', 'Cadbury Dairy Milk Little Chocolate Bar 18g',
+      'Cadbury Dairy Milk Little Chocolate Bars Multipack 4x18g', 'Cadbury', 18, 'g'],
   ])('blocks held-pack identity mismatch at review selection: %s',
     async (_label, canonical, title, brand, packSize, units) => {
       const { page, live } = await heldEvidence({ title, brandName: brand,
@@ -234,6 +240,21 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     expect(result.result).toBe('no_due_products');
     expect(fetchPage).not.toHaveBeenCalled();
   });
+  it.each(['1.5L','1.5 Litre','1,5L'])(
+    'recognises %s as 1500ml in exact reviewed evidence, not as a 5L product',async measure=>{
+      const title=`Ballygowan Hint of Fruit Peach ${measure}`;
+      const {page,live}=await heldEvidence({title,brandName:'Ballygowan',
+        details:{packSize:[{value:1.5,units:'l'}]}});
+      await db.query(`update products set canonical_name=$1,brand='Ballygowan' where id=$2`,
+        [title,products[0]]);
+      await db.query(`update store_products set store_product_name=$1,brand='Ballygowan',is_own_brand=false
+        where id=$2`,[title,ids[0]]);
+      await db.query(`update store_products set store_product_name=$1,brand='Ballygowan'
+        where store in ('dunnes','supervalu')`,[title]);
+      const review=await approve(page);
+      const {result}=await collect(review,live);
+      expect(result).toMatchObject({result:'complete',inserted:1});
+    });
   it.each(['different canonical identity', 'equivalent synonym', 'new shared mapping after approval'])(
     'rejects shared-SKU validator concern: %s', async scenario => {
       const { page, live } = await heldEvidence();

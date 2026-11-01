@@ -1,5 +1,45 @@
 # Supermarket.ie — Canonical Project State
 
+## PROPOSED (NOT DEPLOYED): Tesco recovery audit reconciliation and PR #286 hardening — 31 October 2026
+
+Recovered and persisted read-only identity evidence for all additional **980**
+held unique-SKU mappings (521 with exactly one fresh retailer peer, 459 with
+none). Including the original dual-peer 183, the live held/unique inventory
+reconciles to **1,163**. The earlier 1,129 baseline differs by 34.
+New independent AI-assisted adjudication: **78 identity-supported**, **107
+explicit barcode/pack-count mismatches**, **795 uncertain**; all 980 product
+records have retained Tesco source page IDs/body hashes, previous identity
+outcomes, historical receipt/price counts and fresh peer context where present.
+The new 78 have **69 single-peer / nine zero-peer** mappings and cannot re-enter
+through the unchanged **two-peer** PR #286 identity gate. The previous 76
+was a provisional, unsaved estimate superseded by this product-level report,
+not 76 additional approvals. Owner-visible artifacts hold the full audit,
+78 candidates and 73 original mapping-correction proposals; repo stores the
+compact 78 candidate manifest under `docs/`.
+
+Decimal and counted-pack identity parsing repairs (1.5L/1,5L, 7 vs 4 sticks,
+4 vs 21 dental sticks, 1 vs 4x18g) preserve fail-closed pack/variant guards.
+The original 61 dual-peer verified identities now yield 36 that pass the
+strict source identity gate, 34 of them commercially comparable. The single
+new Dr Oetker 3x12g gate match still has unallowlisted legacy validator
+`brandConflict`/`measureConflict`, so **33** remains the reviewed
+production candidate ceiling absent a separately approved validator
+investigation. Latest local PGlite collector suites: **95/95 passed**;
+TypeScript and ESLint passed after earlier edits. **Not deployed or collected.**
+
+PR #286's two-person control currently checks **two different reviewer-name
+strings**, not two authenticated principals. Treat this as a blocking
+security finding. Proposed narrow repair uses existing authenticated
+Supabase reviewer identities and a restricted evidence-bound batch RPC,
+with distinct verified principal IDs and no collector approval ability.
+Alternative single accountable authenticated approval is a policy change
+that requires explicit owner authorisation; current two-person guard stays.
+Release requires reviewed PR, separate schema/approval-mechanism deployment,
+signed immutable evidence, fresh supervised Work collector verification and
+guarded finalisation. AWS ECR/ECS deploy workflow is for website services,
+not the SQL migration or standalone Work supervised collector. Existing
+trusted Tesco baseline **323**; new trusted prices **0** as of this audit.
+
 ## PROPOSED (NOT DEPLOYED): full held-mapping AI review and narrow collection repair — 31 October 2026
 
 Completed a read-only, individual evidence-supported assessment of **all 183**
