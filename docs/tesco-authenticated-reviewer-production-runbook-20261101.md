@@ -37,7 +37,7 @@ does not authorise collecting any held Tesco mapping.
 
 The unsigned queue is
 `docs/tesco-hold-reentry-production-queue-20261101.jsonl`
-(**33** priority dual-peer, then **56** independently evidence-supported
+(**33** priority dual-peer, then **60** independently evidence-supported
 one-/zero-peer mappings). The separate inference addendum
 `docs/tesco-hold-reentry-inference-addendum-20261101.jsonl`
 records four later barcode-supported products, pending the same safeguards.
@@ -66,7 +66,7 @@ For **each** reviewed candidate, just before signing:
    approval. A stale mapping/page/peer snapshot, new attempt, new hold,
    pending request, or revoked/used/expired approval must fail closed.
 
-One authenticated reviewer session may perform the 89 individual reviewed
+One authenticated reviewer session may perform the 93 individual reviewed
 decisions in sequence. No second fake reviewer, per-item deployment,
 unbounded bulk override, or new infrastructure is needed. A manual
 independent product judgment remains mandatory for each product.
@@ -79,7 +79,7 @@ independent product judgment remains mandatory for each product.
    3 November, 246 on 4 November UTC; the 20 later renewals expire 7 November).
 2. After deploying the audited mechanism and obtaining its signed review UUIDs,
    refresh preflight and select the **33 dual-peer** reviewed mappings first,
-   followed by the remaining **56**. Use
+   followed by the remaining **60**. Use
    `node --import tsx scripts/tesco-supervised-collect.ts --mode expansion --limit 100 --reviewed-candidates REVIEW_UUIDS --dry-run`
    for the existing safety checks, then only after explicit collection
    authorisation use `--confirm-run`. Batches are sequential, at most 100,
