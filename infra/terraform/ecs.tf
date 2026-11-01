@@ -66,6 +66,13 @@ locals {
     { name = "DISABLE_RETAILER_COLLECTION", value = local.retailer_blocked ? "true" : "false" },
     { name = "DISABLE_OUTBOUND_EMAIL", value = local.email_blocked ? "true" : "false" },
     { name = "SUPABASE_READ_ONLY", value = local.supabase_read_only ? "true" : "false" },
+    # Customer-facing Eve agent model provider. Default 'anthropic' keeps the
+    # agent working the moment this rolls out (the Bedrock Anthropic use-case
+    # form is an account prerequisite); flip agent_model_provider to 'bedrock'
+    # once that form has cleared (env-only apply, no rebuild). The task role
+    # carries least-privilege Bedrock invoke (see iam.tf) regardless.
+    { name = "AGENT_MODEL_PROVIDER", value = var.agent_model_provider },
+    { name = "AGENT_MODEL_ID", value = var.agent_model_id },
     # Retailer worker flags: OFF on AWS unless stage-2 worker migration enables them.
     { name = "TESCO_VERCEL_WORKER_ENABLED", value = local.retailer_on["tesco"] },
     { name = "DUNNES_VERCEL_WORKER_ENABLED", value = local.retailer_on["dunnes"] },

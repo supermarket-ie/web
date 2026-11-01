@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState, type ComponentType } from 'react';
-import { useEveAgent } from 'eve/react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEveAgent, type EveMessage } from 'eve/react';
+import { useLightweightAgent } from '@/lib/agent/use-lightweight-agent';
+import { buildMessageContinuation } from '@/lib/agent/continuation';
 import {
   ArrowUp,
   Bell,
@@ -39,12 +41,29 @@ import { examplePrefillAction, EXAMPLE_PREFILL_EVENT, HOMEPAGE_EXAMPLE_ID } from
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
 const GUEST_EVE_CHAT_KEY = `${LEGACY_EVE_CHAT_KEY}:guest`;
 
+/**
+ * Runtime switch. DEFAULTS to the lightweight stateless agent; set
+ * `NEXT_PUBLIC_AGENT_RUNTIME=eve` to roll back to Eve. These are build-time
+ * inlined by Next, so the value is fixed per build.
+ */
+const USE_LIGHTWEIGHT_AGENT = process.env.NEXT_PUBLIC_AGENT_RUNTIME !== 'eve';
+
 type EveAgentOptions = NonNullable<Parameters<typeof useEveAgent>[0]>;
+type LightweightInitialMessages = NonNullable<Parameters<typeof useLightweightAgent>[0]>['initialMessages'];
 type SavedEveChat = {
   events?: EveAgentOptions['initialEvents'];
   session?: EveAgentOptions['initialSession'];
   resumeContext?: string;
+  /** Lightweight-runtime persistence marker (version:2 is message-based). */
+  version?: number;
+  /** Lightweight-runtime transcript used to seed initialMessages on resume. */
+  messages?: { role: 'user' | 'assistant'; content: string }[];
 };
+
+/** Continuation accepted by the signup form: Eve events OR a message transcript. */
+type SignupContinuation =
+  | Pick<SavedEveChat, 'events'>
+  | ReturnType<typeof buildMessageContinuation>;
 
 type LoadedEveChat = {
   saved: SavedEveChat;
@@ -184,7 +203,7 @@ function InlineEmailSignup({
   prompt: SignupPrompt;
   placement: SignupPlacement;
   intent: ReturnType<typeof inferSuggestionIntent>;
-  continuation: Pick<SavedEveChat, 'events'>;
+  continuation: SignupContinuation;
   busy: boolean;
   compact?: boolean;
 }) {
@@ -328,17 +347,28 @@ function AgentComposer({ input, setInput, send, busy, gated, placeholder, promin
   );
 }
 
-function ShoppingAgentInner({
-  saved,
-  storageKey,
-  isGuest,
-  primaryHeading,
-  signedInEmptyState,
-  onJourneyStateChange,
-  initialConversationId,
-  onNewChat,
-  guestReceipt,
-}: {
+/** The message shape the view and all shop/journey helpers consume (shared by
+ * both runtimes — the UIMessage `parts` shape is identical to Eve's). */
+type AgentViewMessage = Pick<EveMessage, 'id' | 'role' | 'parts'>;
+
+/**
+ * Runtime-agnostic surface the presentational view consumes. Both the Eve and
+ * lightweight containers normalize their hook to this shape so the rendered
+ * experience is identical. `send` already wires conversation creation and the
+ * resume client-context; the view only adds analytics around it.
+ */
+type AgentRuntime = {
+  messages: readonly AgentViewMessage[];
+  busy: boolean;
+  /** Sends a user turn. Containers handle ensureConversation + resume context. */
+  send: (text: string) => Promise<void>;
+  /** Current signed-in conversation id (null for guests / before creation). */
+  getConversationId: () => string | null;
+  /** Continuation payload for the signup form: Eve events or a message transcript. */
+  signupContinuation: SignupContinuation;
+};
+
+type ShoppingAgentContainerProps = {
   saved: SavedEveChat;
   storageKey: string | null;
   isGuest: boolean;
@@ -348,50 +378,45 @@ function ShoppingAgentInner({
   initialConversationId?: string | null;
   onNewChat?: () => void;
   guestReceipt: boolean;
-}) {
-  const [input, setInput] = useState('');
-  const [pendingExample, setPendingExample] = useState<string | null>(null);
-  const [exampleReady, setExampleReady] = useState(false);
-  const [answerSaveOpen, setAnswerSaveOpen] = useState(false);
-  const answerSaveId = useId();
-  const exampleResultPending = useRef<{ previousShop: string | null } | null>(null);
-  const [error, setError] = useState('');
-  const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
-  const [marketStarters, setMarketStarters] = useState<Starter[] | null>(null);
-  const [structuredSave, setStructuredSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [saveAttempt, setSaveAttempt] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const starterGridRef = useRef<HTMLDivElement>(null);
-  const landingPromptHandled = useRef(false);
-  const conversationIdRef = useRef<string | null>(initialConversationId ?? null);
-  const transcriptRef = useRef<Array<{ role: string; content: string }>>([]);
+};
 
-  async function ensureConversation(firstMessage: string) {
-    if (isGuest || conversationIdRef.current) return conversationIdRef.current;
-    const response = await fetch('/api/conversations', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: firstMessage.slice(0, 72),
-        messages: [{ role: 'user', content: firstMessage }],
-        profile: { eve_state: { version: 1, events: [], session: null } },
-      }),
-    });
-    if (!response.ok) return null;
-    const result = await response.json() as { conversation?: { id?: string } };
-    conversationIdRef.current = result.conversation?.id ?? null;
-    return conversationIdRef.current;
-  }
+/** Shared onError → user-facing message mapping for both runtimes. */
+function agentErrorMessage(nextError: Error): string {
+  const message = nextError.message || '';
+  return /authori[sz]ation|required.*route|unauthori[sz]ed/i.test(message)
+    ? 'Sign in to let your agent remember this and keep working for you.'
+    : 'Supermarket.ie could not complete that request. Please try again.';
+}
+
+/** Create a conversation row for a signed-in shopper (shared by both runtimes). */
+async function createConversation(firstMessage: string, eveState: Record<string, unknown>): Promise<string | null> {
+  const response = await fetch('/api/conversations', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: firstMessage.slice(0, 72),
+      messages: [{ role: 'user', content: firstMessage }],
+      profile: { eve_state: eveState },
+    }),
+  });
+  if (!response.ok) return null;
+  const result = await response.json() as { conversation?: { id?: string } };
+  return result.conversation?.id ?? null;
+}
+
+/** Eve container: calls `useEveAgent`, persists `{events, session}`. */
+function EveShoppingAgentInner(props: ShoppingAgentContainerProps) {
+  const { saved, storageKey, isGuest } = props;
+  const [error, setError] = useState('');
+  const conversationIdRef = useRef<string | null>(props.initialConversationId ?? null);
+  const transcriptRef = useRef<Array<{ role: string; content: string }>>([]);
 
   const agent = useEveAgent({
     initialEvents: saved.events ?? [],
     initialSession: saved.session,
     onError(nextError) {
-      const message = nextError.message || '';
-      setError(/authori[sz]ation|required.*route|unauthori[sz]ed/i.test(message)
-        ? 'Sign in to let your agent remember this and keep working for you.'
-        : 'Supermarket.ie could not complete that request. Please try again.');
+      setError(agentErrorMessage(nextError));
     },
     onFinish(snapshot) {
       if (storageKey) {
@@ -417,7 +442,6 @@ function ShoppingAgentInner({
     },
   });
 
-  const busy = agent.status === 'submitted' || agent.status === 'streaming';
   const messages = agent.data.messages;
   useEffect(() => {
     transcriptRef.current = messages.flatMap(message => {
@@ -425,6 +449,149 @@ function ShoppingAgentInner({
       return content ? [{ role: message.role, content }] : [];
     });
   }, [messages]);
+
+  const send = useCallback(async (message: string) => {
+    if (!isGuest && !conversationIdRef.current) {
+      conversationIdRef.current = await createConversation(message, { version: 1, events: [], session: null });
+    }
+    await agent.send(
+      [{ type: 'text', text: message }],
+      !agent.session && saved.resumeContext ? { clientContext: saved.resumeContext } : undefined,
+    );
+  }, [agent, isGuest, saved.resumeContext]);
+
+  const runtime: AgentRuntime = {
+    messages,
+    busy: agent.status === 'submitted' || agent.status === 'streaming',
+    send,
+    getConversationId: () => conversationIdRef.current,
+    signupContinuation: { events: agent.events },
+  };
+
+  return <ShoppingAgentView {...props} runtime={runtime} error={error} setError={setError} />;
+}
+
+/** Lightweight container: calls `useLightweightAgent`, persists `{version:2, messages}`. */
+function LightweightShoppingAgentInner(props: ShoppingAgentContainerProps) {
+  const { saved, storageKey, isGuest } = props;
+  const [error, setError] = useState('');
+  const conversationIdRef = useRef<string | null>(props.initialConversationId ?? null);
+  const transcriptRef = useRef<Array<{ role: string; content: string }>>([]);
+
+  // Resume only message-based state; legacy Eve `{events}` cannot be replayed
+  // in the lightweight runtime, so those conversations start empty.
+  const initialMessages = useMemo<LightweightInitialMessages>(
+    () => (Array.isArray(saved.messages) && saved.messages.length
+      ? saved.messages.map((message, index) => ({
+          id: `resume-${index}`,
+          role: message.role,
+          parts: [{ type: 'text' as const, text: message.content }],
+        }))
+      : []),
+    [saved.messages],
+  );
+
+  const agent = useLightweightAgent({
+    initialMessages,
+    conversationId: props.initialConversationId ?? null,
+    onError(nextError) {
+      setError(agentErrorMessage(nextError));
+    },
+    onFinish({ messages: finishedMessages }) {
+      const transcript = finishedMessages.flatMap(message => {
+        const content = messageText(message);
+        return content ? [{ role: message.role, content }] : [];
+      });
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify({ version: 2, messages: transcript }));
+        } catch {}
+      }
+      const conversationId = conversationIdRef.current;
+      if (!isGuest && conversationId) {
+        window.setTimeout(() => {
+          void fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: transcript,
+              profile: { eve_state: { version: 2, messages: transcript } },
+            }),
+          });
+        }, 0);
+      }
+      window.dispatchEvent(new CustomEvent('sm:eve-turn-finished'));
+    },
+  });
+
+  const rawMessages = agent.data.messages;
+  // The UIMessage `parts` shape matches Eve's for the fields the view reads.
+  const messages = rawMessages as readonly AgentViewMessage[];
+  useEffect(() => {
+    transcriptRef.current = messages.flatMap(message => {
+      const content = messageText(message);
+      return content ? [{ role: message.role, content }] : [];
+    });
+  }, [messages]);
+
+  const send = useCallback(async (message: string) => {
+    if (!isGuest && !conversationIdRef.current) {
+      conversationIdRef.current = await createConversation(message, { version: 2, messages: [] });
+    }
+    await agent.send(message);
+  }, [agent, isGuest]);
+
+  const runtime: AgentRuntime = {
+    messages,
+    busy: agent.status === 'submitted' || agent.status === 'streaming',
+    send,
+    getConversationId: () => conversationIdRef.current,
+    signupContinuation: buildMessageContinuation(rawMessages),
+  };
+
+  return <ShoppingAgentView {...props} runtime={runtime} error={error} setError={setError} />;
+}
+
+/** Selects the runtime container at the component boundary (hook rules safe). */
+function ShoppingAgentInner(props: ShoppingAgentContainerProps) {
+  return USE_LIGHTWEIGHT_AGENT
+    ? <LightweightShoppingAgentInner {...props} />
+    : <EveShoppingAgentInner {...props} />;
+}
+
+function ShoppingAgentView({
+  storageKey,
+  isGuest,
+  primaryHeading,
+  signedInEmptyState,
+  onJourneyStateChange,
+  onNewChat,
+  guestReceipt,
+  runtime,
+  error,
+  setError,
+}: ShoppingAgentContainerProps & {
+  runtime: AgentRuntime;
+  error: string;
+  setError: (value: string) => void;
+}) {
+  const [input, setInput] = useState('');
+  const [pendingExample, setPendingExample] = useState<string | null>(null);
+  const [exampleReady, setExampleReady] = useState(false);
+  const [answerSaveOpen, setAnswerSaveOpen] = useState(false);
+  const answerSaveId = useId();
+  const exampleResultPending = useRef<{ previousShop: string | null } | null>(null);
+  const [catalogueSuggestions, setCatalogueSuggestions] = useState<CatalogueSuggestionProduct[]>([]);
+  const [marketStarters, setMarketStarters] = useState<Starter[] | null>(null);
+  const [structuredSave, setStructuredSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveAttempt, setSaveAttempt] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const starterGridRef = useRef<HTMLDivElement>(null);
+  const landingPromptHandled = useRef(false);
+
+  const busy = runtime.busy;
+  const messages = runtime.messages;
   const displayedShops = useMemo(() => visibleHouseholdShops(messages), [messages]);
   const latestStructuredShop = [...displayedShops.values()].at(-1) ?? null;
   const initialShopGeneratedAt = useRef(latestStructuredShop?.provenance.generated_at);
@@ -573,7 +740,6 @@ function ShoppingAgentInner({
   useEffect(() => {
     const intent = inferSuggestionIntent(input);
     if (input.trim().length < 2 || intent === 'meal' || intent === 'budget' || intent === 'dietary') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale catalogue results when predictive lookup is not applicable
       setCatalogueSuggestions([]);
       return;
     }
@@ -625,7 +791,6 @@ function ShoppingAgentInner({
     let savedList: string | null = null;
     try { savedList = localStorage.getItem(saveKey); } catch {}
     if (savedList) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reflect the external persistence marker
       setStructuredSave('saved');
       return;
     }
@@ -635,7 +800,7 @@ function ShoppingAgentInner({
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ household_shop: latestStructuredShop, conversation_id: conversationIdRef.current }),
+      body: JSON.stringify({ household_shop: latestStructuredShop, conversation_id: runtime.getConversationId() }),
       signal: controller.signal,
     }).then(async response => {
       if (!response.ok) throw new Error('Structured shop save failed');
@@ -647,6 +812,8 @@ function ShoppingAgentInner({
       if (!(error instanceof DOMException && error.name === 'AbortError')) setStructuredSave('error');
     });
     return () => controller.abort();
+    // runtime.getConversationId reads a stable ref; it is intentionally not a reactive dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGuest, busy, latestStructuredShop, storageKey, saveAttempt]);
 
   async function send(text: string, source: AgentStartSource, starterTracking?: Starter['tracking']) {
@@ -675,8 +842,7 @@ function ShoppingAgentInner({
     setPendingExample(null);
     setInput('');
     setError('');
-    if (!isGuest) await ensureConversation(message);
-    await agent.send([{ type: 'text', text: message }], !agent.session && saved.resumeContext ? { clientContext: saved.resumeContext } : undefined);
+    await runtime.send(message);
   }
 
   useEffect(() => {
@@ -700,8 +866,10 @@ function ShoppingAgentInner({
       entry_path: landingPath?.startsWith('/') ? landingPath : window.location.pathname,
       prompt_source: 'landing_page',
     });
-    void agent.send([{ type: 'text', text: prompt }]);
-  }, [agent, busy, isGuest, messages.length]);
+    void runtime.send(prompt);
+    // One-shot, guarded by landingPromptHandled; runtime.send is stable in effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, isGuest, messages.length]);
 
   if (isEmpty) {
     return (
@@ -832,7 +1000,7 @@ function ShoppingAgentInner({
               {answerSaveOpen ? 'Close save form' : firstRequestIntent === 'meal' ? 'Save these ideas — free account' : 'Save this answer — free account'}
             </button>}
             <div id={answerSaveId} hidden={!latestStructuredShop && !answerSaveOpen} className="rounded-2xl border border-[#dbe9df] bg-[#f5faf6] px-4 py-4 sm:px-5">
-              <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} continuation={{ events: agent.events }} busy={busy} />
+              <InlineEmailSignup prompt={signupPrompt} placement="first_answer" intent={firstRequestIntent} continuation={runtime.signupContinuation} busy={busy} />
             </div>
           </div>
         )}
@@ -860,7 +1028,7 @@ function ShoppingAgentInner({
                   }}
                   placement="guest_gate"
                   intent={firstRequestIntent}
-                  continuation={{ events: agent.events }}
+                  continuation={runtime.signupContinuation}
                   busy={busy}
                 />
               </div>
@@ -875,7 +1043,7 @@ function ShoppingAgentInner({
         busy={busy}
         error={Boolean(error)}
         revisionAvailable={guestJourney.revisionAvailable}
-        signup={<InlineEmailSignup compact prompt={signupPrompt} placement={showGuestGate ? 'guest_gate' : 'first_answer'} intent={firstRequestIntent} continuation={{ events: agent.events }} busy={busy} />}
+        signup={<InlineEmailSignup compact prompt={signupPrompt} placement={showGuestGate ? 'guest_gate' : 'first_answer'} intent={firstRequestIntent} continuation={runtime.signupContinuation} busy={busy} />}
       />}
 
       <div className={showGuestReceipt ? 'min-w-0 lg:col-start-1 lg:row-start-2' : 'shrink-0'}>

@@ -74,3 +74,25 @@ resource "aws_iam_role_policy" "task_sqs_produce" {
   role   = aws_iam_role.task[0].id
   policy = data.aws_iam_policy_document.task_sqs_produce[0].json
 }
+
+# The website task runs the customer-facing Eve agent, which invokes Amazon
+# Bedrock for model inference (AGENT_MODEL_PROVIDER=bedrock). Least-privilege:
+# InvokeModel(+stream) only, scoped to the specific EU Claude inference profile
+# and the EU regional foundation-model ARNs that profile routes to (cross-region
+# inference). No other Bedrock actions, no wildcard model access. Disabled when
+# var.bedrock_invoke_resource_arns is empty, so the grant is explicit.
+data "aws_iam_policy_document" "task_bedrock_invoke" {
+  count = local.create && length(var.bedrock_invoke_resource_arns) > 0 ? 1 : 0
+  statement {
+    sid       = "InvokeBedrockAgentModel"
+    actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = var.bedrock_invoke_resource_arns
+  }
+}
+
+resource "aws_iam_role_policy" "task_bedrock_invoke" {
+  count  = local.create && length(var.bedrock_invoke_resource_arns) > 0 ? 1 : 0
+  name   = "${var.name_prefix}-task-bedrock-invoke"
+  role   = aws_iam_role.task[0].id
+  policy = data.aws_iam_policy_document.task_bedrock_invoke[0].json
+}

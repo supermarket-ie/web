@@ -153,6 +153,18 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
   // peer would create an inaccurate multi-retailer comparison when finalised.
   // Until that canonical peer is audited/corrected, keep the mapping held.
   if (e.peers.some(peer=>peerIdentityConflict(e,source,peer))) return false;
+  // Two fresh price records alone are not identity evidence: a same-size but
+  // unrelated product at both other shops must never grant hold re-entry.
+  // Require at least one corroborating peer name even for a barcode match;
+  // human review separately checks the other peer's equivalence.
+  if (e.peers.length && !e.peers.some(peer => titleSupport(source.name, peer.store_product_name)))
+    return false;
+  // A branded canonical product cannot silently compare a different branded
+  // manufacturer's product just because the quantity and variant line up.
+  // Generic/unbranded canonical products may have cross-retailer equivalents.
+  const canonicalBrand = m.canonical_brand;
+  if (canonicalBrand && e.peers.some(peer => peer.brand && !sameBrand(canonicalBrand, peer.brand)))
+    return false;
   // A canonical EAN matching the page is independent exact-product evidence;
   // retailer coverage is a commercial property, not a prerequisite.
   if (sameBarcode(m.canonical_ean,source.gtin)) return true;

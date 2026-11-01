@@ -254,6 +254,22 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     expect(result).toMatchObject({result:'complete',inserted:1});
     expect(fetched).toHaveBeenCalledTimes(1);
   });
+  it('cannot infer exact identity from two fresh peer prices for an unrelated product',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.exec(`update store_products set store_product_name='Tesco Whole Cream 1L'
+      where store in ('dunnes','supervalu')`);
+    const review=await approve(page);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+  });
+  it('does not trust a contradictory branded peer in a two-peer reviewed mapping',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.query('update products set brand=$1 where id=$2',['Tesco',products[0]]);
+    await db.exec(`update store_products set brand='Other Manufacturer' where store='dunnes'`);
+    const review=await approve(page);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+  });
   it('keeps a peer-variant conflict held even when canonical and Tesco barcodes match',async()=>{
     const gtin='05012345678901';
     const {page,live}=await heldEvidence({gtin});

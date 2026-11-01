@@ -213,6 +213,157 @@ two-person audited approval gate.
 No evidence-bound, two-person review approval is being inserted into production
 by this PR. Baseline protection remains 323 fresh Tesco observations after
 20 supervised renewals on 31 October; no held collection initiated.
+## IMPLEMENTATION (branch only; NOT deployed): lightweight stateless Bedrock agent PoC — 1 November 2026
+
+A lightweight, stateless, Bedrock-powered shopping-agent proof of concept that
+lives ALONGSIDE the Eve runtime (does NOT replace it). On branch
+`feat/lightweight-agent-poc`. No production change, no infra/Eve/collector edits,
+no deploy. Verified locally: 22 new vitest tests pass, `npm run lint` clean
+(0 errors / 22 warnings baseline), `tsc --noEmit` 0 errors. Full build + deploy
+NOT run.
+
+WHAT IT IS: a single App-Router SSE route `POST /api/agent/chat`
+(`runtime='nodejs'`) that emits the SAME AI SDK UIMessage stream the frontend
+already consumes via `toUIMessageStreamResponse()`. It REUSES existing shopping
+logic (no business-logic rewrites): `resolveCatalogueProduct` → `get_current_price`;
+`groundHouseholdShop` + the exact batch-resolution query from
+`agent/tools/present_household_shop.ts` → `present_household_shop`;
+`compareBasketStores` → `compare_shop_stores`; epicure `getSubstitutes` +
+`groundIngredient` + dietary screen → `find_substitutes`. All new code is under
+`src/lib/agent/` (model, tools, context, limits, safeguards, supabase), the new
+route, a new Supabase migration, and tests. `agent/**`, the Tesco/Dunnes/SuperValu
+collectors and `infra/**` are UNTOUCHED.
+
+UIMessage `dynamic-tool` CONTRACT: `present_household_shop` is defined with the
+AI SDK `dynamicTool(...)` and returns exactly `{ kind:'household_shop', shop }`.
+A dynamic tool streams as `tool-input-available`/`tool-output-available` chunks
+with `dynamic:true`, which the client (`useChat`/`readUIMessageStream`)
+reconstructs into a `message.parts` entry of
+`{ type:'dynamic-tool', toolName:'present_household_shop',
+state:'output-available', output:{ kind:'household_shop', shop } }` — the exact
+part the frontend renders. The route test asserts this at the reconstructed-part
+layer (not the raw wire), the layer the UI actually reads.
+
+STATELESS + SAFEGUARDS (atomic, fail-closed): no per-session/in-process state —
+all durable state is in Supabase, so ≥2 ECS tasks with no sticky routing enforce
+identical limits. New migration
+`supabase/migrations/20261101120000_agent_poc_safeguards.sql` adds
+`agent_conversations`, `agent_turns` (token counts/outcomes only — NO prompt
+text), `agent_guest_limits`, `agent_bedrock_spend_ledger` +
+`agent_bedrock_spend_reservations`, an `agent_usage_daily` view, and six
+`security definer` plpgsql RPCs that are atomic via `SELECT ... FOR UPDATE` /
+`UPDATE ... RETURNING`: `agent_guest_rate_check` (≤10/hour, ≤30/day,
+≤1 concurrent lock with 5-min stale auto-release, ≤15/conversation),
+`agent_guest_release`, `agent_conversation_ensure`,
+`agent_bedrock_spend_reserve` ($10/day UTC ceiling, reserve BEFORE the model
+call), `agent_bedrock_spend_settle` (reconcile to actuals, idempotent),
+`agent_turn_record`. Every safeguard wrapper FAILS CLOSED: any RPC error/throw
+rejects the turn with a customer-friendly streamed assistant message and no model
+call. Client IP (`x-forwarded-for` first hop) is a SECONDARY log/metric signal
+only, never a hard block. Guest identity is a signed `sm_guest` HMAC cookie
+(`AGENT_GUEST_COOKIE_SECRET`, falls back to `MAGIC_LINK_SECRET`); signed-in
+callers use the existing `sm_session` cookie via `verifySessionToken`.
+
+SUPABASE CLIENTS: catalogue/price reads go through the SHARED read-only-guarded
+`agentSupabase` (stays read-only under APP_ENV=preview / SUPABASE_READ_ONLY=true,
+preserving price truth). The PoC's OWN safeguard tables use a SEPARATE raw
+service-role client so conversations/usage/limits stay writable even in preview.
+
+MODEL: `src/lib/agent/model.ts` copies `agent/agent.ts` resolveModel() exactly
+(Bedrock default `eu.anthropic.claude-sonnet-4-6` via the ECS task-role
+`credentialProvider`; `anthropic` one-flag rollback) under the same env contract
+(`AGENT_MODEL_PROVIDER`/`AGENT_MODEL_ID`/`AGENT_ANTHROPIC_MODEL`). Per-turn caps
+in `limits.ts`: `MAX_OUTPUT_TOKENS=2000`, `MAX_STEPS=5` (`stepCountIs`), 60s
+AbortSignal wall-clock, input trimmed to ~24k chars. The same Bedrock account
+gate from the Eve-agent entry still applies (Anthropic use-case form) before the
+bedrock provider can be invoked in prod.
+
+TESTS (`src/lib/agent/__tests__/`, run with
+`npx vitest run src/lib/agent/__tests__`): safeguards decision/fail-closed +
+guest-cookie signing (18); present_household_shop output validates against
+`householdShopToolOutputSchema` with the catalogue client mocked (1); route
+dry-run with a MOCKED `MockLanguageModelV4` (no Bedrock/AWS) asserting a
+reconstructed `dynamic-tool` part, reserve+settle called, and a blocked guest
+getting the friendly message with NO model call (3).
+
+## IMPLEMENTATION (preview-validated; NOT deployed): restore Eve agent + Bedrock — 31 October 2026
+
+Fixes the broken customer-facing agent and migrates model access to Amazon
+Bedrock. On branch `fix/eve-agent-bedrock`; validated in an isolated preview ECS
+task. NO production change; awaiting approval to deploy. Tesco/Dunnes/SuperValu
+pipelines untouched. Full plan + results: `docs/eve-agent-bedrock-migration.md`.
+
+PREVIEW VALIDATION (isolated one-off ECS task, branch image, dedicated preview
+task role w/ least-priv Bedrock): transport fix CONFIRMED (turns reach the model;
+no more `world-local`/`fetch failed`); Bedrock SigV4 via task role CONFIRMED (no
+credential error; requests reach bedrock-runtime converse-stream with full prompt
++ tools); a full 3-turn customer conversation COMPLETED end-to-end with REAL
+Supermarket.ie data (real butter prices across 3 retailers; milk/bread/eggs
+comparison that refused a single-cheapest on incomplete coverage and separated
+promo flags from confirmed savings; present_household_shop bolognese list, 6
+lines €9.42) — proven via the Anthropic rollback path, which exercises the
+identical transport/tools/data. Preview resources removed after.
+
+BLOCKER (account-level, NOT code/IAM): Bedrock returns ResourceNotFoundException
+"Model use case details have not been submitted for this account" for ALL
+Anthropic models (Sonnet 4.5/4.6, Haiku 4.5) in acct 611622961299. The one-time
+Bedrock Anthropic use-case form (console → Model access) must be submitted by the
+account owner before any Anthropic model can be invoked. So the first prod
+rollout defaults AGENT_MODEL_PROVIDER=anthropic (works now); flip to bedrock
+(env-only apply) after the form clears. The earlier admin Converse "Pong!" slipped
+through before the gate propagated.
+
+ROOT CAUSE (verified against the compiled Eve runtime, not assumed): Eve's
+`configureProductionNitroRoutes` registers the IN-PROCESS turn-queue handler
+ONLY when `experimental.workflow.world` is defined. `agent/agent.ts` declared no
+workflow world, so no direct handler was registered and every turn fell back to
+the `world-local` HTTP self-delivery to `/flow`. An isolated two-process probe
+(Next :3000 + Eve Nitro :4274, same image) confirmed `/flow` is served by
+NEITHER port (both 404), so the HTTP delivery can never succeed → every turn
+died with `TypeError: fetch failed`, 0 completed turns.
+
+FIX (code, `agent/agent.ts`): (1) set `experimental: { workflow: { world:
+'local' } }` so the production build registers the in-process handler and turns
+run in-process (no HTTP self-hop). Durable household state lives in Supabase
+(rebuilt per turn), not the workflow store, so this is correct across multiple
+ECS tasks for the stateless request→turn→response flow. (2) Model is now
+configurable: `AGENT_MODEL_PROVIDER` (`bedrock` default | `anthropic`),
+`AGENT_MODEL_ID` (default `eu.anthropic.claude-sonnet-4-6`), with Anthropic kept
+as a one-env-flag rollback. (3) `modelContextWindowTokens: 200000` supplied
+because a direct Bedrock model has no AI-Gateway window metadata (Eve build
+errors without it). Added dep `@ai-sdk/amazon-bedrock@5.0.130` (its
+`@ai-sdk/provider` is 4.x, matching `ai@7.0.66`/`@ai-sdk/anthropic@4.0.38`).
+
+GATE (green): 742 tests, 16 behavioural, lint 0 errors/22 warnings, 3
+typechecks, `eve build` OK.
+
+IAM (required for prod, least-privilege): task role `smie-prod-task` currently
+has NO Bedrock permission (only inline `smie-prod-task-sqs-produce`). Prod needs
+`bedrock:InvokeModel`+`bedrock:InvokeModelWithResponseStream` scoped to the EU
+Claude inference profile + the foundation model(s) it routes to.
+
+RELIABILITY NOTE (requirement): `world-local` keeps only in-flight turn state
+locally and ephemerally per task; a turn interrupted by a task restart is lost
+(user retries) and there is no cross-task workflow resumption. Acceptable for a
+chat turn; the durable-world upgrade path (shared Supabase/SQS-backed world) is
+documented for future scale.
+
+## DIAGNOSIS: customer-facing Eve agent broken on AWS — `world-local` workflow transport self-delivery fails (NOT Anthropic credits) — 30 October 2026
+
+Read-only investigation (code read + CloudWatch `/ecs/smie-prod` + read-only
+one-off ECS probe tasks; no production change). The homepage/shopping agent has
+produced NO successful turn since the AWS cutover window (~25 Oct). The agent is
+the **Eve** framework (`eve@0.39.0`, AI SDK `ai@7`), `agent/agent.ts` previously
+`model: anthropic('claude-sonnet-5')` via `@ai-sdk/anthropic` + `ANTHROPIC_API_KEY`
+(no Bedrock). Container runs TWO processes: Next on `0.0.0.0:3000` (ALB) and Eve
+Nitro on `127.0.0.1:4274`.
+
+RULED OUT WITH EVIDENCE — NOT credits/key/model/networking: a one-off ECS task
+(live `smie-prod:12` task def, same subnets/SG, real injected key) called
+`api.anthropic.com` → **HTTP 200** with `model: claude-sonnet-5` and real usage.
+Key well-formed; SG allows all egress; subnets public; `localhost`→127.0.0.1.
+Site healthy (200, 2/2). See the IMPLEMENTATION entry above for the confirmed
+root cause and fix.
 
 ## INVESTIGATION: Tesco expansion campaign post-mortem + renewal readiness — 28 October 2026
 
