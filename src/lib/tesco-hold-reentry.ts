@@ -21,8 +21,14 @@ export type Reentry = { reviewId: string; sourcePageId: string; evidence: Reentr
 export type ReviewRecord = {
   id: string; store_product_id: string; source_page_id: string; evidence_snapshot: ReentryEvidence;
   independent_reason: string; reviewer_id: string;
+  approval_kind: 'human' | 'machine'; machine_assessment: MachineAssessment | null;
   approved_at: string; expires_at: string;
   revoked: boolean; used: boolean;
+};
+export type MachineAssessment = {
+  decision: 'verified_exact'; model: string; source: string; reason: string;
+  mapping_id: string; source_page_id: string; source_body_sha256: string;
+  validation: { independently_exact: true; checks: string[] };
 };
 const ID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 export function reviewedUuid(id: string): string {
@@ -245,6 +251,14 @@ export function approvedReview(r: ReviewRecord, current: ReentryEvidence | null)
   const snap = r.evidence_snapshot;
   return !!current && !r.revoked && !r.used
     && ID.test(r.reviewer_id) && r.independent_reason.trim().length >= 30
+    && (r.approval_kind === 'human' || (r.approval_kind === 'machine'
+      && r.machine_assessment?.decision === 'verified_exact'
+      && typeof r.machine_assessment.model === 'string' && r.machine_assessment.model.trim().length >= 3
+      && typeof r.machine_assessment.reason === 'string' && r.machine_assessment.reason.trim().length >= 30
+      && r.machine_assessment.mapping_id === r.store_product_id
+      && r.machine_assessment.source_page_id === r.source_page_id
+      && r.machine_assessment.source_body_sha256 === snap?.page?.body_sha256
+      && r.machine_assessment.validation?.independently_exact === true))
     && Date.parse(r.approved_at) <= Date.now() && Date.parse(r.expires_at) > Date.now()
     && r.store_product_id === snap?.mapping?.id && r.source_page_id === snap?.page?.id
     && JSON.stringify(snap) === JSON.stringify(current)
@@ -290,6 +304,11 @@ export function assertReentry(target: Candidate, runId: string, reserved: boolea
       and v.source_page_id=${reviewedUuid(target.reentry.sourcePageId)}
       and v.approved_at<=now() and v.expires_at>now()
       and v.reviewer_id is not null and length(trim(v.independent_reason))>=30
+      and (v.approval_kind='human' or (v.approval_kind='machine'
+        and v.machine_assessment->>'decision'='verified_exact'
+        and v.machine_assessment->>'mapping_id'=v.store_product_id::text
+        and v.machine_assessment->>'source_page_id'=v.source_page_id::text
+        and v.machine_assessment->>'source_body_sha256'=v.evidence_snapshot #>> '{page,body_sha256}'))
       and v.evidence_snapshot=${encoded}::jsonb
       and ${evidence}=${encoded}::jsonb
       and not exists(select 1 from tesco_hold_reentry_revocations x where x.review_id=v.id)

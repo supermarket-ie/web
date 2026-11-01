@@ -6,6 +6,7 @@ import { collectTescoSupervised, reconcileSupervisedRun, selectSupervisedCandida
 import { fetchTescoCollectedPage, parseTescoCollectedPage, validateTescoCollectedIdentity, type TescoPageResponse } from './tesco-direct-collection-core';
 import { selectAcquisitionCandidates } from './tesco-acquisition-handoff';
 import { reentryEvidenceSql, reviewedCanonicalEvidenceGap, selectReviewedCandidates, type ReentryEvidence } from './tesco-hold-reentry';
+import { prepareMachineAssessment, type AiReviewedMapping } from './tesco-machine-approval';
 
 let db: PGlite;
 let execute: ExecuteSql;
@@ -86,6 +87,7 @@ beforeEach(async () => {
     .split('create or replace function public.finalize_tesco_scrape_product_pepesto')[0]);
   await db.exec(readFileSync('supabase/migrations/20260929093608_tesco_direct_collection_evidence.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261101000000_tesco_hold_reentry_reviews.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261101182500_tesco_machine_reentry_approvals.sql', 'utf8'));
   execute = async query => {
     const results = await db.exec(query);
     return results.at(-1)?.rows as Record<string, unknown>[] ?? [];
@@ -98,6 +100,39 @@ beforeEach(async () => {
 afterEach(async () => { await db.close(); });
 
 describe('audited held Tesco re-entry (production database transactions)', () => {
+  async function machineApproval(page: string, overrides: Record<string, unknown> = {}, roleClaims: Record<string, boolean> = {
+    tesco_reentry_machine_approver: true,
+  }) {
+    const [row] = await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    const evidence = row.evidence as ReentryEvidence;
+    const machine = randomUUID(), claimedActor = randomUUID(), review = randomUUID();
+    await db.query('insert into auth.users(id) values($1),($2)',[machine,claimedActor]);
+    const assessment = {
+      decision:'verified_exact',model:'chatgpt-work-audited-identity-inference',
+      source:'docs/tesco-hold-reentry-production-queue-20261101.jsonl',
+      reason:'Independent matching of Tesco SKU, source barcode, brand, pack and correct retailer peers.',
+      mapping_id:ids[0],source_page_id:page,source_body_sha256:evidence.page.body_sha256,
+      validation:{independently_exact:true,checks:['unique_sku','source_page','brand','pack','variant','peers']},
+      ...overrides,
+    };
+    await db.query('select set_config($1,$2,false)',['request.jwt.claim.sub',machine]);
+    await db.query('select set_config($1,$2,false)',
+      ['request.jwt.claims',JSON.stringify({sub:machine,role:'authenticated',app_metadata:roleClaims,
+        user_metadata:{tesco_reentry_machine_approver:true}})]);
+    await db.exec('set role authenticated');
+    try {
+      await db.query(`insert into tesco_hold_reentry_reviews
+        (id,store_product_id,source_page_id,evidence_snapshot,independent_reason,reviewer_id,
+         approval_kind,machine_assessment,expires_at)
+        values($1,$2,$3,$4,$5,$6,'human',$7,now()+interval '2 days')`,
+      [review,ids[0],page,JSON.stringify(evidence),assessment.reason,claimedActor,JSON.stringify(assessment)]);
+    } finally {
+      await db.exec('reset role');
+      await db.query('select set_config($1,$2,false)',['request.jwt.claim.sub','']);
+      await db.query('select set_config($1,$2,false)',['request.jwt.claims','']);
+    }
+    return { review, machine, assessment };
+  }
   async function authenticatedReviewInsert(
     page: string, actor: string, claimedReviewer: string, permission: boolean,
   ) {
@@ -199,6 +234,53 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
       } finally {await db.exec('reset role');}
     }
     expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it('binds a genuine machine Auth principal and machine kind despite forged human fields',async()=>{
+    const {page,live}=await heldEvidence();
+    const {review,machine}=await machineApproval(page);
+    const rows=await db.query<{reviewer_id:string;approval_kind:string}>(
+      'select reviewer_id,approval_kind from tesco_hold_reentry_reviews where id=$1',[review]);
+    expect(rows.rows[0]).toMatchObject({reviewer_id:machine,approval_kind:'machine'});
+    expect(await selectReviewedCandidates(execute,[review])).toHaveLength(1);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+  });
+  it('rejects machine approvals with missing or contradictory AI/evidence attestation',async()=>{
+    const {page}=await heldEvidence();
+    for(const bad of [{decision:'uncertain'},{source_body_sha256:'f'.repeat(64)},
+      {validation:{independently_exact:false,checks:[]}},{mapping_id:randomUUID()}]) {
+      await expect(machineApproval(page,bad)).rejects.toThrow();
+    }
+    const count=await db.query<{n:number}>('select count(*) n from tesco_hold_reentry_reviews');
+    expect(Number(count.rows[0].n)).toBe(0);
+  });
+  it('rejects machine privilege forged in user_metadata and ambiguous dual privileged roles',async()=>{
+    const {page}=await heldEvidence();
+    await expect(machineApproval(page,{},{})).rejects.toThrow('authenticated_tesco_reentry_reviewer_required');
+    await expect(machineApproval(page,{},
+      {tesco_reentry_machine_approver:true,tesco_reentry_reviewer:true})).rejects.toThrow(
+      'exactly_one_tesco_reentry_approval_role_required');
+  });
+  it('converts only exact source-bound prior AI evidence into machine attestation',async()=>{
+    const {page}=await heldEvidence();
+    const [row]=await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    const evidence=row.evidence as ReentryEvidence;
+    const product=evidence.page.parsed.products[0];
+    const manifest:AiReviewedMapping={type:'candidate',
+      status:'AI_VERIFIED_PENDING_AUTHENTICATED_HUMAN_APPROVAL_AND_FRESH_LIVE_FETCH',
+      sku:sku(),mapping_id:ids[0],source_page_id:page,
+      source_body_sha256:evidence.page.body_sha256,
+      review_reason:'AI assessed correct Tesco source, exact variant, pack and both verified retailer peers.',
+      positive_independent_code_gate:true,
+      source_identity:{name:product.name,brand:product.brand ?? '',quantity:product.quantity ?? {}},
+      peer_identity:evidence.peers.map(p=>({store:p.store,name:p.store_product_name})),
+    };
+    const prepare=(v:AiReviewedMapping)=>prepareMachineAssessment(v,evidence,'verified-manifest.jsonl','gpt-work-review');
+    expect(prepare(manifest)?.decision).toBe('verified_exact');
+    expect(prepare({...manifest,source_body_sha256:'f'.repeat(64)})).toBeNull();
+    expect(prepare({...manifest,sku:'555555555'})).toBeNull();
+    expect(prepare({...manifest,status:'AI_REJECTED'})).toBeNull();
+    expect(prepare({...manifest,peer_identity:[{store:'dunnes',name:'Orange Juice 1L'}]})).toBeNull();
   });
   it('admits an exact held Tesco identity with only one fresh peer after authenticated approval',async()=>{
     const {page,live}=await heldEvidence();
