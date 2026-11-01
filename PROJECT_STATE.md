@@ -1,5 +1,56 @@
 # Supermarket.ie — Canonical Project State
 
+## 1 November 2026, 21:35 UTC — production Tesco machine migration and collection reconciliation
+
+The owner-authorised protected Supabase migration
+`20261101182500_tesco_machine_reentry_approvals.sql` was APPLIED via the
+Supabase migration workflow, not raw privileged SQL. Verified both approval
+columns exist, ledger RLS is enabled, the INSERT policy is restricted to a
+server-controlled authenticated human or machine role, and service_role has no
+INSERT privilege. Auth currently has ZERO dedicated principals with
+`app_metadata.tesco_reentry_machine_approver=true`; the signed ledger has
+ZERO production machine approvals. The 93 evidence-supported held candidates
+(33 potential triples) remain held and unsigned pending legitimate Auth Admin
+provisioning. No mapping or hold was changed.
+
+An owner-authorised Node24/approved-commit (815355c) renewal campaign run
+`a0279c32-af6c-4d4e-9d5a-b5326793a39b` achieved **27 real successful
+existing-price receipts**. The supervising terminal then disappeared while
+one Tesco URL (SKU 312236215) was pending, leaving the run status running and
+a stale supervisor token; the owned gate lease has expired and no Node process
+remains. This request has UNKNOWN outcome, must remain pending and MUST NOT be
+retried, finalised from cached evidence or cleared without a source-of-truth
+reconciliation. The six earlier historical unresolved requests remain intact,
+bringing pending pages to seven. Known 1 November renewals are now **142**
+(113 earlier + 2 from run 406ac3c6 + 27 here).
+
+An independently supervised, non-held ordinary expansion
+`d46ed3c1-6e41-4236-bb53-c0891a580f9d` completed **21 Tesco requests**:
+19 clean pages, one permanent unavailable/redirect, one pre-header
+network_error. Guarded finalisation created **one genuinely new trusted
+Tesco price**: Colgate Max Fresh Cooling Crystals Toothpaste 75ml,
+Tesco SKU 297708302, €6.00. The other identity outcomes: 3 ordinary holds,
+15 canonical-identity quarantines, zero prices from those rejects. Run ended
+degraded/network_error, lease released, no new pending, cooldown until
+2026-11-01 21:47:24 UTC. No automatic restart or access bypass.
+
+Actual fresh Tesco catalogue coverage rose **323 → 324**, while genuine fresh
+three-retailer comparisons remained **162** (net new triples 0). After these
+receipts/rejections, the exact approved selector currently exposes **156**
+eligible existing renewals and **36** ordinary unique-SKU expansion candidates.
+The 93 separately evidence-backed held mappings remain the highest-value
+blocked recovery queue, not 93 trusted prices.
+
+The recurring 20s header-abort failure was isolated from the logs (117 earlier
+successful pages, median 6.2s/max 18.5s; two 20.0s pre-header timeouts).
+A narrow one-attempt 30s fetch deadline with no retry or access/identity
+breaker relaxation was merged via PR #297 at
+`bc93773225b893917d7cb0b2ee0e3901b5b3e7d9` after exact-head GitHub
+Actions validate passed. The active runs were NOT hot-swapped; future Work
+collector checkouts can use that reviewed merged code when no live session
+owns the gate. AWS ECS website rollout is unrelated and not needed for the
+supervised Work CLI.
+
 ## 1 November 2026 — Tesco supervised fetch timeout hardening (review pending)
 
 A read-only production sample at 20:53 UTC recorded 117 successful Tesco
