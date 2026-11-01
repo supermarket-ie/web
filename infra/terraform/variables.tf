@@ -56,7 +56,16 @@ variable "task_memory" {
 }
 
 variable "desired_count" {
-  description = "Number of Fargate tasks. Single-task preview."
+  description = <<-EOT
+    Number of Fargate tasks. PINNED to 1: the Eve agent's `world-local` workflow
+    transport keeps per-session turn state in-process on the task that created
+    the session. The browser flow is POST /eve/v1/session then a SEPARATE GET
+    /eve/v1/session/:id/stream (SSE); across >1 task the stream can land on a
+    task that does not own the session (ALB lb_cookie stickiness is not reliable
+    for this two-request SSE flow), so the agent hangs from the frontend. Keep at
+    1 until the agent uses a shared/durable workflow world; then raise with
+    autoscale_min/max.
+  EOT
   type        = number
   default     = 1
 }
@@ -82,15 +91,24 @@ variable "enable_autoscaling" {
 }
 
 variable "autoscale_min" {
-  description = "Minimum task count when autoscaling is enabled (>=2 for AZ redundancy)."
+  description = <<-EOT
+    Minimum task count when autoscaling is enabled. PINNED to 1 for the same
+    reason as desired_count (per-task world-local agent session state). Raising
+    this re-introduces the cross-task frontend hang until the agent has a shared
+    workflow world.
+  EOT
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "autoscale_max" {
-  description = "Maximum task count under load."
+  description = <<-EOT
+    Maximum task count under load. PINNED to 1: scaling the web service beyond 1
+    task breaks the agent's browser session->stream flow (see desired_count).
+    Raise only after the agent uses a shared/durable workflow world.
+  EOT
   type        = number
-  default     = 6
+  default     = 1
 }
 
 variable "autoscale_cpu_target" {
