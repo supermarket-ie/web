@@ -3,7 +3,9 @@
   "compilerOptions": { "incremental": false },
   "include": [
     "scripts/tesco-supervised-collect.ts",
+    "scripts/tesco-machine-approve.ts",
     "scripts/tesco-recovery-campaign.ts",
+    "src/lib/tesco-machine-approval.ts",
     "src/lib/tesco-supervised-collection.ts",
     "src/lib/tesco-supervised-collection.test.ts",
     "src/lib/tesco-campaign.ts",

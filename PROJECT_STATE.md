@@ -1,5 +1,30 @@
 # Supermarket.ie — Canonical Project State
 
+## 1 November 2026 — AI machine-approval release work; Tesco network safeguard stop
+
+Owner expressly replaced PR #286's manual per-product human signing policy
+with a separately authenticated, auditable **machine** approval route for
+independently corroborated exact identities. This is a new feature branch, not
+yet a deployed security policy. The narrow proposal extends the immutable
+review ledger with a JWT-derived machine actor/kind, model/source/rationale
+and structured independent-validation evidence; it retains source+mapping
+snapshots, old holds, six unresolved requests, one-use records, live exact
+verification, rate/lease gates and guarded price finalisation. No signed
+machine approval or trusted held price has yet been inserted. See
+
+`docs/tesco-machine-approval-release-20261101.md`.
+
+Production read-only preflight: **323** fresh Tesco prices, **zero** existing
+hold reviews/uses/revocations, no active supervised run or lease and **six**
+preserved historical pending requests. The earlier network-error cooldown
+had elapsed. The existing approved collector was run for a full 100-product
+renewal cohort, but stopped safely after only **three live Tesco requests**:
+**two successful guarded renewals, zero new trusted products, zero triples**.
+Run `406ac3c6-257f-45c1-8e6d-200d120f2e1f` is terminal
+`degraded/network_error`, `reserved=completed=3`, `inserted=2`, zero new
+pending. Do not repeat collection before a legitimate network-access
+recovery and normal preflight. Cumulative known 1 November renewals: **115**.
+
 ## 1 November 2026, 12:51 UTC — Tesco renewal campaign paused at access safeguard
 
 The approved supervised collector commit `815355cbb53cb418c3a2db26e972b1627c7e10b9`
