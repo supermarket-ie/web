@@ -67,6 +67,22 @@ create index if not exists agent_bedrock_spend_reservations_day_idx
   on public.agent_bedrock_spend_reservations (utc_day);
 
 -- ---------------------------------------------------------------------------
+-- Row-level security: DENY BY DEFAULT to anon/authenticated.
+--
+-- Every access path is the service-role key via the SECURITY DEFINER RPCs
+-- below (service_role bypasses RLS), so no policies are added for anon/
+-- authenticated — enabling RLS with no policy denies them by default. This is
+-- defence-in-depth: if the anon/authenticated keys ever touched these tables
+-- directly they get nothing. The tables hold only counters, outcomes, guest
+-- keys and cost figures — never prompt text or PII.
+-- ---------------------------------------------------------------------------
+alter table public.agent_conversations            enable row level security;
+alter table public.agent_turns                     enable row level security;
+alter table public.agent_guest_limits             enable row level security;
+alter table public.agent_bedrock_spend_ledger      enable row level security;
+alter table public.agent_bedrock_spend_reservations enable row level security;
+
+-- ---------------------------------------------------------------------------
 -- Limits (tunable constants, inlined in the RPCs below)
 --   hourly messages per guest:        10
 --   daily messages per guest:         30
@@ -204,9 +220,9 @@ declare
   v_count integer;
 begin
   if p_conversation_id is not null then
-    select id, message_count into v_id, v_count
-      from public.agent_conversations
-      where id = p_conversation_id
+    select c.id, c.message_count into v_id, v_count
+      from public.agent_conversations c
+      where c.id = p_conversation_id
       for update;
     if found then
       if v_count >= 15 then
@@ -218,9 +234,9 @@ begin
     end if;
   end if;
 
-  insert into public.agent_conversations (id, guest_key, subscriber_id)
+  insert into public.agent_conversations as c (id, guest_key, subscriber_id)
     values (coalesce(p_conversation_id, gen_random_uuid()), p_guest_key, p_subscriber_id)
-    returning id, message_count into v_id, v_count;
+    returning c.id, c.message_count into v_id, v_count;
   return query select true, 'ok', v_id, v_count;
 end;
 $$;
