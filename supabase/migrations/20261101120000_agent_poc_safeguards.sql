@@ -29,9 +29,9 @@ create table if not exists public.agent_turns (
   subscriber_id text,
   role text not null default 'assistant',
   created_at timestamptz not null default now(),
-  input_tokens integer not null default 0,
-  output_tokens integer not null default 0,
-  est_cost_cents numeric(12, 4) not null default 0,
+  input_tokens integer not null default 0 check (input_tokens >= 0),
+  output_tokens integer not null default 0 check (output_tokens >= 0),
+  est_cost_cents numeric(12, 4) not null default 0 check (est_cost_cents >= 0),
   outcome text not null,
   model text
   -- Intentionally NO prompt/message text columns: token counts + outcomes only.
@@ -51,15 +51,18 @@ create table if not exists public.agent_guest_limits (
 
 create table if not exists public.agent_bedrock_spend_ledger (
   utc_day date primary key,
-  reserved_cents numeric(14, 4) not null default 0,
-  settled_cents numeric(14, 4) not null default 0,
+  reserved_cents numeric(14, 4) not null default 0 check (reserved_cents >= 0),
+  settled_cents numeric(14, 4) not null default 0 check (settled_cents >= 0),
   updated_at timestamptz not null default now()
 );
 
 create table if not exists public.agent_bedrock_spend_reservations (
   id uuid primary key default gen_random_uuid(),
   utc_day date not null,
-  estimate_cents numeric(12, 4) not null,
+  -- A reservation must represent a POSITIVE estimated cost. The reserve RPC
+  -- also rejects non-positive estimates before inserting; this is the
+  -- table-level backstop.
+  estimate_cents numeric(12, 4) not null check (estimate_cents > 0),
   settled boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -112,17 +115,27 @@ declare
   v_stale timestamptz := v_now - interval '5 minutes';
   v_row public.agent_guest_limits%rowtype;
   v_conv_count integer;
+  v_conv_owner text;
 begin
-  -- Conversation length cap (15 messages/conversation). A missing conversation
-  -- is allowed here (the ensure RPC creates it); only an over-cap existing
-  -- conversation is rejected.
+  -- Conversation length cap (15 messages/conversation) + OWNERSHIP. The caller
+  -- passes the conversation id returned by agent_conversation_ensure (which
+  -- already enforced ownership), but re-verify here so this RPC cannot be used
+  -- to probe another caller's conversation: a conversation owned by a different
+  -- guest_key is rejected as `not_owned`. A missing conversation is allowed
+  -- (ensure creates it); only an over-cap OWNED conversation hits the cap.
   if p_conversation_id is not null then
-    select message_count into v_conv_count
+    select message_count, guest_key into v_conv_count, v_conv_owner
       from public.agent_conversations
       where id = p_conversation_id;
-    if found and v_conv_count >= 15 then
-      return query select false, 'conversation_limit';
-      return;
+    if found then
+      if v_conv_owner is distinct from p_guest_key then
+        return query select false, 'not_owned';
+        return;
+      end if;
+      if v_conv_count >= 15 then
+        return query select false, 'conversation_limit';
+        return;
+      end if;
     end if;
   end if;
 
@@ -202,8 +215,14 @@ begin
 end;
 $$;
 
--- Ensure/lookup a conversation row, enforcing the ≤15 messages/conversation cap.
--- Creates the row when p_conversation_id is null or unknown. Returns
+-- Ensure/lookup a conversation row, enforcing OWNERSHIP and the ≤15
+-- messages/conversation cap. Creates the row when p_conversation_id is null or
+-- unknown. OWNERSHIP: a supplied conversation id must belong to the caller's
+-- server-derived identity key (p_guest_key, which the route sets to
+-- `sub:<subscriberId>` for signed-in users or `guest:<signed-cookie-id>` for
+-- guests — never client-supplied). A conversation owned by a DIFFERENT key is
+-- rejected with `not_owned`, so one guest/subscriber cannot read or continue
+-- another's conversation by guessing/replaying its id. Returns
 -- (allowed, reason, conversation_id, message_count).
 create or replace function public.agent_conversation_ensure(
   p_conversation_id uuid,
@@ -218,13 +237,24 @@ as $$
 declare
   v_id uuid;
   v_count integer;
+  v_owner text;
 begin
+  if p_guest_key is null or length(p_guest_key) = 0 then
+    return query select false, 'conversation_missing', null::uuid, 0;
+    return;
+  end if;
+
   if p_conversation_id is not null then
-    select c.id, c.message_count into v_id, v_count
+    select c.id, c.message_count, c.guest_key into v_id, v_count, v_owner
       from public.agent_conversations c
       where c.id = p_conversation_id
       for update;
     if found then
+      -- OWNERSHIP GATE: the conversation must belong to this caller's key.
+      if v_owner is distinct from p_guest_key then
+        return query select false, 'not_owned', null::uuid, 0;
+        return;
+      end if;
       if v_count >= 15 then
         return query select false, 'conversation_limit', v_id, v_count;
         return;
@@ -232,10 +262,12 @@ begin
       return query select true, 'ok', v_id, v_count;
       return;
     end if;
+    -- An unknown id is NOT silently adopted under a chosen id: create a fresh
+    -- server-generated conversation owned by this caller instead.
   end if;
 
   insert into public.agent_conversations as c (id, guest_key, subscriber_id)
-    values (coalesce(p_conversation_id, gen_random_uuid()), p_guest_key, p_subscriber_id)
+    values (gen_random_uuid(), p_guest_key, p_subscriber_id)
     returning c.id, c.message_count into v_id, v_count;
   return query select true, 'ok', v_id, v_count;
 end;
@@ -258,6 +290,13 @@ declare
   v_settled numeric;
   v_res_id uuid;
 begin
+  -- Reject a null, zero or negative estimate: the breaker must never admit a
+  -- call on a non-positive reservation (that would bypass accounting).
+  if p_estimate_cents is null or p_estimate_cents <= 0 then
+    return query select false, null::uuid;
+    return;
+  end if;
+
   insert into public.agent_bedrock_spend_ledger (utc_day) values (v_day)
     on conflict (utc_day) do nothing;
 
@@ -266,8 +305,11 @@ begin
     where utc_day = v_day
     for update;
 
-  -- Count both outstanding reservations and settled spend against the ceiling.
-  if greatest(v_reserved, v_settled) + p_estimate_cents > v_ceiling then
+  -- Count outstanding reservations AND already-settled spend TOGETHER against
+  -- the ceiling. Using the SUM (not greatest) is the conservative, correct
+  -- bound: in-flight reservations and booked spend are distinct commitments
+  -- that both consume the daily allowance.
+  if v_reserved + v_settled + p_estimate_cents > v_ceiling then
     return query select false, null::uuid;
     return;
   end if;
@@ -312,9 +354,12 @@ begin
   update public.agent_bedrock_spend_reservations
     set settled = true where id = p_reservation_id;
 
+  -- Coerce an invalid actual cost (null / NaN / negative) to 0 so a bad settle
+  -- can never corrupt the ledger or (via a negative) erase booked spend. The
+  -- estimate is always retired from `reserved` regardless.
   update public.agent_bedrock_spend_ledger
     set reserved_cents = greatest(0, reserved_cents - v_estimate),
-        settled_cents = settled_cents + greatest(0, p_actual_cents),
+        settled_cents = settled_cents + greatest(0, coalesce(p_actual_cents, 0)),
         updated_at = now()
     where utc_day = v_day;
 end;
@@ -377,6 +422,22 @@ select
 from public.agent_turns t
 group by (t.created_at at time zone 'utc')::date
 order by utc_day desc;
+
+-- ---------------------------------------------------------------------------
+-- View security: agent_usage_daily aggregates usage; keep it OFF the public
+-- API. Revoke from anon/authenticated/public and grant only service_role, so
+-- it is never readable through the anon/authenticated PostgREST keys. (Base
+-- tables already have RLS deny-by-default; this closes the view path too.)
+-- ---------------------------------------------------------------------------
+revoke all on public.agent_usage_daily from public, anon, authenticated;
+grant select on public.agent_usage_daily to service_role;
+
+-- Also keep the base tables off the public API (no anon/authenticated grants).
+revoke all on public.agent_conversations from anon, authenticated;
+revoke all on public.agent_turns from anon, authenticated;
+revoke all on public.agent_guest_limits from anon, authenticated;
+revoke all on public.agent_bedrock_spend_ledger from anon, authenticated;
+revoke all on public.agent_bedrock_spend_reservations from anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Grants: service_role only (the PoC uses the service key; no anon/authenticated).

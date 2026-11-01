@@ -112,6 +112,7 @@ export type RateReason =
   | 'concurrent_limit'
   | 'conversation_limit'
   | 'conversation_missing'
+  | 'not_owned'
   | 'check_failed';
 
 export type RateDecision = { allowed: boolean; reason: RateReason };
@@ -123,6 +124,9 @@ const RATE_MESSAGES: Record<RateReason, string> = {
   concurrent_limit: 'Your previous message is still being answered. Please wait for it to finish before sending another.',
   conversation_limit: 'This conversation has reached its length limit. Please start a new conversation to continue.',
   conversation_missing: 'I couldn’t find that conversation. Please start a new one.',
+  // Do not reveal that the conversation exists but belongs to someone else —
+  // present it as not found and steer to a new conversation.
+  not_owned: 'I couldn’t find that conversation. Please start a new one.',
   check_failed: 'The assistant is briefly unavailable. Please try again in a moment.',
 };
 
