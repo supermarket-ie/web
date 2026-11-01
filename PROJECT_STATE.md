@@ -1,5 +1,45 @@
 # Supermarket.ie — Canonical Project State
 
+## DEPLOYED + CUTOVER: lightweight stateless Bedrock agent LIVE, 2 tasks, no stickiness — 1 November 2026
+
+The customer-facing agent was cut over from Eve to the new lightweight stateless
+AWS-native agent (AI SDK `streamText` + Bedrock `eu.anthropic.claude-sonnet-4-6`,
+reusing the existing Supabase shopping tools), and two-task redundancy was
+restored with ALB stickiness DISABLED. Tesco/Dunnes/SuperValu pipelines untouched.
+
+SEQUENCE: Supabase migration `20261101120000_agent_poc_safeguards.sql` (SHA-256
+c74f4576…, commit f0985ae) applied to prod via the operator's Supabase
+integration and verified (5 RLS tables, 6 RPCs, view, anon denied). PR #294
+squash-merged to main (`0ce1565`). Prod image `0ce1565-prod` built
+(image_mode=prod; a standard prod build defaults to the NEW agent because
+`NEXT_PUBLIC_AGENT_RUNTIME` is unset and the flag is lightweight unless `=eve`).
+Targeted `tofu apply` (website task def + service only) → task def `smie-prod:15`.
+The main CI `validate` failed once on the known Turbopack Google-fonts flake and
+passed on re-run.
+
+LIVE VALIDATION (real https://www.supermarket.ie /api/agent/chat, Bedrock):
+- Product search returns REAL catalogue/price data (Kerrygold €2.99, Avonmore
+  €2.89, Connacht Gold €4.89→€3.75), streamed as AI SDK UIMessage events.
+- Structured shopping-list card works: `present_household_shop` emits the
+  `dynamic-tool` part (kind:household_shop, grounded totals) the frontend renders.
+- Concurrency limit fires (parallel same-guest → one `concurrent_limit`).
+- Multiple turns across 2 tasks with stickiness DISABLED all complete (the
+  scenario that broke Eve) — stateless design confirmed.
+- Safeguards operating against PROD DB: agent_usage_daily shows requests, tokens,
+  spend, guest vs auth; spend ledger reserve→settle reconciled (reserved=0), well
+  under the $10/day (1000c) ceiling; no raw prompts stored. Model-errors in the
+  view were empty-input probe artifacts, not agent faults.
+
+CONFIG NOW: service smie-prod-svc on smie-prod:15, image 0ce1565-prod,
+AGENT_MODEL_PROVIDER=bedrock, desired_count=2 / autoscale 2–6, ALB target group
+stickiness DISABLED. Committed tfvars default desired_count raised 1→2.
+
+ROLLBACK (preserved, immediate): re-point the website service to image
+`606477f-prod` (the previous Eve image — runs Eve regardless of flags, since
+`NEXT_PUBLIC_AGENT_RUNTIME` is build-time-inlined) and, if desired, re-pin to 1
+task. The additive migration needs NO reversal (Eve doesn't use the agent_*
+tables).
+
 ## IMPLEMENTATION (branch only; NOT deployed): lightweight stateless Bedrock agent PoC — 1 November 2026
 
 A lightweight, stateless, Bedrock-powered shopping-agent proof of concept that

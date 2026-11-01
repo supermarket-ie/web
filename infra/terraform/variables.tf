@@ -56,9 +56,14 @@ variable "task_memory" {
 }
 
 variable "desired_count" {
-  description = "Number of Fargate tasks. Single-task preview."
+  description = <<-EOT
+    Number of Fargate tasks. The customer agent is now the stateless lightweight
+    runtime (turn/session state in Supabase, not task-local), so >=2 tasks are
+    safe with NO ALB stickiness. Apply-time tfvars sets 2 (autoscale_min/max
+    govern the live range once autoscaling is attached).
+  EOT
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "image_tag" {
