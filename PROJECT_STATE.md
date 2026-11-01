@@ -1,5 +1,35 @@
 # Supermarket.ie — Canonical Project State
 
+## 1 November 2026 — authorised renewals started; held recovery still review-only
+
+The owner expressly authorised **303** eligible existing Tesco renewals
+using approved commit `815355cbb53cb418c3a2db26e972b1627c7e10b9`,
+in sequential runs of no more than 100, without changing holds or
+collection safety controls. Fresh production preflight at 11:43 UTC:
+**323** trusted Tesco prices; **303** four-day renewal eligible;
+gate `workspace-supervised-20260929` has 
+`enabled=false` (required by the approved supervised gate), no lease,
+expired cooldown, and no active supervisor; **six** old pending requests.
+The five old running records have `activeSupervisor=null`. This entry
+records commencement, **not** a final renewal count; the supervised
+runner must reconcile durable receipts after each batch. The PR #286
+branch is NOT used for renewals and no held SKU has been collected.
+
+Further read-only AI-assisted classification of the 795 originally
+uncertain wider held mappings found **four** additional exact
+canonical-EAN/Tesco-GTIN, source-page/receipt/pack-supported identities,
+in `docs/tesco-hold-reentry-inference-addendum-20261101.jsonl`.
+Two tempting barcode matches (a Gillette Sensitive/Classic description
+and a Piccobella cherry-tomato variety) remain uncertain pending
+material equivalence evidence. Strict independent source/validator
+preflight was applied to all 16 uncertain EAN-matched records and
+none of the material legacy conflicts was waived. **Total unsigned held
+review queue is now 93** (33 dual-peer prospective genuine triples,
+60 additional Tesco-only/two-retailer opportunities). Authenticated
+review, PR merge, migration and separate held collection authorisation
+are STILL required. Exact approval/deploy process prepared in
+`docs/tesco-authenticated-reviewer-production-runbook-20261101.md`.
+
 ## PROPOSED, NOT DEPLOYED: PR #286 authenticated identity approval and 89-candidate production queue — 1 November 2026
 
 Owner authorised **one authenticated, accountable privileged human reviewer**

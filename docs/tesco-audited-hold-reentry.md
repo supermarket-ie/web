@@ -78,6 +78,19 @@ or have unresolved competitor equivalence; they remain excluded.
 The independently reviewed 980-product audit, 73 original correction
 proposals and all rejected/uncertain product evidence remain preserved.
 
+**Continuous 1 November inference addendum:** four more previously uncertain
+unique-SKU products now have independently matching current canonical EAN
+and retained Tesco GTIN, source page/hash, previous successful receipt and
+consistent declared type/pack evidence. They are listed individually in
+`docs/tesco-hold-reentry-inference-addendum-20261101.jsonl` with their
+source, canonical, peer and reasoning records. The unsigned held review
+queue therefore totals **93** (the original 89 plus four), with **33**
+potential genuine new triples and **60** other potential Tesco prices.
+One Gillette sensitive-foam equivalence and the Piccobella cherry-tomato
+variety remain uncertain despite a barcode match; do not automatically
+admit every barcode-associated hypothesis. No review is signed or
+held product collected by this extra classification.
+
 ### Separate non-held expansion and renewal lanes — 1 November
 
 The **unchanged ordinary supervised expansion selector** currently reports
@@ -104,8 +117,10 @@ threshold, with earliest seven-day price expiry on **3 November**. The
 expiry exposure by UTC date is **57 on 3 November, 246 on 4 November,
 20 on 7 November**. The
 existing approved renewal path needs operational priority ahead of expansion;
-the current instruction prohibits initiating any production collection,
-so none was run here. Recovered held products subsequently return to
+the subsequent 1 November instruction **authorises the existing supervised
+renewal process**, independently of PR #286. The renewal campaign must be
+reconciled in its own production operation log. Recovered held products
+subsequently return to
 **ordinary** supervised renewal after a newly trusted observation overtakes
 the prior hold; a regression test verifies no repeat human hold re-entry
 approval is required for a normal live-validated renewal.
