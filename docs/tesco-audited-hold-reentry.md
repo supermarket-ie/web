@@ -23,16 +23,26 @@ separate owner-visible reports. The previous provisional **76** candidates
 were reclassified from recovered records; the lost transient list of 76
 identifiers cannot truthfully be diffed row-for-row.
 
-**None of the 78 is selectable through this PR.** The unchanged
-`independentExactIdentity` gate requires both fresh retailer peers.
-They are a **deferred recovery queue**, not an excuse to weaken this gate.
-Before adding a one/no-peer path, a separately reviewed, policy-explicit
-identity rule must require stronger canonical/retained source evidence
-(including barcode or independent corroboration), and exact live checking
-before finalisation. Do not treat price recency or brand alone as identity.
-Those 78 could add at most 78 fresh Tesco prices after a future approved
-path; with fewer than two fresh peers, they add **zero immediate genuine
-three-retailer comparisons**.
+**1 November revised evidence-bound gate:** the owner authorised a
+single **authenticated reviewer** and admission with fewer than two fresh
+retailer peers **only when independent exact-product evidence is sufficient**.
+The code now requires the same unique mapping, successful historical receipt,
+hashed source page, exact Tesco brand/pack/variant and unaltered live identity.
+Two peers retain the previous guard; one peer additionally needs positively
+matching source/canonical/peer brand and source/peer name; zero peers needs
+an exact canonical-to-Tesco barcode. A conflicting existing peer never
+passes. The reviewer must still approve each exact immutable snapshot.
+
+Read-only preflight against **current** production evidence for the 78:
+**64** pass the strict independent source-identity gate; of those, **56**
+have no material unchanged lexical-validator conflict, including **12 whose
+old source page lacked an available regular price** and therefore depend
+on a newly available live price. **22 remain excluded**. All 56 still need
+authenticated human review, fresh production snapshot at approval,
+new live Tesco price/identity and guarded finalisation. None has been
+approved or collected. With one or zero fresh peers, these 56 create
+**zero immediate three-retailer comparisons**, but could provide up to
+56 additional Tesco prices if live availability and all guards permit.
 
 The parser's decimal and counted-pack correction now identifies one
 additional exact-source/peer identity, Dr Oetker Gelatine 3x12g,
@@ -41,60 +51,83 @@ unchanged lexical validator reports `brandConflict` and `measureConflict`;
 the reviewed-only exception **must not** waive those reasons. The safe
 initial cohort remains **33**, not 34.
 
-## Security-review finding: two reviewer names are not two authenticated people
+### Largest defensible prepared production review queue — 1 November
 
-Migration `20261101000000_tesco_hold_reentry_reviews.sql` stores
-`assessed_by` and `approved_by` as freely supplied `text`. Its CHECK
-constraint and collector require different strings but do **not**
-authenticate two distinct privileged humans. A single operator with the
-existing privileged SQL connection could supply both. This is a
-**release-blocking authentication gap**, not evidence of two-person control.
+`docs/tesco-hold-reentry-production-queue-20261101.jsonl` contains
+**89 unique, evidence-backed mapping candidates** with exact mapping UUID,
+source-page UUID and SHA-256, retained Tesco identity and pack, canonical
+identity and available barcode, independently assessed reasoning, and
+current competitor evidence:
 
-**Smallest robust two-person implementation, if that requirement is retained:**
+| Cohort | Candidate mappings | Potential fresh Tesco prices | Genuine new triples if exact live |
+| --- | ---: | ---: | ---: |
+| Original dual-peer, independently confirmed equivalence | 33 | Up to 33 | Up to 33 |
+| Additional exact Tesco identity, one fresh peer | 51 | Up to 51 | 0 at current overlap |
+| Additional exact Tesco identity, no fresh peer; canonical/Tesco barcode match | 5 | Up to 5 | 0 at current overlap |
+| **Total** | **89** | **Up to 89** | **Up to 33** |
 
-1. Reuse existing Supabase Auth operator identities. Grant a narrowly scoped
-   `tesco_reentry_reviewer` permission in server-controlled membership or
-   `app_metadata`; never trust user-editable metadata or a submitted name.
-2. Expose an explicitly restricted, evidence-bound approval RPC to authenticated
-   reviewers. The database derives `assessor_user_id` and
-   `approver_user_id` from separate verified `auth.uid()` sessions,
-   checks the permission and distinct IDs, and stores the exact product,
-   mapping/source/peer snapshot hash and expiry. Do not accept client-supplied
-   reviewer IDs. Restrict direct ledger INSERT to a dedicated controlled role;
-   do not let the collector create approvals.
-3. Support signing a **bounded manifest batch** (up to 100 individual immutable
-   evidence hashes) in one reviewed operation per person. Each candidate
-   retains an independently justified exact-product decision, revocation,
-   one-use claim and live-check semantics. A second review is one batch action,
-   not 33 manual database operations.
-4. Add SQL/RLS/permission and PGlite regressions for a forged reviewer,
-   same identity using two labels, non-reviewer JWT, stale evidence, batch
-   changes, and collector privilege separation.
+Seventeen of these have an old retained source page marked unavailable/
+unpriced; they are **not evidence of currently buyable Tesco stock** and
+will only receive a trusted price on an available and correctly priced
+*new* live page. The initial 33 and 56 additional have **zero signed
+approval records**, so **zero are selectable for collection today**.
+Actual price/triple counts can only be stated after authorised execution.
+The remaining 50 of the 139 evidence-supported identities have not
+passed the entire reviewed positive gate and unchanged lexical conflicts
+or have unresolved competitor equivalence; they remain excluded.
+The independently reviewed 980-product audit, 73 original correction
+proposals and all rejected/uncertain product evidence remain preserved.
 
-A **single authenticated, accountable evidence-bound reviewer** together
-with the existing exact live/source verification may be a defensible simpler
-policy. It is **not the currently proposed two-person policy** and has
-**not been implemented or authorised**. A conscious security-policy decision
-is required before replacing the two-person condition.
+## Authenticated single-reviewer security model
+
+The original two-name-string check was **not** evidence of two independent
+people. The owner has explicitly approved replacing that proposed control
+with **one accountable, authenticated human reviewer**, while retaining
+an independently supported exact-product gate and independent live checks.
+This migration is not a change to an established deployed security rule:
+the earlier two-string proposal was never deployed.
+
+- Approval INSERT is available only over the **Supabase Auth-verified Data
+  API** to an `authenticated` user whose server-owned JWT
+  `app_metadata.tesco_reentry_reviewer` equals `true`.
+- A BEFORE INSERT trigger **overwrites** any submitted `reviewer_id` with
+  `auth.uid()` and stamps the approval time. Row-level security checks the
+  same authenticated principal and privilege. Non-reviewers cannot approve;
+  free-text aliases and caller-supplied reviewer IDs cannot forge a signature.
+- The SQL bridge/collector `service_role` has **SELECT**, but not
+  INSERT/UPDATE/DELETE, on approval rows. SQL database owner access is
+  an administrative break-glass privilege, **not** an approval pathway:
+  do not create approvals through an unrestricted SQL editor/bridge.
+- A reviewed record binds the entire read-only source, mapping, peer,
+  receipt, hold and cooldown snapshot, specific rationale and 14-day
+  expiry. Every changed fact invalidates the approval; it is single-use,
+  revocable, and separately rechecked under the collection lease and
+  immediately before guarded finalisation.
+- PGlite SQL/RLS regression coverage proves the reviewer UUID is sourced
+  from the authenticated session, non-reviewer/anonymous/service-role writes
+  fail, and changed peer/live identity, source or one-use state fail closed.
 
 ## Exact release sequence (not yet authorised)
 
-1. Complete GitHub code/security review of PR #286 and required CI.
-   The identity-parser fix is narrow and keeps all real conflicts blocked;
-   the authenticated-approval concern above must be resolved before
-   describing the approval process as two-person enforced.
+1. Complete GitHub review/required CI of PR #286, including the authenticated
+   single-reviewer policy and the positive one-/zero-peer evidence rule.
 2. Separately authorise and apply the Supabase migration, with verified
    table/RLS/grants and the authenticated reviewer entrypoint. The three new
    ledger tables are **not deployed** at this review checkpoint.
-3. Merge/pin the reviewed collector revision in the existing ChatGPT Work
+3. Set `tesco_reentry_reviewer: true` in the selected human's **server-owned**
+   Supabase Auth app metadata (admin-side), confirm a signed-in Auth session,
+   and approve the exact currently queried candidate JSON snapshots through
+   that Auth-verified API. Then pin the reviewed collector revision in the
+   existing ChatGPT Work
    supervised Node 24 + `npm ci` environment, retaining its authenticated
    SQL bridge, Irish Tesco fetcher, leases, 10-second pacing, cooldowns,
    circuit breakers, six unresolved historical requests and guarded
-   finaliser. Reviewers then sign the 33 exact evidence snapshots.
+   finaliser. This approval step is not available through an SQL-bridge
+   service credential. Do not pre-sign a stale offline manifest.
 4. After **separate collection authorisation**, refresh production preflight,
-   select up to 33 *approved review UUIDs*, check non-stale peers/hold
+   select 1–100 *approved review UUIDs* per sequential batch, check non-stale peers/hold
    conditions and run a supervised batch with fresh live identity evidence.
-   Reconcile 33 requests versus **actual** finalised prices and triples.
+   Reconcile requests versus **actual** finalised prices and genuine triples.
 5. The existing GitHub AWS ECR image workflow may ship any website-side
    code, followed by the normal separately controlled ECS rollout. **It does
    not run this Work-supervised CLI or apply Supabase migrations.** An AWS
@@ -153,10 +186,12 @@ genuine same-product three-retailer comparability.
   stricter positive evidence gate. This is a false-negative in the
   historically held cohort, not grounds to relax real product conflicts.
 
-**No ledger approval is issued by the AI assessment.** Two distinct
-privileged reviewers are required after deployment and separate collection
-authorisation. New peer observations or mapping/source changes invalidate
-the evidence snapshot and require re-review.
+**No ledger approval is issued by the AI assessment.** A single
+authenticated privileged human reviewer is required after approved
+deployment; source/peer changes invalidate that signed snapshot.
+The 31 October 33 retained candidates remain the highest-priority
+defensible *three-retailer* cohort; the broader one-/zero-peer candidates
+are separately accounted for and cannot claim a new triple.
 
 ## Read-only ranking and AI review
 
@@ -185,15 +220,16 @@ Both commands use the same JSONL SQL bridge: for each emitted
 `{type:'sql',id,query}`, execute the entire read-only query once through
 the authenticated connector, then reply `{id,rows}`. The evidence includes
 the retained Tesco page ID, SHA-256, parsed title/brand/barcode/quantity,
-the current canonical Tesco mapping and one-to-one SKU count, two fresh
-retailer peer identities and observation times, historical success,
+the current canonical Tesco mapping and one-to-one SKU count, zero to two
+fresh retailer peer identities and observation times, historical success,
 fresh-Tesco status, and unresolved/24-hour attempt state.
 
-A human assessor and an **independent human approver** must independently
-establish that this is the **same exact** canonical product, including brand,
-pack count, quantity, flavour/formulation, product form, and barcode when
-available. A model verdict or the old deterministic validator alone is
-insufficient. Mark wrong SKUs for a separate mapping-correction process;
+A privileged human reviewer must separately evaluate the AI-assisted
+assessment and positively establish the **same exact** canonical product:
+brand, pack count, quantity, flavour/formulation, product form and barcode
+when present. The code enforces independent source and newly fetched live
+validation on top of that review. A model verdict or the old deterministic
+validator alone is insufficient. Mark wrong SKUs for mapping correction;
 do not use hold re-entry to fix them.
 
 ## Approval ledger (post-deployment and separate authorisation)
@@ -203,22 +239,24 @@ three restricted, append-only tables:
 
 - `tesco_hold_reentry_reviews`: a bounded (maximum 14 days) review
   containing the **exact** read-only evidence snapshot, source page,
-  rationale, and distinct assessor/approver identities.
+  rationale, and one JWT-verified privileged `reviewer_id`.
 - `tesco_hold_reentry_revocations`: one-way audit of cancelled approvals.
 - `tesco_hold_reentry_uses`: one use per review, claimed **atomically**
   with the collector's pending request reservation.
 
-No browser/anonymous/authenticated role may write these ledgers. There
-is no UI or scheduler for approvals. Privileged operator approval is a
-deliberate, separately controlled database action, **not** something the
-collector or ranking script performs.
+Only the specially authorised `authenticated` Supabase Auth role may
+INSERT a review via the verified Data API; anonymous, non-reviewer and
+collector service-role clients may not. The collector may read approvals.
+No UI or scheduler performs approval automatically.
 
-An approved reviewer would insert a row with the exact JSON returned by
-`--evidence`, a specific identity rationale (including both independently
-inspected peer products), their identity and a *different* approver identity.
-The database requires both identities and an expiry no more than 14 days
-away. Every subsequent change or revocation is an additional ledger row;
-the initial approval cannot be edited or deleted.
+An authorised reviewer INSERTs the exact JSON returned by `--evidence`
+(after fetching it **again immediately before signing**), the product and
+source UUIDs, and a specific independent identity rationale. Their
+`reviewer_id` and approval timestamp are **set by the database from the
+verified Auth JWT**. Expiry must be within 14 days. Use an authenticated
+Supabase client/Data API connection for this act, never the SQL editor or
+unrestricted bridge. Changes/revocation are separate records; approval
+cannot be edited or deleted.
 
 ## Guarded use (not authorised by this PR)
 
@@ -231,8 +269,9 @@ replace `--dry-run` with `--confirm-run`, maintaining bounded sequential
 batches and the existing operator SQL bridge.
 
 Before selection, the approval and source must match *exactly*: unique SKU,
-historical success, retained hashed page, complete source run, two fresh
-retailer peers, no fresh trusted Tesco observation, no pending/24h attempt,
+historical success, retained hashed page, complete source run, plus
+positive exact identity evidence suitable to the observed zero, one or two
+fresh peer products; no fresh Tesco price, no pending/24h attempt,
 no material category/variant/quantity conflict, no revocation or prior use.
 The existing hold is **not** cleared.
 
@@ -271,9 +310,9 @@ reused, even after an unsuccessful or interrupted request.
 
 ## Explicit remaining limitations
 
-- **Zero approval rows** are created by this PR. Independent signed-off
-  product evidence and a second reviewer are still required; the ranking
-  output is not a trusted-price whitelist.
+- **Zero approval rows** are created by this PR. One authenticated
+  privileged human review of each immutable evidence snapshot is still
+  required; the AI ranking output is not a trusted-price whitelist.
 - Non-proven held mappings (at least 40 of the 183) cannot use this
   path without an independently approved *different* policy; this PR
   intentionally preserves the existing historical-success requirement.
@@ -285,6 +324,11 @@ reused, even after an unsuccessful or interrupted request.
 - Source metadata edits, new peer observations, expiry, revocation,
   new holds or a concurrent run invalidate existing approvals rather
   than silently relaxing them.
+- The 31 October review marked two additional Tesco identities (SKUs
+  `254877356` and `257572562`) as **cross-retailer equivalence uncertain**
+  despite otherwise strong Tesco-source evidence. They are *not* included
+  in the 33 expected three-retailer comparisons. Do not equate the
+  mechanical gate with an independently reviewed competitor-product match.
 
 ## Review verification
 

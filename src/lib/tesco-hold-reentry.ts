@@ -5,6 +5,7 @@ import type { Candidate, ExecuteSql } from './tesco-supervised-collection';
 // Nothing here can grant approval, change a mapping or write a trusted price.
 export type ReentryEvidence = {
   mapping: { id: string; product_id: string; canonical_name: string; canonical_brand: string | null;
+    canonical_ean: string | null;
     store_product_name: string; store_brand: string | null; is_own_brand: boolean;
     store_sku: string; store_url: string; url_status: string; gtin: string | null };
   sameSkuCount: number;
@@ -19,7 +20,7 @@ export type ReentryEvidence = {
 export type Reentry = { reviewId: string; sourcePageId: string; evidence: ReentryEvidence };
 export type ReviewRecord = {
   id: string; store_product_id: string; source_page_id: string; evidence_snapshot: ReentryEvidence;
-  independent_reason: string; assessed_by: string; approved_by: string;
+  independent_reason: string; reviewer_id: string;
   approved_at: string; expires_at: string;
   revoked: boolean; used: boolean;
 };
@@ -53,7 +54,7 @@ function reentryEvidenceSqlWithRefs(storeIdSql: string, sourcePageSql: string, o
       ${excludeOwn}),
     'recentAttempt',exists(select 1 from tesco_direct_collection_pages x where x.requested_url=m.store_url
       and x.created_at>now()-interval '24 hours' ${excludeOwn}))
-    from (select s.id,s.product_id,p.canonical_name,p.brand canonical_brand,
+    from (select s.id,s.product_id,p.canonical_name,p.brand canonical_brand,(to_jsonb(p)->>'ean') canonical_ean,
       s.store_product_name,s.brand store_brand,s.is_own_brand,s.store_sku,s.store_url,s.url_status,s.gtin
       from store_products s join products p on p.id=s.product_id
       where s.id=${storeIdSql} and s.store='tesco') m
@@ -67,6 +68,18 @@ function normalized(input: string | null | undefined) {
 function sameBrand(a: string, b: string) {
   // Retailer structured brands vary in separator spacing (7UP / 7 UP).
   return normalized(a).replaceAll(' ', '') === normalized(b).replaceAll(' ', '');
+}
+function sameBarcode(a: string | null, b: string | null) {
+  if (!a || !b || !/^\d{8,14}$/.test(a) || !/^\d{8,14}$/.test(b)) return false;
+  return a.replace(/^0+/, '') === b.replace(/^0+/, '');
+}
+function titleSupport(a: string, b: string) {
+  const excluded = new Set(['the','with','and','for','from','pack','tesco','dunnes','supervalu','stores',
+    'product','products','g','kg','ml','l','litre','litres','bottle']);
+  const tokens = (s: string) => new Set(normalized(s).split(' ')
+    .filter(x => x.length >= 3 && !excluded.has(x) && !/^\d+$/.test(x)));
+  const left = tokens(a), right = tokens(b);
+  return [...left].filter(x => right.has(x)).length / Math.max(1, Math.min(left.size,right.size)) >= 0.65;
 }
 function qualifiers(name: string) {
   // Safety-first invariant attributes. The deterministic validator previously
@@ -125,17 +138,39 @@ function independentPackConflict(e: ReentryEvidence, source: TescoCollectedProdu
   if (canonical.amount && structured && canonical.amount !== structured
     && tesco.units === 1) return true;
   if (canonical.units != null && tesco.units != null && canonical.units !== tesco.units) return true;
-  // Fresh third-party equivalents do not independently prove *brand*, but
-  // known explicit units/pack sizes must not contradict the Tesco identity.
-  for (const peer of e.peers) {
-    // Peer formulation is independently relevant to a *genuine* three-way
-    // comparison: a juice drink cannot corroborate juice, nor an unadvertised
-    // citrus/vanilla variant. The reviewer checks the remaining semantics.
-    if (canonicalVariantConflict(source.name, peer.store_product_name)) return true;
-    const other = declaredPack(peer.store_product_name);
-    if (tesco.amount && other.amount && tesco.amount !== other.amount) return true;
-    if (tesco.units != null && other.units != null && tesco.units !== other.units) return true;
+  return false;
+}
+function peerIdentityConflict(e: ReentryEvidence, source: TescoCollectedProduct, peer: ReentryEvidence['peers'][number]) {
+  const tesco = declaredPack(source.name), other = declaredPack(peer.store_product_name);
+  return canonicalVariantConflict(source.name, peer.store_product_name)
+    || (tesco.amount != null && other.amount != null && tesco.amount !== other.amount)
+    || (tesco.units != null && other.units != null && tesco.units !== other.units);
+}
+function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollectedProduct) {
+  const m=e.mapping;
+  if (!source.brand) return false;
+  // Even if the Tesco EAN itself is exact, a contradictory existing retailer
+  // peer would create an inaccurate multi-retailer comparison when finalised.
+  // Until that canonical peer is audited/corrected, keep the mapping held.
+  if (e.peers.some(peer=>peerIdentityConflict(e,source,peer))) return false;
+  // A canonical EAN matching the page is independent exact-product evidence;
+  // retailer coverage is a commercial property, not a prerequisite.
+  if (sameBarcode(m.canonical_ean,source.gtin)) return true;
+  if (e.peers.length===2)
+    // Keep the previously approved dual-peer safety floor unchanged.
+    return true;
+  if (e.peers.length===1) {
+    const peer=e.peers[0];
+    // One peer can corroborate identity only with a positive brand, title and
+    // pack match. AI reviewer rationale alone cannot replace these checks.
+    return m.canonical_brand!=null && sameBrand(m.canonical_brand,source.brand)
+      && (peer.brand==null ? normalized(peer.store_product_name).includes(normalized(m.canonical_brand))
+        : sameBrand(peer.brand,source.brand))
+      && titleSupport(source.name,peer.store_product_name)
+      && !peerIdentityConflict(e,source,peer);
   }
+  // Without a fresh peer or a canonical-to-Tesco barcode, only historical
+  // receipts and mapped Tesco metadata remain; those are insufficient.
   return false;
 }
 export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollectedProduct): boolean {
@@ -148,17 +183,19 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
     || !/^[a-f0-9]{64}$/.test(e.page.body_sha256)
     || e.page.requested_url !== m.store_url || e.page.final_url !== m.store_url
     || !['success', 'degraded'].includes(e.sourceRun?.status) || !e.sourceRun?.finished_at
-    || !Array.isArray(e.peers) || e.peers.length !== 2
-    || new Set(e.peers.map(p => p.store)).size !== 2
-    || !e.peers.some(p => p.store === 'dunnes') || !e.peers.some(p => p.store === 'supervalu')
+    || !Array.isArray(e.peers) || e.peers.length>2
+    || new Set(e.peers.map(p => p.store)).size !== e.peers.length
+    || e.peers.some(p=>!['dunnes','supervalu'].includes(p.store))
     || e.peers.some(p => !p.observed_at || !p.store_product_name || !(Number(p.price) > 0))
     || source.sku !== m.store_sku || source.url !== m.store_url
     || !source.name || !source.brand || !source.quantity
     || (m.gtin != null && m.gtin !== source.gtin)
+    || (m.canonical_ean != null && !sameBarcode(m.canonical_ean,source.gtin))
     || (m.store_brand != null && !sameBrand(m.store_brand, source.brand))
     || (m.canonical_brand != null && !sameBrand(m.canonical_brand, source.brand))
     || independentPackConflict(e, source)
-    || canonicalVariantConflict(m.canonical_name, source.name)) return false;
+    || canonicalVariantConflict(m.canonical_name, source.name)
+    || !sufficientIndependentSupport(e,source)) return false;
   // The source's exact brand, pack, barcode and variant become immutable
   // constraints on the NEW live page. A changed SKU/name/pack/brand/GTIN
   // cannot inherit the approval. New price is never taken from the source.
@@ -190,12 +227,12 @@ export function reviewedCanonicalEvidenceGap(
     && independentExactIdentity(evidence, live);
 }
 
-// Review approval is a separate two-person act, never inferred by this runner.
+// Review approval is a separately authenticated, accountable human act,
+// never inferred by this runner or accepted from an arbitrary name string.
 export function approvedReview(r: ReviewRecord, current: ReentryEvidence | null): boolean {
   const snap = r.evidence_snapshot;
   return !!current && !r.revoked && !r.used
-    && r.assessed_by.trim().length >= 3 && r.approved_by.trim().length >= 3
-    && r.assessed_by !== r.approved_by && r.independent_reason.trim().length >= 30
+    && ID.test(r.reviewer_id) && r.independent_reason.trim().length >= 30
     && Date.parse(r.approved_at) <= Date.now() && Date.parse(r.expires_at) > Date.now()
     && r.store_product_id === snap?.mapping?.id && r.source_page_id === snap?.page?.id
     && JSON.stringify(snap) === JSON.stringify(current)
@@ -216,7 +253,7 @@ export async function selectReviewedCandidates(execute: ExecuteSql, reviewIds: s
     if (!r || !r.evidence || !approvedReview(r, r.evidence)) continue;
     const m = r.evidence.mapping;
     selected.push({ ...m, observed_at: null, price: null, due: false, held: true, proven: true,
-      overlap: 2, peers: [{ id: m.id, product_id: m.product_id, canonical_name: m.canonical_name,
+      overlap: r.evidence.peers.length, peers: [{ id: m.id, product_id: m.product_id, canonical_name: m.canonical_name,
         canonical_brand: m.canonical_brand, store_product_name: m.store_product_name, store_brand: m.store_brand,
         is_own_brand: m.is_own_brand, store_sku: m.store_sku, store_url: m.store_url, url_status: m.url_status }],
       reentry: { reviewId: r.id, sourcePageId: r.source_page_id, evidence: r.evidence } });
@@ -240,7 +277,7 @@ export function assertReentry(target: Candidate, runId: string, reserved: boolea
       and v.store_product_id=${reviewedUuid(target.id)}
       and v.source_page_id=${reviewedUuid(target.reentry.sourcePageId)}
       and v.approved_at<=now() and v.expires_at>now()
-      and v.assessed_by<>v.approved_by and length(trim(v.independent_reason))>=30
+      and v.reviewer_id is not null and length(trim(v.independent_reason))>=30
       and v.evidence_snapshot=${encoded}::jsonb
       and ${evidence}=${encoded}::jsonb
       and not exists(select 1 from tesco_hold_reentry_revocations x where x.review_id=v.id)

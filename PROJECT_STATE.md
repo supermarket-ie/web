@@ -1,5 +1,54 @@
 # Supermarket.ie — Canonical Project State
 
+## PROPOSED, NOT DEPLOYED: PR #286 authenticated identity approval and 89-candidate production queue — 1 November 2026
+
+Owner authorised **one authenticated, accountable privileged human reviewer**
+instead of the previous **two arbitrary reviewer-name strings**. Proposed
+Supabase migration now derives `reviewer_id` from the verified Auth JWT
+(`auth.uid()`) and checks the **server-controlled**
+`app_metadata.tesco_reentry_reviewer=true` permission; reviewer insert
+through an Auth-verified API only. Collector's service role has SELECT
+but no INSERT authority on the approval ledger. No two-name identities
+remain. New PGlite regressions demonstrate forged reviewer UUIDs are
+overridden and non-reviewer, anonymous and service-role approval writes
+are rejected. This is a proposed schema change, **not a production change**.
+
+Owner also authorised non-dual-peer **only where stronger positive exact
+identity evidence supports them**. New gate keeps hashed source/one-to-one
+SKU/successful receipt, exact brand/pack/barcode/variant, stable peer
+evidence, live page revalidation and reviewed-only two lexical false-negative
+exceptions. For one fresh peer require matching canonical, source, peer
+brand/name and pack; for zero fresh peers require a canonical-to-source
+barcode match. Contradictory retailer variant/pack, material legacy conflict
+or no exact evidence remains held.
+
+Fresh read-only source/peer preflight of all 139 independently supported
+identities (61 priority plus 78 wider): **89** evidence-supported mappings
+form a product-level **unsigned** queue in
+`docs/tesco-hold-reentry-production-queue-20261101.jsonl`: **33** already
+peer-verified dual-retailer candidates (up to 33 genuine triples),
+**51** additional one-peer and **5** barcode-confirmed zero-peer candidates
+(up to 56 more Tesco prices, zero immediate additional triples). At most
+**89 additional fresh Tesco prices** if all become available and pass live
+checks; **17** source pages were previously unpriced/unavailable.
+**50** of 139 are excluded for insufficient independent exact evidence,
+material legacy conflict or unresolved peer equivalence. AI review is not
+an authenticated privileged approval: **zero signed review rows, zero new
+trusted Tesco prices**. Current trusted baseline remains the last
+verified **323**; do not treat it as an independently re-queried live count.
+
+The 980 held mapping audit is persisted and reconciled (78 verified,
+107 rejected, 795 uncertain); the original 183 cohort is 61 verified,
+73 rejected, 49 uncertain. Combined counts: **139 evidence-supported**,
+**180 rejected**, **844 uncertain**. No production mappings, ledgers,
+holds or prices changed. Deployment requires PR merge/review, separate
+approved Supabase SQL migration, selected human Auth app-metadata privilege,
+fresh per-product immutable snapshot signed through Auth API, pinning the
+reviewed Node24 Work collector/SQL bridge, and **separate supervised
+collection authorisation**. Existing AWS ECR/ECS image workflow ships
+website code only and does **not** run this migration or the Work collector.
+See `docs/tesco-audited-hold-reentry.md`.
+
 ## PROPOSED (NOT DEPLOYED): Tesco recovery audit reconciliation and PR #286 hardening — 31 October 2026
 
 Recovered and persisted read-only identity evidence for all additional **980**

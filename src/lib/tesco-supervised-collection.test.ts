@@ -45,6 +45,15 @@ beforeEach(async () => {
   db = await PGlite.create();
   await db.exec(`
     create role anon; create role authenticated; create role service_role;
+    create schema auth;
+    create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable
+      as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    create function auth.jwt() returns jsonb language sql stable
+      as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb) $$;
+    grant usage on schema auth to authenticated;
+    grant execute on function auth.uid() to authenticated;
+    grant execute on function auth.jwt() to authenticated;
     create table products(id uuid primary key,canonical_name text,brand text);
     create table store_products(id uuid primary key,product_id uuid references products,store text,store_sku text,
       store_url text,store_product_name text,brand text,is_own_brand boolean,url_status text,gtin text);
@@ -89,6 +98,29 @@ beforeEach(async () => {
 afterEach(async () => { await db.close(); });
 
 describe('audited held Tesco re-entry (production database transactions)', () => {
+  async function authenticatedReviewInsert(
+    page: string, actor: string, claimedReviewer: string, permission: boolean,
+  ) {
+    const [row]=await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    const review=randomUUID();
+    await db.query('select set_config($1,$2,false)',['request.jwt.claim.sub',actor]);
+    await db.query('select set_config($1,$2,false)',
+      ['request.jwt.claims',JSON.stringify({sub:actor,role:'authenticated',
+        app_metadata:{tesco_reentry_reviewer:permission}})]);
+    await db.exec('set role authenticated');
+    try {
+      await db.query(`insert into tesco_hold_reentry_reviews
+        (id,store_product_id,source_page_id,evidence_snapshot,independent_reason,reviewer_id,expires_at)
+        values($1,$2,$3,$4,$5,$6,now()+interval '2 days')`,
+      [review,ids[0],page,JSON.stringify(row.evidence),
+        'Accountably reviewed the exact canonical identity, barcode, pack and retained source page.',claimedReviewer]);
+    } finally {
+      await db.exec('reset role');
+      await db.query('select set_config($1,$2,false)',['request.jwt.claim.sub','']);
+      await db.query('select set_config($1,$2,false)',['request.jwt.claims','']);
+    }
+    return review;
+  }
   async function heldEvidence(changes: Record<string, unknown> = {}) {
     await seed(0, '8 days');
     for (const store of ['dunnes', 'supervalu']) {
@@ -112,12 +144,26 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
   }
   async function approve(page: string) {
     const [e] = await execute(`select ${reentryEvidenceSql(ids[0], page)} evidence`);
-    const review = randomUUID();
-    await db.query(`insert into tesco_hold_reentry_reviews
-      (id,store_product_id,source_page_id,evidence_snapshot,independent_reason,assessed_by,approved_by,expires_at)
-      values($1,$2,$3,$4,$5,'identity-assessor','independent-reviewer',now()+interval '2 days')`,
-    [review, ids[0], page, JSON.stringify(e.evidence),
-      'Reviewed exact canonical, brand, pack and variant against two retailer peers and a retained page.']);
+    const review = randomUUID(), reviewer = randomUUID();
+    await db.query('insert into auth.users(id) values($1)',[reviewer]);
+    await db.query('select set_config($1,$2,false)',
+      ['request.jwt.claim.sub',reviewer]);
+    await db.query('select set_config($1,$2,false)',
+      ['request.jwt.claims',JSON.stringify({sub:reviewer,role:'authenticated',
+        app_metadata:{tesco_reentry_reviewer:true}})]);
+    await db.exec('set role authenticated');
+    try {
+      await db.query(`insert into tesco_hold_reentry_reviews
+        (id,store_product_id,source_page_id,evidence_snapshot,independent_reason,reviewer_id,expires_at)
+        values($1,$2,$3,$4,$5,$6,now()+interval '2 days')`,
+      [review, ids[0], page, JSON.stringify(e.evidence),
+        'Reviewed exact canonical, brand, pack and variant against current evidence and a retained page.',
+        reviewer]);
+    } finally {
+      await db.exec('reset role');
+      await db.query('select set_config($1,$2,false)',['request.jwt.claim.sub','']);
+      await db.query('select set_config($1,$2,false)',['request.jwt.claims','']);
+    }
     return review;
   }
   async function collect(review: string, live: TescoPageResponse) {
@@ -126,6 +172,99 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
       { execute, sleep, fetchPage });
     return { result, fetchPage };
   }
+  it('binds an approval to the authenticated account, not a caller-supplied reviewer UUID',async()=>{
+    const {page}=await heldEvidence();
+    const signer=randomUUID(), forged=randomUUID();
+    await db.query('insert into auth.users(id) values($1),($2)',[signer,forged]);
+    const review=await authenticatedReviewInsert(page,signer,forged,true);
+    const result=(await db.query<{reviewer_id:string,approved_at:string}>(
+      'select reviewer_id,approved_at from tesco_hold_reentry_reviews where id=$1',[review])).rows[0];
+    expect(result.reviewer_id).toBe(signer);
+    expect(new Date(result.approved_at).getTime()).toBeLessThanOrEqual(Date.now());
+    expect((await selectReviewedCandidates(execute,[review]))).toHaveLength(1);
+  });
+  it('refuses a signed-in non-reviewer and cannot accept anonymous/service-role approval writes',async()=>{
+    const {page}=await heldEvidence();
+    const actor=randomUUID();
+    await db.query('insert into auth.users(id) values($1)',[actor]);
+    await expect(authenticatedReviewInsert(page,actor,actor,false))
+      .rejects.toThrow('authenticated_tesco_reentry_reviewer_required');
+    for(const role of ['anon','service_role']){
+      await db.exec('set role '+role);
+      try {
+        await expect(db.exec(`insert into tesco_hold_reentry_reviews
+          (store_product_id,source_page_id,evidence_snapshot,independent_reason,reviewer_id,expires_at)
+          values('${ids[0]}','${page}','{}','A real review must be authenticated and evidence-bound.',
+            '${actor}',now()+interval '2 days')`)).rejects.toThrow();
+      } finally {await db.exec('reset role');}
+    }
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it('admits an exact held Tesco identity with only one fresh peer after authenticated approval',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.query('update products set brand=$1 where id=$2',['TESCO',products[0]]);
+    await db.exec(`delete from price_observations where store_product_id in
+      (select id from store_products where store='supervalu')`);
+    const review=await approve(page);
+    const rows=await selectReviewedCandidates(execute,[review]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].overlap).toBe(1);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+  });
+  it('admits a zero-peer mapping only with an independently matching canonical Tesco barcode',async()=>{
+    const gtin='05012345678901';
+    const {page,live}=await heldEvidence({gtin});
+    await db.exec('alter table products add column ean text');
+    await db.query('update products set ean=$1 where id=$2',[gtin,products[0]]);
+    await db.exec(`delete from price_observations where store_product_id in
+      (select id from store_products where store in ('dunnes','supervalu'))`);
+    const review=await approve(page);
+    const rows=await selectReviewedCandidates(execute,[review]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].overlap).toBe(0);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+  });
+  it('does not admit a zero-peer mapping on historical receipts and Tesco page metadata alone',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.exec(`delete from price_observations where store_product_id in
+      (select id from store_products where store in ('dunnes','supervalu'))`);
+    const review=await approve(page);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+  });
+  it('returns a successfully recovered held product to ordinary supervised renewal without a new approval',async()=>{
+    const {page,live}=await heldEvidence();
+    const review=await approve(page);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+    // Simulate five days elapsed: historical holds precede the latest trusted
+    // observation, and new live renewal still validates exact identity.
+    await db.exec(`update tesco_direct_collection_pages
+      set created_at=created_at-interval '6 days'
+      where requested_url='${url()}'`);
+    await db.exec(`update price_observations
+      set observed_at=now()-interval '5 days'
+      where store_product_id='${ids[0]}' and observed_at>now()-interval '1 day'`);
+    const due=await selectSupervisedCandidates(execute,'renewal',100,{excludeSharedSku:true});
+    expect(due.map(x=>x.id)).toContain(ids[0]);
+    expect(due[0].reentry).toBeUndefined();
+    // No re-review ID is required; this is the original exact live validator.
+    const fetched=vi.fn().mockResolvedValue(live);
+    const result=await collectTescoSupervised({mode:'renewal',limit:1},
+      {execute,sleep,fetchPage:fetched});
+    expect(result).toMatchObject({result:'complete',inserted:1});
+    expect(fetched).toHaveBeenCalledTimes(1);
+  });
+  it('keeps a peer-variant conflict held even when canonical and Tesco barcodes match',async()=>{
+    const gtin='05012345678901';
+    const {page,live}=await heldEvidence({gtin});
+    await db.exec('alter table products add column ean text');
+    await db.query('update products set ean=$1 where id=$2',[gtin,products[0]]);
+    await db.exec(`update store_products set store_product_name='Tesco Vanilla Whole Milk 1L'
+      where store='dunnes'`);
+    const review=await approve(page);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+  });
   it('keeps a past hold and its historical observation, then finalises only a newly fetched verified price once', async () => {
     const { page, live } = await heldEvidence(); const review = await approve(page);
     expect((await selectSupervisedCandidates(execute, 'expansion', 100))).toEqual([]);
