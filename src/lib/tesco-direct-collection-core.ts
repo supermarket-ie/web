@@ -178,7 +178,9 @@ export async function fetchTescoCollectedPage(url: string, fetcher: typeof fetch
   if (!isTescoCollectionUrl(url)) throw new Error('Unsafe Tesco collection URL');
   const start = Date.now();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20_000);
+  // One attempt only: allow a slow response, while preserving all transport
+  // and access stops, cooldowns and the no-retry contract.
+  const timer = setTimeout(() => controller.abort(), 30_000);
   let current = url;
   let status: number | null = null;
   let retryAfter: string | null = null;
