@@ -1,5 +1,28 @@
 # Supermarket.ie — Canonical Project State
 
+## 1 November 2026 — Tesco supervised fetch timeout hardening (review pending)
+
+A read-only production sample at 20:53 UTC recorded 117 successful Tesco
+page retrievals on 1 November (median 6.2 seconds, maximum 18.5 seconds)
+and two network_error stops after exactly 20 seconds with no HTTP response
+headers (AbortError, SKUs 315397543 and 258147425). Neither provided a 403,
+429 or explicit challenge, so evidence identifies a pre-header transport
+timeout but cannot conclusively assign responsibility to Tesco versus egress.
+The normal 15-minute cooldown and stop policy held; six historical unresolved
+requests remained unchanged.
+
+This focused follow-up changes ONLY the one-attempt network deadline from 20
+to 30 seconds. It introduces no retries, proxy rotation, circuit-breaker change,
+identity relaxation or new write path. Regression tests require the fetch to
+remain pending at 20 seconds, abort at 30, never retry, preserve status/phase
+and continue to stop on denial/rate limit and incomplete body evidence. The
+running renewal campaign remains pinned to approved collector revision
+815355cbb53cb418c3a2db26e972b1627c7e10b9; do not swap its code mid-run.
+
+The protected machine-approval migration was applied successfully and its RLS
+verified. The required separately authenticated machine approver account is
+still absent; zero machine approvals or held-product collection were initiated.
+
 ## 1 November 2026 — AI machine-approval release work; Tesco network safeguard stop
 
 Owner expressly replaced PR #286's manual per-product human signing policy
