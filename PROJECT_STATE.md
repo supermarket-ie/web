@@ -1,5 +1,218 @@
 # Supermarket.ie — Canonical Project State
 
+## 1 November 2026, 12:51 UTC — Tesco renewal campaign paused at access safeguard
+
+The approved supervised collector commit `815355cbb53cb418c3a2db26e972b1627c7e10b9`
+completed **116 live product requests**, producing **113 successful existing
+price renewals** and **zero net new Tesco products or three-retailer comparisons**.
+Run `749d24f1-4019-4f9a-9de7-a3ac4e24ab49` reconciled successfully:
+100 completed, 98 renewal receipts, two live pages without regular prices,
+zero holds/quarantines/pending. It resumed its original lease-bound run
+safely after a transient supervisor disconnect at 29 receipts.
+Run `e3f79371-5e09-461a-8320-14ff14615efe` stopped terminally as
+`degraded/network_error` after 16 completed requests and 15 renewal receipts.
+The last Tesco request `315397543` timed out before HTTP headers
+(`AbortError`); the approved egress gate is disabled, lease released, and
+cooldown set to **13:05:29 UTC**. No new run is started under this
+access stop. Exactly **six** historical unresolved requests remain; neither
+new run left any pending pages.
+
+Production still contains **323 fresh trusted Tesco prices**. Unrenewed
+expiry exposure is **one** on 3 November, **189** on 4 November and
+**20** on 7 November UTC. **187** additional unique-SKU products remain
+currently eligible by the approved renewal selector, but collection is
+halted by the actual network-error safeguard. Product-level audit:
+`docs/tesco-supervised-renewal-20261101.jsonl`. The separate PR #286
+held-review cohort remains **93 unsigned candidates**, not live prices.
+
+## 1 November 2026 — authorised renewals started; held recovery still review-only
+
+The owner expressly authorised **303** eligible existing Tesco renewals
+using approved commit `815355cbb53cb418c3a2db26e972b1627c7e10b9`,
+in sequential runs of no more than 100, without changing holds or
+collection safety controls. Fresh production preflight at 11:43 UTC:
+**323** trusted Tesco prices; **303** four-day renewal eligible;
+gate `workspace-supervised-20260929` has
+`enabled=false` (required by the approved supervised gate), no lease,
+expired cooldown, and no active supervisor; **six** old pending requests.
+The five old running records have `activeSupervisor=null`. This entry
+records commencement, **not** a final renewal count; the supervised
+runner must reconcile durable receipts after each batch. The PR #286
+branch is NOT used for renewals and no held SKU has been collected.
+
+Further read-only AI-assisted classification of the 795 originally
+uncertain wider held mappings found **four** additional exact
+canonical-EAN/Tesco-GTIN, source-page/receipt/pack-supported identities,
+in `docs/tesco-hold-reentry-inference-addendum-20261101.jsonl`.
+Two tempting barcode matches (a Gillette Sensitive/Classic description
+and a Piccobella cherry-tomato variety) remain uncertain pending
+material equivalence evidence. Strict independent source/validator
+preflight was applied to all 16 uncertain EAN-matched records and
+none of the material legacy conflicts was waived. **Total unsigned held
+review queue is now 93** (33 dual-peer prospective genuine triples,
+60 additional Tesco-only/two-retailer opportunities). Authenticated
+review, PR merge, migration and separate held collection authorisation
+are STILL required. Exact approval/deploy process prepared in
+`docs/tesco-authenticated-reviewer-production-runbook-20261101.md`.
+
+## PROPOSED, NOT DEPLOYED: PR #286 authenticated identity approval and 89-candidate production queue — 1 November 2026
+
+Owner authorised **one authenticated, accountable privileged human reviewer**
+instead of the previous **two arbitrary reviewer-name strings**. Proposed
+Supabase migration now derives `reviewer_id` from the verified Auth JWT
+(`auth.uid()`) and checks the **server-controlled**
+`app_metadata.tesco_reentry_reviewer=true` permission; reviewer insert
+through an Auth-verified API only. Collector's service role has SELECT
+but no INSERT authority on the approval ledger. No two-name identities
+remain. New PGlite regressions demonstrate forged reviewer UUIDs are
+overridden and non-reviewer, anonymous and service-role approval writes
+are rejected. This is a proposed schema change, **not a production change**.
+
+Owner also authorised non-dual-peer **only where stronger positive exact
+identity evidence supports them**. New gate keeps hashed source/one-to-one
+SKU/successful receipt, exact brand/pack/barcode/variant, stable peer
+evidence, live page revalidation and reviewed-only two lexical false-negative
+exceptions. For one fresh peer require matching canonical, source, peer
+brand/name and pack; for zero fresh peers require a canonical-to-source
+barcode match. Contradictory retailer variant/pack, material legacy conflict
+or no exact evidence remains held.
+
+Fresh read-only source/peer preflight of all 139 independently supported
+identities (61 priority plus 78 wider): **89** evidence-supported mappings
+form a product-level **unsigned** queue in
+`docs/tesco-hold-reentry-production-queue-20261101.jsonl`: **33** already
+peer-verified dual-retailer candidates (up to 33 genuine triples),
+**51** additional one-peer and **5** barcode-confirmed zero-peer candidates
+(up to 56 more Tesco prices, zero immediate additional triples). At most
+**89 additional fresh Tesco prices** if all become available and pass live
+checks; **17** source pages were previously unpriced/unavailable.
+**50** of 139 are excluded for insufficient independent exact evidence,
+material legacy conflict or unresolved peer equivalence. AI review is not
+an authenticated privileged approval: **zero signed review rows, zero new
+trusted Tesco prices**. Current trusted baseline remains the last
+verified **323**; a fresh 1 November read-only query confirms **323**.
+
+Separate **ordinary non-held expansion** eligibility under the *existing*
+collector predicate is **57** unique one-to-one mapped products
+(23 with one fresh peer, 34 with none, zero dual-peer). Of these,
+**12** have a retained exact source page and **two** pass the stronger
+independent source identity check (SKUs `282485161`, `297708302`).
+**55** are selector-eligible but not independently source-verified:
+do not count them as secured trusted price recoveries. Product-level
+read-only audit: `docs/tesco-nonheld-expansion-preflight-20261101.jsonl`.
+Future expansion request pool is **up to 146** (89 held contingent on
+authenticated approval, 57 ordinary), of which **91** are independently
+source-supported. Expected genuine new triples remain **at most 33**.
+Read-only renewal check: **303/323 existing Tesco prices** are already
+eligible for proactive 4-day supervised renewal; earliest seven-day
+expiry **3 November** (57 expire 3 Nov, 246 on 4 Nov,
+20 on 7 Nov UTC). This no-production-write task did **not** renew
+them. Prioritise the normal authorised renewal lane at the next
+production operations window.
+
+The 980 held mapping audit is persisted and reconciled (78 verified,
+107 rejected, 795 uncertain); the original 183 cohort is 61 verified,
+73 rejected, 49 uncertain. Combined counts: **139 evidence-supported**,
+**180 rejected**, **844 uncertain**. No production mappings, ledgers,
+holds or prices changed. Deployment requires PR merge/review, separate
+approved Supabase SQL migration, selected human Auth app-metadata privilege,
+fresh per-product immutable snapshot signed through Auth API, pinning the
+reviewed Node24 Work collector/SQL bridge, and **separate supervised
+collection authorisation**. Existing AWS ECR/ECS image workflow ships
+website code only and does **not** run this migration or the Work collector.
+See `docs/tesco-audited-hold-reentry.md`.
+
+## PROPOSED (NOT DEPLOYED): Tesco recovery audit reconciliation and PR #286 hardening — 31 October 2026
+
+Recovered and persisted read-only identity evidence for all additional **980**
+held unique-SKU mappings (521 with exactly one fresh retailer peer, 459 with
+none). Including the original dual-peer 183, the live held/unique inventory
+reconciles to **1,163**. The earlier 1,129 baseline differs by 34.
+New independent AI-assisted adjudication: **78 identity-supported**, **107
+explicit barcode/pack-count mismatches**, **795 uncertain**; all 980 product
+records have retained Tesco source page IDs/body hashes, previous identity
+outcomes, historical receipt/price counts and fresh peer context where present.
+The new 78 have **69 single-peer / nine zero-peer** mappings and cannot re-enter
+through the unchanged **two-peer** PR #286 identity gate. The previous 76
+was a provisional, unsaved estimate superseded by this product-level report,
+not 76 additional approvals. Owner-visible artifacts hold the full audit,
+78 candidates and 73 original mapping-correction proposals; repo stores the
+compact 78 candidate manifest under `docs/`.
+
+Decimal and counted-pack identity parsing repairs (1.5L/1,5L, 7 vs 4 sticks,
+4 vs 21 dental sticks, 1 vs 4x18g) preserve fail-closed pack/variant guards.
+The original 61 dual-peer verified identities now yield 36 that pass the
+strict source identity gate, 34 of them commercially comparable. The single
+new Dr Oetker 3x12g gate match still has unallowlisted legacy validator
+`brandConflict`/`measureConflict`, so **33** remains the reviewed
+production candidate ceiling absent a separately approved validator
+investigation. Latest local PGlite collector suites: **95/95 passed**;
+TypeScript and ESLint passed after earlier edits. **Not deployed or collected.**
+
+PR #286's two-person control currently checks **two different reviewer-name
+strings**, not two authenticated principals. Treat this as a blocking
+security finding. Proposed narrow repair uses existing authenticated
+Supabase reviewer identities and a restricted evidence-bound batch RPC,
+with distinct verified principal IDs and no collector approval ability.
+Alternative single accountable authenticated approval is a policy change
+that requires explicit owner authorisation; current two-person guard stays.
+Release requires reviewed PR, separate schema/approval-mechanism deployment,
+signed immutable evidence, fresh supervised Work collector verification and
+guarded finalisation. AWS ECR/ECS deploy workflow is for website services,
+not the SQL migration or standalone Work supervised collector. Existing
+trusted Tesco baseline **323**; new trusted prices **0** as of this audit.
+
+## PROPOSED (NOT DEPLOYED): full held-mapping AI review and narrow collection repair — 31 October 2026
+
+Completed a read-only, individual evidence-supported assessment of **all 183**
+held, unique Tesco SKU mappings with two fresh retailer peers, including the
+original 23 hypotheses. **61 verified Tesco identities**, **73 rejected
+genuine mismatches**, **49 uncertain**. Initial 23: **20 / 1 / 2**. Of 61,
+**51** have genuinely equivalent Dunnes/SuperValu peers; five known peer
+mismatches and five unresolved peers are excluded from triple estimates.
+The per-product audit is `tesco-183-identity-review-2026-10-31-v2.jsonl`
+(separate evidence artifact, not deployed to the repository). Each row
+contains mapping/product identity, retained page hash and parsed identity,
+historical observations, peer details, validator history, judgment and
+rationale. These AI-assisted decisions are **not** signed human approvals.
+
+Preflight on the proposed PR #286 exact-source/live gate: **35 verified
+identities pass** (of which **33** have genuine comparable peers, the
+other two stay pending peer-equivalence review); the
+unchanged lexical validator accepts only nine of those 33. Feature branch
+therefore adds a narrow *audited-reviewed-candidate-only* exception for
+the two lexical-only false-negative reasons (generic canonical identity and
+measure exactness), conditional on the stronger independent identity guard.
+All genuine identity conflicts, changed source/peer snapshots, old holds,
+six unresolved requests, shared SKU, lease/pacing/cooldown/circuit breakers
+and guarded one-use finalisation stay protected. No production write,
+schema deployment, held collection or new trusted price was made.
+Human review, approval/deployment and a separately authorised bounded
+collection run remain material prerequisites.
+
+## PROPOSED (NOT DEPLOYED): audited Tesco hold re-entry — 31 October 2026
+
+Feature branch `feat/tesco-audited-hold-reentry` adds a review-only operator
+workflow, independently approved evidence ledger, one-time hold-re-entry
+candidate selection and live identity revalidation to the existing supervised
+collector, with no changes to fetcher/SQL bridge/guarded finaliser. No
+production mapping, hold, price, collection gate or evidence rows were edited.
+Approval/deployment and collection remain separate decisions. See
+`docs/tesco-audited-hold-reentry.md`.
+
+Read-only production snapshot: **183 held unique-SKU Tesco products** lack a
+fresh Tesco price but have fresh Dunnes + SuperValu peers; **143** have historic
+successful Tesco receipts, **180** a retained parsed product-page source,
+**142** both and no recent/pending attempt; **40** lack historic success,
+**3** lack a parsed source, **1** has a pending attempt. These overlap
+categories; they are not independently approved identity matches.
+The feature branch's read-only, AI-review triage ran across all 183 rows:
+**23 likely-exact hypotheses, 109 conflict signals, 51 needs-evidence**.
+These are intentionally non-binding rankings; no row has passed the new
+two-person audited approval gate.
+No evidence-bound, two-person review approval is being inserted into production
+by this PR. Baseline protection remains 323 fresh Tesco observations after
+20 supervised renewals on 31 October; no held collection initiated.
 ## IMPLEMENTATION (branch only; NOT deployed): lightweight stateless Bedrock agent PoC — 1 November 2026
 
 A lightweight, stateless, Bedrock-powered shopping-agent proof of concept that

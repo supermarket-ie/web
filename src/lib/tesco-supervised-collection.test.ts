@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { collectTescoSupervised, reconcileSupervisedRun, selectSupervisedCandidates, SUPERVISED_GATE, type ExecuteSql } from './tesco-supervised-collection';
-import { fetchTescoCollectedPage, parseTescoCollectedPage, type TescoPageResponse } from './tesco-direct-collection-core';
+import { fetchTescoCollectedPage, parseTescoCollectedPage, validateTescoCollectedIdentity, type TescoPageResponse } from './tesco-direct-collection-core';
 import { selectAcquisitionCandidates } from './tesco-acquisition-handoff';
+import { reentryEvidenceSql, reviewedCanonicalEvidenceGap, selectReviewedCandidates, type ReentryEvidence } from './tesco-hold-reentry';
 
 let db: PGlite;
 let execute: ExecuteSql;
@@ -44,6 +45,15 @@ beforeEach(async () => {
   db = await PGlite.create();
   await db.exec(`
     create role anon; create role authenticated; create role service_role;
+    create schema auth;
+    create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable
+      as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    create function auth.jwt() returns jsonb language sql stable
+      as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb) $$;
+    grant usage on schema auth to authenticated;
+    grant execute on function auth.uid() to authenticated;
+    grant execute on function auth.jwt() to authenticated;
     create table products(id uuid primary key,canonical_name text,brand text);
     create table store_products(id uuid primary key,product_id uuid references products,store text,store_sku text,
       store_url text,store_product_name text,brand text,is_own_brand boolean,url_status text,gtin text);
@@ -75,6 +85,7 @@ beforeEach(async () => {
   await db.exec(readFileSync('supabase/migrations/20260822100000_add_price_observation_source.sql', 'utf8')
     .split('create or replace function public.finalize_tesco_scrape_product_pepesto')[0]);
   await db.exec(readFileSync('supabase/migrations/20260929093608_tesco_direct_collection_evidence.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261101000000_tesco_hold_reentry_reviews.sql', 'utf8'));
   execute = async query => {
     const results = await db.exec(query);
     return results.at(-1)?.rows as Record<string, unknown>[] ?? [];
@@ -85,6 +96,417 @@ beforeEach(async () => {
   });
 }, 20_000);
 afterEach(async () => { await db.close(); });
+
+describe('audited held Tesco re-entry (production database transactions)', () => {
+  async function authenticatedReviewInsert(
+    page: string, actor: string, claimedReviewer: string, permission: boolean,
+  ) {
+    const [row]=await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    const review=randomUUID();
+    await db.query('select set_config($1,$2,false)',['request.jwt.claim.sub',actor]);
+    await db.query('select set_config($1,$2,false)',
+      ['request.jwt.claims',JSON.stringify({sub:actor,role:'authenticated',
+        app_metadata:{tesco_reentry_reviewer:permission}})]);
+    await db.exec('set role authenticated');
+    try {
+      await db.query(`insert into tesco_hold_reentry_reviews
+        (id,store_product_id,source_page_id,evidence_snapshot,independent_reason,reviewer_id,expires_at)
+        values($1,$2,$3,$4,$5,$6,now()+interval '2 days')`,
+      [review,ids[0],page,JSON.stringify(row.evidence),
+        'Accountably reviewed the exact canonical identity, barcode, pack and retained source page.',claimedReviewer]);
+    } finally {
+      await db.exec('reset role');
+      await db.query('select set_config($1,$2,false)',['request.jwt.claim.sub','']);
+      await db.query('select set_config($1,$2,false)',['request.jwt.claims','']);
+    }
+    return review;
+  }
+  async function heldEvidence(changes: Record<string, unknown> = {}) {
+    await seed(0, '8 days');
+    for (const store of ['dunnes', 'supervalu']) {
+      const peer = randomUUID();
+      await db.query(`insert into store_products(id,product_id,store,store_sku,store_product_name,brand,url_status)
+        values($1,$2,$3,'peer-'||$3,'Whole Milk 1L','Tesco','resolved')`, [peer, products[0], store]);
+      await db.query(`insert into price_observations(store_product_id,price,observed_at,source)
+        values($1,1.45,now()-interval '2 hours','tesco_direct')`, [peer]);
+    }
+    const sourceRun = randomUUID(), page = randomUUID();
+    await db.query(`insert into scrape_runs(id,store,status,finished_at,error_summary)
+      values($1,'tesco','success',now()-interval '2 days','{}')`, [sourceRun]);
+    const live = response(0, changes);
+    await db.query(`insert into tesco_direct_collection_pages
+      (id,run_id,egress_key,requested_url,final_url,mode,outcome,http_status,body_sha256,parsed,identity_results,created_at)
+      values($1,$2,$3,$4,$4,'products','ok',200,$5,$6,$7,now()-interval '2 days')`,
+    [page,sourceRun,SUPERVISED_GATE,url(),'a'.repeat(64),
+      JSON.stringify(parseTescoCollectedPage(live.html, url())),
+      JSON.stringify([{ storeProductId: ids[0], sku: sku(), reasons: ['historical_hold'] }])]);
+    return { page, live };
+  }
+  async function approve(page: string) {
+    const [e] = await execute(`select ${reentryEvidenceSql(ids[0], page)} evidence`);
+    const review = randomUUID(), reviewer = randomUUID();
+    await db.query('insert into auth.users(id) values($1)',[reviewer]);
+    await db.query('select set_config($1,$2,false)',
+      ['request.jwt.claim.sub',reviewer]);
+    await db.query('select set_config($1,$2,false)',
+      ['request.jwt.claims',JSON.stringify({sub:reviewer,role:'authenticated',
+        app_metadata:{tesco_reentry_reviewer:true}})]);
+    await db.exec('set role authenticated');
+    try {
+      await db.query(`insert into tesco_hold_reentry_reviews
+        (id,store_product_id,source_page_id,evidence_snapshot,independent_reason,reviewer_id,expires_at)
+        values($1,$2,$3,$4,$5,$6,now()+interval '2 days')`,
+      [review, ids[0], page, JSON.stringify(e.evidence),
+        'Reviewed exact canonical, brand, pack and variant against current evidence and a retained page.',
+        reviewer]);
+    } finally {
+      await db.exec('reset role');
+      await db.query('select set_config($1,$2,false)',['request.jwt.claim.sub','']);
+      await db.query('select set_config($1,$2,false)',['request.jwt.claims','']);
+    }
+    return review;
+  }
+  async function collect(review: string, live: TescoPageResponse) {
+    const fetchPage = vi.fn().mockResolvedValue(live);
+    const result = await collectTescoSupervised({ mode: 'expansion', limit: 1, reviewedCandidates: [review] },
+      { execute, sleep, fetchPage });
+    return { result, fetchPage };
+  }
+  it('binds an approval to the authenticated account, not a caller-supplied reviewer UUID',async()=>{
+    const {page}=await heldEvidence();
+    const signer=randomUUID(), forged=randomUUID();
+    await db.query('insert into auth.users(id) values($1),($2)',[signer,forged]);
+    const review=await authenticatedReviewInsert(page,signer,forged,true);
+    const result=(await db.query<{reviewer_id:string,approved_at:string}>(
+      'select reviewer_id,approved_at from tesco_hold_reentry_reviews where id=$1',[review])).rows[0];
+    expect(result.reviewer_id).toBe(signer);
+    expect(new Date(result.approved_at).getTime()).toBeLessThanOrEqual(Date.now());
+    expect((await selectReviewedCandidates(execute,[review]))).toHaveLength(1);
+  });
+  it('refuses a signed-in non-reviewer and cannot accept anonymous/service-role approval writes',async()=>{
+    const {page}=await heldEvidence();
+    const actor=randomUUID();
+    await db.query('insert into auth.users(id) values($1)',[actor]);
+    await expect(authenticatedReviewInsert(page,actor,actor,false))
+      .rejects.toThrow('authenticated_tesco_reentry_reviewer_required');
+    for(const role of ['anon','service_role']){
+      await db.exec('set role '+role);
+      try {
+        await expect(db.exec(`insert into tesco_hold_reentry_reviews
+          (store_product_id,source_page_id,evidence_snapshot,independent_reason,reviewer_id,expires_at)
+          values('${ids[0]}','${page}','{}','A real review must be authenticated and evidence-bound.',
+            '${actor}',now()+interval '2 days')`)).rejects.toThrow();
+      } finally {await db.exec('reset role');}
+    }
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it('admits an exact held Tesco identity with only one fresh peer after authenticated approval',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.query('update products set brand=$1 where id=$2',['TESCO',products[0]]);
+    await db.exec(`delete from price_observations where store_product_id in
+      (select id from store_products where store='supervalu')`);
+    const review=await approve(page);
+    const rows=await selectReviewedCandidates(execute,[review]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].overlap).toBe(1);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+  });
+  it('admits a zero-peer mapping only with an independently matching canonical Tesco barcode',async()=>{
+    const gtin='05012345678901';
+    const {page,live}=await heldEvidence({gtin});
+    await db.exec('alter table products add column ean text');
+    await db.query('update products set ean=$1 where id=$2',[gtin,products[0]]);
+    await db.exec(`delete from price_observations where store_product_id in
+      (select id from store_products where store in ('dunnes','supervalu'))`);
+    const review=await approve(page);
+    const rows=await selectReviewedCandidates(execute,[review]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].overlap).toBe(0);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+  });
+  it('does not admit a zero-peer mapping on historical receipts and Tesco page metadata alone',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.exec(`delete from price_observations where store_product_id in
+      (select id from store_products where store in ('dunnes','supervalu'))`);
+    const review=await approve(page);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+  });
+  it('returns a successfully recovered held product to ordinary supervised renewal without a new approval',async()=>{
+    const {page,live}=await heldEvidence();
+    const review=await approve(page);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+    // Simulate five days elapsed: historical holds precede the latest trusted
+    // observation, and new live renewal still validates exact identity.
+    await db.exec(`update tesco_direct_collection_pages
+      set created_at=created_at-interval '6 days'
+      where requested_url='${url()}'`);
+    await db.exec(`update price_observations
+      set observed_at=now()-interval '5 days'
+      where store_product_id='${ids[0]}' and observed_at>now()-interval '1 day'`);
+    const due=await selectSupervisedCandidates(execute,'renewal',100,{excludeSharedSku:true});
+    expect(due.map(x=>x.id)).toContain(ids[0]);
+    expect(due[0].reentry).toBeUndefined();
+    // No re-review ID is required; this is the original exact live validator.
+    const fetched=vi.fn().mockResolvedValue(live);
+    const result=await collectTescoSupervised({mode:'renewal',limit:1},
+      {execute,sleep,fetchPage:fetched});
+    expect(result).toMatchObject({result:'complete',inserted:1});
+    expect(fetched).toHaveBeenCalledTimes(1);
+  });
+  it('cannot infer exact identity from two fresh peer prices for an unrelated product',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.exec(`update store_products set store_product_name='Tesco Whole Cream 1L'
+      where store in ('dunnes','supervalu')`);
+    const review=await approve(page);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+  });
+  it('does not trust a contradictory branded peer in a two-peer reviewed mapping',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.query('update products set brand=$1 where id=$2',['Tesco',products[0]]);
+    await db.exec(`update store_products set brand='Other Manufacturer' where store='dunnes'`);
+    const review=await approve(page);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+  });
+  it('keeps a peer-variant conflict held even when canonical and Tesco barcodes match',async()=>{
+    const gtin='05012345678901';
+    const {page,live}=await heldEvidence({gtin});
+    await db.exec('alter table products add column ean text');
+    await db.query('update products set ean=$1 where id=$2',[gtin,products[0]]);
+    await db.exec(`update store_products set store_product_name='Tesco Vanilla Whole Milk 1L'
+      where store='dunnes'`);
+    const review=await approve(page);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+  });
+  it('keeps a past hold and its historical observation, then finalises only a newly fetched verified price once', async () => {
+    const { page, live } = await heldEvidence(); const review = await approve(page);
+    expect((await selectSupervisedCandidates(execute, 'expansion', 100))).toEqual([]);
+    const before = await observations(), dryFetcher = vi.fn();
+    expect(await collectTescoSupervised({ mode: 'expansion', reviewedCandidates: [review], dryRun: true },
+      { execute, fetchPage: dryFetcher })).toMatchObject({ result: 'dry_run', selected: [{ id: ids[0] }] });
+    expect(dryFetcher).not.toHaveBeenCalled();
+    const { result, fetchPage } = await collect(review, live);
+    expect(result).toMatchObject({ result: 'complete', reserved: 1, completed: 1, inserted: 1 });
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+    expect(await observations()).toHaveLength(before.length + 1);
+    const receipt = (await db.query<{detail: string}>(`select detail from tesco_direct_collection_pages where run_id=$1`, [result.id])).rows[0];
+    expect(JSON.parse(receipt.detail)).toMatchObject({ purpose: 'audited_hold_reentry', reviewId: review,
+      sourcePageId: page, independentlyExact: true });
+    expect(await selectReviewedCandidates(execute, [review])).toEqual([]);
+    expect((await db.query('select * from tesco_hold_reentry_uses')).rows).toHaveLength(1);
+    await db.query(`select finalize_store_scrape_product(p_run_uuid=>$1,p_store=>'tesco',p_store_product_id=>$2,p_success=>true,p_price=>99)`,[result.id,ids[0]]);
+    expect(await observations()).toHaveLength(before.length + 1);
+  });
+  it.each([
+    ['incomplete canonical quantity', 'Chilli and Garlic Stir Fry Sauce',
+      'Blue Dragon Sweet Chilli & Garlic Stir Fry Sauce 120G', 'Blue Dragon', 120, 'g', 'measureExactnessFailed'],
+    ['different exact-name wording', 'Airwick Pure Soft Cotton Aerosol 250ml',
+      'Air Wick Pure Aerosol Soft Cotton Air Freshener 250ml', 'AIR WICK', 250, 'ml',
+      'candidate does not establish full exact canonical identity'],
+  ])('permits audited evidence to resolve %s without exempting other collection modes',
+    async (_label, canonical, title, brand, size, units, legacyReason) => {
+      const { page, live } = await heldEvidence({ title, brandName: brand,
+        details: { packSize: [{ value: size, units }] } });
+      await db.query(`update products set canonical_name=$1,brand=$2 where id=$3`,[canonical,brand,products[0]]);
+      await db.query(`update store_products set store_product_name=$1,brand=$2,is_own_brand=false where id=$3`,
+        [title,brand,ids[0]]);
+      await db.query(`update store_products set store_product_name=$1,brand=$2 where store in ('dunnes','supervalu')`,
+        [title,brand]);
+      const parsed = parseTescoCollectedPage(live.html,url()).products[0];
+      const ordinaryReasons = validateTescoCollectedIdentity({ storeProductId: ids[0],
+        canonicalName: canonical, canonicalBrand: brand, storeProductName: title, storeBrand: brand,
+        isOwnBrand: false, storeSku: sku(), storeUrl: url(), duplicateSkuCount: 1,
+        duplicateCanonicalNames: [canonical], isFresh: false }, parsed);
+      expect(ordinaryReasons).toContain(legacyReason);
+      const review = await approve(page);
+      const { result } = await collect(review,live);
+      expect(result).toMatchObject({ result: 'complete', inserted: 1 });
+      const record = (await db.query<{detail:string}>(`select detail from tesco_direct_collection_pages where run_id=$1`,
+        [result.id])).rows[0];
+      expect(JSON.parse(record.detail)).toMatchObject({ auditedEvidenceGap: true,
+        independentlyExact: true, legacyValidatorReasons: ordinaryReasons });
+    });
+  it('never treats a conflict, missing price or unexpected validator result as an audited canonical-evidence gap', async () => {
+    const { page, live } = await heldEvidence();
+    const [row] = await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    const evidence = row.evidence as ReentryEvidence;
+    const product = parseTescoCollectedPage(live.html,url()).products[0];
+    for (const reason of ['measureConflict','packCountConflict','brandConflict','brandExactnessFailed',
+      'formulationConflict','variantConflict','productTypeConflict','ownLabelConflict',
+      'unavailable_or_no_regular_price','different_sku_requires_mapping_review']) {
+      expect(reviewedCanonicalEvidenceGap(evidence,product,[reason])).toBe(false);
+      expect(reviewedCanonicalEvidenceGap(evidence,product,['measureExactnessFailed',reason])).toBe(false);
+    }
+    expect(reviewedCanonicalEvidenceGap(evidence,{...product,price:null},['measureExactnessFailed'])).toBe(false);
+    expect(reviewedCanonicalEvidenceGap(evidence,{...product,name:'Tesco Vanilla Whole Milk 1L'},
+      ['candidate does not establish full exact canonical identity'])).toBe(false);
+  });
+  it.each([
+    ['orange juice versus juice drink', 'Orange Juice 1L', 'Jaffa Gold Orange Juice Drink 1 Litre', 'Jaffa Gold', 1000],
+    ['unadvertised citrus variant', 'Flash Kitchen Spray 800ml', 'Flash Kitchen Cleaning Spray Citrus 800ml', 'Flash', 800],
+  ])('rejects an actual existing-validator false positive: %s', async (_label, canonical, title, brand, ml) => {
+    const { page, live } = await heldEvidence({ title, brandName: brand,
+      details: { packSize: [{ value: ml, units: 'ml' }] } });
+    await db.query(`update products set canonical_name=$1 where id=$2`, [canonical, products[0]]);
+    await db.query(`update store_products set store_product_name=$1,brand=$2,is_own_brand=false where id=$3`,
+      [title, brand, ids[0]]);
+    const parsed = parseTescoCollectedPage(live.html, url()).products[0];
+    expect(validateTescoCollectedIdentity({ storeProductId: ids[0], canonicalName: canonical, canonicalBrand: null,
+      storeProductName: title, storeBrand: brand, isOwnBrand: false, storeSku: sku(), storeUrl: url(),
+      duplicateSkuCount: 1, duplicateCanonicalNames: [canonical], isFresh: false }, parsed)).toEqual([]);
+    const review = await approve(page);
+    const { fetchPage, result } = await collect(review, live);
+    expect(fetchPage).not.toHaveBeenCalled();
+    expect(result.result).toBe('no_due_products');
+    expect((await selectReviewedCandidates(execute,[review]))).toEqual([]);
+  });
+  it.each([
+    ['4 rolls versus 24 standard rolls', 'Andrex Complete Clean Toilet Tissue 4 Roll',
+      'Andrex Complete Clean Toilet Tissue 24 Standard Rolls', 'Andrex', 24, 'each'],
+    ['single 110g versus 3x110g', 'John West Tuna Steak 110g',
+      'John West Tuna Steak 3x110g', 'John West', 110, 'g'],
+    ['7 pack versus 4 sticks', 'Pedigree Rodeo Beef 7 Pack',
+      'Pedigree Rodeo Beef 4 Sticks 70G', 'Pedigree', 70, 'g'],
+    ['4 pack versus 21 dental sticks', 'Pedigree Dentastix Daily Large Dog 4 Pack',
+      'Pedigree Dentastix Daily Large Dog Treats 21 Dental Sticks', 'Pedigree', 21, 'each'],
+    ['single 18g bar versus 4x18g', 'Cadbury Dairy Milk Little Chocolate Bar 18g',
+      'Cadbury Dairy Milk Little Chocolate Bars Multipack 4x18g', 'Cadbury', 18, 'g'],
+  ])('blocks held-pack identity mismatch at review selection: %s',
+    async (_label, canonical, title, brand, packSize, units) => {
+      const { page, live } = await heldEvidence({ title, brandName: brand,
+        details: {packSize:[{value:packSize,units}]} });
+      await db.query(`update products set canonical_name=$1,brand=$2 where id=$3`,[canonical,brand,products[0]]);
+      await db.query(`update store_products set store_product_name=$1,brand=$2,is_own_brand=false where id=$3`,
+        [title,brand,ids[0]]);
+      await db.query(`update store_products set store_product_name=$1 where store in ('dunnes','supervalu')`,[canonical]);
+      const review=await approve(page), {result,fetchPage}=await collect(review,live);
+      expect(result.result).toBe('no_due_products');
+      expect(fetchPage).not.toHaveBeenCalled();
+    });
+  it('blocks a freshly reviewed Tesco source when either retailer peer is a conflicting flavour',async()=>{
+    const {page,live}=await heldEvidence();
+    await db.query(`update store_products set store_product_name='Tesco Vanilla Whole Milk 1L'
+      where store='dunnes'`);
+    const review=await approve(page);
+    const {result,fetchPage}=await collect(review,live);
+    expect(result.result).toBe('no_due_products');
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+  it.each(['1.5L','1.5 Litre','1,5L'])(
+    'recognises %s as 1500ml in exact reviewed evidence, not as a 5L product',async measure=>{
+      const title=`Ballygowan Hint of Fruit Peach ${measure}`;
+      const {page,live}=await heldEvidence({title,brandName:'Ballygowan',
+        details:{packSize:[{value:1.5,units:'l'}]}});
+      await db.query(`update products set canonical_name=$1,brand='Ballygowan' where id=$2`,
+        [title,products[0]]);
+      await db.query(`update store_products set store_product_name=$1,brand='Ballygowan',is_own_brand=false
+        where id=$2`,[title,ids[0]]);
+      await db.query(`update store_products set store_product_name=$1,brand='Ballygowan'
+        where store in ('dunnes','supervalu')`,[title]);
+      const review=await approve(page);
+      const {result}=await collect(review,live);
+      expect(result).toMatchObject({result:'complete',inserted:1});
+    });
+  it.each(['different canonical identity', 'equivalent synonym', 'new shared mapping after approval'])(
+    'rejects shared-SKU validator concern: %s', async scenario => {
+      const { page, live } = await heldEvidence();
+      const review = await approve(page);
+      const another = randomUUID(), productId = randomUUID();
+      await db.query(`insert into products(id,canonical_name) values($1,$2)`, [productId,
+        scenario === 'different canonical identity' ? 'Whole Cream 1L' : 'Whole Milk 1 Litre']);
+      await db.query(`insert into store_products(id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status)
+        values($1,$2,'tesco',$3,$4,'Tesco Whole Milk 1L','TESCO',true,'resolved')`,
+      [another, productId, sku(), url()]);
+      const { result, fetchPage } = await collect(review, live);
+      expect(result.result).toBe('no_due_products');
+      expect(fetchPage).not.toHaveBeenCalled();
+    });
+  it('a source-page mutation, revocation and past 24h pending request cannot silently inherit approval', async () => {
+    const { page, live } = await heldEvidence(); const review = await approve(page);
+    await db.query(`update tesco_direct_collection_pages set body_sha256=$1 where id=$2`, ['b'.repeat(64),page]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+    await db.query(`update tesco_direct_collection_pages set body_sha256=$1 where id=$2`, ['a'.repeat(64),page]);
+    await db.query(`insert into tesco_hold_reentry_revocations(review_id,revoked_by,reason)
+      values($1,'safety-reviewer','Additional identity concern')`,[review]);
+    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+    const other = await approve(page);
+    const run = randomUUID(); await db.query(`insert into scrape_runs(id,store) values($1,'tesco')`,[run]);
+    await db.query(`insert into tesco_direct_collection_pages(run_id,egress_key,requested_url,mode,outcome)
+      values($1,$2,$3,'products','pending')`,[run,SUPERVISED_GATE,url()]);
+    expect((await collect(other,live)).fetchPage).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['brand', { brandName: 'OTHER' }],
+    ['pack', { details: { packSize: [{ value: 2, units: 'l' }] } }],
+    ['variant', { title: 'Tesco Whole Milk Vanilla 1L' }],
+  ])('holds a changed live %s despite past approval', async (_label, changes) => {
+    const { page } = await heldEvidence(); const review = await approve(page);
+    const { result } = await collect(review, response(0, changes));
+    expect(result).toMatchObject({ inserted: 0, reserved: 1 });
+    expect(await observations()).toHaveLength(3);
+  });
+  it('rejects a changed live barcode even when the old deterministic validator accepts the page', async () => {
+    const { page } = await heldEvidence({ gtin:'05012345678901' });
+    const review = await approve(page);
+    const changed = response(0, { gtin:'05012345678999' });
+    const parsed = parseTescoCollectedPage(changed.html, url()).products[0];
+    expect(validateTescoCollectedIdentity({storeProductId:ids[0],canonicalName:'Whole Milk 1L',
+      canonicalBrand:null,storeProductName:'Tesco Whole Milk 1L',storeBrand:'TESCO',isOwnBrand:true,
+      storeSku:sku(),storeUrl:url(),duplicateSkuCount:1,duplicateCanonicalNames:['Whole Milk 1L'],
+      isFresh:false},parsed)).toEqual([]);
+    const { result } = await collect(review, changed);
+    expect(result).toMatchObject({ result:'complete', inserted:0, held:1 });
+    expect(await observations()).toHaveLength(3);
+  });
+  it('rejects a duplicate approval for the same URL and preserves the append-only audit',async()=>{
+    const { page }=await heldEvidence();const review=await approve(page), second=await approve(page);
+    await expect(selectReviewedCandidates(execute,[review,second])).rejects.toThrow('Overlapping reviewed approvals');
+    await expect(db.query(`update tesco_hold_reentry_reviews set independent_reason='rewritten approval'
+      where id=$1`,[review])).rejects.toThrow('reentry_audit_append_only');
+  });
+  it('a changed canonical identity after selection prevents reservation and consumes no approval', async () => {
+    const { page, live } = await heldEvidence(); const review = await approve(page);
+    const fetchPage = vi.fn().mockResolvedValue(live);
+    const sql: ExecuteSql = async q => {
+      const rows = await execute(q);
+      if (q.startsWith('select v.*,exists(select 1 from tesco_hold_reentry_revocations'))
+        await db.query(`update products set canonical_name='Whole Milk 2L' where id=$1`,[products[0]]);
+      return rows;
+    };
+    const selected = await collectTescoSupervised({ mode:'expansion', reviewedCandidates:[review] },
+      { execute: sql, sleep, fetchPage });
+    expect(selected).toMatchObject({ result: 'interrupted', inserted: 0, unresolved: [] });
+    expect(fetchPage).not.toHaveBeenCalled();
+    expect((await db.query('select * from tesco_hold_reentry_uses')).rows).toHaveLength(0);
+  });
+  it('rechecks fresh retailer peers before finalisation after a new live Tesco fetch', async () => {
+    const { page, live } = await heldEvidence(); const review = await approve(page);
+    const before = await observations();
+    const fetchPage = vi.fn(async () => {
+      const peer = (await db.query<{id:string}>(`select id from store_products where store='dunnes'`)).rows[0].id;
+      await db.query(`insert into price_observations(store_product_id,price,observed_at,source)
+        values($1,3.42,now(),'tesco_direct')`,[peer]);
+      return live;
+    });
+    const result = await collectTescoSupervised({ mode:'expansion', reviewedCandidates:[review] },
+      { execute, sleep, fetchPage });
+    expect(result).toMatchObject({ result:'interrupted', inserted:0, unresolved:[url()] });
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+    // Only the deliberately added Dunnes observation exists, no Tesco price.
+    expect(await observations()).toHaveLength(before.length + 1);
+    expect((await db.query('select * from tesco_hold_reentry_uses')).rows).toHaveLength(1);
+  });
+  it('forbids mixing reviewed approvals with renewal, acquisition or resume', async () => {
+    const { page } = await heldEvidence();const review=await approve(page);
+    await expect(collectTescoSupervised({mode:'renewal',reviewedCandidates:[review]},{execute}))
+      .rejects.toThrow('separate new bounded expansion');
+    await expect(collectTescoSupervised({mode:'expansion',reviewedCandidates:[review],acquisitionPages:[page]},{execute}))
+      .rejects.toThrow('separate new bounded expansion');
+  });
+});
 
 describe('explicit acquisition handoff with PostgreSQL finalisation', () => {
   async function acquisition() {
