@@ -37,10 +37,11 @@ does not authorise collecting any held Tesco mapping.
 
 The unsigned queue is
 `docs/tesco-hold-reentry-production-queue-20261101.jsonl`
-(**33** priority dual-peer, then **60** independently evidence-supported
+(**33** priority dual-peer, then **56** independently evidence-supported
 one-/zero-peer mappings). The separate inference addendum
 `docs/tesco-hold-reentry-inference-addendum-20261101.jsonl`
-records four later barcode-supported products, pending the same safeguards.
+records **four more** barcode-supported products, giving **93 total**
+(33 dual-peer and 60 other), pending the same safeguards.
 These are **preparatory evidence**, not signed approvals or guaranteed prices.
 
 For **each** reviewed candidate, just before signing:
