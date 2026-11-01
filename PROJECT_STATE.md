@@ -7,7 +7,7 @@ using approved commit `815355cbb53cb418c3a2db26e972b1627c7e10b9`,
 in sequential runs of no more than 100, without changing holds or
 collection safety controls. Fresh production preflight at 11:43 UTC:
 **323** trusted Tesco prices; **303** four-day renewal eligible;
-gate `workspace-supervised-20260929` has 
+gate `workspace-supervised-20260929` has
 `enabled=false` (required by the approved supervised gate), no lease,
 expired cooldown, and no active supervisor; **six** old pending requests.
 The five old running records have `activeSupervisor=null`. This entry
