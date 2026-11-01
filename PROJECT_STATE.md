@@ -1,5 +1,42 @@
 # Supermarket.ie — Canonical Project State
 
+## FIX: Eve agent frontend hang — web service PINNED to a single ECS task — 1 November 2026
+
+The customer-facing agent kept hanging from the browser. ROOT CAUSE (real one,
+superseding the earlier ALB-stickiness attempt): Eve's `world-local` workflow
+transport keeps per-session turn state IN-PROCESS on the task that created the
+session. The browser flow is `POST /eve/v1/session` (creates the session on one
+task) then a SEPARATE `GET /eve/v1/session/:id/stream` (SSE). With 2 tasks, the
+ALB routes those two requests independently; `lb_cookie` stickiness is NOT
+reliable for this flow (the ALB re-issues a fresh `AWSALB` cookie on the stream
+GET, and the real Eve client does not always echo the POST's cookie), so the
+stream lands on the task that does not own the session and returns an empty body
+— the agent appears to hang. A single-task `eve invoke` / shared-cookie curl
+masked it; a plain browser-style POST+stream without a shared jar reproduced it.
+
+MITIGATION (live, verified): web service pinned to exactly ONE task —
+`aws ecs update-service --desired-count 1` AND
+`application-autoscaling register-scalable-target --min-capacity 1 --max-capacity 1`
+(the autoscaler's min=2 would otherwise force it back to 2). With one task the
+POST and stream always hit the same process. Verified: browser POST+stream (no
+shared cookie jar) now streams to `turn.completed` on Bedrock
+`eu.anthropic.claude-sonnet-4-6` with real data (milk, bananas, butter). Service
+1/1 HEALTHY, site 200.
+
+IaC: committed `infra/terraform/variables.tf` defaults `desired_count`,
+`autoscale_min`, `autoscale_max` = 1 (with the reason) so a repo-default apply
+does not reintroduce the bug; the gitignored apply-time `terraform.tfvars` was
+also set to 1/1/1. The earlier `aws_lb_target_group.app` `stickiness` block
+(PR #290) is harmless and left in place.
+
+TRADEOFF / KNOWN LIMITATION: single task = NO AZ redundancy and NO horizontal
+scale for the website+agent (a task crash is a brief outage until ECS replaces
+it). Acceptable to restore service now. DURABLE FIX (recommended next): move
+Eve's workflow world off `world-local` to a shared/durable backend
+(Supabase/SQS-backed world via `experimental.workflow.world`) so session state is
+not task-local; then raise task count back to >=2. Collection pipelines
+(Tesco/Dunnes/SuperValu) untouched.
+
 ## IMPLEMENTATION (preview-validated; NOT deployed): restore Eve agent + Bedrock — 31 October 2026
 
 Fixes the broken customer-facing agent and migrates model access to Amazon
