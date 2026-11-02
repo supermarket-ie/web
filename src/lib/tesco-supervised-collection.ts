@@ -16,6 +16,13 @@ export type ExecuteSql = (sql: string) => Promise<Record<string, unknown>[]>;
 export type CollectionMode = 'renewal' | 'expansion';
 export const SUPERVISED_GATE = 'workspace-supervised-20260929';
 const PROTOCOL = 'tesco-supervised-v1';
+// Owner-authorised, ONE-TIME supervised recovery check for the isolated
+// 2 November 2026 Work HTTP 403. This is not a generic cooldown override.
+// Remove this narrow exception after its single use or expiry.
+const ACCESS_RETRY_INCIDENT = {
+  runId: '086c1524-8f4b-487c-990a-0a9a9492bb19',
+  url: 'https://www.tesco.ie/shop/en-IE/products/310180968',
+} as const;
 type Mapping = {
   id: string; product_id: string; canonical_name: string; canonical_brand: string | null;
   store_product_name: string; store_brand: string | null; is_own_brand: boolean;
@@ -28,6 +35,7 @@ export type Candidate = Mapping & {
 type RunState = {
   protocol: string; mode: CollectionMode; selected: Candidate[];
   activeSupervisor: string | null; stopReason?: string; complete?: boolean;
+  oneTimeAccessRetryOf?: string;
   // Hold circuit-breaker counters. Persisted so interruption/resume cannot reset
   // or bypass the breaker. consecutiveHolds resets on an acceptance; totalHolds
   // and attempts are cumulative over the whole run (across resumes).
@@ -38,7 +46,8 @@ type RunState = {
   consecutiveQuarantines?: number; totalQuarantines?: number;
 };
 export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean;
-  acquisitionPages?: string[]; reviewedCandidates?: string[]; excludeSharedSku?: boolean };
+  acquisitionPages?: string[]; reviewedCandidates?: string[]; excludeSharedSku?: boolean;
+  oneTimeAccessRetry?: boolean };
 export type Dependencies = {
   execute: ExecuteSql;
   fetchPage?: (url: string) => Promise<TescoPageResponse>;
@@ -78,13 +87,28 @@ function duePredicate(target: Candidate, mode: CollectionMode): string {
         and observed_at=${literal(target.observed_at)}::timestamptz and observed_at<=now()-interval '4 days')`
     : `not exists(select 1 from latest_prices where store_product_id=${uuid(target.id)})`;
 }
-function owned(runId: string, owner: string, paused = false): string {
+function owned(runId: string, owner: string, paused = false, accessRetry = false): string {
   // Always lock in gate -> run order. Old owners cannot checkpoint or release a
   // successor's lease after expiry, even when the successor resumes the same run.
   return `perform 1 from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)} for update;
     perform 1 from scrape_runs where id=${uuid(runId)} for update;
     if not exists(select 1 from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}
-      and ${paused ? 'leased_until is null and cooldown_until>now()' : 'leased_until>now() and coalesce(cooldown_until,now())<=now()'})
+      and ${paused ? 'leased_until is null and cooldown_until>now()' :
+        `leased_until>now() and (coalesce(cooldown_until,now())<=now()${accessRetry ? ` or
+          (cooldown_until>now() and last_block_at is not null and exists(
+            select 1 from scrape_runs retry where retry.id=${uuid(runId)}
+              and retry.error_summary::jsonb->>'oneTimeAccessRetryOf'=${literal(ACCESS_RETRY_INCIDENT.runId)}
+              and exists(select 1 from tesco_direct_collection_pages blocked
+                where blocked.run_id=${uuid(ACCESS_RETRY_INCIDENT.runId)}
+                  and blocked.requested_url=${literal(ACCESS_RETRY_INCIDENT.url)}
+                  and blocked.outcome='access_block' and blocked.http_status=403
+                  and blocked.retry_after is null
+                  and last_block_at>=blocked.created_at)
+              and not exists(select 1 from tesco_direct_collection_pages newer
+                where newer.egress_key=${literal(SUPERVISED_GATE)}
+                  and newer.created_at>(select max(created_at) from tesco_direct_collection_pages
+                    where run_id=${uuid(ACCESS_RETRY_INCIDENT.runId)} and outcome='access_block')
+                  and newer.run_id<>${uuid(runId)})))` : ''})`})
       or not exists(select 1 from scrape_runs where id=${uuid(runId)}
       and error_summary::jsonb->>'activeSupervisor'=${literal(owner)})
     then raise exception 'ownership_or_gate_lost'; end if;`;
@@ -241,6 +265,10 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   if (!['renewal', 'expansion'].includes(options.mode)) throw new Error('Explicit renewal or expansion mode required');
   const limit = options.limit ?? 25;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Limit must be 1–100');
+  const accessRetry = options.oneTimeAccessRetry === true;
+  if (accessRetry && (options.mode !== 'renewal' || limit > 10 || options.resume ||
+      !options.excludeSharedSku || options.acquisitionPages || options.reviewedCandidates))
+    throw new Error('One-time access retry requires a new unique-SKU renewal run of at most 10 products');
   if (options.acquisitionPages && (options.mode !== 'expansion' || options.resume || options.acquisitionPages.length > limit))
     throw new Error('Acquisition handoff requires a new bounded expansion run');
   if (options.reviewedCandidates && (options.mode !== 'expansion' || options.resume ||
@@ -276,7 +304,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
     mode: options.mode, selected: selected.map(m => ({ id: m.id, name: m.canonical_name, observedAt: m.observed_at })) };
 
   const runId = options.resume ?? randomUUID(), owner = randomUUID();
-  const initial: RunState = { protocol: PROTOCOL, mode: options.mode, selected, activeSupervisor: owner };
+  const initial: RunState = { protocol: PROTOCOL, mode: options.mode, selected, activeSupervisor: owner,
+    ...(accessRetry ? { oneTimeAccessRetryOf: ACCESS_RETRY_INCIDENT.runId } : {}) };
   // Retain the identifier even if the claim commits but its acknowledgement is lost.
   deps.progress?.({ event: 'starting', runId, mode: options.mode, selected: selected.length });
   // The workspace gate is intentionally disabled for automated egress selection.
@@ -284,8 +313,26 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   await execute(`do $runner$ begin
     perform 1 from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)} for update;
     if not exists(select 1 from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}
-      and enabled=false and (leased_until is null or leased_until<=now()) and coalesce(cooldown_until,now())<=now())
+      and enabled=false and (leased_until is null or leased_until<=now()) and
+      ${accessRetry ? `cooldown_until>now() and last_block_at is not null` : `coalesce(cooldown_until,now())<=now()`})
       then raise exception 'gate_unavailable'; end if;
+    ${accessRetry ? `if exists(select 1 from scrape_runs prior
+        where prior.run_id like 'tesco_supervised_%' and
+          case when left(ltrim(coalesce(prior.error_summary,'')),1)='{' then
+            prior.error_summary::jsonb->>'oneTimeAccessRetryOf'=${literal(ACCESS_RETRY_INCIDENT.runId)}
+          else false end)
+        then raise exception 'access_retry_already_consumed'; end if;
+      if not exists(select 1 from scrape_runs original
+        join tesco_direct_collection_pages blocked on blocked.run_id=original.id
+        where original.id=${uuid(ACCESS_RETRY_INCIDENT.runId)} and original.store='tesco'
+          and original.status='degraded' and original.error_summary::jsonb->>'stopReason'='access_block'
+          and original.error_summary::jsonb->>'activeSupervisor' is null
+          and blocked.requested_url=${literal(ACCESS_RETRY_INCIDENT.url)}
+          and blocked.outcome='access_block' and blocked.http_status=403 and blocked.retry_after is null
+          and (select last_block_at from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)})>=blocked.created_at
+          and not exists(select 1 from tesco_direct_collection_pages newer
+            where newer.egress_key=${literal(SUPERVISED_GATE)} and newer.created_at>blocked.created_at))
+        then raise exception 'access_retry_source_changed'; end if;` : ''}
     -- Invalidate expired owners before transferring this protocol's single gate.
     update scrape_runs set error_summary=(error_summary::jsonb || jsonb_build_object('activeSupervisor',null))::text
       where id<>${uuid(runId)} and case when run_id like 'tesco_supervised_renewal_%' or run_id like 'tesco_supervised_expansion_%'
@@ -315,7 +362,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       const [spacing] = await execute(`select greatest(0,10000-extract(epoch from
         (now()-last_success_at))*1000)::int wait_ms from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}`);
       await (deps.sleep ?? (ms => new Promise(r => setTimeout(r, ms))))(Number(spacing?.wait_ms ?? 0));
-      await execute(`do $runner$ begin ${owned(runId, owner)} ${assertSnapshot(target)} ${assertAcquisition(target, runId)}
+      await execute(`do $runner$ begin ${owned(runId, owner, false, accessRetry)} ${assertSnapshot(target)} ${assertAcquisition(target, runId)}
         ${assertReentry(target, runId, false)}
         if not (${duePredicate(target, options.mode)}) then raise exception 'not_due_or_observation_changed'; end if;
         if exists(select 1 from tesco_direct_collection_pages where requested_url=${literal(target.store_url)}
@@ -400,13 +447,13 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       }
       // Quarantine precedes evidence/finalisation: a later database error must not
       // roll back a known access restriction. This operation is owner guarded.
-      if (pauseUntil) await execute(`do $runner$ begin ${owned(runId, owner)}
+      if (pauseUntil) await execute(`do $runner$ begin ${owned(runId, owner, false, accessRetry)}
         perform pause_tesco_collection_egress(${literal(SUPERVISED_GATE)},${literal(pauseUntil)}::timestamptz,${outcome === 'access_block'});
         update scrape_runs set error_summary=(error_summary::jsonb || jsonb_build_object('stopReason',${literal(pageStop)}))::text
           where id=${uuid(runId)}; end $runner$; select 1 paused`);
       // Checkpoint + receipt + append are one atomic operation. No cached page is
       // finalised later with a new timestamp. A lost acknowledgement is reconciled.
-      await execute(`do $runner$ begin ${owned(runId, owner, !!pauseUntil)}
+      await execute(`do $runner$ begin ${owned(runId, owner, !!pauseUntil, accessRetry)}
         if exists(select 1 from tesco_direct_collection_pages where run_id=${uuid(runId)}
           and requested_url=${literal(target.store_url)} and outcome='pending') then
           ${accepted || isQuarantine ? assertSnapshot(target) + assertAcquisition(target, runId) + assertReentry(target, runId, true) : ''}
@@ -449,7 +496,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       // persisted (above) so interruption/resume cannot reset or bypass this.
       if (breaker) {
         stopReason = breaker === 'consecutive' ? 'identity_hold_consecutive_exceeded' : 'identity_hold_rate_exceeded';
-        await execute(`do $runner$ begin ${owned(runId, owner)}
+        await execute(`do $runner$ begin ${owned(runId, owner, false, accessRetry)}
           update scrape_runs set error_summary=(error_summary::jsonb || jsonb_build_object('stopReason',${literal(stopReason)}))::text
             where id=${uuid(runId)}; end $runner$; select 1 breaker`);
         break;
@@ -458,7 +505,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       // quarantines indicates a bad cohort or a subtle systemic issue -> stop.
       if (quarantineBreaker) {
         stopReason = quarantineBreaker === 'consecutive' ? 'identity_quarantine_consecutive_exceeded' : 'identity_quarantine_rate_exceeded';
-        await execute(`do $runner$ begin ${owned(runId, owner)}
+        await execute(`do $runner$ begin ${owned(runId, owner, false, accessRetry)}
           update scrape_runs set error_summary=(error_summary::jsonb || jsonb_build_object('stopReason',${literal(stopReason)}))::text
             where id=${uuid(runId)}; end $runner$; select 1 qbreaker`);
         break;

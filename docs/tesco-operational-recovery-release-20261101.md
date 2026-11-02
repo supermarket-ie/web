@@ -1,5 +1,33 @@
 # Tesco held-mapping recovery — existing operational identity
 
+## Single-use Work access recheck — 2 November 2026 (not yet deployed)
+
+The owner approved one **incident-bound**, auditable supervised renewal batch
+to determine whether the isolated 2 November HTTP 403 persists. This is not
+general permission to clear or shorten the 48-hour egress cooldown. The new
+CLI option is `--one-time-access-retry`; it is valid only with `--mode renewal`,
+`--exclude-shared-sku`, an explicit `--confirm-run`, a new run and a limit ≤10.
+The database locks the existing egress gate and verifies the exact original
+403 run and URL, no `Retry-After`, no newer page/competing lease and that no
+prior retry has consumed the incident. A claim leaves the cooldown untouched,
+records the source run in `scrape_runs.error_summary`, and is single-use even
+if the acknowledgement is lost. Do not retry a lost claim; reconcile first.
+
+After normal GitHub validation/merge, verify the live original incident and
+gate, then use the existing Node 24 SQL bridge:
+
+```sh
+node --use-env-proxy --import tsx scripts/tesco-supervised-collect.ts --mode renewal --dry-run --limit 10 --exclude-shared-sku --one-time-access-retry
+node --use-env-proxy --import tsx scripts/tesco-supervised-collect.ts --mode renewal --confirm-run --limit 10 --exclude-shared-sku --one-time-access-retry
+```
+
+Reconcile the exact new run before reporting renewed prices. On another 403,
+stop and preserve the new 48-hour cooldown; no second exception or other egress.
+If the batch completes normally, the pre-existing cooldown still applies to
+all ordinary runs. Remove the temporary incident-bound code with a follow-up
+validated PR. Seven historical pending pages and the older interrupted renewal
+run must remain untouched.
+
 The supervised ChatGPT Work collector and its authenticated Supabase SQL bridge
 are the only operational identity and database transport. No new Auth account,
 password, access token, signed human product review or new infrastructure.
