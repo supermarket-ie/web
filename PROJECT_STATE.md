@@ -1,5 +1,34 @@
 # Supermarket.ie — Canonical Project State
 
+## 2 November 2026 — One-time supervised Work access retry (feature branch, NOT deployed)
+
+The owner authorised a narrow, auditable single-use exception after inspecting
+the only ChatGPT Work HTTP 403 in **2,724 recorded Tesco page requests** (2,662
+HTTP 200 responses). The 2 November 19:21 UTC incident is run
+`086c1524-8f4b-487c-990a-0a9a9492bb19`, SKU `310180968`, with no Tesco
+`Retry-After` header. The original gate cooldown is **4 November 19:21:42 UTC**.
+Do not treat the isolated 403 as proof of an IP-wide or permanent ban.
+
+Branch `fix/tesco-one-time-supervised-access-retry` introduces an **explicit**
+`--one-time-access-retry` option only for a new supervised Work **renewal** run
+with `--exclude-shared-sku`, limit at most **10**, and normal `--confirm-run`.
+It is incident-bound, not a generic cooldown bypass: the original degraded run,
+exact 403 page/URL, absence of `Retry-After`, no newer page and the current
+unexpired/leased-free gate are checked under the existing database row lock.
+An atomic new `scrape_runs` record contains `oneTimeAccessRetryOf`; a second
+claim for that incident fails closed. Ownership checks allow only that run's
+lease while the existing cooldown remains unchanged. A subsequent 403 still
+immediately stops, records the page and extends the ordinary 48-hour block.
+No proxy rotation, paid provider, new Supabase Auth identity, new grants, RLS
+change, schema change, identity-validation change or automatic retry is added.
+
+This is currently **local code and tests only**, not a production exception or
+evidence of restored network access. Release requires the existing GitHub
+`validate` gate and protected merge before an explicit bounded collector run.
+After execution, reconcile all page/receipt/lease/unknown records; remove the
+temporary exception from source in a follow-up protected PR. See
+`docs/tesco-operational-recovery-release-20261101.md` for the normal safeguards.
+
 ## 2 November 2026 — Production held recovery restored: 42 trusted Tesco prices
 
 The owner-approved correction is **deployed**. PRs **#299** and **#300** merged

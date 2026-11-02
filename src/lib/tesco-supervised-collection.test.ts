@@ -847,6 +847,77 @@ describe('explicit acquisition handoff with PostgreSQL finalisation', () => {
 });
 
 describe('supervised renewal with PostgreSQL finalisation', () => {
+  async function seedIsolatedWorkBlock() {
+    const incident = '086c1524-8f4b-487c-990a-0a9a9492bb19';
+    await db.query(`insert into scrape_runs(id,store,run_id,status,error_summary,finished_at)
+      values($1,'tesco',$2,'degraded',$3,now()-interval '9 minutes')`,
+    [incident,`tesco_supervised_renewal_${incident}`,JSON.stringify({
+      protocol:'tesco-supervised-v1',mode:'renewal',stopReason:'access_block',activeSupervisor:null,
+    })]);
+    await db.query(`insert into tesco_direct_collection_pages
+      (run_id,egress_key,requested_url,mode,outcome,http_status,created_at)
+      values($1,$2,$3,'products','access_block',403,now()-interval '10 minutes')`,
+    [incident,SUPERVISED_GATE,'https://www.tesco.ie/shop/en-IE/products/310180968']);
+    await db.exec(`update tesco_egress_pool set cooldown_until=now()+interval '47 hours',
+      last_block_at=now()-interval '9 minutes' where egress_key='${SUPERVISED_GATE}'`);
+  }
+  const retryOptions = {mode:'renewal' as const,limit:1,excludeSharedSku:true,oneTimeAccessRetry:true};
+
+  it('claims the exact isolated Work 403 once without clearing its cooldown and rejects replay', async () => {
+    await seed();await seed(1);await seedIsolatedWorkBlock();
+    const fetcher=vi.fn().mockResolvedValue(response());
+    const result=await collectTescoSupervised(retryOptions,{execute,sleep,fetchPage:fetcher});
+    expect(result).toMatchObject({result:'complete',completed:1,inserted:1,unresolved:[]});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(Date.parse(String((await gate()).cooldown_until))).toBeGreaterThan(Date.now());
+    const audits=await db.query<Record<string, unknown>>(`select error_summary::jsonb->>'oneTimeAccessRetryOf' as incident
+      from scrape_runs where id=$1`,[result.id]);
+    expect(audits.rows[0].incident).toBe('086c1524-8f4b-487c-990a-0a9a9492bb19');
+    const replay=vi.fn();
+    await expect(collectTescoSupervised(retryOptions,{execute,sleep,fetchPage:replay}))
+      .rejects.toThrow('access_retry_already_consumed');
+    expect(replay).not.toHaveBeenCalled();
+  });
+  it('keeps the hard stop and a new 48-hour restriction if the one-time retry returns 403', async () => {
+    await seed();await seedIsolatedWorkBlock();
+    const fetcher=vi.fn().mockResolvedValue({...response(),status:403,outcome:'access_block',html:'Denied'});
+    const result=await collectTescoSupervised(retryOptions,{execute,sleep,fetchPage:fetcher});
+    expect(result).toMatchObject({result:'access_block',completed:1,inserted:0});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(Date.parse(String((await gate()).cooldown_until))).toBeGreaterThan(Date.now()+47*3600_000);
+    expect((await gate()).leased_until).toBeNull();
+  },30_000);
+  it('rejects the exception without its precise original 403 evidence', async () => {
+    await seed();await seedIsolatedWorkBlock();
+    await db.exec(`update tesco_direct_collection_pages set outcome='ok',http_status=200
+      where run_id='086c1524-8f4b-487c-990a-0a9a9492bb19'`);
+    const fetcher=vi.fn();
+    await expect(collectTescoSupervised(retryOptions,{execute,fetchPage:fetcher}))
+      .rejects.toThrow('access_retry_source_changed');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('rejects a newer access event or a competing lease', async () => {
+    await seed();await seedIsolatedWorkBlock();
+    await db.query(`insert into tesco_direct_collection_pages
+      (run_id,egress_key,requested_url,mode,outcome,http_status)
+      values($1,$2,$3,'products','http_error',502)`,
+    [historic,SUPERVISED_GATE,url(2)]);
+    const fetcher=vi.fn();
+    await expect(collectTescoSupervised(retryOptions,{execute,fetchPage:fetcher}))
+      .rejects.toThrow('access_retry_source_changed');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('cannot use the exception for expansion, shared SKUs, resume, or an 11-product batch', async () => {
+    const sql=vi.fn();
+    for(const options of [
+      {...retryOptions,mode:'expansion' as const},
+      {...retryOptions,excludeSharedSku:false},
+      {...retryOptions,resume:randomUUID()},
+      {...retryOptions,limit:11},
+    ]) await expect(collectTescoSupervised(options,{execute:sql}))
+      .rejects.toThrow('One-time access retry requires');
+    expect(sql).not.toHaveBeenCalled();
+  });
   it('exposes a reconcilable run ID when the lease claim acknowledgement is lost', async () => {
     await seed();
     const progress = vi.fn(), fetchPage = vi.fn();
