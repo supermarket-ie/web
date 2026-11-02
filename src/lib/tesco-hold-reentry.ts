@@ -20,8 +20,8 @@ export type ReentryEvidence = {
 export type Reentry = { reviewId: string; sourcePageId: string; evidence: ReentryEvidence };
 export type ReviewRecord = {
   id: string; store_product_id: string; source_page_id: string; evidence_snapshot: ReentryEvidence;
-  independent_reason: string; reviewer_id: string;
-  approval_kind: 'human' | 'machine'; machine_assessment: MachineAssessment | null;
+  independent_reason: string; reviewer_id: string | null; collector_identity: string | null;
+  approval_kind: 'human' | 'machine' | 'collector'; machine_assessment: MachineAssessment | null;
   approved_at: string; expires_at: string;
   revoked: boolean; used: boolean;
 };
@@ -245,13 +245,18 @@ export function reviewedCanonicalEvidenceGap(
     && independentExactIdentity(evidence, live);
 }
 
-// Review approval is a separately authenticated, accountable human act,
-// never inferred by this runner or accepted from an arbitrary name string.
+// A human review still needs an authenticated reviewer; a collector decision
+// instead has the fixed SQL-bridge actor bound by the database's narrow,
+// invoker-rights recovery function. Neither can be inferred by this runner.
 export function approvedReview(r: ReviewRecord, current: ReentryEvidence | null): boolean {
   const snap = r.evidence_snapshot;
+  const accountableActor = (r.approval_kind === 'human' || r.approval_kind === 'machine')
+    ? !!r.reviewer_id && ID.test(r.reviewer_id) && r.collector_identity == null
+    : r.approval_kind === 'collector' && r.reviewer_id == null
+      && r.collector_identity === 'postgres:supervised_sql_bridge';
   return !!current && !r.revoked && !r.used
-    && ID.test(r.reviewer_id) && r.independent_reason.trim().length >= 30
-    && (r.approval_kind === 'human' || (r.approval_kind === 'machine'
+    && accountableActor && r.independent_reason.trim().length >= 30
+    && (r.approval_kind === 'human' || ((r.approval_kind === 'machine' || r.approval_kind === 'collector')
       && r.machine_assessment?.decision === 'verified_exact'
       && typeof r.machine_assessment.model === 'string' && r.machine_assessment.model.trim().length >= 3
       && typeof r.machine_assessment.reason === 'string' && r.machine_assessment.reason.trim().length >= 30
@@ -303,8 +308,11 @@ export function assertReentry(target: Candidate, runId: string, reserved: boolea
       and v.store_product_id=${reviewedUuid(target.id)}
       and v.source_page_id=${reviewedUuid(target.reentry.sourcePageId)}
       and v.approved_at<=now() and v.expires_at>now()
-      and v.reviewer_id is not null and length(trim(v.independent_reason))>=30
-      and (v.approval_kind='human' or (v.approval_kind='machine'
+      and ((v.approval_kind in ('human','machine') and v.reviewer_id is not null and v.collector_identity is null)
+        or (v.approval_kind='collector' and v.reviewer_id is null
+          and v.collector_identity='postgres:supervised_sql_bridge'))
+      and length(trim(v.independent_reason))>=30
+      and (v.approval_kind='human' or (v.approval_kind in ('machine','collector')
         and v.machine_assessment->>'decision'='verified_exact'
         and v.machine_assessment->>'mapping_id'=v.store_product_id::text
         and v.machine_assessment->>'source_page_id'=v.source_page_id::text

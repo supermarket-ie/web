@@ -1,5 +1,38 @@
 # Supermarket.ie — Canonical Project State
 
+## 1 November 2026 — Tesco held recovery through the existing supervised SQL bridge (feature branch)
+
+The owner explicitly rejected provisioning a separate Supabase machine Auth
+account. `fix/tesco-held-recovery-operational-identity` replaces that extra
+dependency with `tesco_internal.record_verified_hold_reentry`, an
+**SECURITY INVOKER**, postgres-only, non-Data-API database function callable
+through the *existing authenticated supervised SQL connector*. No Auth user,
+new credentials, generic privileged RPC, service-role approval INSERT grant,
+RLS relaxation or human per-product review is required. The previously deployed
+machine Auth INSERT branch is removed by the new migration; the authenticated
+human-review path remains intact for existing policy compatibility.
+
+For each AI-reviewed candidate, the normal operator script independently
+matches the current exact one-to-one Tesco mapping, retained source page/hash,
+historical success, canonical identity, peer evidence, barcode/brand/quantity,
+pack and variant. The SQL function independently rereads and locks the mapping
+and source; compares the *complete* current evidence bundle; checks immutable
+source identity, price absence, pending/recent request exclusions and material
+brand/barcode/pack/variant conflicts; and appends a 48-hour operational decision
+with a fixed database-derived SQL-bridge actor. It never edits mappings,
+holds or prices. The existing collector still requires the original plus
+fresh live exact Tesco identity, rechecks mapping/peer snapshots and reviews
+under lease, consumes each review once and uses guarded/idempotent finalisation.
+Shared SKUs, all six historical unresolved requests, pacing, cooldowns,
+circuit breakers and 100-request batch caps are unchanged. The 33 dual-peer
+candidates remain first, followed by the other 60 and separately eligible
+ordinary expansion/renewals, with no forecast of trusted prices before live
+fetches. Runbook: `docs/tesco-operational-recovery-release-20261101.md`.
+
+This entry records a branch implementation only; no release, new trusted price,
+three-retailer comparison, new approval or held collection is implied until
+GitHub validation, protected migration and supervised live reconciliation.
+
 ## 1 November 2026 — Tesco supervised fetch timeout hardening (review pending)
 
 A read-only production sample at 20:53 UTC recorded 117 successful Tesco

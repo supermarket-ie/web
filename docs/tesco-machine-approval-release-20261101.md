@@ -1,5 +1,11 @@
 # Tesco automated machine approval — release and recovery
 
+> **Superseded 1 November 2026.** The owner rejected the separate machine Auth
+> account. Do not use the credentials or setup steps below. The replacement
+> existing-SQL-bridge procedure is in
+> `docs/tesco-operational-recovery-release-20261101.md`. The historical notes
+> are retained as an audit record of the earlier proposal.
+
 **Not deployed.** PR #286's human approval mechanism is installed; this
 follow-up adds a separate, narrow Supabase Auth machine principal for the
 owner-authorised automated evidence review. It does not modify canonical

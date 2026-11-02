@@ -1,11 +1,10 @@
-// Automated AI-evidence approval through a *separate real Supabase Auth machine
-// principal*. Never through the privileged SQL bridge or a forged human claim.
-// The SQL bridge reads the current immutable source/mapping/peer evidence only.
-// Final collection uses the unchanged supervised collector and its live guard.
+// Retained-source AI evidence assessment, followed by one narrowly scoped,
+// database-enforced recovery decision through the EXISTING supervised SQL bridge.
+// This does not require a second Supabase Auth account, grant direct INSERT,
+// clear holds or write a price. Fresh Tesco identity is checked at collection.
 import { readFileSync, appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { createClient } from '@supabase/supabase-js';
-import { reentryEvidenceSql, type ReentryEvidence } from '../src/lib/tesco-hold-reentry';
+import { reentryEvidenceSql, reviewedUuid, type ReentryEvidence } from '../src/lib/tesco-hold-reentry';
 import { prepareMachineAssessment, type AiReviewedMapping } from '../src/lib/tesco-machine-approval';
 import type { ExecuteSql } from '../src/lib/tesco-supervised-collection';
 
@@ -71,25 +70,10 @@ function report(value:Record<string,unknown>){
   if(output)appendFileSync(output,line+'\n',{encoding:'utf8',flag:'a'});
 }
 
-async function machineClient(){
-  const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const email=process.env.TESCO_MACHINE_AUTH_EMAIL;
-  const password=process.env.TESCO_MACHINE_AUTH_PASSWORD;
-  if(!url||!key||!email||!password)throw Error('Dedicated Supabase machine Auth credentials not configured');
-  const client=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
-  const {error}=await client.auth.signInWithPassword({email,password});
-  if(error)throw Error('Dedicated machine Auth sign-in denied');
-  const user=await client.auth.getUser();
-  if(user.error||!user.data.user?.id
-    ||user.data.user.app_metadata?.tesco_reentry_machine_approver!==true
-    ||user.data.user.app_metadata?.tesco_reentry_reviewer===true)
-    throw Error('Authenticated principal lacks exclusive machine approval permission');
-  return client;
+function sqlJson(value:unknown){
+  return `E'${JSON.stringify(value).replaceAll('\\','\\\\').replaceAll("'","''").replaceAll('$','\\044')}'::jsonb`;
 }
 async function main(){
-  // No credentials or approval permission needed for a full read-only review.
-  const client=confirm?await machineClient():null;
   let verified=0,rejected=0;
   const approvalIds:string[]=[];
   for(const {row,source} of selected){
@@ -98,37 +82,35 @@ async function main(){
     const assessment=prepareMachineAssessment(row,evidence,source,model);
     if(!assessment){
       rejected++;
-      report({type:'machine_review',sku:row.sku,mapping_id:row.mapping_id,
+      report({type:'operational_review',sku:row.sku,mapping_id:row.mapping_id,
         decision:'uncertain_or_conflict',reason:'live_mapping_source_peer_or_exact_identity_check_failed'});
       continue;
     }
     verified++;
-    if(!client){
-      report({type:'machine_review',sku:row.sku,mapping_id:row.mapping_id,
+    if(!confirm){
+      report({type:'operational_review',sku:row.sku,mapping_id:row.mapping_id,
         decision:'verified_dry_run',source_page_id:row.source_page_id,source_sha256:assessment.source_body_sha256});
       continue;
     }
-    const {data,error}=await client.from('tesco_hold_reentry_reviews').insert({
-      store_product_id:row.mapping_id,source_page_id:row.source_page_id,
-      evidence_snapshot:evidence,independent_reason:assessment.reason,
-      machine_assessment:assessment,
-      expires_at:new Date(Date.now()+48*60*60*1000).toISOString(),
-    }).select('id').single();
-    if(error||!data?.id) {
-      report({type:'machine_review',sku:row.sku,mapping_id:row.mapping_id,
-        decision:'approval_denied',reason:'authenticated_machine_insert_failed'});
-      // A systematic privilege/API mismatch is an auth boundary, not a
-      // per-product identity failure: stop, never switch to privileged SQL.
-      throw Error('Machine Auth approval API rejected insert; stop safely');
+    // The database re-reads and locks the exact mapping, historical source
+    // page, original receipt, peers and pending/fresh state before recording
+    // a single immutable decision. No direct review INSERT is issued here.
+    const [result]=await execute(`select tesco_internal.record_verified_hold_reentry(
+      ${reviewedUuid(row.mapping_id)}::uuid,${reviewedUuid(row.source_page_id)}::uuid,
+      ${sqlJson(evidence)},${sqlJson(assessment)}) review_id`);
+    if(!result?.review_id || typeof result.review_id!=='string'){
+      report({type:'operational_review',sku:row.sku,mapping_id:row.mapping_id,
+        decision:'decision_unacknowledged',reason:'reconcile_ledger_before_restart'});
+      throw Error('Recovery decision acknowledgement missing; stop safely');
     }
-    approvalIds.push(data.id);
-    report({type:'machine_review',sku:row.sku,mapping_id:row.mapping_id,
-      decision:'machine_approved',review_id:data.id,source_page_id:row.source_page_id,
+    approvalIds.push(result.review_id);
+    report({type:'operational_review',sku:row.sku,mapping_id:row.mapping_id,
+      decision:'operational_decision_recorded',review_id:result.review_id,source_page_id:row.source_page_id,
       source_sha256:assessment.source_body_sha256});
   }
-  report({type:'machine_summary',considered:selected.length,verified,rejected,
-    approvals_created:approvalIds.length,review_ids:approvalIds,
+  report({type:'operational_summary',considered:selected.length,verified,rejected,
+    decisions_recorded:approvalIds.length,review_ids:approvalIds,
     collection_started:false});
 }
-main().catch(()=>{report({type:'error',message:'Machine review stopped; reconcile durable approvals before restart'});process.exitCode=1})
+main().catch(()=>{report({type:'error',message:'Operational recovery stopped; reconcile durable decisions before restart'});process.exitCode=1})
   .finally(()=>reader.close());
