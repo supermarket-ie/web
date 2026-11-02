@@ -43,10 +43,12 @@ reviewed one-purpose function for approval, not an arbitrary review INSERT.
    RLS, grants, function invoker status and append-only triggers. Test negative
    roles and wrong-source/replay cases inside a rolled-back transaction.
 3. Refresh production preflight: existing fresh/renewal/three-retailer
-   coverage, 93 held unique candidates (33 dual peer first), six historical
-   pending requests, gate lease/cooldown, last network_error, competing
-   supervisors and exact active candidate state. Do not reset a cooldown or
-   retry an unresolved product.
+   coverage, 93 held unique candidates (33 dual peer first), **six historical
+   pending requests plus any newly pending pages**, gate lease/cooldown, last
+   network_error, competing supervisors and exact active candidate state.
+   As of 2 November, a seventh pending SKU (`312236215`) exists in the
+   interrupted 1 November renewal run. Do not reset a cooldown, assume that
+   interrupted run is safe to resume, or retry an unresolved product.
 4. With the existing Node 24 SQL bridge, use:
 
    ```sh

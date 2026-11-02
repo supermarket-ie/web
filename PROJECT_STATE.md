@@ -33,6 +33,18 @@ This entry records a branch implementation only; no release, new trusted price,
 three-retailer comparison, new approval or held collection is implied until
 GitHub validation, protected migration and supervised live reconciliation.
 
+**2 November 10:25 UTC preflight (read-only):** Production has **324** fresh
+Tesco prices, **170** true three-retailer comparisons, **161** existing Tesco
+renewals due, **zero** review/use rows, no active supervisor/lease, and a
+historically expired cooldown (1 Nov 21:47:24 UTC). The original **six**
+pending/unknown requests remain. A **seventh** pending URL, Tesco SKU
+`312236215`, was introduced by the interrupted 1 Nov renewal run
+`a0279c32-af6c-4d4e-9d5a-b5326793a39b` (status `running` but
+`activeSupervisor=null`); it is NOT part of the 93 reviewed-held candidates,
+and must be treated as unresolved, never automatically retried or cleared.
+The 324th fresh price is an ordinary non-held source (SKU `297708302`),
+NOT the result of this recovery fix. No recovery claims may include it.
+
 ## 1 November 2026 — Tesco supervised fetch timeout hardening (review pending)
 
 A read-only production sample at 20:53 UTC recorded 117 successful Tesco
