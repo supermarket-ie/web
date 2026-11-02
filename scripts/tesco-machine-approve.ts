@@ -9,7 +9,7 @@ import { prepareMachineAssessment, type AiReviewedMapping } from '../src/lib/tes
 import type { ExecuteSql } from '../src/lib/tesco-supervised-collection';
 
 const args=process.argv.slice(2);
-const allowed=new Set(['--confirm-approve','--dry-run','--limit','--model','--result-file','--candidate-file']);
+const allowed=new Set(['--confirm-approve','--dry-run','--limit','--offset','--model','--result-file','--candidate-file','--candidate-file-only']);
 for(let i=0;i<args.length;i++) {
   if(!allowed.has(args[i])) throw Error('Unknown machine approval option');
   if(!['--confirm-approve','--dry-run'].includes(args[i])) {
@@ -22,8 +22,12 @@ if(confirm===args.includes('--dry-run'))throw Error('Select exactly one of --dry
 function option(k:string){const i=args.indexOf(k);return i<0?undefined:args[i+1]}
 const limit=Number(option('--limit')??100);
 if(!Number.isInteger(limit)||limit<1||limit>100)throw Error('Bounded machine review limit must be 1..100');
+const offset=Number(option('--offset')??0);
+if(!Number.isSafeInteger(offset)||offset<0)throw Error('Machine review offset must be a nonnegative safe integer');
 const model=option('--model')??'prior-chatgpt-work-ai-assisted-identity-review';
-const sources=[
+const onlySource=option('--candidate-file-only');
+if(onlySource&&option('--candidate-file'))throw Error('Select only one candidate-file mode');
+const sources=onlySource?[onlySource]:[
   'docs/tesco-hold-reentry-production-queue-20261101.jsonl',
   'docs/tesco-hold-reentry-inference-addendum-20261101.jsonl',
   ...(option('--candidate-file')?[option('--candidate-file')!]:[]),
@@ -36,9 +40,11 @@ const seen=new Set<string>();
 const selected=candidates.filter(item=>{
   if(seen.has(item.row.mapping_id))throw Error('Duplicate mapping in AI evidence manifest');
   seen.add(item.row.mapping_id);return true;
-}).sort((a,b)=>Number((b.row as unknown as {expected_genuine_triple_if_live?:boolean}).expected_genuine_triple_if_live)-
-  Number((a.row as unknown as {expected_genuine_triple_if_live?:boolean}).expected_genuine_triple_if_live))
-  .slice(0,limit);
+}).sort((a,b)=>Number(Boolean((b.row as unknown as {expected_genuine_triple_if_live?:boolean}).expected_genuine_triple_if_live))-
+  Number(Boolean((a.row as unknown as {expected_genuine_triple_if_live?:boolean}).expected_genuine_triple_if_live)))
+  // Explicit advancement across the same immutable, priority-sorted manifests;
+  // never silently retry or skip a previously unacknowledged decision.
+  .slice(offset,offset+limit);
 
 let sequence=0,disconnected=false;
 const replies=new Map<number,{resolve:(rows:Record<string,unknown>[])=>void;reject:(e:Error)=>void}>();
@@ -108,7 +114,9 @@ async function main(){
       decision:'operational_decision_recorded',review_id:result.review_id,source_page_id:row.source_page_id,
       source_sha256:assessment.source_body_sha256});
   }
-  report({type:'operational_summary',considered:selected.length,verified,rejected,
+  report({type:'operational_summary',offset,limit,candidate_count:candidates.length,
+    next_offset:offset+selected.length<candidates.length?offset+selected.length:null,
+    considered:selected.length,verified,rejected,
     decisions_recorded:approvalIds.length,review_ids:approvalIds,
     collection_started:false});
 }
