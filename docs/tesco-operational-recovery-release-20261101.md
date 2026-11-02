@@ -102,3 +102,35 @@ collector and restore the earlier human-only INSERT policy through a reviewed
 migration; do not delete ledgers, clear historical holds or reset the egress
 gate. Existing trusted observations and their regular renewal lifecycle remain
 untouched. No AWS site deploy is required for the supervised SQL-bridge script.
+
+## Verified production recovery checkpoint — 2 November 2026
+
+- Protected migration was applied as Supabase migration `20261102135210_tesco_supervised_operational_recovery`.
+  The private SECURITY INVOKER operation grants no API role EXECUTE or schema usage.
+- Reviewed all 93 evidence-backed mappings: 46 immutable collector decisions recorded,
+  47 held/rejected (including a genuine structured pack conflict rejected by the DB).
+- Four successful guarded expansion runs consumed all 46 decisions once and completed
+  46 Tesco requests: **42 new trusted offers**, **13 new genuine three-retailer comparisons**,
+  zero renewals, and four live identity/redirect/availability holds.
+  Trusted Tesco offers increased 324 → 366; three-retailer comparisons 170 → 183.
+  Seven preexisting pending requests remained untouched. No active collection lease remains.
+- The supervised SQL connector truncated the serialized state of a 30-candidate run
+  before its first reservation. That run had **zero pages and zero consumed decisions**;
+  it was conditionally closed as degraded, its original malformed state retained inside
+  the reconciliation record, and only its own lease released. Keep subsequent
+  SQL-bridge batches to **10 candidates** so the atomic run-state SQL stays below
+  the connector payload limit. Do not retry the already-consumed decisions.
+- The unreviewed ordinary-expansion dry run surfaced shared-SKU canonical groups.
+  Continue ordinary expansion only with the existing internal
+  `excludeSharedSku` selector exposed by the supervised CLI flag
+  `--exclude-shared-sku`. The pre-selection filter excludes those groups without
+  fetching a Tesco page, changing mappings or disabling the runtime conflict guard.
+
+```sh
+node --use-env-proxy --import tsx scripts/tesco-supervised-collect.ts --mode expansion --dry-run --limit 10 --exclude-shared-sku
+node --use-env-proxy --import tsx scripts/tesco-supervised-collect.ts --mode expansion --confirm-run --limit 10 --exclude-shared-sku
+```
+
+Observe the existing lease, pacing, circuit breakers and 24-hour per-URL retry
+exclusions after each batch. Expand from held evidence only after a fresh,
+independent exact-identity assessment and a new narrowly bound one-use decision.
