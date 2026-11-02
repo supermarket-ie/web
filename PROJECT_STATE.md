@@ -1,6 +1,6 @@
 # Supermarket.ie — Canonical Project State
 
-## 2 November 2026 — One-time supervised Work access retry (feature branch, NOT deployed)
+## 2 November 2026 — One-time supervised Work access retry completed; exception retired
 
 The owner authorised a narrow, auditable single-use exception after inspecting
 the only ChatGPT Work HTTP 403 in **2,724 recorded Tesco page requests** (2,662
@@ -9,7 +9,7 @@ HTTP 200 responses). The 2 November 19:21 UTC incident is run
 `Retry-After` header. The original gate cooldown is **4 November 19:21:42 UTC**.
 Do not treat the isolated 403 as proof of an IP-wide or permanent ban.
 
-Branch `fix/tesco-one-time-supervised-access-retry` introduces an **explicit**
+PR **#302**, merged through GitHub's required `validate` check, temporarily introduced an **explicit**
 `--one-time-access-retry` option only for a new supervised Work **renewal** run
 with `--exclude-shared-sku`, limit at most **10**, and normal `--confirm-run`.
 It is incident-bound, not a generic cooldown bypass: the original degraded run,
@@ -22,12 +22,22 @@ immediately stops, records the page and extends the ordinary 48-hour block.
 No proxy rotation, paid provider, new Supabase Auth identity, new grants, RLS
 change, schema change, identity-validation change or automatic retry is added.
 
-This is currently **local code and tests only**, not a production exception or
-evidence of restored network access. Release requires the existing GitHub
-`validate` gate and protected merge before an explicit bounded collector run.
-After execution, reconcile all page/receipt/lease/unknown records; remove the
-temporary exception from source in a follow-up protected PR. See
-`docs/tesco-operational-recovery-release-20261101.md` for the normal safeguards.
+The supervised Work recheck **completed successfully** on 2 November at
+21:54:24 UTC: run `8f0709d9-6e8d-4e2b-9536-c3e64d21ad51` recorded **10/10
+Tesco pages `ok`**, nine successful guarded renewal receipts and one
+`skip_no_price` (SKU `286814636`). No further HTTP 403, quarantine, identity
+hold, or unresolved request was recorded. Fresh trusted Tesco products remain
+**366**; this was renewal rather than expansion. All **seven historical
+pending** pages remain unchanged. The run ledger preserves the
+`oneTimeAccessRetryOf` link to the original incident and proves consumption.
+The collector released its lease, but the original cooldown was deliberately
+**not** changed: it expires 4 November 2026 at 19:21:42 UTC. Ordinary collection
+must respect it until a separately reviewed policy adjustment; successful
+Work access does not itself authorise another bypass.
+
+The temporary incident-specific CLI/code permission is being removed in a
+follow-up protected PR, leaving the recorded audit ledger intact. See
+`docs/tesco-operational-recovery-release-20261101.md` for the safeguards.
 
 ## 2 November 2026 — Production held recovery restored: 42 trusted Tesco prices
 

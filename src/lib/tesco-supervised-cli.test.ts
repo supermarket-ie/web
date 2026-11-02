@@ -3,10 +3,10 @@ import { createInterface } from 'node:readline';
 import { describe, expect, it } from 'vitest';
 
 // Local bridge only: the dry-run never reaches Supabase or Tesco.
-async function runExpansion(args: string[], mode: 'expansion' | 'renewal' = 'expansion') {
+async function runExpansion(args: string[]) {
   return new Promise<{ code: number | null; queries: string[]; result: Record<string, unknown> | null }>((resolve, reject) => {
     const child = spawn(process.execPath,
-      ['--import', 'tsx', 'scripts/tesco-supervised-collect.ts', '--mode', mode, '--dry-run', '--limit', '10', ...args],
+      ['--import', 'tsx', 'scripts/tesco-supervised-collect.ts', '--mode', 'expansion', '--dry-run', '--limit', '10', ...args],
       { stdio: ['pipe', 'pipe', 'pipe'] });
     const queries: string[] = [];
     let result: Record<string, unknown> | null = null;
@@ -50,14 +50,5 @@ describe('supervised CLI shared-SKU exclusion', { timeout: 45_000 }, () => {
     expect(run.code).toBe(0);
     expect(run.queries).toHaveLength(1);
     expect(run.queries[0]).not.toContain('(select count(*) from mappings m2 where m2.store_sku=c.store_sku)<=1');
-  });
-  it('offers the one-time retry only as an explicit unique-SKU renewal option', async () => {
-    const run = await runExpansion(['--one-time-access-retry', '--exclude-shared-sku'], 'renewal');
-    expect(run.queries).toHaveLength(1);
-    expect(run.queries[0]).toContain('and due');
-    expect(run.queries[0]).toContain('(select count(*) from mappings m2 where m2.store_sku=c.store_sku)<=1');
-    expect(run.result).toMatchObject({ type: 'result', result: 'dry_run' });
-    await expect(runExpansion(['--one-time-access-retry'], 'renewal'))
-      .rejects.toThrow('Supervised CLI exited 1');
   });
 });
