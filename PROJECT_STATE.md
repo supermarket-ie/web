@@ -1,5 +1,44 @@
 # Supermarket.ie — Canonical Project State
 
+## 2 November 2026 — Operational recovery merged; pre-deployment database hardening
+
+PR **#299** merged through the required GitHub `validate` check as
+`ba2eb0e214b789cb636ffcfd983a351a4642c7fa`. It removes the separate machine Auth
+account dependency, using the existing supervised authenticated SQL bridge.
+The protected Supabase migration confirmation expired without executing; do not
+bypass that confirmation with raw DDL. The **12:36 UTC** read-only preflight
+confirms the new function and migration are absent, **zero** review/use records,
+**324** fresh Tesco prices, **170** fresh three-retailer groups, **161** due
+renewals, no active supervisor/lease, and **seven** preserved pending requests
+(the original six plus SKU `312236215`). No trusted prices, comparisons,
+renewals, decisions or collection requests were produced by this release work.
+
+An independent isolated-Postgres review caught a database-only false-approval
+case: a forged positive assessment could record canonical `1L` against a
+`6x1L` source. The normal TypeScript gate already rejected it before any live
+price, but the approval boundary must reject it too. The **still-unapplied**
+operational migration is corrected before release: sized single units are
+counted as one; explicit multipack/count conflicts, compound quantities and
+contradictory structured source quantities are rejected; required source
+fields and assessment constraints fail closed on NULL. Regression tests invoke
+the actual database function with deliberately wrong positive verdicts and
+require zero review rows. No already-applied migration is rewritten.
+
+Local helper checks of the 93 persisted candidate manifests pass 92 and retain
+one quantity uncertainty: SKU `303887500` says `4 x 145g` but the historical
+structured source quantity is 408g. Drained-versus-net weight is plausible but
+not established by that manifest, so it remains held rather than being declared
+a verified match or a proven mismatch. These are offline evidence checks, not
+current approvals, live availability or production recovery counts.
+
+The approval CLI also gains explicit bounded-batch advancement so the initial
+33 and subsequent 60 are separate slices, and a fresh independently reviewed
+manifest can be processed without re-approving the historical queue. These
+selection options do not relax any identity predicate, grant, one-time use,
+live-fetch/finalisation guard, request budget or network safeguard. This entry
+describes the corrective release work, **not a deployed migration or recovery**.
+See `docs/tesco-operational-recovery-release-20261101.md` for the protected gate.
+
 ## 1 November 2026 — Tesco held recovery through the existing supervised SQL bridge (feature branch)
 
 The owner explicitly rejected provisioning a separate Supabase machine Auth

@@ -202,6 +202,91 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
     expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
   });
+  it.each([
+    ['sized single versus multipack', 'Whole Milk 1L', 'Tesco Whole Milk 6x1L'],
+    ['multipack versus sized single', 'Whole Milk 6x1L', 'Tesco Whole Milk 1L'],
+  ])('the database rejects %s before recording an operational decision',async(_label,canonical,title)=>{
+    const {page}=await heldEvidence({title});
+    await db.query('update products set canonical_name=$1 where id=$2',[canonical,products[0]]);
+    await db.query('update store_products set store_product_name=$1 where id=$2',[title,ids[0]]);
+    // The snapshot is authentic and the assessment claims success. The SQL
+    // boundary must independently reject the explicit count contradiction.
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it('the database rejects different explicit can counts before operational approval',async()=>{
+    const title='Tesco Cola 8 Cans';
+    const {page}=await heldEvidence({title,details:{packSize:[{value:8,units:'each'}]}});
+    await db.query('update products set canonical_name=$1 where id=$2',['Tesco Cola 6 Cans',products[0]]);
+    await db.query('update store_products set store_product_name=$1 where product_id=$2',[title,products[0]]);
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it.each([
+    ['different volume', 2, 'l'],
+    ['different measurement dimension', 1000, 'g'],
+  ])('the database rejects structured quantity contradicting the source title: %s',async(_label,value,units)=>{
+    const {page}=await heldEvidence({details:{packSize:[{value,units}]}});
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it.each(['canonical','source','mapped'] as const)(
+    'the database rejects an additional compound quantity in the %s identity',async(location)=>{
+      const compound='Tesco Whole Milk 1L + 500ml';
+      const {page}=await heldEvidence(location==='source'?{title:compound}:{});
+      if(location==='canonical'){
+        await db.query('update products set canonical_name=$1 where id=$2',['Whole Milk 1L + 500ml',products[0]]);
+      }else{
+        await db.query('update store_products set store_product_name=$1 where id=$2',[compound,ids[0]]);
+      }
+      await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
+      expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+    });
+  it.each(['final_url','http_status','body_sha256','source_run_status'] as const)(
+    'the database fails closed on missing mandatory retained evidence: %s',async(field)=>{
+      const {page}=await heldEvidence();
+      if(field==='source_run_status'){
+        await db.query(`update scrape_runs set status=null
+          where id=(select run_id from tesco_direct_collection_pages where id=$1)`,[page]);
+      }else{
+        // Identifiers come only from the fixed test-case allowlist above.
+        await db.query(`update tesco_direct_collection_pages set ${field}=null where id=$1`,[page]);
+      }
+      await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_source_identity_not_exact');
+      expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+    });
+  it.each([
+    ['empty object', {}],
+    ['numeric string', {millilitres:'1000'}],
+    ['multiple measurement units', {millilitres:1000,grams:1000}],
+    ['zero quantity', {millilitres:0}],
+  ])('the database rejects malformed retained source quantity: %s',async(_label,quantity)=>{
+    const {page}=await heldEvidence();
+    await db.query(`update tesco_direct_collection_pages
+      set parsed=jsonb_set(parsed,'{products,0,quantity}',$2::jsonb) where id=$1`,
+    [page,JSON.stringify(quantity)]);
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_source_identity_not_exact');
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it.each([
+    ['six litre multipack', 'Tesco Whole Milk 6x1L', 'Tesco Whole Milk 6x1L', 'TESCO', 6, 'l'],
+    ['three weight multipack', 'John West Tuna Steak 3x110g', 'John West Tuna Steak 3x110g', 'John West', 330, 'g'],
+    ['decimal volume', 'Ballygowan Still Water 1.5L', 'Ballygowan Still Water 1.5L', 'Ballygowan', 1500, 'ml'],
+    ['counted sticks with total weight', 'Pedigree Dentastix Daily Small Dog Treats 7 Pack',
+      'Pedigree Dentastix Daily Small Dog Treats 7 Dental Sticks', 'Pedigree', 110, 'g'],
+  ])('the database retains exact operational approval for %s',async(_label,canonical,title,brand,value,units)=>{
+    const {page}=await heldEvidence({title,brandName:brand,details:{packSize:[{value,units}]}});
+    await db.query('update products set canonical_name=$1,brand=$2 where id=$3',[canonical,brand,products[0]]);
+    await db.query(`update store_products set store_product_name=$1,brand=$2,is_own_brand=$3
+      where id=$4 or (product_id=$5 and store in ('dunnes','supervalu'))`,
+    [title,brand,brand==='TESCO',ids[0],products[0]]);
+    const review=await operationalApproval(page);
+    expect(review).toMatch(/^[0-9a-f-]{36}$/);
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(1);
+    expect(await selectReviewedCandidates(execute,[review])).toHaveLength(1);
+    // Recording a valid decision is still not collection or price recovery.
+    expect((await db.query('select store_product_id from latest_prices where store_product_id=$1',[ids[0]])).rows).toHaveLength(0);
+  });
   async function authenticatedReviewInsert(
     page: string, actor: string, claimedReviewer: string, permission: boolean,
   ) {

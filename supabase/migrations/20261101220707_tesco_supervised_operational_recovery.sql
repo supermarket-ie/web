@@ -12,7 +12,7 @@ alter table public.tesco_hold_reentry_reviews
   add constraint tesco_hold_reentry_reviews_approval_kind_check
     check (approval_kind in ('human', 'machine', 'collector')),
   drop constraint tesco_machine_approval_evidence,
-  add constraint tesco_machine_approval_evidence check (
+  add constraint tesco_machine_approval_evidence check (coalesce(
     (approval_kind = 'human' and machine_assessment is null)
     or (approval_kind in ('machine', 'collector')
       and jsonb_typeof(machine_assessment) = 'object'
@@ -24,7 +24,7 @@ alter table public.tesco_hold_reentry_reviews
       and machine_assessment->>'mapping_id' = store_product_id::text
       and machine_assessment->>'source_page_id' = source_page_id::text
       and machine_assessment->>'source_body_sha256' = evidence_snapshot #>> '{page,body_sha256}')
-  ),
+  , false)),
   add constraint tesco_reentry_accountable_actor check (
     (approval_kind = 'collector' and reviewer_id is null
       and collector_identity = 'postgres:supervised_sql_bridge')
@@ -72,9 +72,11 @@ create schema if not exists tesco_internal;
 revoke all on schema tesco_internal from public, anon, authenticated, service_role;
 
 -- A conservative second-line database check for explicit pack/variant
--- contradictions. The existing TypeScript independentExactIdentity check is
--- stricter and remains mandatory before the SQL call and after a live fetch.
-create function tesco_internal.material_title_conflict(p_canonical text, p_tesco text)
+-- contradictions. The existing TypeScript independentExactIdentity check
+-- remains mandatory before the SQL call and after a live fetch.
+create function tesco_internal.material_title_conflict(
+  p_canonical text, p_tesco text, p_source_quantity jsonb default null
+)
 returns boolean language plpgsql immutable set search_path = ''
 as $check$
 declare
@@ -87,31 +89,75 @@ declare
   tm text[];
   cc text[];
   tc text[];
+  t_multi text[];
+  c_units numeric;
+  t_units numeric;
+  c_measures integer;
+  t_measures integer;
   c_quantity numeric;
   t_quantity numeric;
+  source_unit text;
+  source_quantity numeric;
 begin
+  c := replace(replace(c, ',', '.'), '×', 'x');
+  t := replace(replace(t, ',', '.'), '×', 'x');
   foreach term in array terms loop
     if (c ~ ('\m' || replace(term,' ','[[:space:]]+') || '\M'))
       is distinct from (t ~ ('\m' || replace(term,' ','[[:space:]]+') || '\M'))
     then return true; end if;
   end loop;
 
-  cm := regexp_match(replace(c,',','.'), '(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\M');
-  tm := regexp_match(replace(t,',','.'), '(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\M');
-  if cm is not null and tm is not null then
+  -- A compound title cannot be reduced to its first measure. Keep it held
+  -- rather than silently dropping the extra quantity or dimension.
+  select count(*) into c_measures from regexp_matches(c, '(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\M', 'g');
+  select count(*) into t_measures from regexp_matches(t, '(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\M', 'g');
+  if c_measures > 1 or t_measures > 1 then return true; end if;
+  cm := regexp_match(c, '(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\M');
+  tm := regexp_match(t, '(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\M');
+  if cm is not null then
     c_quantity := cm[1]::numeric * case when cm[2] in ('kg','l','litre','litres') then 1000 else 1 end;
+    if c_quantity <= 0 then return true; end if;
+  end if;
+  if tm is not null then
     t_quantity := tm[1]::numeric * case when tm[2] in ('kg','l','litre','litres') then 1000 else 1 end;
+    if t_quantity <= 0 then return true; end if;
+  end if;
+  if cm is not null and tm is not null then
     if (cm[2] in ('kg','g')) <> (tm[2] in ('kg','g')) or c_quantity <> t_quantity
     then return true; end if;
   end if;
 
-  cc := regexp_match(c, '\m(\d+)\s*(?:x\s*\d|packs?\M|pk\M|rolls?\M|bars?\M|sticks?\M|bottles?\M)');
-  tc := regexp_match(t, '\m(\d+)\s*(?:x\s*\d|packs?\M|pk\M|rolls?\M|bars?\M|sticks?\M|bottles?\M)');
-  if cc is not null and tc is not null and cc[1]::integer <> tc[1]::integer
+  cc := regexp_match(c, '\m(\d+)\s*(?:x\s*\d|(?:(?:standard|dental|jumbo|mini|large|small|sausage)\s+)?(?:packs?|pk|rolls?|sheets?|pieces?|pairs?|bars?|sticks?|pouches?|sachets?|chews?|pods?|cubes?|tablets?|bottles?|tubes?|cans?)\M)');
+  tc := regexp_match(t, '\m(\d+)\s*(?:x\s*\d|(?:(?:standard|dental|jumbo|mini|large|small|sausage)\s+)?(?:packs?|pk|rolls?|sheets?|pieces?|pairs?|bars?|sticks?|pouches?|sachets?|chews?|pods?|cubes?|tablets?|bottles?|tubes?|cans?)\M)');
+  -- Match the independent collector's conservative single-unit inference:
+  -- "1L" is one unit, and must not approve "6x1L" in either direction.
+  c_units := case when cc is not null then cc[1]::numeric when cm is not null then 1 end;
+  t_units := case when tc is not null then tc[1]::numeric when tm is not null then 1 end;
+  if c_units <= 0 or t_units <= 0
+    or (c_units is not null and t_units is not null and c_units <> t_units)
   then return true; end if;
+
+  -- Structured source quantity is retained retailer evidence, not an AI claim.
+  -- Tesco's Nx-size product measure is the total pack amount; an ordinary
+  -- counted title such as "7 sticks 110g" already states the total weight.
+  if p_source_quantity is not null then
+    select key, value::text::numeric into source_unit, source_quantity
+      from jsonb_each(p_source_quantity);
+    t_multi := regexp_match(t, '\m(\d+)\s*x\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|l|litres?)\M');
+    if tm is not null and (
+      source_unit is distinct from case when tm[2] in ('kg','g') then 'grams' else 'millilitres' end
+      or source_quantity <> t_quantity * case when t_multi is not null then t_multi[1]::numeric else 1 end
+    ) then return true; end if;
+    if tm is null and source_unit = 'pieces' and t_units is not null
+      and source_quantity <> t_units then return true; end if;
+    if tm is null and cm is not null and coalesce(c_units,1) = 1 and (
+      source_unit is distinct from case when cm[2] in ('kg','g') then 'grams' else 'millilitres' end
+      or source_quantity <> c_quantity
+    ) then return true; end if;
+  end if;
   return false;
 end $check$;
-revoke all on function tesco_internal.material_title_conflict(text,text)
+revoke all on function tesco_internal.material_title_conflict(text,text,jsonb)
   from public, anon, authenticated, service_role;
 
 -- SECURITY INVOKER: this routine receives no privileges beyond the existing
@@ -179,24 +225,24 @@ begin
   v_page := v_evidence->'page';
   v_source := v_page #> '{parsed,products,0}';
 
-  if (v_evidence->>'sameSkuCount')::integer <> 1
-    or v_evidence->>'proven' <> 'true'
-    or v_evidence->>'freshTesco' <> 'false'
-    or v_evidence->>'pending' <> 'false'
-    or v_evidence->>'recentAttempt' <> 'false'
-    or v_mapping->>'url_status' <> 'resolved'
-    or v_mapping->>'store_sku' !~ '^[0-9]{6,12}$'
-    or v_mapping->>'store_url' <> 'https://www.tesco.ie/shop/en-IE/products/' || (v_mapping->>'store_sku')
-    or v_page->>'requested_url' <> v_mapping->>'store_url'
-    or v_page->>'final_url' <> v_mapping->>'store_url'
-    or v_page->>'outcome' <> 'ok' or (v_page->>'http_status')::integer <> 200
-    or v_page->>'mode' <> 'products'
-    or v_page->>'body_sha256' !~ '^[a-f0-9]{64}$'
-    or (v_evidence #>> '{sourceRun,status}') not in ('success','degraded')
+  if (v_evidence->>'sameSkuCount')::integer is distinct from 1
+    or v_evidence->>'proven' is distinct from 'true'
+    or v_evidence->>'freshTesco' is distinct from 'false'
+    or v_evidence->>'pending' is distinct from 'false'
+    or v_evidence->>'recentAttempt' is distinct from 'false'
+    or v_mapping->>'url_status' is distinct from 'resolved'
+    or not coalesce(v_mapping->>'store_sku' ~ '^[0-9]{6,12}$', false)
+    or v_mapping->>'store_url' is distinct from 'https://www.tesco.ie/shop/en-IE/products/' || (v_mapping->>'store_sku')
+    or v_page->>'requested_url' is distinct from v_mapping->>'store_url'
+    or v_page->>'final_url' is distinct from v_mapping->>'store_url'
+    or v_page->>'outcome' is distinct from 'ok' or (v_page->>'http_status')::integer is distinct from 200
+    or v_page->>'mode' is distinct from 'products'
+    or not coalesce(v_page->>'body_sha256' ~ '^[a-f0-9]{64}$', false)
+    or not coalesce((v_evidence #>> '{sourceRun,status}') in ('success','degraded'), false)
     or v_evidence #>> '{sourceRun,finished_at}' is null
-    or jsonb_typeof(v_page #> '{parsed,products}') <> 'array'
-    or jsonb_array_length(v_page #> '{parsed,products}') <> 1
-    or v_page #> '{parsed,listing}' <> 'null'::jsonb
+    or jsonb_typeof(v_page #> '{parsed,products}') is distinct from 'array'
+    or jsonb_array_length(v_page #> '{parsed,products}') is distinct from 1
+    or v_page #> '{parsed,listing}' is distinct from 'null'::jsonb
     or v_source->>'sku' is distinct from v_mapping->>'store_sku'
     or v_source->>'url' is distinct from v_mapping->>'store_url'
     or nullif(trim(coalesce(v_source->>'name','')),'') is null
@@ -204,6 +250,13 @@ begin
     or jsonb_typeof(v_source->'quantity') is distinct from 'object'
     or jsonb_typeof(v_evidence->'peers') is distinct from 'array'
     or jsonb_array_length(v_evidence->'peers') > 2
+  then raise exception 'tesco_recovery_source_identity_not_exact'; end if;
+
+  if (select count(*) from jsonb_each(v_source->'quantity')) <> 1
+    or exists(select 1 from jsonb_each(v_source->'quantity') q
+      where q.key not in ('grams','millilitres','pieces') or jsonb_typeof(q.value) <> 'number')
+  then raise exception 'tesco_recovery_source_identity_not_exact'; end if;
+  if (select value::text::numeric from jsonb_each(v_source->'quantity')) <= 0
   then raise exception 'tesco_recovery_source_identity_not_exact'; end if;
 
   -- Material barcode and brand contradictions cannot be attested away by AI.
@@ -219,8 +272,8 @@ begin
       lower(regexp_replace(v_source->>'brand','[^a-zA-Z0-9]','','g')))
   then raise exception 'tesco_recovery_barcode_or_brand_conflict'; end if;
 
-  if tesco_internal.material_title_conflict(v_mapping->>'canonical_name',v_source->>'name')
-    or tesco_internal.material_title_conflict(v_mapping->>'store_product_name',v_source->>'name')
+  if tesco_internal.material_title_conflict(v_mapping->>'canonical_name',v_source->>'name',v_source->'quantity')
+    or tesco_internal.material_title_conflict(v_mapping->>'store_product_name',v_source->>'name',v_source->'quantity')
   then raise exception 'tesco_recovery_pack_or_variant_conflict'; end if;
 
   if p_independent_assessment->>'mapping_id' is distinct from p_mapping_id::text

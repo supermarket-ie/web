@@ -24,6 +24,11 @@ Migration `20261101220707_tesco_supervised_operational_recovery.sql`:
   exact source SKU/URL, positive AI assessment with the same IDs and hash,
   explicit barcode/brand/pack/variant contradictions, and any active prior
   review. It appends *one* 48-hour approval record, not a trusted price.
+- The pre-deployment hardening rejects sized-single versus multipack changes,
+  extra compound measures and a structured source quantity contradicting the
+  title (including total quantities for `N x unit-size` packs). Required source
+  fields and assessment constraints reject NULL rather than relying on SQL's
+  nullable comparison semantics. The normal independent collector checks remain.
 - The existing `tesco_hold_reentry_uses` one-use insert, lease/mapping/peer
   checks, independent fresh-live Tesco validator and guarded
   `finalize_store_scrape_product` remain unchanged.
@@ -42,6 +47,10 @@ reviewed one-purpose function for approval, not an arbitrary review INSERT.
    not the website's AWS/ECR deploy. Verify its recorded migration version,
    RLS, grants, function invoker status and append-only triggers. Test negative
    roles and wrong-source/replay cases inside a rolled-back transaction.
+   The protected confirmation expired without executing on 2 November; the
+   migration was verified absent before correcting its SQL. Do not apply an
+   older copy from PR #299, bypass the confirmation, or rewrite an installed
+   migration. Apply the corrected, validated `main` file only.
 3. Refresh production preflight: existing fresh/renewal/three-retailer
    coverage, 93 held unique candidates (33 dual peer first), **six historical
    pending requests plus any newly pending pages**, gate lease/cooldown, last
@@ -54,12 +63,24 @@ reviewed one-purpose function for approval, not an arbitrary review INSERT.
    ```sh
    node --import tsx scripts/tesco-machine-approve.ts --dry-run --limit 33
    node --import tsx scripts/tesco-machine-approve.ts --confirm-approve --limit 33 --result-file tesco-operational-decisions.jsonl
+   node --import tsx scripts/tesco-machine-approve.ts --dry-run --offset 33 --limit 60
+   node --import tsx scripts/tesco-machine-approve.ts --confirm-approve --offset 33 --limit 60 --result-file tesco-operational-decisions.jsonl
    ```
 
    The script independently revalidates each old AI-reviewed candidate and
    calls the restricted SQL function only for exact identities. Keep the
    returned review UUIDs as append-only receipts. A missing SQL acknowledgement
    is an interruption requiring ledger reconciliation, **not** a retry.
+
+   For further catalogue expansion, use `--candidate-file-only PATH` with a
+   newly independently assessed JSONL manifest, preserving its source IDs,
+   hashes and rationales. Advance through a fixed manifest using `next_offset`
+   from each completed summary; `--limit` is always at most 100. An offset is
+   only a candidate-list position, never authority to retry a pending request
+   or consumed decision. Do not reorder/change a manifest between its batches
+   or assume appended priority candidates sort after the original 93. The
+   additive `--candidate-file` option remains available but cannot be combined
+   with `--candidate-file-only`.
 
 5. After normal access safeguards permit, run `tesco-supervised-collect.ts`
    in **expansion** mode with those review UUIDs, batches ≤100 and explicit
