@@ -1,5 +1,49 @@
 # Supermarket.ie — Canonical Project State
 
+## 2 November 2026 — Production held recovery restored: 42 trusted Tesco prices
+
+The owner-approved correction is **deployed**. PRs **#299** and **#300** merged
+through GitHub's required `validate` check. Protected Supabase migration
+`20261102135210_tesco_supervised_operational_recovery` applied successfully.
+Its fixed-operation `tesco_internal.record_verified_hold_reentry` remains
+`SECURITY INVOKER` in a private schema: no `anon`, `authenticated` or
+`service_role` schema USAGE or function EXECUTE; no separate machine Auth
+account, arbitrary privileged approval endpoint or human product review.
+
+The existing supervised operator independently reassessed all **93** retained
+candidate mappings (first 33 dual-peer, then the other 60). It recorded
+**46** one-time evidence-bound decisions; **47** remain held/rejected. The
+database rejected the contradictory pack-size/variant source for SKU
+`303887500`. Four successful production expansion runs consumed all **46**
+decisions and made **46** paced Tesco requests, yielding **42 new trusted
+Tesco prices**, **13 new genuine three-retailer comparisons**, **zero
+renewals**, and four guarded live holds/redirects. Independent live identity
+validation and guarded finalisation were not relaxed.
+
+Verified after reconciliation: trusted Tesco latest offers **324 → 366**;
+four-day-fresh Tesco offers **163 → 205**; genuine three-retailer
+comparisons **170 → 183**. All original **seven pending** pages (including
+the six historical unresolved requests) are preserved. Collector decisions
+and uses both count **46**; no active supervisor lease or current cooldown.
+
+An attempted 30-candidate run uncovered SQL-bridge payload truncation in the
+large run-state checkpoint. It made **zero pages**, **zero decision
+consumptions**, and no price writes. After proving exact run/lease ownership
+and zero durable activity, that failed run alone was conditionally marked
+degraded, its original malformed state retained inside the reconciliation
+record, and its own lease released. Subsequent batches of **10** completed
+normally. Keep supervised SQL-bridge batches at most **10** until the
+transport has a separately verified larger-size protocol.
+
+Ordinary expansion dry-run initially selected shared-SKU canonical groups.
+PR **#301** exposes the already-implemented `excludeSharedSku` selector
+through `--exclude-shared-sku` with CLI integration tests and a production
+checkpoint. The guarded read-only dry run with this flag selects ten
+different, unique-SKU candidates. Complete the required GitHub `validate`,
+merge PR #301 normally, then use the flag for bounded ordinary expansion.
+Do not treat a dry run as a collected price, retry consumed decisions, clear
+historic holds, or resume the unrelated interrupted renewal run.
+
 ## 2 November 2026 — Operational recovery merged; pre-deployment database hardening
 
 PR **#299** merged through the required GitHub `validate` check as
