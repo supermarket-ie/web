@@ -88,6 +88,7 @@ beforeEach(async () => {
   await db.exec(readFileSync('supabase/migrations/20260929093608_tesco_direct_collection_evidence.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261101000000_tesco_hold_reentry_reviews.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261101182500_tesco_machine_reentry_approvals.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261101220707_tesco_supervised_operational_recovery.sql', 'utf8'));
   execute = async query => {
     const results = await db.exec(query);
     return results.at(-1)?.rows as Record<string, unknown>[] ?? [];
@@ -100,6 +101,22 @@ beforeEach(async () => {
 afterEach(async () => { await db.close(); });
 
 describe('audited held Tesco re-entry (production database transactions)', () => {
+  async function operationalApproval(page: string, assessed?: Record<string, unknown>, suppliedEvidence?: unknown) {
+    const [row] = await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    const evidence = row.evidence as ReentryEvidence;
+    const assessment = { decision:'verified_exact',
+      model:'previous-chatgpt-work-independent-inference',
+      source:'docs/tesco-hold-reentry-production-queue-20261101.jsonl',
+      reason:'Exact previous Tesco SKU and source page, branded pack and independently matching peer evidence.',
+      mapping_id:ids[0],source_page_id:page,source_body_sha256:evidence.page.body_sha256,
+      validation:{independently_exact:true,checks:['historical_success','brand','pack','variant','peers']},
+      ...assessed,
+    };
+    const json = (value:unknown) => `E'${JSON.stringify(value).replaceAll('\\','\\\\').replaceAll("'","''")}'::jsonb`;
+    const [result] = await execute(`select tesco_internal.record_verified_hold_reentry(
+      '${ids[0]}'::uuid,'${page}'::uuid,${json(suppliedEvidence??evidence)},${json(assessment)}) review_id`);
+    return result.review_id as string;
+  }
   async function machineApproval(page: string, overrides: Record<string, unknown> = {}, roleClaims: Record<string, boolean> = {
     tesco_reentry_machine_approver: true,
   }) {
@@ -133,6 +150,58 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     }
     return { review, machine, assessment };
   }
+  it('records a bridge-bound evidence decision and consumes it exactly once with live verification',async()=>{
+    const {page,live}=await heldEvidence();
+    const review=await operationalApproval(page);
+    const rows=await db.query<{reviewer_id:string|null;collector_identity:string;approval_kind:string}>(
+      'select reviewer_id,collector_identity,approval_kind from tesco_hold_reentry_reviews where id=$1',[review]);
+    expect(rows.rows[0]).toEqual({reviewer_id:null,collector_identity:'postgres:supervised_sql_bridge',approval_kind:'collector'});
+    expect(await selectReviewedCandidates(execute,[review])).toHaveLength(1);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+    expect((await db.query('select * from tesco_hold_reentry_uses')).rows).toHaveLength(1);
+    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+    await expect(operationalApproval(page)).rejects.toThrow(); // Now fresh; cannot mint a second decision.
+  });
+  it('forbids direct collector inserts, ordinary Auth/service role access and old machine-Auth approval',async()=>{
+    const {page}=await heldEvidence();
+    const [e]=await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    await expect(db.query(`insert into tesco_hold_reentry_reviews
+      (store_product_id,source_page_id,evidence_snapshot,independent_reason,approval_kind,expires_at)
+      values($1,$2,$3,$4,'collector',now()+interval '2 days')`,
+      [ids[0],page,JSON.stringify(e.evidence),'Pretend unverified direct collector approval should be denied.']))
+      .rejects.toThrow('tesco_operational_recovery_function_required');
+    for(const role of ['anon','authenticated','service_role']){
+      await db.exec(`set role ${role}`);
+      try {
+        await expect(db.exec(`select tesco_internal.record_verified_hold_reentry(
+          '${ids[0]}','${page}','{}'::jsonb,'{}'::jsonb)`)).rejects.toThrow();
+      } finally {await db.exec('reset role');}
+    }
+    expect((await db.query('select * from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it('rejects source swaps, tampered snapshots, forged independent claims and material identity conflicts',async()=>{
+    const {page}=await heldEvidence();
+    const [row]=await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    await expect(operationalApproval(page,{}, {...row.evidence as object, proven:false})).rejects.toThrow('tesco_recovery_evidence_snapshot_changed');
+    await expect(operationalApproval(page,{source_body_sha256:'f'.repeat(64)})).rejects.toThrow('tesco_recovery_assessment_not_bound_to_source');
+    await expect(operationalApproval(page,{validation:{independently_exact:false}})).rejects.toThrow('verified_identity_evidence_required');
+    await db.query("update store_products set brand='WRONG BRAND' where id=$1",[ids[0]]);
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_barcode_or_brand_conflict');
+    await db.query("update store_products set brand='TESCO',gtin='9999999999999' where id=$1",[ids[0]]);
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_barcode_or_brand_conflict');
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
+  it('the database rejects incorrect canonical pack, variant and mapped pack even with a forged verified AI verdict',async()=>{
+    const {page}=await heldEvidence();
+    await db.query("update products set canonical_name='Whole Milk 2L' where id=$1",[products[0]]);
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
+    await db.query("update products set canonical_name='Whole Chocolate Milk 1L' where id=$1",[products[0]]);
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
+    await db.query("update products set canonical_name='Whole Milk 1L' where id=$1",[products[0]]);
+    await db.query("update store_products set store_product_name='Tesco Whole Milk 3L' where id=$1",[ids[0]]);
+    await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+  });
   async function authenticatedReviewInsert(
     page: string, actor: string, claimedReviewer: string, permission: boolean,
   ) {
@@ -235,15 +304,10 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     }
     expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
   });
-  it('binds a genuine machine Auth principal and machine kind despite forged human fields',async()=>{
-    const {page,live}=await heldEvidence();
-    const {review,machine}=await machineApproval(page);
-    const rows=await db.query<{reviewer_id:string;approval_kind:string}>(
-      'select reviewer_id,approval_kind from tesco_hold_reentry_reviews where id=$1',[review]);
-    expect(rows.rows[0]).toMatchObject({reviewer_id:machine,approval_kind:'machine'});
-    expect(await selectReviewedCandidates(execute,[review])).toHaveLength(1);
-    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
-    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
+  it('retires the separate machine-Auth route even when that JWT is privileged',async()=>{
+    const {page}=await heldEvidence();
+    await expect(machineApproval(page)).rejects.toThrow('authenticated_tesco_reentry_reviewer_required');
+    expect((await db.query('select id from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
   });
   it('rejects machine approvals with missing or contradictory AI/evidence attestation',async()=>{
     const {page}=await heldEvidence();
@@ -259,7 +323,7 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     await expect(machineApproval(page,{},{})).rejects.toThrow('authenticated_tesco_reentry_reviewer_required');
     await expect(machineApproval(page,{},
       {tesco_reentry_machine_approver:true,tesco_reentry_reviewer:true})).rejects.toThrow(
-      'exactly_one_tesco_reentry_approval_role_required');
+      'authenticated_tesco_reentry_reviewer_required');
   });
   it('converts only exact source-bound prior AI evidence into machine attestation',async()=>{
     const {page}=await heldEvidence();

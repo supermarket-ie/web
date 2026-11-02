@@ -1,0 +1,83 @@
+# Tesco held-mapping recovery — existing operational identity
+
+The supervised ChatGPT Work collector and its authenticated Supabase SQL bridge
+are the only operational identity and database transport. No new Auth account,
+password, access token, signed human product review or new infrastructure.
+
+## Small, bounded database change
+
+Migration `20261101220707_tesco_supervised_operational_recovery.sql`:
+
+- Retires the unused separate-machine-Auth INSERT policy, preserving the prior
+  authenticated-human policy and immutable historical review records.
+- Enables `approval_kind='collector'` on the existing append-only ledger,
+  with `reviewer_id` NULL and fixed database-derived
+  `collector_identity='postgres:supervised_sql_bridge'`.
+- Adds a `tesco_internal.record_verified_hold_reentry` **SECURITY INVOKER**
+  function. `EXECUTE` and schema usage are denied to `PUBLIC`, `anon`,
+  `authenticated` and `service_role`; only the existing privileged SQL
+  bridge's postgres session can call it. This is not a Data API RPC or a
+  general-purpose RLS bypass.
+- Re-derives and locks the complete current mapping/source/peer evidence in
+  the database; checks the supplied immutable snapshot, unique SKU, source
+  page hash, historical success, lack of fresh/pending/recent attempts,
+  exact source SKU/URL, positive AI assessment with the same IDs and hash,
+  explicit barcode/brand/pack/variant contradictions, and any active prior
+  review. It appends *one* 48-hour approval record, not a trusted price.
+- The existing `tesco_hold_reentry_uses` one-use insert, lease/mapping/peer
+  checks, independent fresh-live Tesco validator and guarded
+  `finalize_store_scrape_product` remain unchanged.
+
+The privileged SQL connector is an existing owner-trusted administrative
+boundary. It already has postgres authority; the change deliberately grants
+that authority to no other role. The connector must still execute *only* the
+reviewed one-purpose function for approval, not an arbitrary review INSERT.
+
+## Release gates
+
+1. Review PR diff, PGlite negative/positive tests, full typecheck and GitHub
+   Actions `validate`; merge only through the protected `main` ruleset.
+2. Confirm the prior review and machine migrations are installed. Apply the
+   new migration **once** through the protected Supabase migration workflow,
+   not the website's AWS/ECR deploy. Verify its recorded migration version,
+   RLS, grants, function invoker status and append-only triggers. Test negative
+   roles and wrong-source/replay cases inside a rolled-back transaction.
+3. Refresh production preflight: existing fresh/renewal/three-retailer
+   coverage, 93 held unique candidates (33 dual peer first), **six historical
+   pending requests plus any newly pending pages**, gate lease/cooldown, last
+   network_error, competing supervisors and exact active candidate state.
+   As of 2 November, a seventh pending SKU (`312236215`) exists in the
+   interrupted 1 November renewal run. Do not reset a cooldown, assume that
+   interrupted run is safe to resume, or retry an unresolved product.
+4. With the existing Node 24 SQL bridge, use:
+
+   ```sh
+   node --import tsx scripts/tesco-machine-approve.ts --dry-run --limit 33
+   node --import tsx scripts/tesco-machine-approve.ts --confirm-approve --limit 33 --result-file tesco-operational-decisions.jsonl
+   ```
+
+   The script independently revalidates each old AI-reviewed candidate and
+   calls the restricted SQL function only for exact identities. Keep the
+   returned review UUIDs as append-only receipts. A missing SQL acknowledgement
+   is an interruption requiring ledger reconciliation, **not** a retry.
+
+5. After normal access safeguards permit, run `tesco-supervised-collect.ts`
+   in **expansion** mode with those review UUIDs, batches ≤100 and explicit
+   `--confirm-run`. Reconcile every run. Stop at the ordinary network/identity
+   circuit breakers, no new fetch transport or alternate egress. Continue
+   through the other 60 held opportunities, then ordinary non-held candidates
+   and further independently corroborated AI evidence, within the owner's
+   1,000-request ceiling. Renew existing trusted prices as separately due.
+6. Report **new trusted Tesco**, **new genuine three-retailer comparisons**,
+   **renewals**, **decisions recorded**, **held/rejected/uncertain** and
+   **network/access stops** as distinct measurements. Never call a review a
+   recovered price or a retailer peer an exact match without verification.
+
+## Rollback
+
+Stop new approval calls, preserve every immutable decision/use/source record,
+and append revocations where necessary. If a rollout fails, pin the prior
+collector and restore the earlier human-only INSERT policy through a reviewed
+migration; do not delete ledgers, clear historical holds or reset the egress
+gate. Existing trusted observations and their regular renewal lifecycle remain
+untouched. No AWS site deploy is required for the supervised SQL-bridge script.
