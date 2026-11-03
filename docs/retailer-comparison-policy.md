@@ -84,10 +84,9 @@ preliminary inferences. No group has independently captured direct-product
 proof from all three retailers, so **verified exact triples are currently
 zero established by this audit**; do not equate 183 with exact coverage.
 
-The implementation is feature-branch work until GitHub `validate` passes,
-the PR is merged, the table migration is applied through protected Supabase
-workflow and the AWS ECR SHA-tagged image + Terraform rollout is confirmed
-on `smie-prod-cluster` (eu-west-1). No merge automatically deploys. Do not
+The release passed GitHub `validate`, merged as PR #304, applied its
+protected Supabase migration and deployed as AWS ECR image `d81d019-prod`
+(ECS task definition `smie-prod:16`). No merge automatically deploys. Do not
 backfill/approve the 55 staged Dunnes different-pack candidates as exact
 offers. Each requires fresh direct evidence and separately reviewed,
 source-bound classification.
@@ -114,8 +113,12 @@ capture reference was rejected in a rollback-only test. The ledger holds
 zero approved decisions; 183 raw triple overlaps remain distinct from
 zero independently corroborated exact triples under this review policy.
 
-**AWS image build, ECR push and Terraform ECS rollout remain outstanding.**
-Until live deployment, customer-facing UI has not changed; until independent
-peer source captures and approved pair decisions exist, no alternative count
-can truthfully increase. The supervised Tesco collector did not run in this
-session, and its original safeguards remain unchanged.
+**AWS production rollout completed:** ECR image `d81d019-prod` is live on
+ECS `smie-prod:16`; both web tasks and ALB targets were healthy at rollout,
+and the live comparison page displays retailer offer names, unit prices and
+unverified-comparison labels. The immutable review ledger still has zero
+approved pair decisions, so no independently verified exact triples or
+approved comparable alternatives can be claimed. The historical 183 raw
+triple overlap count above fell to 182 at the 3 November 22:46 UTC read-only
+check as one Tesco price aged out. The supervised Tesco collector has not
+run again from this chat; its operational safeguards remain unchanged.
