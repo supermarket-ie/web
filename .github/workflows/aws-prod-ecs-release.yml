@@ -1,0 +1,171 @@
+name: Release production web image to AWS ECS
+
+# MANUAL ONLY. Releases an existing main-history ECR image with a protected
+# Terraform plan; does not build, change DNS, touch Supabase or run Tesco.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Existing ECR image from main history (e.g. ceabe79-prod)'
+        type: string
+        required: true
+      apply:
+        description: 'Apply guarded plan (false = plan only)'
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-production-terraform-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: AWS production web release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: aws-prod
+    env:
+      AWS_REGION: eu-west-1
+      IMAGE_TAG: ${{ inputs.image_tag }}
+    steps:
+      - name: Checkout approved main history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Confirm release image belongs to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_TAG" =~ ^[0-9a-f]{7}-prod$ ]] || { echo "::error::Expected seven-character SHA tag ending in -prod"; exit 1; }
+          short_sha="${IMAGE_TAG%-prod}"
+          commit="$(git rev-parse --verify "${short_sha}^{commit}")"
+          [[ "$(git rev-parse --short=7 "$commit")" == "$short_sha" ]] || exit 1
+          git merge-base --is-ancestor "$commit" HEAD || { echo "::error::Image commit is not an ancestor of main"; exit 1; }
+          echo "Verified main-history image: $IMAGE_TAG"
+
+      - name: Test fail-closed release policy
+        run: node --test scripts/aws-release-guard.check.mjs
+
+      - name: Check production Terraform configuration is provided
+        shell: bash
+        env:
+          PROD_TFVARS_B64: ${{ secrets.PROD_TERRAFORM_TFVARS_B64 }}
+        run: |
+          set -euo pipefail
+          [[ -n "$PROD_TFVARS_B64" ]] || { echo "::error::Missing environment secret PROD_TERRAFORM_TFVARS_B64"; exit 1; }
+          printf '%s' "$PROD_TFVARS_B64" | base64 --decode > infra/terraform/prod.release.tfvars
+          chmod 600 infra/terraform/prod.release.tfvars
+          [[ -s infra/terraform/prod.release.tfvars ]] || { echo "::error::Production tfvars is empty"; exit 1; }
+          echo "Loaded protected production configuration; values are not printed."
+
+      - name: Configure production AWS identity through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-1
+          role-session-name: smie-web-release
+
+      - name: Verify account and ECR image
+        shell: bash
+        run: |
+          set -euo pipefail
+          account="$(aws sts get-caller-identity --query Account --output text)"
+          [[ "$account" == '611622961299' ]] || { echo "::error::Not Supermarket-Prod"; exit 1; }
+          aws ecr describe-images --region eu-west-1 --repository-name smie-prod \
+            --image-ids "imageTag=$IMAGE_TAG" --query 'imageDetails[0].imageDigest' --output text > /dev/null
+          echo 'Verified production account and existing ECR image.'
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+          terraform_wrapper: false
+
+      - name: Load remote state and preserve production worker image
+        id: worker
+        shell: bash
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          terraform init -input=false -backend-config=backend.hcl
+          terraform validate
+          terraform show -json > "$RUNNER_TEMP/smie-terraform-state.json"
+          worker_tag="$(node ../../scripts/aws-release-guard.mjs worker-tag "$RUNNER_TEMP/smie-terraform-state.json")"
+          echo "tag=$worker_tag" >> "$GITHUB_OUTPUT"
+          echo "Existing worker image remains $worker_tag"
+
+      - name: Plan and reject all non-image changes
+        shell: bash
+        working-directory: infra/terraform
+        env:
+          WORKER_TAG: ${{ steps.worker.outputs.tag }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -lock-timeout=120s -no-color \
+            -var-file=prod.release.tfvars \
+            -var="image_tag=$IMAGE_TAG" \
+            -var="image_tag_worker=$WORKER_TAG" \
+            -out="$RUNNER_TEMP/smie-release.tfplan" > "$RUNNER_TEMP/smie-plan.log"
+          terraform show -json "$RUNNER_TEMP/smie-release.tfplan" > "$RUNNER_TEMP/smie-release-plan.json"
+          node ../../scripts/aws-release-guard.mjs verify-plan \
+            "$RUNNER_TEMP/smie-release-plan.json" "$IMAGE_TAG" "$WORKER_TAG"
+          echo 'Guarded Terraform plan has no infrastructure drift or worker changes.'
+
+      - name: Summarize validated release
+        shell: bash
+        run: |
+          {
+            echo '### Supermarket.ie production release'
+            echo "- Image: $IMAGE_TAG"
+            echo '- Account: 611622961299, region: eu-west-1'
+            echo '- Change scope: ECS web task image and service reference only'
+            echo '- SQS consumer and scheduled worker images unchanged'
+            echo '- Terraform plan guard: passed'
+            if [[ '${{ inputs.apply }}' == 'true' ]]; then
+              echo '- Mode: apply'
+            else
+              echo '- Mode: plan only (no production writes)'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply the exact validated plan
+        if: inputs.apply
+        shell: bash
+        working-directory: infra/terraform
+        run: terraform apply -input=false -no-color -auto-approve "$RUNNER_TEMP/smie-release.tfplan"
+
+      - name: Verify ECS service health and deployed image
+        if: inputs.apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecs wait services-stable --region eu-west-1 \
+            --cluster smie-prod-cluster --services smie-prod-svc
+          task_definition="$(aws ecs describe-services --region eu-west-1 \
+            --cluster smie-prod-cluster --services smie-prod-svc \
+            --query 'services[0].taskDefinition' --output text)"
+          deployed_image="$(aws ecs describe-task-definition --region eu-west-1 \
+            --task-definition "$task_definition" \
+            --query "taskDefinition.containerDefinitions[?name=='web'].image | [0]" --output text)"
+          [[ "$deployed_image" == "611622961299.dkr.ecr.eu-west-1.amazonaws.com/smie-prod:$IMAGE_TAG" ]] ||
+            { echo "::error::ECS is not running the intended image"; exit 1; }
+          curl --fail --silent --show-error --retry 3 --max-time 20 \
+            https://www.supermarket.ie/terms > /dev/null
+          echo 'ECS stable, image verified, public HTTPS /terms healthy.'
+
+      - name: Remove runner-local production configuration and plan
+        if: always()
+        shell: bash
+        run: |
+          rm -f infra/terraform/prod.release.tfvars
+          rm -f "$RUNNER_TEMP/smie-terraform-state.json"
+          rm -f "$RUNNER_TEMP/smie-release.tfplan"
+          rm -f "$RUNNER_TEMP/smie-release-plan.json"
+          rm -f "$RUNNER_TEMP/smie-plan.log"

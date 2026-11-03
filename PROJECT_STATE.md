@@ -1,5 +1,43 @@
 # Supermarket.ie — Canonical Project State
 
+
+## 3 November 2026 — protected GitHub-to-AWS ECS rollout PR #306 (NOT RELEASED)
+
+The owner selected GitHub Actions + AWS OIDC (Option A) instead of sharing AWS
+keys or relying on a locally credentialled workspace for each future release.
+Branch `feat/protected-aws-ecs-release` / PR **#306** adds manual workflow
+`.github/workflows/aws-prod-ecs-release.yml` plus a fail-closed Terraform
+release-plan guard and nine regression tests, included in required `validate`.
+The workflow takes an existing `main`-history ECR `<sha>-prod` tag, defaults
+to plan-only and can explicitly apply the saved plan through `aws-prod`.
+It verifies AWS account `611622961299`, ECR image and S3 remote state;
+loads the real production Terraform configuration from a protected
+environment secret; keeps SQS/scheduled worker images pinned to their existing
+state; and rejects ANY Terraform changes beyond a website ECS task-definition
+image replacement and website ECS service task-definition reference.
+Deployment stability, actual ECS image and customer HTTPS health are checked
+after apply. No automatic release on PR merge.
+
+**One-time deployment prerequisites NOT yet verified/configured here:**
+`aws-prod` required reviewers + main-only environment branches; a dedicated
+OIDC Terraform release role in Supermarket-Prod stored as
+`AWS_TERRAFORM_DEPLOY_ROLE_ARN`; and the existing actual production
+`terraform.tfvars` provided as protected environment secret
+`PROD_TERRAFORM_TFVARS_B64`. Do NOT reconstruct tfvars from repo defaults
+(`create_resources=false` would be destructive against existing state).
+See `docs/aws-production.md` for setup and rollback. The ECR builder remains a
+separate existing OIDC workflow; no need to broaden it.
+
+This is **workflow code under review, not a production deployment**.
+No image was pushed, Terraform plan or apply was executed, and no ECS image,
+Supabase migration, Tesco collection request or price was changed from
+this PR. The comparison UI merged at `ceabe79...` remains awaiting a
+`ceabe79-prod` ECR image built from that exact commit and protected ECS
+rollout. Tesco's supervised Work collector remains a separate operational
+capability; an AWS-hosted Tesco fetch previously received HTTP 403 and must
+not be routed through the production deploy workflow.
+
+
 ## 3 November 2026 — offer comparison review ledger merged and migrated; ECS NOT DEPLOYED
 
 PR **#304** was squash-merged to GitHub `main` as
