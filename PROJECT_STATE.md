@@ -1,7 +1,7 @@
 # Supermarket.ie — Canonical Project State
 
 
-## 17 October 2026 — offer-comparison UI (PRs #304/#305/#306) RELEASED to AWS prod ECS
+## 3 November 2026 — offer-comparison UI (PRs #304/#305/#306) RELEASED to AWS prod ECS
 
 The website changes from PRs **#304/#305/#306** are **deployed and live** on
 AWS prod. `main` is at
@@ -57,7 +57,7 @@ rendering Tesco/Dunnes/SuperValu with comparison vocabulary
 `/ecs/smie-prod` showed no application errors over the deploy window (only a
 benign transient Next.js "Server Action from an older/newer deployment"
 during rollover). Migration
-`20261103141000_offer_comparison_review_ledger` (table
+`20261103142905_offer_comparison_review_ledger` (table
 `retailer_offer_pair_reviews`) was already applied in prod, so the new image
 is DB-compatible.
 
@@ -66,6 +66,17 @@ is DB-compatible.
 (`smie-prod-sqs-consumer`, `smie-prod-scheduled`) remain on `df9f0c1-prod`,
 unchanged. The supervised Tesco/Dunnes/SuperValu collection operations were
 not touched.
+
+**Read-only Tesco checkpoint (3 November, 22:46 UTC):** production shows 367
+fresh trusted Tesco offers, 142 meeting the four-day renewal threshold,
+182 raw three-retailer price overlaps, zero approved offer-pair reviews and
+seven preserved pending collection pages. The nearest remaining Tesco
+expiry is 4 November at 07:14:42 UTC. The supervised Work egress key has
+no active lease and its cooldown expired; its `enabled=false` field alone
+cannot establish an access block because successful supervised requests
+occurred with that value recorded. The previous 368/183 position has fallen
+by one through freshness expiry, not a removal or invalidation write. This
+read-only checkpoint performed no collection requests or price writes.
 
 **GHA deploy path status:** NOT yet operational without new setup. Making
 `aws-prod-ecs-release.yml` runnable with existing access (no new IAM, secrets
