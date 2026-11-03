@@ -51,7 +51,7 @@ jobs:
           echo "Verified main-history image: $IMAGE_TAG"
 
       - name: Test fail-closed release policy
-        run: node --test scripts/aws-release-guard.test.mjs
+        run: node --test scripts/aws-release-guard.check.mjs
 
       - name: Check production Terraform configuration is provided
         shell: bash
