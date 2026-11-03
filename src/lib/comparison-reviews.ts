@@ -1,4 +1,3 @@
-import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase';
 import { validPairReview, type PairReview } from './comparison-policy';
 

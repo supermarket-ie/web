@@ -88,7 +88,8 @@ export function weeklyShopTotals(items: WeeklyItem[], quantities: Record<string,
       unverifiedCount: unverified.length,
       excludedComparisonCount: incompatible.length,
       subtotal: priced.length ? subtotalCents / 100 : null,
-      total: selected.length > 0 && priced.length === selected.length && unverified.length === 0
+      total: selected.length > 0 && priced.length === selected.length ? subtotalCents / 100 : null,
+      verifiedComparableTotal: selected.length > 0 && priced.length === selected.length && unverified.length === 0
         ? subtotalCents / 100 : null,
     };
   });

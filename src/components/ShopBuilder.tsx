@@ -202,7 +202,7 @@ export function ShopBuilder({ suggestions }: { suggestions: ShopProduct[] }) {
           {totals.map(total => <div key={total.store} className="rounded-xl border border-[#dce6de] bg-white p-2.5">
             <p className="text-[11px] font-medium text-[#607065]">{WEEKLY_STORE_NAMES[total.store].split(' ')[0]}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums tracking-tight text-[#173525]">{total.subtotal === null ? '—' : money(total.subtotal)}</p>
-            <p className="mt-1 text-[10px] leading-4 text-[#607065]">{total.selectedCount ? `${total.pricedCount}/${total.selectedCount} priced` : 'Add products'}<br />{total.total !== null ? 'Verified comparable total' : total.selectedCount ? 'Indicative subtotal' : 'to see prices'}</p>
+            <p className="mt-1 text-[10px] leading-4 text-[#607065]">{total.selectedCount ? `${total.pricedCount}/${total.selectedCount} priced` : 'Add products'}<br />{total.verifiedComparableTotal !== null ? 'Verified comparable total' : total.selectedCount ? 'Indicative subtotal' : 'to see prices'}</p>
             {(total.alternativeCount > 0 || total.unverifiedCount > 0 || total.excludedComparisonCount > 0) &&
               <p className="mt-1 text-[10px] leading-4 text-[#82591a]">
                 {total.alternativeCount > 0 ? `${total.alternativeCount} comparable alternative(s) · ` : ''}

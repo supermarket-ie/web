@@ -45,6 +45,7 @@ export function validPairReview(row: PairReview, now = Date.now()): boolean {
 
 /** Conservative parser for clearly stated pack totals; never infers absent pack facts. */
 export function readPack(name: string): PackUnit | null {
+  if (typeof name !== 'string' || !name.trim()) return null;
   const text = name.toLowerCase().replace(/,/g, '');
   const multi = text.match(/\b(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(kg|g|litres?|l|ml)\b/i);
   const single = multi ? null : text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|litres?|l|ml)\b/i);

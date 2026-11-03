@@ -78,7 +78,7 @@ describe('pack and basket disclosures', () => {
     expect(totals.find(x=>x.store==='dunnes')).toMatchObject({
       alternativeCount:2,excludedComparisonCount:1,pricedCount:1,total:null,subtotal:1.3,
     });
-    expect(totals.find(x=>x.store==='supervalu')).toMatchObject({unverifiedCount:1,total:null});
+    expect(totals.find(x=>x.store==='supervalu')).toMatchObject({unverifiedCount:1,total:null,verifiedComparableTotal:null});
     expect(totals.find(x=>x.store==='tesco')).toMatchObject({alternativeCount:0,total:3.5});
   });
   it('keeps raw three-store overlap unverified without a separate pair review ledger', () => {

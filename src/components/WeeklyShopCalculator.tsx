@@ -100,7 +100,7 @@ export function WeeklyShopCalculator({ items }: { items: WeeklyItem[] }) {
             <div key={total.store} className="rounded-2xl border border-[#dce3dd] bg-white p-5">
               <h3 className="text-sm font-semibold text-[#354a3b]">{WEEKLY_STORE_NAMES[total.store]}</h3>
               <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-[#173525]">{total.subtotal === null ? '—' : money(total.subtotal)}</p>
-              <p className="mt-1 text-xs font-semibold text-[#52665a]">{total.total !== null ? 'Verified comparable total' : total.pricedCount ? 'Indicative subtotal' : 'No priced items selected'}</p>
+              <p className="mt-1 text-xs font-semibold text-[#52665a]">{total.verifiedComparableTotal !== null ? 'Verified comparable total' : total.pricedCount ? 'Indicative subtotal' : 'No priced items selected'}</p>
               <p className="mt-3 text-xs leading-5 text-[#6d7c71]">{total.pricedCount} of {total.selectedCount} selected products priced{total.missingCount > 0 ? ` · ${total.missingCount} missing/incompatible` : ''}{total.alternativeCount > 0 ? ` · ${total.alternativeCount} comparable alternatives` : ''}{total.unverifiedCount > 0 ? ` · ${total.unverifiedCount} unverified` : ''}</p>
             </div>
           ))}
