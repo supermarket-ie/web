@@ -68,9 +68,10 @@ unchanged. The supervised Tesco/Dunnes/SuperValu collection operations were
 not touched.
 
 **Read-only Tesco checkpoint (3 November, 22:46 UTC):** production shows 367
-fresh trusted Tesco offers, 142 meeting the four-day renewal threshold,
-182 raw three-retailer price overlaps, zero approved offer-pair reviews and
-seven preserved pending collection pages. The nearest remaining Tesco
+fresh trusted Tesco offers, 122 at least four days old (116 eligible for
+supervised renewal after held/shared-SKU exclusions), 26 ordinary expansion
+candidates, 182 raw three-retailer price overlaps, zero approved offer-pair
+reviews and seven preserved pending collection pages. The nearest remaining Tesco
 expiry is 4 November at 07:14:42 UTC. The supervised Work egress key has
 no active lease and its cooldown expired; its `enabled=false` field alone
 cannot establish an access block because successful supervised requests
