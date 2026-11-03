@@ -43,6 +43,83 @@ There is **no automatic deploy on merge.** A deploy is two explicit steps:
 Rollback: `terraform apply -var image_tag=<previous-good-sha>-prod` (prior ECR
 images are retained). Nothing in Supabase changes during a deploy.
 
+
+## Protected GitHub Actions production ECS web release — 3 November 2026
+
+The manual `Release production web image to AWS ECS` workflow
+(`.github/workflows/aws-prod-ecs-release.yml`) makes the second deployment
+step available through GitHub OIDC. It **does not** run on merge, push, or PR.
+The separate `Build & push deploy image to ECR` workflow must publish a
+production image first. The release workflow accepts an existing
+seven-character main-history SHA tag ending in `-prod`; it defaults to a
+**plan-only** run. Select `apply=true` for the explicit protected production
+rollout. Both modes use the `aws-prod` environment. It verifies account
+`611622961299`, region `eu-west-1`, ECR image presence, the S3 Terraform
+backend and live remote state. It waits for ECS web service stability,
+confirms its deployed image, and probes HTTPS `/terms` after apply.
+
+**One-time protected environment setup (AWS administrator):**
+
+1. In GitHub **Settings → Environments → `aws-prod`**, require production
+   reviewers, disable self-approval if supported, and restrict deployment
+   branches to `main`. Merely naming an environment in YAML does not
+   configure required reviewers.
+2. Create a **separate**, narrowly scoped AWS IAM OIDC role for Terraform
+   releases, trusting only the `supermarket-ie/web` `aws-prod` environment
+   subject and `sts.amazonaws.com` audience. Attach read permissions for the
+   existing Terraform-managed resources (including regional and Global
+   Accelerator resources), S3 state bucket/key and lockfile access,
+   `ecr:DescribeImages`, and deployment writes limited to
+   `ecs:RegisterTaskDefinition`/`ecs:UpdateService` for the production web
+   service, with `iam:PassRole` restricted to existing web task/execution
+   roles. Terraform plan refresh needs additional read/list/describe
+   permissions; grant only as the validated plan requires, never unrestricted
+   IAM or infrastructure mutation. Store the ARN as the **`aws-prod`
+   environment secret** `AWS_TERRAFORM_DEPLOY_ROLE_ARN`.
+3. Obtain the **exact current production** `infra/terraform/terraform.tfvars`
+   from the authorised Terraform operator workspace. Base64-encode it without
+   changing values and store it in the **`aws-prod` environment secret**
+   `PROD_TERRAFORM_TFVARS_B64` (not in Git or chat). Base64 is a transport
+   encoding, **not encryption**. The original file must retain the working
+   values: `create_resources=true`, `deploy_application=true`,
+   `test_mode=false`, `enable_workers=true`, `QUEUE_BACKEND=sqs`,
+   resource names/ARNs, schedules, network and certificate settings.
+   Missing or altered configuration is a hard stop. Never synthesize
+   production tfvars from repository defaults.
+4. Existing `AWS_DEPLOY_ROLE_ARN`, `PROD_SUPABASE_*` and `ECR_REPOSITORY`
+   settings continue to serve the separate ECR build; do not broaden that
+   image-build role to Terraform privileges.
+
+**Fail-closed checks before apply:** The workflow loads S3 remote state
+with locking, snapshots the existing SQS/scheduled worker image tag
+and pins it with `image_tag_worker`, then validates the saved Terraform
+plan using `scripts/aws-release-guard.mjs`. It refuses to apply if Terraform
+would change anything other than replacing the **web** ECS task definition
+for an image-only difference and updating the **web** ECS service's task
+definition reference. It rejects unsafe Terraform defaults, a wrong AWS
+account, image tags not from `main`, any retailer/schedule/worker changes,
+and any infrastructure changes beyond the web image rollout.
+A failed plan is **not** permission to widen the allowlist automatically:
+investigate drift and production settings first.
+
+**First intended release:** After PR validation and workflow merge, run the
+existing ECR build on `main` with `image_mode=prod`; then run the new release
+workflow with its matching image tag, first `apply=false` and then
+`apply=true` through the protected environment. The comparison implementation
+was merged as `ceabe79...`, producing `ceabe79-prod` if built from that
+exact commit. A later main commit has a different tag; a GitHub merge does
+not prove an ECR image exists.
+
+**Rollback:** The same workflow accepts an earlier *main-history*
+known-good `-prod` tag still in ECR, with a new protected plan/apply.
+It does not change Supabase, DNS, the collector's egress gate, or Tesco
+history.
+
+This GitHub/ECS deployment path does **not** make the supervised Tesco
+SQL bridge available in AWS. AWS ECS Tesco fetches previously received
+HTTP 403. Continue supervised Tesco collection only from its authorised
+Work runner with existing safeguards.
+
 ## CI / release gate
 
 - The required status check on `main` is the GitHub Actions **`validate`** job
