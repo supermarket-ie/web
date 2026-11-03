@@ -1,5 +1,38 @@
 # Supermarket.ie — Canonical Project State
 
+## 3 November 2026 — offer-level comparison implementation (feature branch; NOT RELEASED)
+
+The owner approved four explicit retailer **offer-pair** relationships:
+`exact_product`, `comparable_alternative`, `not_comparable` and
+`unverified`. A canonical product and fresh `latest_prices` row are not
+proof of cross-retailer exact identity. Exact three-retailer reporting now
+requires all three independently reviewed pairwise edges. Review findings
+on 183 raw overlapping three-store groups: 130 apparently compatible titles,
+22 material contradictions, 15 different-brand/private-label assessments,
+16 insufficient titles. These are preliminary inference observations; no
+group has independent direct captured evidence from all three retailers,
+so they remain raw overlap rather than verified exact triples.
+
+Branch `feat/evidence-bound-offer-comparisons` adds a separate immutable,
+RLS-protected pair-review ledger, explicit four-way UI labels beside each
+retailer price, retailer pack and normalized unit price disclosure, and
+basket-total warnings/exclusions for alternatives, incompatible packs and
+unverified relationships. `latest_prices`, the supervised Tesco finaliser
+and collection gate are unchanged. No staged Dunnes alternative is
+automatically promoted, and absent review records fail closed to unverified.
+See `docs/retailer-comparison-policy.md` for evidence semantics,
+tests and protected release requirements.
+
+At 14:03 UTC, read-only production had **368 fresh Tesco** prices,
+**143** at the four-day renewal threshold, **183 raw triple overlaps**,
+**seven** preserved pending pages and no active Work egress lease or
+unexpired cooldown. Earliest Tesco expiry is **3 Nov 18:17 UTC**.
+This entry does NOT claim new collection, review approvals, migration,
+merge or AWS deployment from this branch. Existing supervised renewals
+should resume in maximum-ten-request batches in an authorised collector
+runtime; do not use direct Supabase SQL as a substitute for live collection.
+
+
 ## 2 November 2026 — One-time supervised Work access retry completed; exception retired
 
 The owner authorised a narrow, auditable single-use exception after inspecting

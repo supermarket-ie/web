@@ -3,8 +3,9 @@ import type { ShopProduct } from './shop-builder';
 import { hasProductIdentityConflict } from './shopping/product-identity';
 import { dunnesPackSignature } from './dunnes-discovery';
 import { WEEKLY_STORES, type WeeklyStore } from './weekly-shop';
+import { classifyOfferGroup, differentPack, normalizedUnitPrice, type PairReview } from './comparison-policy';
 
-export function buildShopCatalogue(prices: ProductPrice[], now = Date.now()): ShopProduct[] {
+export function buildShopCatalogue(prices: ProductPrice[], now = Date.now(), reviews: PairReview[] = []): ShopProduct[] {
   const products = new Map<string, ShopProduct>();
   for (const row of prices) {
     const observed = Date.parse(row.observed_at);
@@ -21,9 +22,21 @@ export function buildShopCatalogue(prices: ProductPrice[], now = Date.now()): Sh
     };
     const store = row.store as WeeklyStore;
     if (!item.offers[store] || Date.parse(item.offers[store]!.observedAt) < observed) {
-      item.offers[store] = { name: row.store_product_name, price: row.price, observedAt: row.observed_at };
+      item.offers[store] = { name: row.store_product_name, price: row.price, observedAt: row.observed_at, storeProductId: row.store_product_id };
     }
     products.set(item.id, item);
+  }
+  for (const product of products.values()) {
+    const offers = WEEKLY_STORES.flatMap(store => product.offers[store]
+      ? [{ store, storeProductId: product.offers[store]!.storeProductId, name: product.offers[store]!.name, price: product.offers[store]!.price }] : []);
+    const statuses = classifyOfferGroup(offers, reviews, now);
+    for (const store of WEEKLY_STORES) {
+      const offer = product.offers[store];
+      if (!offer) continue;
+      offer.comparisonType = statuses[store] ?? 'unverified';
+      offer.unitPrice = normalizedUnitPrice(offer.name, offer.price);
+      offer.differentPack = offer.comparisonType === 'comparable_alternative' && differentPack(product.name, offer.name);
+    }
   }
   return [...products.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

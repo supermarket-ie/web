@@ -6,6 +6,7 @@ import { trackEvent } from '@/lib/analytics';
 import { saveAgentLandingHandoff } from '@/lib/agent-landing-handoff';
 import { readShopDraft, shopBuilderPrompt, SHOP_BUILDER_LIMIT, SHOP_BUILDER_PATH, SHOP_DRAFT_KEY, type ShopDraft, type ShopProduct } from '@/lib/shop-builder';
 import { weeklyShopTotals, WEEKLY_STORES, WEEKLY_STORE_NAMES } from '@/lib/weekly-shop';
+import { COMPARISON_LABELS } from '@/lib/comparison-policy';
 
 const money = (value: number) => `€${value.toFixed(2)}`;
 const field = 'w-full rounded-xl border border-[#d9e3db] bg-white px-3 py-2.5 text-base text-[#173525] focus:outline-2 focus:outline-offset-2 focus:outline-[#287246]';
@@ -28,14 +29,24 @@ function ProductOption({ product, selected, full, onAdd }: { product: ShopProduc
       </button>
     </div>
     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[#607065]">
-      {WEEKLY_STORES.map(store => <span key={store}>{WEEKLY_STORE_NAMES[store].split(' ')[0]} <strong className="text-[#263e2e]">{product.offers[store] ? money(product.offers[store]!.price) : '—'}</strong></span>)}
+      {WEEKLY_STORES.map(store => {
+        const offer = product.offers[store];
+        return <span key={store}>{WEEKLY_STORE_NAMES[store].split(' ')[0]} <strong className="text-[#263e2e]">{offer ? money(offer.price) : '—'}</strong>
+          {offer && <span className="ml-1 rounded bg-[#f0f7f2] px-1 py-0.5 text-[10px]">{COMPARISON_LABELS[offer.comparisonType ?? 'unverified']}</span>}
+        </span>;
+      })}
     </div>
     <details className="mt-2 text-[11px] leading-5 text-[#607065]">
       <summary className="cursor-pointer underline decoration-[#b4c7ba] underline-offset-2">Retailer products and price dates</summary>
       <ul className="mt-2 space-y-2">
         {WEEKLY_STORES.map(store => {
           const offer = product.offers[store];
-          return <li key={store}><strong>{WEEKLY_STORE_NAMES[store]}:</strong> {offer ? `${offer.name} · ${money(offer.price)} each · checked ${new Date(offer.observedAt).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' })}` : 'Price unavailable'}</li>;
+          return <li key={store}><strong>{WEEKLY_STORE_NAMES[store]}:</strong> {offer ? <>
+            {offer.name} · {money(offer.price)} per retailer pack · {COMPARISON_LABELS[offer.comparisonType ?? 'unverified']}
+            {offer.unitPrice ? ` · ${money(offer.unitPrice.price)} per ${offer.unitPrice.per}` : ''}
+            {offer.differentPack ? ' · different/unknown pack, excluded from same-pack basket total' : ''}
+            {' · checked '}{new Date(offer.observedAt).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
+          </> : 'Price unavailable'}</li>;
         })}
       </ul>
     </details>
@@ -191,10 +202,16 @@ export function ShopBuilder({ suggestions }: { suggestions: ShopProduct[] }) {
           {totals.map(total => <div key={total.store} className="rounded-xl border border-[#dce6de] bg-white p-2.5">
             <p className="text-[11px] font-medium text-[#607065]">{WEEKLY_STORE_NAMES[total.store].split(' ')[0]}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums tracking-tight text-[#173525]">{total.subtotal === null ? '—' : money(total.subtotal)}</p>
-            <p className="mt-1 text-[10px] leading-4 text-[#607065]">{total.selectedCount ? `${total.pricedCount}/${total.selectedCount} priced` : 'Add products'}<br />{total.total !== null ? 'Selected list total' : total.selectedCount ? 'Partial subtotal' : 'to see prices'}</p>
+            <p className="mt-1 text-[10px] leading-4 text-[#607065]">{total.selectedCount ? `${total.pricedCount}/${total.selectedCount} priced` : 'Add products'}<br />{total.total !== null ? 'Verified comparable total' : total.selectedCount ? 'Indicative subtotal' : 'to see prices'}</p>
+            {(total.alternativeCount > 0 || total.unverifiedCount > 0 || total.excludedComparisonCount > 0) &&
+              <p className="mt-1 text-[10px] leading-4 text-[#82591a]">
+                {total.alternativeCount > 0 ? `${total.alternativeCount} comparable alternative(s) · ` : ''}
+                {total.unverifiedCount > 0 ? `${total.unverifiedCount} unverified comparison(s) · ` : ''}
+                {total.excludedComparisonCount > 0 ? `${total.excludedComparisonCount} incompatible pack/item(s) excluded` : ''}
+              </p>}
           </div>)}
         </div>
-        <p className="mt-3 text-[11px] leading-5 text-[#607065]">Missing prices are excluded. Subtotals can cover different products, so a lower subtotal does not mean a cheaper complete shop. Retailer brands and specifications can differ.</p>
+        <p className="mt-3 text-[11px] leading-5 text-[#607065]">Prices are for the retailer packs shown. Unverified relationships are not proof of identical products; different or unknown alternative packs and non-comparable offers are excluded from like-for-like totals. An indicative subtotal cannot establish the cheapest equivalent shop.</p>
         <fieldset className="mt-5 border-t border-[#dce6de] pt-4">
           <legend className="px-1 text-sm font-semibold text-[#354a3b]">Make it work for your household</legend>
           <div className="grid grid-cols-3 gap-2">

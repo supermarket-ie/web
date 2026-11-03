@@ -4,6 +4,8 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ShopBuilder } from '@/components/ShopBuilder';
 import { getAllLatestPrices } from '@/lib/price-data';
+import { getCurrentPairReviews } from '@/lib/comparison-reviews';
+import { COMPARISON_LABELS } from '@/lib/comparison-policy';
 import { buildShopCatalogue } from '@/lib/shop-builder-catalogue';
 import { EXAMPLE_WEEKLY_ITEMS } from '@/lib/weekly-shop';
 
@@ -44,6 +46,7 @@ type EvidenceProduct = {
   name: string;
   category: string;
   prices: Record<string, number>;
+  offers: Record<string, { name: string; comparisonType: keyof typeof COMPARISON_LABELS; unitPrice: { price: number; per: 'kg' | 'l' | 'each' } | null; differentPack: boolean }>;
 };
 
 async function getComparisonData() {
@@ -51,14 +54,21 @@ async function getComparisonData() {
   // product/store. Reading the historical observations table here previously
   // paginated the full observation history during static generation and could
   // push Vercel builds over the 60-second page timeout.
-  const priceRows = await getAllLatestPrices();
-  const catalogue = buildShopCatalogue(priceRows);
+  const [priceRows, reviews] = await Promise.all([getAllLatestPrices(), getCurrentPairReviews()]);
+  const catalogue = buildShopCatalogue(priceRows, Date.now(), reviews);
   const catalogueById = new Map(catalogue.map(product => [product.id, product]));
   const suggestions = [0, 3, 6, 10, 11, 16].map(index => catalogueById.get(EXAMPLE_WEEKLY_ITEMS[index].id)).filter(product => product !== undefined);
 
-  const byProduct = new Map<string, { category: string; stores: Map<string, number> }>();
+  const byProduct = new Map<string, { category: string; stores: Map<string, number>; offers: EvidenceProduct['offers'] }>();
   for (const product of catalogue) {
-    byProduct.set(product.id, { category: product.category, stores: new Map(Object.entries(product.offers).map(([store, offer]) => [store, offer.price])) });
+    byProduct.set(product.id, {
+      category: product.category,
+      stores: new Map(Object.entries(product.offers).map(([store, offer]) => [store, offer.price])),
+      offers: Object.fromEntries(Object.entries(product.offers).map(([store, offer]) => [store, {
+        name: offer.name, comparisonType: offer.comparisonType ?? 'unverified',
+        unitPrice: offer.unitPrice ?? null, differentPack: Boolean(offer.differentPack),
+      }])),
+    });
   }
 
   const MAIN_3: StoreKey[] = ['tesco', 'dunnes', 'supervalu'];
@@ -69,9 +79,10 @@ async function getComparisonData() {
 
   const activeStores = MAIN_3;
   const products: EvidenceProduct[] = [];
-  for (const [id, { category, stores }] of byProduct) {
+  for (const [id, { category, stores, offers }] of byProduct) {
     if (!EVIDENCE_CATEGORIES.includes(category)) continue;
-    products.push({ name: catalogueById.get(id)!.name, category, prices: Object.fromEntries(stores) });
+    if (activeStores.some(store => offers[store]?.comparisonType === 'not_comparable')) continue;
+    products.push({ name: catalogueById.get(id)!.name, category, prices: Object.fromEntries(stores), offers });
   }
 
   const staplePattern = /milk|bread|butter|egg|chicken|beef|banana|apple|potato|pasta|rice|coffee|tea/i;
@@ -146,7 +157,7 @@ export default async function ComparePage() {
         <section className="mb-10 border-t border-[#e3e8e4] pt-9" aria-label="Current supermarket price evidence">
         <p className="mb-5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#397250]">Grounded in current data</p>
         <h2 className="mb-3 text-2xl font-semibold tracking-tight text-[#173525]">Supermarket price comparison in Ireland</h2>
-        <p className="mb-5 max-w-3xl text-sm leading-6 text-[#607065]">These currently matched products have prices at all three supermarkets. Your own shop may have different coverage. Compare the exact retailer product, pack size and date before deciding what works for you.</p>
+        <p className="mb-5 max-w-3xl text-sm leading-6 text-[#607065]">Current prices at three retailers are a raw overlap, not proof of identical products. Each offer below states whether its pairwise identity is independently verified, a reviewed comparable alternative or unverified. Different pack prices must be judged by their unit price.</p>
         {!featured.length && <p className="mb-5 text-sm text-[#607065]">There are no current three-store examples to display. You can still describe your shopping needs above.</p>}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {featured.map(product => (
@@ -157,9 +168,19 @@ export default async function ComparePage() {
                 {activeStores.map(store => (
                   <span key={store} className="rounded-full bg-[#f2f5f2] px-2.5 py-1 text-[11px] text-[#59645c]">
                     {STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#253128]">{fmt(product.prices[store])}</strong>
+                    <span className="ml-1 text-[10px]">{COMPARISON_LABELS[product.offers[store].comparisonType]}</span>
                   </span>
                 ))}
               </div>
+              <details className="mt-3 text-xs text-[#607065]">
+                <summary className="cursor-pointer underline underline-offset-2">Retailer product names and packs</summary>
+                <ul className="mt-2 space-y-1">
+                  {activeStores.map(store => <li key={store}>{STORE_INFO[store].name}: {product.offers[store].name}
+                    {product.offers[store].unitPrice && <span> · {fmt(product.offers[store].unitPrice.price)} per {product.offers[store].unitPrice.per}</span>}
+                    {product.offers[store].differentPack && <span> · different pack, excluded from same-pack basket totals</span>}
+                  </li>)}
+                </ul>
+              </details>
             </article>
           ))}
         </div>
@@ -181,7 +202,7 @@ export default async function ComparePage() {
                   </div>
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667169]">
                     {activeStores.map(store => (
-                      <span key={store}>{STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#354139]">{fmt(product.prices[store])}</strong></span>
+                      <span key={store}>{STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#354139]">{fmt(product.prices[store])}</strong> · {COMPARISON_LABELS[product.offers[store].comparisonType]} · {product.offers[store].name}</span>
                     ))}
                   </div>
                 </div>
@@ -195,7 +216,7 @@ export default async function ComparePage() {
         <section aria-labelledby="comparison-guide-title" className="mb-10 grid gap-6 border-t border-[#e3e8e4] pt-8 sm:grid-cols-2">
           <div>
             <h2 id="comparison-guide-title" className="text-xl font-semibold text-[#173525]">Which supermarket is cheapest for your shop?</h2>
-            <p className="mt-3 text-sm leading-6 text-[#607065]">It depends on the products and quantities you buy. Build your list above to see each retailer’s coverage and subtotal. A total is only complete when every selected product has a current matched price; partial subtotals cannot establish the cheapest complete shop.</p>
+            <p className="mt-3 text-sm leading-6 text-[#607065]">It depends on the products and quantities you buy. Build your list above to see each retailer’s coverage and subtotal. A verified total also requires independent pairwise identity evidence for compatible packs; partial or unverified subtotals cannot establish the cheapest equivalent shop.</p>
           </div>
           <div>
             <h2 className="text-xl font-semibold text-[#173525]">What is included in these prices?</h2>

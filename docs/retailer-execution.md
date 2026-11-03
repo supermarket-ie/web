@@ -434,3 +434,30 @@ Dunnes products, exactly eight more than the earlier 18/86 result. Sixty remain:
 Dunnes resolution queue is now 169 records. Dunnes remains at 921/2,462 live
 trusted products (37.41%) and 74.50% demand coverage; SuperValu remains at
 1,594/2,462 (64.74%) and 81.56% demand coverage.
+
+
+## 3 November 2026 — retailer offer identity and comparison labels
+
+`latest_prices` retains its **exact-to-canonical trusted-price** boundary.
+A current price does not certify that two retailers' products are the same.
+After successful guarded retailer collection, independently capture and retain
+direct SKU-bound response evidence, original body hash, source URL, capture
+UTC time, brand/GTIN/variant/formulation/quantity/pack and review rationale.
+The separate reviewed pairwise relationship is either **Exact product**,
+**Comparable alternative**, **Not comparable** or **Unverified**. Review all
+three pairs before advertising a three-store exact comparison. Contradictory
+packs, variants, species and diets remain rejected; missing evidence stays
+unverified. AI inference proposes, never approves a record by confidence.
+
+A comparable own-brand or different-pack alternative must be reviewed for
+function, intended use, dietary compatibility and current unit price. Its
+actual retailer title/pack and explicit alternative label appear beside the
+price; unequal packs cannot be priced as identical basket items. Do not
+change existing exact mapping/collector approval thresholds to obtain
+alternative coverage. See `docs/retailer-comparison-policy.md`.
+
+Priority remains supervised Tesco renewal before ordinary and reviewed-held
+expansion, using the approved SQL bridge, 10-request maximum batches,
+leases/pacing/circuit breakers and guarded finaliser. Fresh Tesco prices can
+be valid without fresh peers. Preserve the seven unresolved pages, exclude
+shared SKUs and never restart a stopped/unknown request.

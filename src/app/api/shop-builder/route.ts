@@ -1,4 +1,5 @@
 import { getAllLatestPrices } from '@/lib/price-data';
+import { getCurrentPairReviews } from '@/lib/comparison-reviews';
 import { buildShopCatalogue, searchShopCatalogue } from '@/lib/shop-builder-catalogue';
 import { SHOP_BUILDER_LIMIT } from '@/lib/shop-builder';
 
@@ -10,7 +11,8 @@ export async function GET(request: Request) {
     return Response.json({ error: 'Search for a product using 2–80 characters.' }, { status: 400 });
   }
   try {
-    const catalogue = buildShopCatalogue(await getAllLatestPrices());
+    const [prices, reviews] = await Promise.all([getAllLatestPrices(), getCurrentPairReviews()]);
+    const catalogue = buildShopCatalogue(prices, Date.now(), reviews);
     const selectedIds = new Set(ids);
     const products = ids.length ? catalogue.filter(product => selectedIds.has(product.id)) : searchShopCatalogue(catalogue, query);
     return Response.json({ products }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=60' } });

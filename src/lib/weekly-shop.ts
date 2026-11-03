@@ -1,4 +1,5 @@
 import type { ProductPrice } from '@/lib/price-data';
+import { classifyOfferGroup, differentPack, normalizedUnitPrice, type ComparisonType, type PairReview } from './comparison-policy';
 
 export const WEEKLY_SHOP_PATH = '/cost-of-weekly-shop-ireland';
 export const WEEKLY_STORES = ['tesco', 'dunnes', 'supervalu'] as const;
@@ -29,7 +30,7 @@ export const EXAMPLE_WEEKLY_ITEMS = [
   { id: '153316b3-ddda-4af4-90cb-4de2ebca26f9', name: 'Fairy Max Power Lemon Washing Up Liquid 660ml', quantity: 1 },
 ];
 
-export type WeeklyOffer = { price: number; name: string; observedAt: string };
+export type WeeklyOffer = { price: number; name: string; observedAt: string; storeProductId?: string; comparisonType?: ComparisonType; unitPrice?: ReturnType<typeof normalizedUnitPrice>; differentPack?: boolean };
 export type WeeklyItem = {
   id: string;
   name: string;
@@ -37,7 +38,7 @@ export type WeeklyItem = {
   offers: Partial<Record<WeeklyStore, WeeklyOffer>>;
 };
 
-export function buildWeeklyExample(prices: ProductPrice[], now = Date.now()): WeeklyItem[] {
+export function buildWeeklyExample(prices: ProductPrice[], now = Date.now(), reviews: PairReview[] = []): WeeklyItem[] {
   const items: WeeklyItem[] = EXAMPLE_WEEKLY_ITEMS.map(item => ({ ...item, offers: {} }));
   const byId = new Map(items.map(item => [item.id, item]));
   for (const price of prices) {
@@ -50,7 +51,19 @@ export function buildWeeklyExample(prices: ProductPrice[], now = Date.now()): We
     const store = price.store as WeeklyStore;
     if (item.offers[store] && Date.parse(item.offers[store]!.observedAt) >= observed) continue;
     item.name = price.canonical_name;
-    item.offers[store] = { price: price.price, name: price.store_product_name, observedAt: price.observed_at };
+    item.offers[store] = { price: price.price, name: price.store_product_name, observedAt: price.observed_at, storeProductId: price.store_product_id };
+  }
+  for (const item of items) {
+    const offers = WEEKLY_STORES.flatMap(store => item.offers[store]
+      ? [{ store, storeProductId: item.offers[store]!.storeProductId, name: item.offers[store]!.name, price: item.offers[store]!.price }] : []);
+    const classification = classifyOfferGroup(offers, reviews, now);
+    for (const store of WEEKLY_STORES) {
+      const offer = item.offers[store];
+      if (!offer) continue;
+      offer.comparisonType = classification[store] ?? 'unverified';
+      offer.unitPrice = normalizedUnitPrice(offer.name, offer.price);
+      offer.differentPack = offer.comparisonType === 'comparable_alternative' && differentPack(item.name, offer.name);
+    }
   }
   return items;
 }
@@ -58,15 +71,25 @@ export function buildWeeklyExample(prices: ProductPrice[], now = Date.now()): We
 export function weeklyShopTotals(items: WeeklyItem[], quantities: Record<string, number>) {
   const selected = items.filter(item => Number.isInteger(quantities[item.id]) && quantities[item.id] > 0 && quantities[item.id] <= 20);
   return WEEKLY_STORES.map(store => {
-    const priced = selected.filter(item => item.offers[store]);
-    const subtotalCents = priced.reduce((sum, item) => sum + Math.round(item.offers[store]!.price * 100) * quantities[item.id], 0);
+    const offers = selected.flatMap(item => item.offers[store] ? [{ item, offer: item.offers[store]! }] : []);
+    const alternatives = offers.filter(({ offer }) => offer.comparisonType === 'comparable_alternative');
+    const unverified = offers.filter(({ offer }) => (offer.comparisonType ?? 'unverified') === 'unverified');
+    const incompatible = offers.filter(({ offer }) => offer.comparisonType === 'not_comparable' || offer.differentPack);
+    // A different pack is a genuine offer but cannot be multiplied as the
+    // selected exact pack in a basket total.
+    const priced = offers.filter(({ offer }) => offer.comparisonType !== 'not_comparable' && !offer.differentPack);
+    const subtotalCents = priced.reduce((sum, { item, offer }) => sum + Math.round(offer.price * 100) * quantities[item.id], 0);
     return {
       store,
       selectedCount: selected.length,
       pricedCount: priced.length,
       missingCount: selected.length - priced.length,
+      alternativeCount: alternatives.length,
+      unverifiedCount: unverified.length,
+      excludedComparisonCount: incompatible.length,
       subtotal: priced.length ? subtotalCents / 100 : null,
-      total: selected.length > 0 && priced.length === selected.length ? subtotalCents / 100 : null,
+      total: selected.length > 0 && priced.length === selected.length && unverified.length === 0
+        ? subtotalCents / 100 : null,
     };
   });
 }

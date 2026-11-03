@@ -211,3 +211,33 @@ inference is blocked by an unavailable local Anthropic credential. Vercel does
 have a configured provider key; it was not exported. Run the reviewed CLI in an
 authorized protected runtime with verified current token rates. Do not add an
 unauthenticated inference endpoint or put credentials in a build/log/report.
+
+
+## 3 November 2026 — separate commercial comparison outcome
+
+The historic intersection A–E categories are **audit/association categories**,
+not the new customer-facing product-comparison types. The approved pairwise
+relationship ledger records `exact_product`, `comparable_alternative`,
+`not_comparable` or `unverified` per two retailer offers. The output of
+`branded-inference` is untrusted candidate input: neither a confident
+`exact_match` nor `related_different_pack` approves a public claim.
+Only direct, SKU-bound original captures with source IDs, body hashes,
+checked pack/variant/GTIN/manufacturer/ingredient facts, independent review
+and a non-expired 14-day horizon can enter approved positive edges.
+
+For Tesco, use the supervised page evidence; for Dunnes/SuperValu, original
+captured direct-product responses. Listing-only or refresh-attested records
+do not establish independent exact corroboration. All three pairwise edges
+must be exact before recording an exact three-retailer group. Alternatives
+are a **separate count**, never included in the exact group metric.
+Unverified/non-comparable relationships remain in the audit dataset but not
+in equivalent-price claims. The UI shows retailer title, pack, unit price
+and explicit alternative/uncertainty labels. `latest_prices` continues to
+protect exact offer price freshness and provenance; the new relationship
+ledger never writes prices.
+
+The 3 November 183-overlap title audit yielded 130 compatible-looking,
+22 contradictory, 15 different-brand and 16 insufficient-title groups.
+These preliminary findings are not verified classifications and lack
+all-three independent direct captures. See
+`docs/retailer-comparison-policy.md` for the decision contract and release.
