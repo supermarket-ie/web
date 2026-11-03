@@ -118,3 +118,40 @@ test('already-current image with no mutations is safe', () => {
   plan.resource_changes = [];
   assert.match(verifyPlan(plan, newTag, oldTag), /Already/);
 });
+
+test('AWS-refreshed container/task defaults are not treated as changes', () => {
+  // Terraform refreshes the `before` from AWS, which echoes control-plane
+  // defaults the config never sets. Only the image should drive the release.
+  const plan = basePlan();
+  const entry = plan.resource_changes[0];
+  const before = JSON.parse(entry.change.before.container_definitions);
+  before[0].portMappings = [{ containerPort: 3000, hostPort: 3000, protocol: 'tcp' }];
+  before[0].mountPoints = [];
+  before[0].systemControls = [];
+  before[0].volumesFrom = [];
+  entry.change.before.container_definitions = JSON.stringify(before);
+  const after = JSON.parse(entry.change.after.container_definitions);
+  after[0].portMappings = [{ containerPort: 3000, protocol: 'tcp' }];
+  entry.change.after.container_definitions = JSON.stringify(after);
+  entry.change.before.enable_fault_injection = false;
+  entry.change.before.ipc_mode = '';
+  entry.change.before.pid_mode = '';
+  entry.change.after.enable_fault_injection = null;
+  entry.change.after.ipc_mode = null;
+  entry.change.after.pid_mode = null;
+  assert.match(verifyPlan(plan, newTag, oldTag), /Image-only/);
+});
+
+test('a real non-empty port mapping or task attribute is still rejected', () => {
+  const portPlan = basePlan();
+  const portEntry = portPlan.resource_changes[0];
+  const after = JSON.parse(portEntry.change.after.container_definitions);
+  after[0].portMappings = [{ containerPort: 4000, protocol: 'tcp' }];
+  portEntry.change.after.container_definitions = JSON.stringify(after);
+  assert.throws(() => verifyPlan(portPlan, newTag, oldTag), /web container changed/);
+
+  const attrPlan = basePlan();
+  attrPlan.resource_changes[0].change.before.cpu = '512';
+  attrPlan.resource_changes[0].change.after.cpu = '1024';
+  assert.throws(() => verifyPlan(attrPlan, newTag, oldTag), /web task attribute changed/);
+});
