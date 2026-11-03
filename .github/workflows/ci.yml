@@ -45,7 +45,7 @@ jobs:
         run: npm run typecheck:branded
 
       - name: AWS production release policy tests
-        run: node --test scripts/aws-release-guard.test.mjs
+        run: node --test scripts/aws-release-guard.check.mjs
 
       - name: Behavioural release gate
         run: npm run test:behavioural
