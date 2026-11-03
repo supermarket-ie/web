@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 
 export default async function WeeklyShopCostPage() {
   const [prices, reviews] = await Promise.all([getAllLatestPrices(), getCurrentPairReviews()]);
-  const items = buildWeeklyExample(prices, Date.now(), reviews);
+  const items = buildWeeklyExample(prices, undefined, reviews);
   const dates = items.flatMap(item => Object.values(item.offers).map(offer => offer.observedAt)).sort();
   const formatDate = (value: string) => new Date(value).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   const observedLabel = dates.length ? `${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}` : null;
