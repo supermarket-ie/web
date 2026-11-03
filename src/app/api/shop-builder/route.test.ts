@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const readPrices = vi.hoisted(() => vi.fn());
+const readReviews = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/price-data', () => ({ getAllLatestPrices: readPrices }));
+vi.mock('@/lib/comparison-reviews', () => ({ getCurrentPairReviews: readReviews }));
 import { GET } from './route';
 
-beforeEach(() => { readPrices.mockReset(); });
+beforeEach(() => { readPrices.mockReset(); readReviews.mockReset(); readReviews.mockResolvedValue([]); });
 
 describe('public shop builder search', () => {
   it('rejects unbounded searches and invalid restoration IDs before reading prices', async () => {

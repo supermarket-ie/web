@@ -4,6 +4,7 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { WeeklyShopCalculator } from '@/components/WeeklyShopCalculator';
 import { getAllLatestPrices } from '@/lib/price-data';
+import { getCurrentPairReviews } from '@/lib/comparison-reviews';
 import { buildWeeklyExample, WEEKLY_SHOP_PATH } from '@/lib/weekly-shop';
 
 export const revalidate = 1800;
@@ -21,7 +22,8 @@ export const metadata: Metadata = {
 };
 
 export default async function WeeklyShopCostPage() {
-  const items = buildWeeklyExample(await getAllLatestPrices());
+  const [prices, reviews] = await Promise.all([getAllLatestPrices(), getCurrentPairReviews()]);
+  const items = buildWeeklyExample(prices, undefined, reviews);
   const dates = items.flatMap(item => Object.values(item.offers).map(offer => offer.observedAt)).sort();
   const formatDate = (value: string) => new Date(value).toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   const observedLabel = dates.length ? `${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}` : null;
@@ -48,7 +50,7 @@ export default async function WeeklyShopCostPage() {
           <div className="mt-4 grid gap-5 text-sm leading-6 text-[#607065] sm:grid-cols-2">
             <p>Each line shows a specific catalogue product and the retailer product currently matched to it. We multiply its observed pack or item price by your chosen quantity, then add the priced lines for each supermarket. The example starts with two cartons of milk, two tins each of tomatoes and beans, and one of each other listed product.</p>
             <p>Prices come from our current retailer data and must have been observed within the preceding seven days when this page refreshes. We show the actual observation date for each price. Prices and availability can change before you shop; the retailer confirms the final price.</p>
-            <p>Missing prices remain missing. A retailer gets a complete basket total only when every selected product has a current price there. A partial subtotal excludes unpriced lines and cannot establish which supermarket is cheapest for your whole shop.</p>
+            <p>Missing, unverified and non-comparable relationships are disclosed separately. A retailer gets a verified complete basket total only when every selected product has a current compatible offer with independently corroborated pairwise equivalence. A partial subtotal excludes unpriced lines and cannot establish which supermarket is cheapest for your whole shop.</p>
             <p>This basket is an editable example, not a survey of average Irish household spending or a nutritionally complete meal plan. Branded and own-label products can differ; the retailer names and pack descriptions help you judge the choices. Delivery, conditional vouchers and unverified loyalty discounts are excluded.</p>
           </div>
         </section>

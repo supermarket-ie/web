@@ -18,6 +18,7 @@ export function fmt(n: number) { return `€${n.toFixed(2)}`; }
 export function pct(was: number, now: number) { return Math.round(((was - now) / was) * 100); }
 
 export type ProductPrice = {
+  store_product_id?: string;
   canonical_product_id: string;
   canonical_name: string;
   category: string;
@@ -82,7 +83,7 @@ export async function getAllLatestPrices(options: { bypassCache?: boolean } = {}
         'latest_prices.all_current_prices',
         () => supabaseAdmin
           .from('latest_prices')
-          .select('canonical_product_id, canonical_name, category, store, price, was_price, on_promotion, store_product_name, store_sku, store_url, observed_at, source, relationship_type, freshness_state')
+          .select('store_product_id, canonical_product_id, canonical_name, category, store, price, was_price, on_promotion, store_product_name, store_sku, store_url, observed_at, source, relationship_type, freshness_state')
           .order('canonical_product_id')
           .order('store')
           .range(from, from + 999),

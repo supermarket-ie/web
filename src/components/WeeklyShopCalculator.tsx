@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { ArrowRight, RotateCcw, ShoppingBasket } from 'lucide-react';
 import { trackEvent } from '@/lib/analytics';
 import { saveAgentLandingHandoff } from '@/lib/agent-landing-handoff';
+import { COMPARISON_LABELS } from '@/lib/comparison-policy';
 import {
   WEEKLY_SHOP_PATH, WEEKLY_STORES, WEEKLY_STORE_NAMES,
   weeklyShopPrompt, weeklyShopTotals, type WeeklyItem,
@@ -99,12 +100,12 @@ export function WeeklyShopCalculator({ items }: { items: WeeklyItem[] }) {
             <div key={total.store} className="rounded-2xl border border-[#dce3dd] bg-white p-5">
               <h3 className="text-sm font-semibold text-[#354a3b]">{WEEKLY_STORE_NAMES[total.store]}</h3>
               <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-[#173525]">{total.subtotal === null ? '—' : money(total.subtotal)}</p>
-              <p className="mt-1 text-xs font-semibold text-[#52665a]">{total.total !== null ? 'Total for selected products' : total.pricedCount ? 'Priced items subtotal' : 'No priced items selected'}</p>
-              <p className="mt-3 text-xs leading-5 text-[#6d7c71]">{total.pricedCount} of {total.selectedCount} selected products priced{total.missingCount > 0 ? ` · ${total.missingCount} missing prices` : ''}</p>
+              <p className="mt-1 text-xs font-semibold text-[#52665a]">{total.verifiedComparableTotal !== null ? 'Verified comparable total' : total.pricedCount ? 'Indicative subtotal' : 'No priced items selected'}</p>
+              <p className="mt-3 text-xs leading-5 text-[#6d7c71]">{total.pricedCount} of {total.selectedCount} selected products priced{total.missingCount > 0 ? ` · ${total.missingCount} missing/incompatible` : ''}{total.alternativeCount > 0 ? ` · ${total.alternativeCount} comparable alternatives` : ''}{total.unverifiedCount > 0 ? ` · ${total.unverifiedCount} unverified` : ''}</p>
             </div>
           ))}
         </div>
-        <p className="mb-5 text-sm leading-6 text-[#607065]">Subtotals can cover different products, so a lower subtotal does not mean a cheaper complete shop. A missing price means we cannot currently price that product; it does not mean the retailer is out of stock.</p>
+        <p className="mb-5 text-sm leading-6 text-[#607065]">Only independently established pairwise relationships qualify for verified comparable totals. Unverified prices may appear in indicative subtotals, but cannot establish a cheaper equivalent shop. Different/unknown alternative packs and non-comparable offers are excluded from like-for-like totals.</p>
 
         <div className="overflow-x-auto rounded-2xl border border-[#dce3dd] bg-white" role="region" aria-label="Editable example basket prices" tabIndex={0}>
           <table className="w-full min-w-[740px] border-collapse text-left text-sm">
@@ -126,7 +127,8 @@ export function WeeklyShopCalculator({ items }: { items: WeeklyItem[] }) {
                     {offer ? <>
                       <span className="block font-semibold tabular-nums text-[#173525]">{quantities[item.id] > 0 ? money(Math.round(offer.price * 100) * quantities[item.id] / 100) : 'Not included'}</span>
                       <span className="mt-1 block text-xs leading-5 text-[#607065]">{offer.name}</span>
-                      <span className="mt-1 block text-[11px] leading-4 text-[#718076]">{money(offer.price)} each · checked {date(offer.observedAt)}</span>
+                      <span className="mt-1 block text-[11px] font-semibold text-[#82591a]">{COMPARISON_LABELS[offer.comparisonType ?? 'unverified']}{offer.differentPack ? ' · different/unknown pack, excluded from equivalent total' : ''}</span>
+                      <span className="mt-1 block text-[11px] leading-4 text-[#718076]">{money(offer.price)} per retailer pack · checked {date(offer.observedAt)}{offer.unitPrice ? ` · ${money(offer.unitPrice.price)} per ${offer.unitPrice.per}` : ''}</span>
                     </> : <span className="text-xs text-[#718076]">Price unavailable</span>}
                   </td>;
                 })}
@@ -135,7 +137,7 @@ export function WeeklyShopCalculator({ items }: { items: WeeklyItem[] }) {
           </table>
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="max-w-2xl text-xs leading-5 text-[#607065]">Retailer brands and specifications can differ. Check the product names above. Prices shown exclude delivery, vouchers and any loyalty discount we cannot verify.</p>
+          <p className="max-w-2xl text-xs leading-5 text-[#607065]">Retailer brands, variants and pack sizes can differ. Only independently approved relationships are labelled Exact product or Comparable alternative. Review retailer names and normalized unit prices; delivery, vouchers and unverified loyalty discounts are excluded.</p>
           <a href="#personalise" className="rounded-xl bg-[#173525] px-5 py-3 text-sm font-semibold text-white hover:bg-[#28553a]">Use this to plan my week ↑</a>
         </div>
       </section>
