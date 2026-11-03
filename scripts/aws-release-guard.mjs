@@ -85,8 +85,8 @@ function verifyTaskDefinition(change, desiredTag) {
   const afterImage = imageFromDefinition(after.container_definitions, 'web');
   assert(afterImage.tag === desiredTag, 'new web task image does not match requested tag');
   assert(IMAGE_TAG_PATTERN.test(beforeImage.tag), 'current web image has an unexpected tag');
-  const previous = structuredClone(beforeImage.container);
-  const next = structuredClone(afterImage.container);
+  const previous = JSON.parse(JSON.stringify(beforeImage.container));
+  const next = JSON.parse(JSON.stringify(afterImage.container));
   next.image = previous.image;
   assert(equal(previous, next), 'web container changed beyond its image');
   const computed = new Set(['arn', 'arn_without_revision', 'id', 'revision']);
