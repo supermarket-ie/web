@@ -102,3 +102,20 @@ payload problem is fixed, use batches of **at most 10**. Existing due
 renewals precede expansion. Peer relationship verification is asynchronous:
 a verified Tesco price must not be rejected solely because Dunnes or
 SuperValu currently lacks a price.
+
+## Release checkpoint — 3 November 2026
+
+PR #304 is merged into `main` at `fc7d2cc3d76f5ce57e8b86b9bbf454c11cf1a41a`
+with GitHub Actions `validate` green. The protected Supabase migration is
+installed as `20261103142905_offer_comparison_review_ledger`: verified RLS,
+service-role SELECT-only, no anonymous/authenticated write access and a
+SECURITY INVOKER validation trigger without public/API EXECUTE. A forged
+capture reference was rejected in a rollback-only test. The ledger holds
+zero approved decisions; 183 raw triple overlaps remain distinct from
+zero independently corroborated exact triples under this review policy.
+
+**AWS image build, ECR push and Terraform ECS rollout remain outstanding.**
+Until live deployment, customer-facing UI has not changed; until independent
+peer source captures and approved pair decisions exist, no alternative count
+can truthfully increase. The supervised Tesco collector did not run in this
+session, and its original safeguards remain unchanged.
