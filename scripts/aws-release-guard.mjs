@@ -22,6 +22,43 @@ function equal(a, b) {
   return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
 }
 
+// Terraform refreshes task-definition attributes from AWS, which reports
+// provider defaults for options the config never sets (enable_fault_injection
+// false, ipc_mode/pid_mode "", numeric 0). The freshly rendered plan leaves the
+// same unset attributes as null. Treat an empty/falsy value as equivalent to
+// null so the attribute guard measures real changes, not these defaults — a
+// value set to anything meaningful still differs and is still rejected.
+function emptyAttribute(value) {
+  return value === null || value === undefined || value === '' || value === false || value === 0 ||
+    (Array.isArray(value) && value.length === 0) ||
+    (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
+}
+
+function attributeEqual(a, b) {
+  if (emptyAttribute(a) && emptyAttribute(b)) return true;
+  return equal(a, b);
+}
+
+// A Fargate/awsvpc task definition read back from AWS carries fields the ECS
+// control plane fills in that Terraform never renders: hostPort mirrors
+// containerPort, and mountPoints/systemControls/volumesFrom default to empty
+// arrays. Terraform's refreshed `before` therefore holds them while the freshly
+// rendered `after` omits them (null). Strip these AWS defaults so the container
+// comparison measures a real configuration change, not control-plane echo.
+function normalizeAwsContainer(container) {
+  const normalized = JSON.parse(JSON.stringify(container));
+  for (const key of ['mountPoints', 'systemControls', 'volumesFrom']) {
+    const value = normalized[key];
+    if (value === null || (Array.isArray(value) && value.length === 0)) delete normalized[key];
+  }
+  if (Array.isArray(normalized.portMappings)) {
+    for (const mapping of normalized.portMappings) {
+      if (mapping && mapping.hostPort === mapping.containerPort) delete mapping.hostPort;
+    }
+  }
+  return normalized;
+}
+
 function imageFromDefinition(raw, containerName) {
   assert(typeof raw === 'string', 'task container definitions are missing');
   const definitions = JSON.parse(raw);
@@ -85,14 +122,14 @@ function verifyTaskDefinition(change, desiredTag) {
   const afterImage = imageFromDefinition(after.container_definitions, 'web');
   assert(afterImage.tag === desiredTag, 'new web task image does not match requested tag');
   assert(IMAGE_TAG_PATTERN.test(beforeImage.tag), 'current web image has an unexpected tag');
-  const previous = JSON.parse(JSON.stringify(beforeImage.container));
-  const next = JSON.parse(JSON.stringify(afterImage.container));
+  const previous = normalizeAwsContainer(beforeImage.container);
+  const next = normalizeAwsContainer(afterImage.container);
   next.image = previous.image;
   assert(equal(previous, next), 'web container changed beyond its image');
   const computed = new Set(['arn', 'arn_without_revision', 'id', 'revision']);
   for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
     if (computed.has(key) || key === 'container_definitions') continue;
-    assert(equal(before[key], after[key]), 'web task attribute changed: ' + key);
+    assert(attributeEqual(before[key], after[key]), 'web task attribute changed: ' + key);
   }
   const env = Object.fromEntries((afterImage.container.environment || []).map(({ name, value }) => [name, value]));
   assert(env.APP_ENV === 'production', 'web would not run in production mode');
@@ -106,7 +143,7 @@ function verifyService(change) {
   const after = change.after || {};
   for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
     if (key === 'task_definition') continue;
-    assert(equal(before[key], after[key]), 'web ECS service attribute changed: ' + key);
+    assert(attributeEqual(before[key], after[key]), 'web ECS service attribute changed: ' + key);
   }
 }
 

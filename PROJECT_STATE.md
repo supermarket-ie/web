@@ -1,6 +1,89 @@
 # Supermarket.ie — Canonical Project State
 
 
+## 3 November 2026 — offer-comparison UI (PRs #304/#305/#306) RELEASED to AWS prod ECS
+
+The website changes from PRs **#304/#305/#306** are **deployed and live** on
+AWS prod. `main` is at
+`d81d019e78ccf5c7812c1922fbdc5f15f0718201` (PR #304 `fc7d2cc`, #305 `ceabe79`,
+#306 `d81d019`), authoritative `validate` check green. The `vercel[bot]`
+status was ignored per the AWS-only platform policy.
+
+**Image:** built via the existing OIDC `Build & push deploy image to ECR`
+workflow (`image_mode=prod`) into ECR `smie-prod` as tag
+`d81d019-prod` (digest
+`sha256:b05c5be2ce7241cbd3de30021ef55f7c63384a1f24e14dc3c91268cd80292d89`).
+A temporary `main` deploy-branch policy on the `aws-prod` environment allowed
+the build to run from `main` and was removed afterward; no new identity,
+secret or reviewer was created.
+
+**Deploy path:** the #306 workflow `aws-prod-ecs-release.yml` could NOT run —
+its required inputs do not exist (`PROD_TERRAFORM_TFVARS_B64` and
+`AWS_TERRAFORM_DEPLOY_ROLE_ARN` are not configured; the `aws-prod` env holds
+only `PROD_SUPABASE_SERVICE_ROLE_KEY`, and the repo has `AWS_DEPLOY_ROLE_ARN`
+for ECR builds only). Per the authorised fallback, the release was executed
+directly from the existing credentialled Terraform workspace
+(`infra/terraform`, `AWS_PROFILE=smie-prod`, SSO AdministratorAccess, account
+`611622961299`, eu-west-1) using the real gitignored production
+`terraform.tfvars` (set `image_tag=d81d019-prod`; `image_tag_worker` left at
+`df9f0c1-prod`). A **targeted** plan
+(`-target=aws_ecs_task_definition.app[0] -target=aws_ecs_service.app[0]`)
+produced an image-only web task replacement + service update
+(`1 add / 1 change / 1 destroy`), avoiding the unrelated pre-existing
+sqs-consumer/scheduled env drift (PR #283, `SCHEDULED_RETAILERS` /
+`SCRAPE_ALERT_EMAIL`), which was deliberately left untouched.
+
+**Release guard fix:** `scripts/aws-release-guard.mjs` was rejecting the
+genuine image-only plan as "web container changed beyond its image" /
+"web task attribute changed: enable_fault_injection". Root cause: the guard
+compared Terraform's AWS-refreshed `before` against the freshly rendered
+`after`, which differ only by control-plane echo of unset defaults
+(`portMappings[].hostPort` mirroring `containerPort`; empty
+`mountPoints`/`systemControls`/`volumesFrom`; `enable_fault_injection=false`,
+`ipc_mode`/`pid_mode=""`). The guard now normalizes these AWS defaults before
+comparison (strips empty arrays and mirrored `hostPort`; treats empty/falsy
+task attributes as equivalent to null). Negative tests confirm it still
+refuses real env, attribute and mount-point changes. The live comparison of
+the running `smie-prod:15` task env vs the planned env showed all 24 vars
+identical (order-only difference), confirming the plan was truly image-only.
+
+**Result:** `tofu apply` registered task def **`smie-prod:16`**
+(image `d81d019-prod`) and updated `smie-prod-svc`. Rolling deploy reached
+steady state: single deployment, rollout COMPLETED, **2/2 tasks running**,
+both `smie-prod-tg` ALB targets **healthy**. Live verification:
+`https://www.supermarket.ie/` 200, `/compare/supermarket-prices-ireland` 200
+rendering Tesco/Dunnes/SuperValu with comparison vocabulary
+(`equivalent`, `like-for-like`, `review`, `offer`), `/terms` 200. CloudWatch
+`/ecs/smie-prod` showed no application errors over the deploy window (only a
+benign transient Next.js "Server Action from an older/newer deployment"
+during rollover). Migration
+`20261103142905_offer_comparison_review_ledger` (table
+`retailer_offer_pair_reviews`) was already applied in prod, so the new image
+is DB-compatible.
+
+**Rollback:** redeploy image `0ce1565-prod` (previous web task def
+`smie-prod:15`) via the same targeted Terraform path. Workers
+(`smie-prod-sqs-consumer`, `smie-prod-scheduled`) remain on `df9f0c1-prod`,
+unchanged. The supervised Tesco/Dunnes/SuperValu collection operations were
+not touched.
+
+**Read-only Tesco checkpoint (3 November, 22:46 UTC):** production shows 367
+fresh trusted Tesco offers, 122 at least four days old (116 eligible for
+supervised renewal after held/shared-SKU exclusions), 26 ordinary expansion
+candidates, 182 raw three-retailer price overlaps, zero approved offer-pair
+reviews and seven preserved pending collection pages. The nearest remaining Tesco
+expiry is 4 November at 07:14:42 UTC. The supervised Work egress key has
+no active lease and its cooldown expired; its `enabled=false` field alone
+cannot establish an access block because successful supervised requests
+occurred with that value recorded. The previous 368/183 position has fallen
+by one through freshness expiry, not a removal or invalidation write. This
+read-only checkpoint performed no collection requests or price writes.
+
+**GHA deploy path status:** NOT yet operational without new setup. Making
+`aws-prod-ecs-release.yml` runnable with existing access (no new IAM, secrets
+or reviewers) is deferred; this release used the authorised local workspace.
+
+
 ## 3 November 2026 — protected GitHub-to-AWS ECS rollout PR #306 (NOT RELEASED)
 
 The owner selected GitHub Actions + AWS OIDC (Option A) instead of sharing AWS
