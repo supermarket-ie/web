@@ -1,5 +1,38 @@
 # Supermarket.ie — Canonical Project State
 
+## 3 November 2026 — offer comparison review ledger merged and migrated; ECS NOT DEPLOYED
+
+PR **#304** was squash-merged to GitHub `main` as
+`fc7d2cc3d76f5ce57e8b86b9bbf454c11cf1a41a` after the
+authoritative GitHub Actions **`validate`** job passed (lint, full tests,
+supervised Tesco/discovery/branded TypeScript checks, behavioural gate and
+Next.js build). This implements the offer-pair `exact_product` /
+`comparable_alternative` / `not_comparable` / `unverified`
+classification and frontend disclosure paths. A genuine exact triple
+requires all three verified pairs; unknown relations default to unverified.
+
+Protected Supabase migration **`20261103142905_offer_comparison_review_ledger`**
+was applied. Verified: RLS enabled, `anon` has no SELECT,
+`authenticated` has no INSERT, `service_role` has SELECT but not INSERT,
+validation function is SECURITY INVOKER with no API-role EXECUTE, and an
+invalid source-ID/hash positive review failed a rolled-back negative test.
+The new ledger has **zero approved comparison reviews**, so **zero
+independently verified exact triples or labelled alternatives were added
+by this change**. Existing `latest_prices` and all Tesco operational
+tables, checks and seven pending pages are unaffected.
+
+**Not yet released:** the SHA-tagged ECR build and Terraform rollout to
+`smie-prod-svc` have not run from this session; no AWS credentials/CLI
+or supervised Work collector executable are mounted here. The site still
+uses its prior image. No Tesco renewals, expansion requests or price
+writes were executed by this implementation task. Do not mistake a GitHub
+merge or database migration for a live UI deployment or additional Tesco
+coverage. Resume the approved supervised collector in its authorised
+Node 24/SQL-bridge workspace, with due renewals first, `--exclude-shared-sku`,
+10-request maximum batches, normal egress cooldown/lease and guarded
+finalisation. Its genuine network/identity breakers remain mandatory.
+
+
 ## 3 November 2026 — offer-level comparison implementation (feature branch; NOT RELEASED)
 
 The owner approved four explicit retailer **offer-pair** relationships:
