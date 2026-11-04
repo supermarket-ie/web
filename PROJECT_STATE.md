@@ -1,5 +1,28 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — recovery checkpoint and supervised interruption
+
+Four additional guarded prices raised fresh Tesco coverage from 452 to 456
+across six charged requests. One live check was held for availability/identity;
+one request remains pending after the supervisor was interrupted before its
+result was committed. Preserve that reservation and never repeat the request
+without authoritative reconciliation. The original eight unresolved historical
+requests remain preserved as well. Conservative accounting charges 568 since
+31 October, leaving 432 under the original 1,000-request ceiling.
+
+The evidence-first repair workflow passed all required GitHub validation and
+merged in PR #319. Local verification passed 25 repair transaction tests and
+27 independent identity tests, TypeScript and targeted ESLint. Eight non-fresh,
+unshared candidate targets passed read-only staging preflight. They have not
+yet been staged or fetched and are not recovered prices. Current gate leases
+must expire naturally before further repair or collection.
+
+Persist the complete supervised runner stdout to a new private file outside the
+repository on every invocation. This preserves emitted source/checkpoint SQL
+if an interactive session disappears; reconcile the immutable ledger before
+using any saved statement. Never replay a mutation solely because its reply
+was lost. An in-flight request with no captured result stays pending.
+
 ## 4 November 2026 — evidence-first mapping repair workflow
 
 Unassigned SKUs in retained listing captures are investigation hints when their
