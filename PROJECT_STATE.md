@@ -1,5 +1,31 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — evidence-first mapping repair workflow
+
+Unassigned SKUs in retained listing captures are investigation hints when their
+structured quantities are absent or captures are old. They do not authorise a
+price or live-verified identity. An independently reviewed, fully measured,
+manufacturer-branded candidate may provisionally replace a non-fresh mapping's
+URL/SKU only under a free supervised gate, unchanged canonical identity,
+positive peer corroboration and an atomic prior-state audit. The target stays
+failed. No price, observation timestamp or approval is written.
+
+The existing evidence-only collector then fetches that exact target. Activation
+requires a completed successful source acquisition after staging, unchanged
+staged metadata, explicit structured quantity, unchanged hinted barcode where
+present, matching canonical brand/pack/recipe and independent peer support.
+The activation appends its source-bound audit and corrects retailer metadata;
+it still writes no price. Normal single-use audited review and a separate new
+live request remain mandatory for trusted-price recovery.
+
+Both operations use the existing postgres SQL bridge and audit ledger. No
+schema, account, privilege, paid provider or collection transport is added.
+Current prices, shared SKUs, pending URLs and pending supervised-run mappings
+remain protected. Previously attempted destinations require newer source
+support rather than an automatic retry. Gate ownership and cooldowns cannot
+be changed by repair. Source and prior mapping records remain preserved.
+
+
 ## 4 November 2026 — independent branded whole-pack corroboration
 
 A positively identified manufacturer-branded Tesco offer can use one independent peer when
