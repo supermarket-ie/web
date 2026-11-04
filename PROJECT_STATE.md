@@ -39,7 +39,7 @@ source price was promoted. Detailed evidence remains protected.
 
 The existing supervised collector gains explicit `--evidence-only` and
 `--evidence-mappings` options for known mappings lacking retained captures.
-Selection requires resolved exact Irish product URLs, a unique numeric SKU,
+Selection accepts resolved or failed mappings with exact Irish product URLs, a unique numeric SKU,
 a prior successful receipt and an absent current price. Pending and recent
 requests are excluded. Each run is bounded to ten requests and uses the
 existing owned lease, pacing and network/identity circuit breakers.

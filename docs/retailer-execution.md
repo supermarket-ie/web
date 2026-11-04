@@ -500,7 +500,8 @@ before using the corresponding reviewed collector revision.
 Use the existing supervised CLI in expansion mode with `--evidence-only`,
 `--evidence-mappings` containing explicit mapping identifiers, and a limit of
 at most ten. Dry-run selection precedes an authorised live run. Apply the receipt-guard migration before acquisition. The run stores
-fresh source evidence without calling the price finaliser. A database trigger
+fresh source evidence for resolved or failed mappings without calling the price
+finaliser. Failed mapping status remains subject to evidence-bound repair. A database trigger
 also rejects price receipts against evidence-only runs. The same purpose
 flag is required when resuming an interrupted evidence run. Retain pending
 requests for reconciliation. A source capture is not a recovered price.
