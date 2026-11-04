@@ -86,7 +86,7 @@ const FORMULATION_GROUPS = [
 
 function plain(value: string | null | undefined) {
   return (value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/&(?:amp;)?/g, ' and ')
+    .toLowerCase().replace(/[’']/g, '').replace(/&(?:amp;)?/g, ' and ')
     .replace(/\bkilograms?\b/g, 'kg').replace(/\bgrams?\b/g, 'g')
     .replace(/\blitres?\b/g, 'l').replace(/\bmillilitres?\b/g, 'ml')
     .replace(/[^a-z0-9.\s]/g, ' ').replace(/\s+/g, ' ').trim();

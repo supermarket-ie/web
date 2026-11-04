@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rankHeldReviewEvidence, type HeldReviewRow } from './tesco-hold-reentry-ranking';
+import { rankHeldReviewEvidence, selectHeldReviewEvidence, type HeldReviewRow } from './tesco-hold-reentry-ranking';
 
 function sample(): HeldReviewRow {
   return { id:'a',store_sku:'251698077',canonical_name:'Dolmio Stir In Sweet Pepper Pasta Sauce 150g',
@@ -41,4 +41,18 @@ describe('read-only AI-assisted hold-reentry triage',()=>{
     expect(r.concerns).toContain('no_retained_hashed_tesco_product_page');
     expect(r.approval).toBe('independent_review_required');
   });
+});
+
+it('enumerates single-peer and zero-peer review work only when explicitly requested', async () => {
+  const queries: string[] = [];
+  const execute = async (sql: string) => { queries.push(sql); return []; };
+  await selectHeldReviewEvidence(execute);
+  await selectHeldReviewEvidence(execute, { allPeers: true });
+  expect(queries[0]).toContain("and l.store in ('dunnes','supervalu'))=2");
+  expect(queries[1]).not.toContain("and l.store in ('dunnes','supervalu'))=2");
+  for (const sql of queries) {
+    expect(sql).toContain("t.store_sku=s.store_sku)=1");
+    expect(sql).toContain("not exists(select 1 from latest_prices");
+    expect(sql).not.toMatch(/insert into|update |delete from/i);
+  }
 });
