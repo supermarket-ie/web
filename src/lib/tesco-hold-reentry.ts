@@ -83,7 +83,16 @@ function sameBarcode(a: string | null, b: string | null) {
 function titleSupport(a: string, b: string) {
   const excluded = new Set(['the','with','and','for','from','pack','tesco','dunnes','supervalu','stores',
     'product','products','g','kg','ml','l','litre','litres','bottle']);
-  const tokens = (s: string) => new Set(normalized(s).split(' ')
+  // Quantity is compared independently below. Attached measures must not
+  // become lexical identity words ("100G" versus "(100 g)"). Only bounded
+  // spelling/inflection equivalents are normalised; flavour words remain.
+  const tokens = (s: string) => new Set(normalized(s
+    .replace(/([a-z])['’]([a-z])/gi, '$1$2')
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:kg|g|ml|litres?|l)\b/gi, ' '))
+    .replace(/\byoghurt\b/g, 'yogurt')
+    .replace(/\b(stick|flake|cake|mealmaker)s\b/g, '$1')
+    .replace(/\bpinhead oats\b/g, 'pinhead oatmeal')
+    .replace(/\bmy protein\b/g, 'myprotein').split(' ')
     .filter(x => x.length >= 3 && !excluded.has(x) && !/^\d+$/.test(x)));
   const left = tokens(a), right = tokens(b);
   return [...left].filter(x => right.has(x)).length / Math.max(1, Math.min(left.size,right.size)) >= 0.65;
@@ -96,6 +105,7 @@ function qualifiers(name: string) {
     /\bchocolate\b/, /\bstrawberry\b/, /\bzero\b/, /\bdiet\b/,
     /\bsugar free\b/, /\bgluten free\b/, /\borganic\b/,
     /\b(?:extra|mature) (?:strong|cheddar)\b/, /\b(?:milk|cream) chocolate\b/,
+    /\bfrench onion\b/, /\bvegetable soup\b/, /\b(?:light|lighter)\b/,
   ];
   return groups.map(regex => regex.test(normalized(name)));
 }
@@ -125,11 +135,12 @@ function declaredPack(name: string) {
   // sticks" or "3 bars", not "7 Pack". Never treat an undisclosed count as
   // evidence that an explicitly different count is safe.
   const count = multi ? Number(multi[1])
-    : n.match(/\b(\d+)\s+(?:(?:standard|dental|jumbo|mini|large|small|sausage|reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded)\s+){0,6}(?:rolls?|sheets?|pieces?|packs?|pk|pairs?|sticks?|bars?|pouches?|sachets?|chews?|pods?|cubes?|bagels?|tablets?|bottles?|tubes?)\b/);
+    : n.match(/\b(\d+)\s+(?:(?:standard|dental|jumbo|mini|large|small|sausage|reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded|ultimate|breaded|fillet)\s+){0,6}(?:rolls?|sheets?|pieces?|packs?|pk|pairs?|sticks?|bars?|pouches?|sachets?|chews?|pods?|cubes?|bagels?|burgers?|pots?|tablets?|bottles?|tubes?)\b/);
   // If a product has a stated unit size and no explicit multipack, treat it
   // conservatively as a single unit. "110g" must not silently match "3x110g".
   const units = typeof count === 'number' ? count : count ? Number(count[1]) : amount ? 1 : null;
-  return { amount, units };
+  const total = multi && amount ? amount.replace(/:[0-9.]+$/, `:${Number(amount.split(':')[1]) * Number(multi[1])}`) : amount;
+  return { amount, total, units };
 }
 function structuredMeasure(quantity: TescoCollectedProduct['quantity']) {
   if (!quantity) return null;
@@ -141,7 +152,8 @@ function structuredMeasure(quantity: TescoCollectedProduct['quantity']) {
 function independentPackConflict(e: ReentryEvidence, source: TescoCollectedProduct) {
   const canonical = declaredPack(e.mapping.canonical_name), tesco = declaredPack(source.name);
   const structured = structuredMeasure(source.quantity);
-  if (canonical.amount && tesco.amount && canonical.amount !== tesco.amount) return true;
+  if (canonical.total && tesco.total && canonical.total !== tesco.total) return true;
+  if (tesco.total && structured && tesco.total !== structured) return true;
   if (canonical.amount && structured && canonical.amount !== structured
     && tesco.units === 1) return true;
   if (canonical.units != null && tesco.units != null && canonical.units !== tesco.units) return true;
@@ -149,16 +161,19 @@ function independentPackConflict(e: ReentryEvidence, source: TescoCollectedProdu
 }
 function peerIdentityConflict(e: ReentryEvidence, source: TescoCollectedProduct, peer: ReentryEvidence['peers'][number]) {
   const tesco = declaredPack(source.name), other = declaredPack(peer.store_product_name);
+  const sourceTotal = tesco.total ?? structuredMeasure(source.quantity);
   return canonicalVariantConflict(source.name, peer.store_product_name)
-    || (tesco.amount != null && other.amount != null && tesco.amount !== other.amount)
+    || (sourceTotal != null && other.total != null && sourceTotal !== other.total)
     || (tesco.units != null && other.units != null && tesco.units !== other.units);
 }
 function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollectedProduct) {
   const m=e.mapping;
   if (!source.brand) return false;
-  // Even if the Tesco EAN itself is exact, a contradictory existing retailer
-  // peer would create an inaccurate multi-retailer comparison when finalised.
-  // Until that canonical peer is audited/corrected, keep the mapping held.
+  // A matching canonical barcode independently establishes the Tesco identity.
+  // Peer classification stays separate; Tesco/canonical conflicts still fail.
+  if (sameBarcode(m.canonical_ean,source.gtin)) return true;
+  // Without the positive barcode path, corroborating peers must not
+  // contradict the identity they are being used to establish.
   if (e.peers.some(peer=>peerIdentityConflict(e,source,peer))) return false;
   // Two fresh price records alone are not identity evidence: a same-size but
   // unrelated product at both other shops must never grant hold re-entry.
@@ -172,9 +187,6 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
   const canonicalBrand = m.canonical_brand;
   if (canonicalBrand && e.peers.some(peer => peer.brand && !sameBrand(canonicalBrand, peer.brand)))
     return false;
-  // A canonical EAN matching the page is independent exact-product evidence;
-  // retailer coverage is a commercial property, not a prerequisite.
-  if (sameBarcode(m.canonical_ean,source.gtin)) return true;
   if (e.peers.length===2)
     // Keep the previously approved dual-peer safety floor unchanged.
     return true;
@@ -182,8 +194,13 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
     const peer=e.peers[0];
     // One peer can corroborate identity only with a positive brand, title and
     // pack match. AI reviewer rationale alone cannot replace these checks.
-    return m.canonical_brand!=null && sameBrand(m.canonical_brand,source.brand)
-      && (peer.brand==null ? normalized(peer.store_product_name).includes(normalized(m.canonical_brand))
+    const canonical = declaredPack(m.canonical_name), tesco = declaredPack(source.name);
+    const brandAnchor = m.canonical_brand ?? source.brand;
+    const canonicalSupported = m.canonical_brand != null ? sameBrand(m.canonical_brand,source.brand)
+      : canonical.total != null && canonical.total === tesco.total
+        && titleSupport(m.canonical_name,source.name);
+    return canonicalSupported
+      && (peer.brand==null ? normalized(peer.store_product_name).replaceAll(' ','').includes(normalized(brandAnchor).replaceAll(' ',''))
         : sameBrand(peer.brand,source.brand))
       && titleSupport(source.name,peer.store_product_name)
       && !peerIdentityConflict(e,source,peer);

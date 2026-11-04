@@ -92,6 +92,7 @@ beforeEach(async () => {
   await db.exec(readFileSync('supabase/migrations/20261104121700_tesco_explicit_food_counts.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261104123000_tesco_evidence_receipt_guard.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261104123500_tesco_reviewed_evidence_followup.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261104134000_tesco_evidence_pack_totals.sql', 'utf8'));
   execute = async query => {
     const results = await db.exec(query);
     return results.at(-1)?.rows as Record<string, unknown>[] ?? [];
@@ -544,7 +545,7 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
     expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
   });
-  it('keeps a peer-variant conflict held even when canonical and Tesco barcodes match',async()=>{
+  it('recovers an independently barcoded Tesco offer without asserting a conflicting peer is exact',async()=>{
     const gtin='05012345678901';
     const {page,live}=await heldEvidence({gtin});
     await db.exec('alter table products add column ean text');
@@ -552,8 +553,10 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     await db.exec(`update store_products set store_product_name='Tesco Vanilla Whole Milk 1L'
       where store='dunnes'`);
     const review=await approve(page);
-    expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
-    expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
+    expect(await selectReviewedCandidates(execute,[review])).toHaveLength(1);
+    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+    expect((await db.query("select store_product_name from store_products where store='dunnes'")).rows[0])
+      .toEqual({store_product_name:'Tesco Vanilla Whole Milk 1L'});
   });
   it('keeps a past hold and its historical observation, then finalises only a newly fetched verified price once', async () => {
     const { page, live } = await heldEvidence(); const review = await approve(page);

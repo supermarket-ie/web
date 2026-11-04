@@ -1,5 +1,28 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — broader identity evidence validation
+
+The retained-source inventory review identified lexical and pack-arithmetic
+false exclusions. The independent title check now excludes physical measures
+from word similarity and recognises bounded apostrophe, plural and spelling
+equivalents. Product variants and quantity checks remain separate. Explicit
+multipacks compare their total amount while preserving unit counts; a per-unit
+amount cannot silently match a different total. Structured source quantities
+also constrain peer comparisons when title formatting obscures the measure.
+
+A positively matching canonical barcode establishes the Tesco offer identity
+independently of an uncertain peer relationship. Canonical and Tesco brand,
+barcode, variant and pack contradictions still block the Tesco price. No pair
+review or comparison classification is inferred by this path. A single branded
+peer can corroborate a missing canonical brand only with positive source-brand,
+canonical-title and explicit equal-quantity evidence.
+
+Regression coverage includes spelling equivalence, multipack totals, changed
+counts and weights, different soup variants, hidden title measures, and a
+correct Tesco barcode alongside a conflicting peer. The forward private
+function replacement preserves existing privileges and invoker rights.
+Production receipts and the request budget are reconciled separately.
+
 ## 4 November 2026 — continuation production receipts and evidence ceiling
 
 The continuation completed 33 supervised requests: twenty successful renewals,
