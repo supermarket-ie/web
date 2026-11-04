@@ -45,7 +45,8 @@ describe('guest cookie signing', () => {
 
   it('rejects a tampered or unsigned cookie', () => {
     const { cookieValue } = mintGuestCookie();
-    expect(verifyGuestCookie(cookieValue.replace(/.$/, '0'))).toBeNull();
+    const tampered = (cookieValue[0] === '0' ? '1' : '0') + cookieValue.slice(1);
+    expect(verifyGuestCookie(tampered)).toBeNull();
     expect(verifyGuestCookie('no-signature')).toBeNull();
     expect(verifyGuestCookie(undefined)).toBeNull();
   });
