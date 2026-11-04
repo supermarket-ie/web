@@ -17,6 +17,32 @@ function evidence(canonical: string, source: string, peer: string, quantity = { 
   };
 }
 describe('independent Tesco naming and pack evidence',()=>{
+  it('requires explicit independent count evidence for a plural whole-pack title',()=>{
+    const e=evidence('Example Pepperoni Pizza Pockets 250g',
+      'Example Pizza Pockets Pepperoni 2 Pack 250g',
+      'Example 2 Pepperoni and Cheese Pizza Pockets 250g',{grams:250});
+    expect(independentExactIdentity(e)).toBe(true);
+    e.peers[0].store_product_name='Example Pepperoni Pizza Pockets 250g';
+    expect(independentExactIdentity(e)).toBe(false);
+    e.peers[0].store_product_name='Example 3 Pepperoni Pizza Pockets 250g';
+    expect(independentExactIdentity(e)).toBe(false);
+  });
+  it.each(['Example Pepperoni Pizza Pockets 1 Pack 250g','Example Pepperoni Pizza Pockets 1x250g',
+    'Example Pepperoni Pizza Pocket 250g'])('never overrides a single-item identity %s',canonical=>{
+    expect(independentExactIdentity(evidence(canonical,'Example Pizza Pockets Pepperoni 2 Pack 250g',
+      'Example 2 Pepperoni Pizza Pockets 250g',{grams:250}))).toBe(false);
+  });
+  it('retains barcode, quantity and retailer-brand constraints on whole-pack counts',()=>{
+    const e=evidence('Example Cheese Pizza Pockets 250g','Example Pizza Pockets Cheese 2 Pack 250g',
+      'Example 2 Cheese Pizza Pockets 250g',{grams:250});
+    expect(independentExactIdentity(e)).toBe(true);
+    e.peers[0].gtin='05999999999999';expect(independentExactIdentity(e)).toBe(false);
+    e.peers[0].gtin=null;e.page.parsed.products[0].quantity={grams:125};
+    expect(independentExactIdentity(e)).toBe(false);
+    e.page.parsed.products[0].quantity={grams:250};e.mapping.is_own_brand=true;
+    expect(independentExactIdentity(e)).toBe(false);
+  });
+
   it('does not convert an explicit item count into a canonical mass',()=>{
     const e=evidence('Example Fruit 1kg','Example Fruit Each','Example Fruit Each');
     e.page.parsed.products[0].quantity={pieces:1};

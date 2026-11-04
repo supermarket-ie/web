@@ -1,5 +1,27 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — explicit counts for positively corroborated whole packs
+
+A measured plural catalogue title without an explicit item count must not be
+interpreted as an explicit one-item assertion. For manufacturer-branded offers
+only, a source's explicit count can resolve that inferred single-item default
+when canonical, structured source and independent peer agree on the complete
+pack measure, and that fresh peer positively states the same count, manufacturer,
+variant and optional barcode. The original mapping must anchor the manufacturer.
+Explicit canonical counts, singular item identities, missing peer counts,
+retailer own labels and differing quantities/barcodes remain blocked.
+
+Pack parsing now recognises leading pizza-pocket counts and bounded pizza
+wording. All evidence snapshots retain every peer; this does not establish an
+unreviewed peer comparison. Independent review, source-bound one-use approval,
+a separate live request and all existing breakers remain mandatory.
+
+The resumed eight-target source acquisition completed successfully with no new
+unresolved request and no price writes. Seven available targets passed current
+source review and received activation audits; one unavailable target remains
+failed. Seven separate one-use price-review decisions were recorded. Source
+and activation counts remain separate from final guarded price receipts.
+
 ## 4 November 2026 — SQL bridge deadline correction
 
 The supervised CLI SQL reply watchdog was 90 seconds, shorter than the

@@ -600,3 +600,14 @@ saved SQL, pending reservations and receipts. An incomplete evidence run with
 no unresolved request can resume its untouched URLs using the same mode and
 `--evidence-only` purpose; completed URLs and all circuit-breaker counters carry
 forward. Source activation requires that acquisition to finish successfully.
+
+### Explicit count evidence for plural whole packs
+
+A mass-only plural catalogue title is not an explicit one-item assertion. An
+inferred single-item default may yield to an explicit source count only for a
+manufacturer-branded identity with unchanged total measure and a fresh,
+independently branded peer explicitly corroborating that count and full measure.
+Keep explicit canonical counts, singular items, manufacturer anchors, variants,
+barcodes, structured quantity and own-label exclusions intact. A peer that omits
+the count cannot supply the positive count proof; never discard it from the
+snapshot or approve its equivalence implicitly.
