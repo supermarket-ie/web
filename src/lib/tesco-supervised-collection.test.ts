@@ -89,6 +89,7 @@ beforeEach(async () => {
   await db.exec(readFileSync('supabase/migrations/20261101000000_tesco_hold_reentry_reviews.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261101182500_tesco_machine_reentry_approvals.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261101220707_tesco_supervised_operational_recovery.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261104121700_tesco_explicit_food_counts.sql', 'utf8'));
   execute = async query => {
     const results = await db.exec(query);
     return results.at(-1)?.rows as Record<string, unknown>[] ?? [];
