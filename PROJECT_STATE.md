@@ -1,6 +1,28 @@
 # Supermarket.ie — Canonical Project State
 
 
+## 4 November 2026 — broader supervised Tesco recovery review
+
+A complete retained-source review examined 797 previously successful,
+non-fresh, unique-SKU mappings with captured product evidence. The existing
+identity gate passed 90 for independent assessment. Independent review selected
+52 for evidence-bound live verification through the existing operational
+approval and guarded collection workflow. Production results are reconciled
+separately from this candidate count.
+
+The review command now supports `--all-peers` to enumerate missing-price held
+mappings with zero or one fresh peer as well as two. This is read-only triage.
+The default dual-peer view and the approval/finalisation gates retain their
+existing behaviour. Brand apostrophe normalisation handles naming punctuation
+such as Jacob's versus Jacobs. Regression coverage checks that different brands,
+variants and quantities continue to fail.
+
+The prior completed collection tranche recorded 114 renewals and six newly
+trusted Tesco offers in 131 requests. Detailed source evidence and operational
+receipts remain in the protected evidence ledger. Public checkpoints contain
+aggregate outcomes only.
+
+
 ## 3 November 2026 — offer-comparison UI (PRs #304/#305/#306) RELEASED to AWS prod ECS
 
 The website changes from PRs **#304/#305/#306** are **deployed and live** on

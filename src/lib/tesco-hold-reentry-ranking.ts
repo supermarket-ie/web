@@ -97,7 +97,7 @@ export function rankHeldReviewEvidence(rows: HeldReviewRow[]): ReviewHypothesis[
   }).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
 }
 
-export async function selectHeldReviewEvidence(execute: ExecuteSql): Promise<ReviewHypothesis[]> {
+export async function selectHeldReviewEvidence(execute: ExecuteSql, options: { allPeers?: boolean } = {}): Promise<ReviewHypothesis[]> {
   const rows = await execute(`with mapped as (
     select s.id,s.product_id,s.store_sku,s.store_url,s.store_product_name,s.brand store_brand,s.gtin,
       p.canonical_name,p.brand canonical_brand,
@@ -108,8 +108,8 @@ export async function selectHeldReviewEvidence(execute: ExecuteSql): Promise<Rev
       and s.store_url='https://www.tesco.ie/shop/en-IE/products/'||s.store_sku
       and (select count(*) from store_products t where t.store='tesco' and t.store_sku=s.store_sku)=1
       and not exists(select 1 from latest_prices l where l.store_product_id=s.id)
-      and (select count(distinct l.store) from latest_prices l where l.canonical_product_id=s.product_id
-        and l.store in ('dunnes','supervalu'))=2
+      ${options.allPeers ? '' : `and (select count(distinct l.store) from latest_prices l where l.canonical_product_id=s.product_id
+        and l.store in ('dunnes','supervalu'))=2`}
       and exists(select 1 from tesco_direct_collection_pages d where d.requested_url=s.store_url and
         (d.outcome='pending' or d.created_at>now()-interval '24 hours'
           or d.outcome<>'ok' or exists(select 1 from jsonb_array_elements(d.identity_results) i

@@ -461,3 +461,13 @@ expansion, using the approved SQL bridge, 10-request maximum batches,
 leases/pacing/circuit breakers and guarded finaliser. Fresh Tesco prices can
 be valid without fresh peers. Preserve the seven unresolved pages, exclude
 shared SKUs and never restart a stopped/unknown request.
+
+
+## Wider Tesco recovery review
+
+Use `tesco-hold-reentry-assess.ts --all-peers` through the existing SQL bridge
+to enumerate zero-, one- and two-peer held mappings. Review original source
+identity and provenance independently. This triage option grants no approval.
+Use evidence-bound one-time operational decisions and live guarded collection
+in batches of at most ten. Preserve the campaign request budget across sessions.
+Brand punctuation normalisation does not establish cross-retailer equivalence.

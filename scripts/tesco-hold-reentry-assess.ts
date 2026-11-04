@@ -8,7 +8,8 @@ import type { ExecuteSql } from '../src/lib/tesco-supervised-collection';
 
 const args = process.argv.slice(2);
 const exactEvidence = args.length === 3 && args[0] === '--evidence';
-if (args.length && !exactEvidence) throw new Error('Only --evidence STORE_PRODUCT_UUID SOURCE_PAGE_UUID is supported');
+const allPeers = args.length === 1 && args[0] === '--all-peers';
+if (args.length && !exactEvidence && !allPeers) throw new Error('Use --all-peers or --evidence STORE_PRODUCT_UUID SOURCE_PAGE_UUID');
 let nextId = 0, disconnected = false;
 const waiting = new Map<number, (rows: Record<string, unknown>[]) => void>();
 const input = createInterface({ input: process.stdin });
@@ -35,7 +36,7 @@ async function main() {
       evidence:row?.evidence ?? null, approval:'independent_review_required'}) + '\n');
     return;
   }
-  const rows: ReviewHypothesis[] = await selectHeldReviewEvidence(execute);
+  const rows: ReviewHypothesis[] = await selectHeldReviewEvidence(execute, { allPeers });
   process.stdout.write(JSON.stringify({ type: 'assessment', count: rows.length,
     hypotheses: {
       likely_exact: rows.filter(r => r.hypothesis === 'likely_exact').length,

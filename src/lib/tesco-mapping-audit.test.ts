@@ -139,3 +139,12 @@ describe('Tesco mapping risk audit', () => {
     expect(result.reasons).toContain('packCountConflict');
   });
 });
+
+it('normalises brand apostrophes while preserving flavour, brand and pack conflicts', () => {
+  const row = mapping({ canonicalName: "Jacob's Rice Cakes Sea Salt 90g", canonicalBrand: "Jacob's", storeBrand: "Jacob's" });
+  const candidate = { sku: '250154135', url: 'https://www.tesco.ie/shop/en-IE/products/250154135', name: 'Jacobs Rice Cakes Sea Salt 90g', evidenceSource: 'tesco_direct_structured' as const };
+  expect(classifyTescoReplacement(row, candidate).classification).toBe('exact_replacement_candidate');
+  expect(classifyTescoReplacement(row, { ...candidate, name: 'Other Rice Cakes Sea Salt 90g' }).classification).toBe('material_mismatch');
+  expect(classifyTescoReplacement(row, { ...candidate, name: 'Jacobs Rice Cakes Sea Salt 180g' }).classification).toBe('material_mismatch');
+  expect(classifyTescoReplacement(row, { ...candidate, name: 'Jacobs Rice Cakes Orange 90g' }).classification).toBe('material_mismatch');
+});
