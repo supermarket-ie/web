@@ -122,7 +122,7 @@ function measure(value: string | null | undefined) {
 function packCount(value: string | null | undefined) {
   const text = plain(value);
   const count = text.match(/\b(\d+)\s*(?:x|pack|pk|rolls?|pieces?|bars?|cans?|bottles?)\b/)
-    ?? text.match(/\b(\d+)\s+(?:(?:reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded)\s+){0,6}(?:cubes?|bagels?)\b/);
+    ?? text.match(/\b(\d+)\s+(?:(?:reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded|ultimate|breaded|fillet)\s+){0,6}(?:cubes?|bagels?|burgers?|pots?)\b/);
   return Number(count?.[1] ?? 0) || null;
 }
 

@@ -1,5 +1,15 @@
 # Retailer Execution — Supermarket.ie
 
+### Evidence naming and pack totals
+
+The reviewed collector recognises bounded naming equivalents after independently
+checking brand, SKU, barcode, quantity and pack. Explicit multipacks compare
+total amounts and retain count checks. Apply the corresponding pack-total
+migration before running the updated reviewer. A matching canonical barcode
+can establish Tesco identity even when a peer relationship remains unverified;
+this does not approve that peer or create an exact comparison. Missing independent
+identity evidence continues to block recovery. Keep live batches at ten or fewer.
+
 ### 4 November 2026 — evidence-only production outcome
 
 The continuation recorded twenty renewals, three new trusted Tesco products and
