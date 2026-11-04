@@ -125,7 +125,8 @@ function declaredPack(name: string) {
   const n = name.normalize('NFKC').toLowerCase()
     .replace(/(\d),(\d{3})(?=\D|$)/g, '$1$2')
     .replace(/(\d),(\d{1,2})(?=\D|$)/g, '$1.$2')
-    .replace(/[^a-z0-9.]+/g, ' ').trim();
+    .replace(/[^a-z0-9.]+/g, ' ').trim()
+    .replace(/\b(\d+)(packs?|pk)\b/g, '$1 $2');
   const multi = n.match(/\b(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\b/);
   const measure = multi ?? n.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\b/);
   let amount: string | null = null;

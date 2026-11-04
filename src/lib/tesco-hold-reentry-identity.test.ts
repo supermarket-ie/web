@@ -52,6 +52,14 @@ describe('independent Tesco naming and pack evidence',()=>{
     expect(independentExactIdentity(evidence('Example Lemon Multipurpose Cleaning Spray 100g',
       'Example Lime All Purpose Cleaner Spray 100g','Example Lemon Multipurpose Cleaning Spray 100g'))).toBe(false);
   });
+  it('keeps attached pack counts subject to the canonical count guard',()=>{
+    const e=evidence('Example Dental Sticks 5Pack','Example Dental Sticks 28 Pack 100g',
+      'Example Dental Sticks 28 Pack 100g');
+    e.mapping.canonical_ean=e.page.parsed.products[0].gtin!;
+    expect(independentExactIdentity(e)).toBe(false);
+    e.mapping.canonical_name='Example Dental Sticks 28pk';
+    expect(independentExactIdentity(e)).toBe(true);
+  });
   it('compares explicit multipacks against their total quantity',()=>{
     expect(independentExactIdentity(evidence('Example Apricot Yogurt 4 Pack','Example Apricot Yogurt 4x90g',
       'Example Apricot Yogurt 4 Pack (360 g)',{grams:360}))).toBe(true);
