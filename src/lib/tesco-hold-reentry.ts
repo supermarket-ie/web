@@ -173,7 +173,7 @@ function peerIdentityConflict(e: ReentryEvidence, source: TescoCollectedProduct,
 }
 function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollectedProduct) {
   const m=e.mapping;
-  if (!source.brand) return false;
+  if (!source.brand || !normalized(source.brand)) return false;
   // A matching canonical barcode independently establishes the Tesco identity.
   // Peer classification stays separate; Tesco/canonical conflicts still fail.
   if (sameBarcode(m.canonical_ean,source.gtin)) return true;
@@ -207,8 +207,8 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
     // mapping to name this manufacturer, and independent positive whole-pack
     // evidence; mere absence of a peer conflict is not enough.
     const originalBrand = m.store_brand != null ? sameBrand(m.store_brand,source.brand)
-      : normalized(m.store_product_name).replaceAll(' ','')
-        .includes(normalized(source.brand).replaceAll(' ',''));
+      : (` ${normalized(m.store_product_name)} `)
+        .includes(` ${normalized(source.brand)} `);
     const independentlySizedOriginal = canonical.total == null && originalBrand
       && sourceAmount != null && peerPack.total === sourceAmount;
     const canonicalSupported = m.canonical_brand != null ? sameBrand(m.canonical_brand,source.brand)

@@ -66,6 +66,8 @@ describe('independent Tesco naming and pack evidence',()=>{
     e.mapping.canonical_brand=null;
     e.mapping.store_brand=null;
     expect(independentExactIdentity(e)).toBe(true);
+    e.mapping.store_product_name='Nonexample Blackcurrant Conserve';
+    expect(independentExactIdentity(e)).toBe(false);
     e.mapping.store_product_name='Blackcurrant Conserve';
     expect(independentExactIdentity(e)).toBe(false);
     e.mapping.store_product_name='Example Blackcurrant Conserve';
