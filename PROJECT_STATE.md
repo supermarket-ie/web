@@ -1,6 +1,30 @@
 # Supermarket.ie — Canonical Project State
 
 
+## 4 November 2026 — wider Tesco recovery production checkpoint
+
+The wider evidence review recorded 61 new one-time recovery decisions.
+At this checkpoint, 46 product requests had completed and 35 had produced
+new trusted Tesco prices. Fresh coverage increased from 372 at the start
+of the morning review to 402, including intervening price expiries.
+Nine requests produced identity holds and two products redirected to
+unavailable-product categories. All other responses were HTTP 200.
+The seven historical pending requests were preserved.
+
+The deduplicated source snapshot contains 856 non-fresh, previously
+successful unique mappings without pending requests. Of these, 790 retain
+captures bound to both the requested and final exact product URL, while
+66 lack that provenance. Separate review of 334 captured mappings without
+prior successful receipts found none satisfying both strict current
+identity checks and independent canonical barcode support. Discovery
+found no automatically executable mapping corrections. These are review
+and evidence counts, not projected price writes.
+
+Budget accounting conservatively includes every recorded request since
+the original additional-request authorisation rather than resetting at
+later restatements. Detailed source and decision records stay protected.
+
+
 ## 4 November 2026 — broader supervised Tesco recovery review
 
 A complete retained-source review examined 797 previously successful,
