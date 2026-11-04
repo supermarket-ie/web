@@ -17,6 +17,18 @@ function evidence(canonical: string, source: string, peer: string, quantity = { 
   };
 }
 describe('independent Tesco naming and pack evidence',()=>{
+  it('does not convert an explicit item count into a canonical mass',()=>{
+    const e=evidence('Example Fruit 1kg','Example Fruit Each','Example Fruit Each');
+    e.page.parsed.products[0].quantity={pieces:1};
+    expect(independentExactIdentity(e)).toBe(false);
+  });
+  it('revalidates retained formulation details without depending on JSON key order',()=>{
+    const e=evidence('Example Butter 100g','Example Butter 100g','Example Butter 100g');
+    const source=e.page.parsed.products[0];
+    source.identityDetails={ingredients:['Cream'],manufacturer:'Example'};
+    expect(independentExactIdentity(e,{...source,identityDetails:{manufacturer:'Example',ingredients:['Cream']}})).toBe(true);
+    expect(independentExactIdentity(e,{...source,identityDetails:{ingredients:['Cream','Salt'],manufacturer:'Example'}})).toBe(false);
+  });
   it.each([
     ["Jacob's Yogurt Rice Cakes 100g",'Jacobs Rice Cakes With Yoghurt 100G',"Jacob's Yogurt Rice Cakes (100 g)","Jacob's"],
     ['Example Butter Stick 100g','Example Butter Sticks 100G','Example Irish Creamery Butter Stick (100 g)','Example'],

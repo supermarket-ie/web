@@ -12,6 +12,15 @@ function mapping(overrides: Partial<TescoMappingEvidence> = {}): TescoMappingEvi
 }
 
 describe('Tesco mapping risk audit', () => {
+  it.each([
+    ['Dr Oetker Bistro Pepperoni Baguettes 2x125g',250,'exact_replacement_candidate'],
+    ['Dr Oetker Bistro Pepperoni Baguettes 1x250g',250,'material_mismatch'],
+    ['Dr Oetker Bistro Pepperoni Baguettes 2x150g',300,'material_mismatch'],
+    ['Other Brand Bistro Pepperoni Baguettes 2x125g',250,'material_mismatch'],
+  ])('checks punctuation, total amount and count for %s',(name,grams,expected)=>{
+    const m=mapping({canonicalName:'Dr. Oetker Bistro Pepperoni Baguettes 2 Pack 250g',canonicalBrand:'Dr. Oetker'});
+    expect(classifyTescoReplacement(m,{sku:m.storeSku!,url:m.storeUrl!,name,structuredQuantity:{grams}}).classification).toBe(expected);
+  });
   it('accepts a current internally consistent unique mapping', () => {
     expect(classifyTescoMapping(mapping()).classification).toBe('exact_unique');
   });

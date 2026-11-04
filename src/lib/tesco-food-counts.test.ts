@@ -68,6 +68,8 @@ describe('multipack total database checks',()=>{
     ['Example Yogurt 4x90g','Example Yogurt 4 Pack 360g',360,false],
     ['Example Burgers 2 Pack','Example 2 Ultimate Breaded Chicken Fillet Burgers 227g',227,false],
     ['Example French Onion Soup 400g','Example Vegetable Soup 400g',400,true],
+    ['Example Baguette 250g','Example Baguette 2x125g',250,true],
+    ['Example Baguette 2x125g','Example Baguette 2x125g',250,false],
   ])('checks %s against %s',async(c,s,grams,expected)=>{
     const result=await db.query<{conflict:boolean}>('select tesco_internal.material_title_conflict($1,$2,$3::jsonb) conflict',[c,s,JSON.stringify({grams})]);
     expect(result.rows[0].conflict).toBe(expected);

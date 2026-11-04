@@ -1,5 +1,32 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — retained formulation details and explicit retailer counts
+
+The continuation following the wider inventory reconciliation completed 22
+guarded Tesco requests and added twenty trusted products, increasing fresh
+coverage from 416 to 436. Two requests remain held by formulation and brand
+checks. Conservative authorisation accounting charges 511 requests, leaving
+489; the historical seven pending requests remain protected. One original
+stored product title was repaired using retained Tesco and independent Dunnes
+captures, with an atomic prior-state audit. That repair is metadata only and
+is not counted as a recovered price. A separate brand punctuation exclusion
+still prevented its price write.
+
+The source parser now retains bounded public product details for independent
+formulation review and unchanged-detail checks on a separately approved live
+request. When structured quantity is absent, an unambiguous explicit retailer
+title count can be retained with its own provenance. No quantity is inferred
+from a bare product name, a pair, conflicting counts or a missing physical
+measure. Existing valid structured quantities take priority.
+
+The ordinary validator also distinguishes brand punctuation from decimals,
+compares explicit multipacks by total amount, and retains their count checks.
+Regression tests protect different brands, changed quantities and counts,
+incomplete or conflicting evidence, and changed formulation details. These
+changes do not permit retrying recent failed requests or lifting any lease,
+network or identity circuit breaker. Further source acquisitions and live
+prices require separate production receipt reconciliation.
+
 ## 4 November 2026 — broader identity evidence validation
 
 The retained-source inventory review identified lexical and pack-arithmetic

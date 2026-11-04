@@ -1,5 +1,16 @@
 # Retailer Execution — Supermarket.ie
 
+### Explicit counts and retained formulation evidence
+
+Missing structured size does not authorise guessing. The parser may retain an
+explicit count stated by the retailer, marked as title-count evidence, while
+leaving ambiguous counts and unsupported dimensions unknown. Reacquire evidence
+through the supervised source-only mode; do not alter old immutable pages.
+Review retained product details independently before authorising a new live
+price request. A changed retained formulation detail blocks that request.
+Recent failed price requests keep their existing exclusion even after a code
+or metadata correction. Metadata repair receipts are separate from price writes.
+
 ### Evidence naming and pack totals
 
 The reviewed collector recognises bounded naming equivalents after independently
