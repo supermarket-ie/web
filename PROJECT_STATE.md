@@ -1,5 +1,46 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — final evening continuation receipts
+
+The completed continuation used 23 Tesco requests: fifteen fresh price checks
+and eight source-only acquisitions. Eleven guarded new trusted products raised
+fresh coverage from 441 to 452. Three price checks were held for identity or
+availability, and one HTTP 503 stopped collection with the normal application
+cooldown. After that cooldown expired, a separately qualified eight-product
+batch completed without another network error. No failed or unknown SKU was
+retried. No renewals were due at preflight; no renewal receipt is counted here.
+
+Fifteen independently reviewed, source-bound one-time decisions were recorded
+and consumed. Source acquisition itself wrote no prices. Preparation evidence
+from the final acquisition resolved a product-form ambiguity before a separate
+live guarded price request. PR #316 passed required validation and merged;
+local validation passed nineteen identity and 140 collector transaction tests.
+No database permission, migration, egress identity or security control changed.
+
+Conservative ledger accounting now charges 562 requests since 31 October,
+leaving 438 under the 1,000-request ceiling. This retains the extra twenty early
+renewals included by this continuation rather than silently restoring budget.
+All seven historical pending requests and the prior interrupted source request
+remain preserved. This continuation created no unresolved request and released
+its leases; no cooldown remained active at the final check.
+
+The live strict inventory contains 739 previously successful, non-fresh,
+resolved unique-SKU products without pending requests. Its disjoint first-blocker
+classification is: 53 barcode-field disagreements, 44 brand-field disagreements,
+212 pack/quantity/variant conflicts, 46 missing quantity records, twenty without
+retained source captures, and 364 requiring further independent identity or
+source-evidence review. These are blocker categories, not verified recoveries
+or a complete AI rejection count. Field disagreements need repair-or-conflict
+assessment; the final group includes uncertain identities. Shared SKUs and
+pending requests are outside this inventory. No mapping repair was made in
+this continuation.
+
+Production has 219 raw three-retailer overlaps and zero approved pair reviews,
+so independently verified exact triples and approved alternatives remain zero.
+The 500-price milestone and wider recovery objective remain unfinished. Raw
+canonical overlap, prepared decisions and source-only captures are not prices.
+Detailed source evidence and operational identifiers remain protected.
+
 ## 4 November 2026 — supervised continuation after interruption
 
 This continuation completed thirteen requests: five held-recovery price checks,
