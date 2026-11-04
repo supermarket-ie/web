@@ -14,6 +14,34 @@ const mapping = { storeProductId: 'mapping', canonicalName: 'Whole Milk 1L', can
 const candidate: TescoCollectedProduct = { sku, url: tescoProductUrl(sku), name: milk.title, price: 1.15, currency: 'EUR', available: true, brand: 'TESCO', gtin: null, quantity: { millilitres: 1000 } };
 
 describe('Tesco structured collection', () => {
+  it.each([
+    ['Example Wet Cloths Refills 10 Pack',10],
+    ['Example Baking Cases 100Pc',100],
+    ['Example Free Range Eggs Large 6 Pack',6],
+    ['Example Whole Cucumber Each',1],
+  ])('retains a retailer-declared count and its provenance for %s',(title,pieces)=>{
+    const parsed=parseTescoCollectedPage(pdp({...milk,title,details:{packSize:[]}}),tescoProductUrl(sku)).products[0];
+    expect(parsed.quantity).toEqual({pieces});
+    expect(parsed.quantityEvidence).toBe('explicit_retailer_title_count');
+  });
+  it.each(['Example Organic Cucumber','Example Gloves 1 Pair','Example Rolls 2 Pack 200g',
+    'Example 2 Packs 3 Sheets','Example Fruit Minimum 4'])('leaves ambiguous or incomplete quantities unknown for %s',title=>{
+    expect(parseTescoCollectedPage(pdp({...milk,title,details:{packSize:[]}}),tescoProductUrl(sku)).products[0].quantity).toBeNull();
+  });
+  it('does not overwrite a valid structured quantity with a title count',()=>{
+    const parsed=parseTescoCollectedPage(pdp({...milk,title:'Example Wipes 72 Pack',details:{packSize:[{value:'60',units:'pieces'}]}}),tescoProductUrl(sku)).products[0];
+    expect(parsed.quantity).toEqual({pieces:60});
+    expect(parsed.quantityEvidence).toBeUndefined();
+  });
+  it('retains public product details for independent formulation review',()=>{
+    const details={packSize:[{value:'1',units:'L'}],ingredients:['Milk'],manufacturer:'Example Dairy'};
+    expect(parseTescoCollectedPage(pdp({...milk,details}),tescoProductUrl(sku)).products[0].identityDetails).toEqual(details);
+  });
+  it('omits oversized fields completely rather than truncating formulation evidence',()=>{
+    const details={packSize:[],ingredients:'x'.repeat(5000),manufacturer:'Example Dairy'};
+    const parsed=parseTescoCollectedPage(pdp({...milk,details}),tescoProductUrl(sku)).products[0];
+    expect(parsed.identityDetails).toEqual({packSize:[],manufacturer:'Example Dairy'});
+  });
   it('uses the exact product root, regular price and Irish evidence, not JSON-LD or promotions', () => {
     const parsed = parseTescoCollectedPage(pdp(), tescoProductUrl(sku));
     expect(parsed.products[0]).toMatchObject({ sku, price: 1.15, currency: 'EUR', quantity: { millilitres: 1000 } });

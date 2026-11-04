@@ -10,6 +10,8 @@ export type TescoCollectedProduct = {
   currency: 'EUR';
   available: boolean;
   quantity: { grams?: number; millilitres?: number; pieces?: number } | null;
+  quantityEvidence?: 'explicit_retailer_title_count';
+  identityDetails?: Record<string, unknown>;
 };
 export type TescoCollectedPage = {
   products: TescoCollectedProduct[];
@@ -55,6 +57,28 @@ export function isTescoCollectionUrl(value: string): boolean {
   } catch { return false; }
 }
 
+// Retailer text can establish an explicit count when the structured size is
+// absent. Never infer a single item, convert a pair, or discard a stated mass.
+function explicitTitlePieces(title: string): number | null {
+  const text=title.normalize('NFKC').toLowerCase();
+  if (/\d+(?:[.,]\d+)?\s*(?:kg|g|mg|ml|cl|litres?|l)\b/.test(text)) return null;
+  const counts=[...text.matchAll(/\b(\d{1,4})\s*(?:(?:standard|mega)\s+)?(?:packs?|pk|pcs?|pieces?|rolls?|sheets?|wipes?|pads?|tablets?|bags?|capsules?|teabags?|cases?)\b/g)]
+    .map(m=>Number(m[1]));
+  if (/\beach\b/.test(text)) counts.push(1);
+  return counts.length>0 && counts.every(n=>n===counts[0] && n>0) ? counts[0] : null;
+}
+function boundedIdentityDetails(details: Record<string, unknown>): Record<string, unknown> | undefined {
+  const preferred=['ingredients','regulatedProductName','productDescription','manufacturer','manufacturerInfo','packSize'];
+  const keys=[...preferred.filter(k=>k in details),...Object.keys(details).filter(k=>!preferred.includes(k)).sort()];
+  const retained: Record<string, unknown>={};
+  // Retain complete fields, never truncated ingredient text. Bound snapshots
+  // so ten reviewed candidates remain within the supervised bridge payload.
+  for (const key of keys) {
+    if (JSON.stringify(details[key]).length>2048) continue;
+    if (JSON.stringify({...retained,[key]:details[key]}).length<=4096) retained[key]=details[key];
+  }
+  return Object.keys(retained).length ? retained : undefined;
+}
 function productFromCache(value: unknown): TescoCollectedProduct | null {
   const p = object(value);
   const sku = string(p.tpnc);
@@ -68,13 +92,22 @@ function productFromCache(value: unknown): TescoCollectedProduct | null {
   if (Number.isFinite(amount) && amount > 0) {
     if (unit === 'g' || unit === 'kg') quantity = { grams: amount * (unit === 'kg' ? 1000 : 1) };
     if (['ml', 'cl', 'l'].includes(unit)) quantity = { millilitres: amount * (unit === 'l' ? 1000 : unit === 'cl' ? 10 : 1) };
-    if (['each', 'ea', 'pieces'].includes(unit)) quantity = { pieces: amount };
+    if (['each', 'ea', 'pieces', 'piece', 'pcs', 'pc', 'rolls', 'sheets', 'wipes', 'pads'].includes(unit)
+      && Number.isInteger(amount)) quantity = { pieces: amount };
   }
+  let quantityEvidence: TescoCollectedProduct['quantityEvidence'];
+  if (!quantity) {
+    const count=explicitTitlePieces(string(p.title));
+    if (count != null) { quantity={pieces:count}; quantityEvidence='explicit_retailer_title_count'; }
+  }
+  const details=object(p.details);
+  const identityDetails=boundedIdentityDetails(details);
   return {
     sku, url: tescoProductUrl(sku), name: string(p.title), brand: string(p.brandName) || null,
     gtin: string(p.gtin) || null,
     price: typeof price === 'number' && Number.isFinite(price) && price > 0 ? price : null,
     currency: 'EUR', available: p.isForSale === true && p.status === 'AvailableForSale', quantity,
+    ...(quantityEvidence ? {quantityEvidence} : {}), ...(identityDetails ? {identityDetails} : {}),
   };
 }
 

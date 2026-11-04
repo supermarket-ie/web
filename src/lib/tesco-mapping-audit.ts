@@ -86,7 +86,7 @@ const FORMULATION_GROUPS = [
 
 function plain(value: string | null | undefined) {
   return (value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/[’']/g, '').replace(/&(?:amp;)?/g, ' and ')
+    .toLowerCase().replace(/[’']/g, '').replace(/([a-z])\.(?=\s|[a-z]|$)/g, '$1 ').replace(/&(?:amp;)?/g, ' and ')
     .replace(/\bkilograms?\b/g, 'kg').replace(/\bgrams?\b/g, 'g')
     .replace(/\blitres?\b/g, 'l').replace(/\bmillilitres?\b/g, 'ml')
     .replace(/[^a-z0-9.\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -109,19 +109,23 @@ function skuFromUrl(url: string | null | undefined) {
 }
 
 function measure(value: string | null | undefined) {
-  const match = plain(value).match(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
+  const text=plain(value);
+  const multi=text.match(/\b(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
+  const match = multi ? [multi[0],multi[2],multi[3]] : text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
   if (!match) return null;
   let amount = Number(match[1]);
   let unit = match[2];
   if (unit === 'kg') { amount *= 1000; unit = 'g'; }
   if (unit === 'l') { amount *= 1000; unit = 'ml'; }
   if (unit === 'cl') { amount *= 10; unit = 'ml'; }
+  if (multi) amount *= Number(multi[1]);
   return { amount, unit };
 }
 
 function packCount(value: string | null | undefined) {
   const text = plain(value);
-  const count = text.match(/\b(\d+)\s*(?:x|pack|pk|rolls?|pieces?|bars?|cans?|bottles?)\b/)
+  const count = text.match(/\b(\d+)\s*x\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|cl|l)\b/)
+    ?? text.match(/\b(\d+)\s*(?:pack|pk|rolls?|pieces?|pcs?|bars?|cans?|bottles?)\b/)
     ?? text.match(/\b(\d+)\s+(?:(?:reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded|ultimate|breaded|fillet)\s+){0,6}(?:cubes?|bagels?|burgers?|pots?)\b/);
   return Number(count?.[1] ?? 0) || null;
 }

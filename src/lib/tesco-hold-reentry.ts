@@ -1,5 +1,6 @@
 import type { TescoCollectedProduct } from './tesco-direct-collection-core';
 import type { Candidate, ExecuteSql } from './tesco-supervised-collection';
+import { isDeepStrictEqual } from 'node:util';
 
 // Separate from ordinary expansion: the only override is the old *hold*.
 // Nothing here can grant approval, change a mapping or write a trusted price.
@@ -155,7 +156,7 @@ function independentPackConflict(e: ReentryEvidence, source: TescoCollectedProdu
   if (canonical.total && tesco.total && canonical.total !== tesco.total) return true;
   if (tesco.total && structured && tesco.total !== structured) return true;
   if (canonical.amount && structured && canonical.amount !== structured
-    && tesco.units === 1) return true;
+    && (tesco.units === 1 || !tesco.amount)) return true;
   if (canonical.units != null && tesco.units != null && canonical.units !== tesco.units) return true;
   return false;
 }
@@ -241,6 +242,7 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
     && normalized(live.name) === normalized(source.name)
     && normalized(live.brand) === normalized(source.brand)
     && JSON.stringify(live.quantity) === JSON.stringify(source.quantity)
+    && (source.identityDetails == null || isDeepStrictEqual(source.identityDetails,live.identityDetails))
     && (source.gtin == null || live.gtin === source.gtin)
     && !canonicalVariantConflict(m.canonical_name, live.name);
 }
