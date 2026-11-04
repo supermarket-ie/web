@@ -63,7 +63,8 @@ reader.on('line',line=>{
 const execute:ExecuteSql=query=>new Promise((resolve,reject)=>{
   if(disconnected){reject(Error('SQL bridge disconnected'));return}
   const id=++sequence;
-  const timer=setTimeout(()=>{replies.delete(id);reject(Error('SQL bridge deadline'))},90_000);
+  // Allow the connector's two-minute confirmation window; this makes no fetch.
+  const timer=setTimeout(()=>{replies.delete(id);reject(Error('SQL bridge deadline'))},180_000);
   replies.set(id,{resolve:rows=>{clearTimeout(timer);resolve(rows)},
     reject:e=>{clearTimeout(timer);reject(e)}});
   process.stdout.write(JSON.stringify({type:'sql',id,query})+'\n');

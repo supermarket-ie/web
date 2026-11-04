@@ -589,3 +589,14 @@ is evidence to reconcile, not authority to replay an unknown mutation. If no
 result was captured for a reserved request, retain it as pending and do not
 fetch it again. A lease is allowed to expire naturally; do not clear it to
 restart work early.
+
+### Database reply deadlines
+
+The three supervised SQL-bridge scripts allow 180 seconds for each connector
+reply, accommodating its two-minute confirmation window. This is separate from
+the unchanged thirty-second retailer network timeout and ten-minute egress
+lease. Do not extend a lease or retry a request on timeout. Reconcile the exact
+saved SQL, pending reservations and receipts. An incomplete evidence run with
+no unresolved request can resume its untouched URLs using the same mode and
+`--evidence-only` purpose; completed URLs and all circuit-breaker counters carry
+forward. Source activation requires that acquisition to finish successfully.

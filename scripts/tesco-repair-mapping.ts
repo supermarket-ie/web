@@ -34,7 +34,9 @@ input.on('line',line=>{
 function send(v:unknown){process.stdout.write(JSON.stringify(v)+'\n');}
 const execute=(query:string)=>new Promise<Record<string,unknown>[]>((resolve,reject)=>{
   if(disconnected){reject(Error('Supervisor disconnected'));return;}
-  const id=++sequence,timer=setTimeout(()=>{waiting.delete(id);reject(Error('Supervisor deadline'));},90000);
+  // The SQL connector may wait two minutes for confirmation. Retailer request
+  // deadlines and the ten-minute gate lease remain separate and unchanged.
+  const id=++sequence,timer=setTimeout(()=>{waiting.delete(id);reject(Error('Supervisor deadline'));},180000);
   waiting.set(id,{resolve:r=>{clearTimeout(timer);resolve(r);},reject:e=>{clearTimeout(timer);reject(e);}});
   send({type:'sql',id,query});
 });
