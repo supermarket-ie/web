@@ -1,5 +1,36 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — supervised continuation after interruption
+
+This continuation completed thirteen requests: five held-recovery price checks,
+seven source-only acquisitions and one independently reviewed source follow-up.
+Four new guarded trusted prices increased fresh Tesco coverage from 441 to 445.
+One price identity/availability hold and one HTTP 503 produced no trusted price.
+The source-only requests produced no price receipts. The HTTP error stopped
+collection and retained the normal fifteen-minute application cooldown.
+
+All seven historical pending requests remain unchanged, alongside the previous
+interrupted source request. That request has not been retried or assigned a
+successful outcome. No lease remains owned by this continuation. Conservative
+accounting charges 552 recorded requests since 31 October, leaving 448 from the
+1,000-request ceiling; this includes twenty earlier renewals omitted by the
+previous carried-forward estimate. Pair-review classifications remain separate
+from canonical price overlap. Detailed evidence remains protected.
+
+## 4 November 2026 — bounded retailer wording
+
+The independent retained-evidence title check recognises stir fry/stirfry,
+all purpose/multipurpose and cleaner/cleaning wording. Positive brand, source
+provenance, pack, barcode and variant checks remain mandatory. A generic unsized
+canonical may use a single peer only when the original Tesco mapping names the
+same manufacturer and that peer positively states the same whole-pack measure.
+An unspecified peer pack, missing original brand anchor or conflicting explicit
+canonical measure remains rejected. Regression cases
+reject changed brands, quantities and lemon/lime variants. Attached pack
+counts also remain explicit constraints, matching the existing database guard. No database
+permissions, approval mechanism or collection safeguards change. Production
+results are reconciled separately; a naming match does not approve a peer pair.
+
 ## 4 November 2026 — retained formulation details and explicit retailer counts
 
 The continuation following the wider inventory reconciliation completed 22

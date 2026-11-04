@@ -93,7 +93,10 @@ function titleSupport(a: string, b: string) {
     .replace(/\byoghurt\b/g, 'yogurt')
     .replace(/\b(stick|flake|cake|mealmaker)s\b/g, '$1')
     .replace(/\bpinhead oats\b/g, 'pinhead oatmeal')
-    .replace(/\bmy protein\b/g, 'myprotein').split(' ')
+    .replace(/\bmy protein\b/g, 'myprotein')
+    .replace(/\bstir fry\b/g, 'stirfry')
+    .replace(/\b(?:all purpose|multi purpose)\b/g, 'multipurpose')
+    .replace(/\b(?:cleaner|cleaning)\b/g, 'clean').split(' ')
     .filter(x => x.length >= 3 && !excluded.has(x) && !/^\d+$/.test(x)));
   const left = tokens(a), right = tokens(b);
   return [...left].filter(x => right.has(x)).length / Math.max(1, Math.min(left.size,right.size)) >= 0.65;
@@ -122,7 +125,8 @@ function declaredPack(name: string) {
   const n = name.normalize('NFKC').toLowerCase()
     .replace(/(\d),(\d{3})(?=\D|$)/g, '$1$2')
     .replace(/(\d),(\d{1,2})(?=\D|$)/g, '$1.$2')
-    .replace(/[^a-z0-9.]+/g, ' ').trim();
+    .replace(/[^a-z0-9.]+/g, ' ').trim()
+    .replace(/\b(\d+)(packs?|pk)\b/g, '$1 $2');
   const multi = n.match(/\b(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\b/);
   const measure = multi ?? n.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|l|litres?)\b/);
   let amount: string | null = null;
@@ -169,7 +173,7 @@ function peerIdentityConflict(e: ReentryEvidence, source: TescoCollectedProduct,
 }
 function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollectedProduct) {
   const m=e.mapping;
-  if (!source.brand) return false;
+  if (!source.brand || !normalized(source.brand)) return false;
   // A matching canonical barcode independently establishes the Tesco identity.
   // Peer classification stays separate; Tesco/canonical conflicts still fail.
   if (sameBarcode(m.canonical_ean,source.gtin)) return true;
@@ -197,9 +201,19 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
     // pack match. AI reviewer rationale alone cannot replace these checks.
     const canonical = declaredPack(m.canonical_name), tesco = declaredPack(source.name);
     const brandAnchor = m.canonical_brand ?? source.brand;
+    const peerPack = declaredPack(peer.store_product_name);
+    const sourceAmount = tesco.total ?? structuredMeasure(source.quantity);
+    // A generic catalogue title can omit the pack. Require the ORIGINAL Tesco
+    // mapping to name this manufacturer, and independent positive whole-pack
+    // evidence; mere absence of a peer conflict is not enough.
+    const originalBrand = m.store_brand != null ? sameBrand(m.store_brand,source.brand)
+      : (` ${normalized(m.store_product_name)} `)
+        .includes(` ${normalized(source.brand)} `);
+    const independentlySizedOriginal = canonical.total == null && originalBrand
+      && sourceAmount != null && peerPack.total === sourceAmount;
     const canonicalSupported = m.canonical_brand != null ? sameBrand(m.canonical_brand,source.brand)
-      : canonical.total != null && canonical.total === tesco.total
-        && titleSupport(m.canonical_name,source.name);
+      : titleSupport(m.canonical_name,source.name)
+        && ((canonical.total != null && canonical.total === tesco.total) || independentlySizedOriginal);
     return canonicalSupported
       && (peer.brand==null ? normalized(peer.store_product_name).replaceAll(' ','').includes(normalized(brandAnchor).replaceAll(' ',''))
         : sameBrand(peer.brand,source.brand))
