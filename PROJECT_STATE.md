@@ -15,8 +15,9 @@ Completed pages retain parsed retailer evidence and the original body hash.
 The evidence-only checkpoint has no finaliser call or price receipt. A private
 invoker trigger also rejects price receipts against evidence-only run identifiers. Subsequent
 recovery requires independent assessment, the existing one-time decision and
-a new live request after operational exclusions permit it. The existing
-24-hour recent-attempt exclusion applies to newly acquired source pages.
+a new live request after operational exclusions permit it. Only the exact successful, completed
+source-only acquisition page is exempt for the separately approved follow-up.
+Other recent requests, pending outcomes and failed acquisitions still block.
 
 Before this acquisition operation, the continuation completed twenty guarded
 renewals and recovered three additional trusted Tesco prices after the explicit

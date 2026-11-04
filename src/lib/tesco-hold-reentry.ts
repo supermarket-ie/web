@@ -59,7 +59,8 @@ function reentryEvidenceSqlWithRefs(storeIdSql: string, sourcePageSql: string, o
     'pending',exists(select 1 from tesco_direct_collection_pages x where x.requested_url=m.store_url and x.outcome='pending'
       ${excludeOwn}),
     'recentAttempt',exists(select 1 from tesco_direct_collection_pages x where x.requested_url=m.store_url
-      and x.created_at>now()-interval '24 hours' ${excludeOwn}))
+      and x.created_at>now()-interval '24 hours' ${excludeOwn}
+      and (x.id<>d.id or not tesco_internal.completed_evidence_source(d.id))))
     from (select s.id,s.product_id,p.canonical_name,p.brand canonical_brand,(to_jsonb(p)->>'ean') canonical_ean,
       s.store_product_name,s.brand store_brand,s.is_own_brand,s.store_sku,s.store_url,s.url_status,s.gtin
       from store_products s join products p on p.id=s.product_id

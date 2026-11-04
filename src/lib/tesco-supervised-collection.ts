@@ -350,6 +350,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         if not (${duePredicate(target, options.mode)}) then raise exception 'not_due_or_observation_changed'; end if;
         if exists(select 1 from tesco_direct_collection_pages where requested_url=${literal(target.store_url)}
           ${target.acquisition ? `and id<>${uuid(target.acquisition.pageId)}` : ''}
+          ${target.reentry ? `and not (id=${uuid(target.reentry.sourcePageId)}
+            and tesco_internal.completed_evidence_source(id))` : ''}
           and (outcome='pending' or created_at>now()-interval '24 hours')) then raise exception 'attempt_already_recorded'; end if;
         if exists(select 1 from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}
           and last_success_at>now()-interval '10 seconds') then raise exception 'pacing_not_elapsed'; end if;

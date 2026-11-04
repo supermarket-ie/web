@@ -493,6 +493,7 @@ also rejects price receipts against evidence-only runs. The same purpose
 flag is required when resuming an interrupted evidence run. Retain pending
 requests for reconciliation. A source capture is not a recovered price.
 
-Review the new source through the normal audited re-entry workflow after its
-operational exclusion window. That workflow fetches a new live price and
+Review the new source through the normal audited re-entry workflow. Only the
+exact successful, finished source-only page is exempt from the recent-attempt
+check for its separately approved follow-up. Other recent/pending attempts block. That workflow fetches a new live price and
 consumes a one-time decision. Evidence pages retain their original timestamps.
