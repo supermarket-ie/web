@@ -85,6 +85,37 @@ describe('independent Tesco naming and pack evidence',()=>{
     e.mapping.canonical_brand=null;
     expect(independentExactIdentity(e)).toBe(false);
   });
+  it('uses a positively corroborating whole pack without asserting the other peer exact',()=>{
+    const e=evidence('Example Deep Cheesy Pizza 100g','Example Deep Cheesy Pizza 100g',
+      'Example Deep Cheesy Pizza 100g');
+    e.peers.push({...e.peers[0],id:'other',store:'dunnes',brand:'Different',
+      store_product_name:'Different Wooden Pizza Set 3 Pieces'});
+    expect(independentExactIdentity(e)).toBe(true);
+    // A second wrong association cannot stand in for positive source support.
+    e.peers[0].store_product_name='Example Deep Cheesy Pizza';
+    expect(independentExactIdentity(e)).toBe(false);
+    e.peers[0].store_product_name='Example Deep Cheesy Pizza 200g';
+    expect(independentExactIdentity(e)).toBe(false);
+    e.peers[0].store_product_name='Example Deep Cheesy Pizza 100g';
+    e.peers[0].gtin='05000000000000';
+    expect(independentExactIdentity(e)).toBe(false);
+  });
+  it.each([
+    ['Example Basmati Rice 100g','Example Basmati Microwave Rice 100g','Example Ready to Heat Basmati Rice 100g'],
+    ['Example Mini Puddings 100g','Example Mini Puddings 100g','Example Mini Pudding 100g'],
+  ])('recognises supported preparation or inflection for %s',(c,s,p)=>{
+    expect(independentExactIdentity(evidence(c,s,p))).toBe(true);
+  });
+  it.each([
+    ['Example Basmati Rice 100g','Example Pilau Microwave Rice 100g','Example Ready to Heat Basmati Rice 100g'],
+    ['Example Rodeo Beef Dog Treats 100g','Example Ranchos Beef Dog Treats 100g','Example Rodeo Beef Dog Treats 100g'],
+    ['Example Wholegrain Rice 100g','Example Long Grain Microwave Rice 100g','Example Ready to Heat Wholegrain Rice 100g'],
+  ])('preserves named recipe and product-range conflicts for %s',(c,s,p)=>{
+    const e=evidence(c,s,p);
+    expect(independentExactIdentity(e)).toBe(false);
+    e.mapping.canonical_ean=e.page.parsed.products[0].gtin!;
+    expect(independentExactIdentity(e)).toBe(false);
+  });
   it('compares explicit multipacks against their total quantity',()=>{
     expect(independentExactIdentity(evidence('Example Apricot Yogurt 4 Pack','Example Apricot Yogurt 4x90g',
       'Example Apricot Yogurt 4 Pack (360 g)',{grams:360}))).toBe(true);

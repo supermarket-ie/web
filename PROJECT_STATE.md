@@ -1,5 +1,20 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — independent branded whole-pack corroboration
+
+A positively identified branded Tesco offer can use one independent peer when
+canonical, source, original mapping and peer positively agree on the manufacturer
+and complete pack measure. An unrelated or conflicting other peer stays in the
+immutable evidence snapshot and remains unverified. No peer mapping or comparison
+review is changed. Missing corroborating quantities, known barcode contradictions
+and genuine canonical/source conflicts remain blocked.
+
+Bounded pudding/dog inflections and ready-to-heat/microwave wording for rice are
+recognised during title corroboration. Explicit rice recipes and named pet-treat
+ranges remain separate material constraints. Independent AI review, single-use
+source-bound decisions, a new live request, ordinary circuit breakers and guarded
+finalisation remain required. Production receipts are recorded separately.
+
 ## 4 November 2026 — final evening continuation receipts
 
 The completed continuation used 23 Tesco requests: fifteen fresh price checks
