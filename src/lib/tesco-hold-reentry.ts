@@ -87,11 +87,13 @@ function titleSupport(a: string, b: string) {
   // Quantity is compared independently below. Attached measures must not
   // become lexical identity words ("100G" versus "(100 g)"). Only bounded
   // spelling/inflection equivalents are normalised; flavour words remain.
-  const tokens = (s: string) => new Set(normalized(s
+  const riceNames = /\brice\b/i.test(`${a} ${b}`);
+  const tokens = (s: string) => new Set(normalized((riceNames
+    ? s.replace(/\bready to heat\b/gi, 'microwave') : s)
     .replace(/([a-z])['’]([a-z])/gi, '$1$2')
     .replace(/\b\d+(?:[.,]\d+)?\s*(?:kg|g|ml|litres?|l)\b/gi, ' '))
     .replace(/\byoghurt\b/g, 'yogurt')
-    .replace(/\b(stick|flake|cake|mealmaker)s\b/g, '$1')
+    .replace(/\b(stick|flake|cake|mealmaker|pudding|dog)s\b/g, '$1')
     .replace(/\bpinhead oats\b/g, 'pinhead oatmeal')
     .replace(/\bmy protein\b/g, 'myprotein')
     .replace(/\bstir fry\b/g, 'stirfry')
@@ -110,6 +112,8 @@ function qualifiers(name: string) {
     /\bsugar free\b/, /\bgluten free\b/, /\borganic\b/,
     /\b(?:extra|mature) (?:strong|cheddar)\b/, /\b(?:milk|cream) chocolate\b/,
     /\bfrench onion\b/, /\bvegetable soup\b/, /\b(?:light|lighter)\b/,
+    /\bbasmati\b/, /\bpilau\b/, /\blong grain\b/, /\bwholegrain\b/,
+    /\brodeo\b/, /\branchos\b/, /\branchos\b.*\bcubes\b/,
   ];
   return groups.map(regex => regex.test(normalized(name)));
 }
@@ -174,9 +178,27 @@ function peerIdentityConflict(e: ReentryEvidence, source: TescoCollectedProduct,
 function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollectedProduct) {
   const m=e.mapping;
   if (!source.brand || !normalized(source.brand)) return false;
+  const sourceBrand = source.brand;
   // A matching canonical barcode independently establishes the Tesco identity.
   // Peer classification stays separate; Tesco/canonical conflicts still fail.
   if (sameBarcode(m.canonical_ean,source.gtin)) return true;
+  // Tesco can be established by ONE independently corroborating branded
+  // whole pack. Retain every peer in the snapshot: a conflicting other offer
+  // remains unverified and grants no comparison claim or mapping repair.
+  const canonicalPack = declaredPack(m.canonical_name);
+  const sourceTotal = declaredPack(source.name).total ?? structuredMeasure(source.quantity);
+  const originalBrand = m.store_brand != null ? sameBrand(m.store_brand,source.brand)
+    : (` ${normalized(m.store_product_name)} `).includes(` ${normalized(source.brand)} `);
+  const manufacturerBrand = !m.is_own_brand && !/^(?:tesco|dunnes|supervalu)(?: |$)/.test(normalized(sourceBrand));
+  if (manufacturerBrand && m.canonical_brand && sameBrand(m.canonical_brand,source.brand) && originalBrand
+    && canonicalPack.total != null && canonicalPack.total === sourceTotal
+    && titleSupport(m.canonical_name,source.name)
+    && e.peers.some(peer => declaredPack(peer.store_product_name).total === sourceTotal
+      && (peer.brand != null ? sameBrand(peer.brand,sourceBrand)
+        : (` ${normalized(peer.store_product_name)} `).includes(` ${normalized(source.brand)} `))
+      && (peer.gtin == null || sameBarcode(peer.gtin,source.gtin))
+      && titleSupport(source.name,peer.store_product_name)
+      && !peerIdentityConflict(e,source,peer))) return true;
   // Without the positive barcode path, corroborating peers must not
   // contradict the identity they are being used to establish.
   if (e.peers.some(peer=>peerIdentityConflict(e,source,peer))) return false;

@@ -541,3 +541,13 @@ do not establish a peer relationship or override a quantity or flavour conflict.
 For unsized generic canonical names, a single peer must positively corroborate
 the same branded whole-pack amount, with that brand also anchored in the original
 Tesco mapping. Missing amounts and conflicting canonical packs remain blocked.
+
+### Independently corroborated branded whole packs
+
+A single peer may establish a manufacturer-branded, fully measured Tesco identity when its
+brand, original mapping, canonical name, total quantity, barcode (if supplied)
+and variant checks agree positively. Retailer own-label offers remain excluded
+from this route. Preserve all peer evidence, including any
+conflicting other mapping; that peer remains unverified. Never remove a peer
+from a review snapshot to manufacture approval. Missing quantities, different
+rice recipes and different named product ranges remain blocked.
