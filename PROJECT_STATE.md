@@ -1,11 +1,45 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — continuation production receipts and evidence ceiling
+
+The continuation completed 33 supervised requests: twenty successful renewals,
+three newly trusted Tesco products, and ten evidence-only acquisitions.
+Fresh coverage increased from 413 at the live continuation preflight to 416.
+No HTTP 403, rate limit or transport failure was recorded. All four runs
+finished successfully and released ownership; no renewal was then due.
+
+The source-only cohort produced four redirects, five unavailable products and
+one available product lacking structured pack evidence. It produced no price
+receipts and no independently executable follow-up. Changed packs and
+formulations remain blocked. The ordinary selector still returned ten mappings;
+independent assessment deferred them for identity conflicts or insufficient
+evidence. An eligible selector row is not an identity approval.
+
+Live inventory contains 2,461 Tesco mappings. There are 1,142 previously
+successful mappings without a current price. The strict unique-SKU, resolved,
+valid-URL, non-pending subset contains 776 products: 756 have a retained Tesco
+capture and twenty do not. These two source-availability cohorts are disjoint;
+neither is a count of verified recoveries. Separately, 276 shared SKUs cover 626
+mappings, 59 mappings lack a usable SKU, and seven historical pending requests
+remain protected. Eight non-fresh, unique, non-pending mappings have an existing
+latest audit classification of material mismatch; this is an audited subset,
+not a complete conflict count. No barcode-backed mapping correction was found.
+The title-exact correction candidates inspected remained shared-SKU exclusions.
+
+Conservative authorisation accounting now charges 489 requests, leaving 511.
+Production has 206 raw three-retailer overlaps, zero independently approved exact
+triples and zero approved comparable alternatives. The target of hundreds more
+prices remains unmet: remaining source and mapping evidence must qualify before
+further exact price finalisation. No request budget was reset and no cached
+source price was promoted. Detailed evidence remains protected.
+
+
 
 ## 4 November 2026 — supervised source acquisition operation
 
 The existing supervised collector gains explicit `--evidence-only` and
 `--evidence-mappings` options for known mappings lacking retained captures.
-Selection accepts resolved or failed mappings with exact Irish product URLs, a unique numeric SKU,
+Selection requires resolved exact Irish product URLs, a unique numeric SKU,
 a prior successful receipt and an absent current price. Pending and recent
 requests are excluded. Each run is bounded to ten requests and uses the
 existing owned lease, pacing and network/identity circuit breakers.

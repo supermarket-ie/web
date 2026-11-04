@@ -1,5 +1,17 @@
 # Retailer Execution — Supermarket.ie
 
+### 4 November 2026 — evidence-only production outcome
+
+The continuation recorded twenty renewals, three new trusted Tesco products and
+ten source-only acquisitions, with zero network-access failures. Source capture
+alone qualified no follow-up: redirects, unavailable products, changed identity
+and missing pack evidence blocked further exact collection. Coverage was 416,
+with 511 requests remaining under conservative authorisation accounting.
+The historical seven pending requests remain protected. A raw selector result
+or cross-retailer canonical overlap must not be treated as an independent exact
+identity decision.
+
+
 **Last updated:** 10 September 2026
 
 This document records retailer-specific execution/handoff findings. Read `PROJECT_STATE.md` first for overall architecture and strategy.
@@ -488,8 +500,7 @@ before using the corresponding reviewed collector revision.
 Use the existing supervised CLI in expansion mode with `--evidence-only`,
 `--evidence-mappings` containing explicit mapping identifiers, and a limit of
 at most ten. Dry-run selection precedes an authorised live run. Apply the receipt-guard migration before acquisition. The run stores
-fresh source evidence for resolved or failed mappings without calling the price
-finaliser. Failed mapping status remains subject to evidence-bound repair. A database trigger
+fresh source evidence without calling the price finaliser. A database trigger
 also rejects price receipts against evidence-only runs. The same purpose
 flag is required when resuming an interrupted evidence run. Retain pending
 requests for reconciliation. A source capture is not a recovered price.
