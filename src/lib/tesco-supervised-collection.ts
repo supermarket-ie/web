@@ -26,7 +26,7 @@ export type Candidate = Mapping & {
   proven: boolean; overlap: number; peers: Mapping[]; acquisition?: Acquisition; reentry?: Reentry;
 };
 type RunState = {
-  protocol: string; mode: CollectionMode; selected: Candidate[];
+  protocol: string; mode: CollectionMode; evidenceOnly?: boolean; selected: Candidate[];
   activeSupervisor: string | null; stopReason?: string; complete?: boolean;
   // Hold circuit-breaker counters. Persisted so interruption/resume cannot reset
   // or bypass the breaker. consecutiveHolds resets on an acceptance; totalHolds
@@ -38,7 +38,7 @@ type RunState = {
   consecutiveQuarantines?: number; totalQuarantines?: number;
 };
 export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean;
-  acquisitionPages?: string[]; reviewedCandidates?: string[]; excludeSharedSku?: boolean };
+  acquisitionPages?: string[]; reviewedCandidates?: string[]; excludeSharedSku?: boolean; evidenceOnly?: boolean; evidenceIds?: string[] };
 export type Dependencies = {
   execute: ExecuteSql;
   fetchPage?: (url: string) => Promise<TescoPageResponse>;
@@ -149,6 +149,27 @@ export async function selectSupervisedCandidates(
   });
 }
 
+// Explicit known mappings only. Evidence acquisition retains the existing
+// gate and reservation protocol, and has no price-finalisation path.
+async function selectEvidenceCandidates(execute: ExecuteSql, ids: string[]): Promise<Candidate[]> {
+  const rows = await execute(`with mappings as (select ${mappingFields} from store_products s join products p on p.id=s.product_id
+    where s.store='tesco')
+    select m.*,null::timestamptz observed_at,null::numeric price,false due,false held,true proven,
+      (select count(distinct l.store) from latest_prices l where l.canonical_product_id=m.product_id
+        and l.store in ('dunnes','supervalu')) overlap,
+      jsonb_build_array(to_jsonb(m)) peers
+    from mappings m where m.id in (${ids.map(uuid).join(',')}) and m.url_status in ('resolved','failed')
+      and m.store_sku ~ '^[0-9]{6,12}$'
+      and m.store_url='https://www.tesco.ie/shop/en-IE/products/'||m.store_sku
+      and (select count(*) from mappings x where x.store_sku=m.store_sku)=1
+      and exists(select 1 from scrape_product_receipts r where r.store_product_id=m.id and r.outcome='success')
+      and not exists(select 1 from latest_prices l where l.store_product_id=m.id)
+      and not exists(select 1 from tesco_direct_collection_pages d where d.requested_url=m.store_url
+        and (d.outcome='pending' or d.created_at>now()-interval '24 hours'))
+    order by overlap desc,m.id`);
+  return rows as unknown as Candidate[];
+}
+
 /**
  * Read-only enumeration of the shared-SKU canonical groups that the bulk
  * recovery conservatively DEFERS (excludeSharedSku). One entry per shared SKU,
@@ -246,6 +267,13 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   if (options.reviewedCandidates && (options.mode !== 'expansion' || options.resume ||
     options.acquisitionPages || options.reviewedCandidates.length > limit))
     throw new Error('Reviewed hold re-entry requires a separate new bounded expansion run');
+  if (options.evidenceOnly && (options.mode !== 'expansion' || limit > 10 || options.reviewedCandidates
+    || options.acquisitionPages || (!options.resume && !options.evidenceIds?.length)))
+    throw new Error('Evidence acquisition requires explicit known mappings in a bounded expansion run');
+  if (options.evidenceIds && (!options.evidenceOnly || options.resume || options.evidenceIds.length > limit
+    || new Set(options.evidenceIds).size !== options.evidenceIds.length))
+    throw new Error('Invalid evidence mapping selection');
+  options.evidenceIds?.forEach(uuid);
   const { execute } = deps;
   let selected: Candidate[];
   let completedUrls: string[] = [];
@@ -259,7 +287,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   if (options.resume) {
     const prior = await reconcileSupervisedRun(execute, options.resume);
     const state = prior.summary as RunState;
-    if (state.protocol !== PROTOCOL || state.mode !== options.mode) throw new Error('Run protocol or mode differs');
+    if (state.protocol !== PROTOCOL || state.mode !== options.mode || !!state.evidenceOnly !== !!options.evidenceOnly) throw new Error('Run protocol or mode differs');
     if ((prior.unresolved as string[]).length) return { ...prior, result: 'unresolved_attempts' };
     if (state.complete || (state.stopReason && state.stopReason !== 'interrupted')) return { ...prior, result: 'terminal_run' };
     selected = state.selected;
@@ -269,14 +297,15 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
     attempts = Number(state.attempts ?? 0);
     consecutiveQuarantines = Number(state.consecutiveQuarantines ?? 0);
     totalQuarantines = Number(state.totalQuarantines ?? 0);
-  } else selected = options.reviewedCandidates ? await selectReviewedCandidates(execute, options.reviewedCandidates)
+  } else selected = options.evidenceOnly ? await selectEvidenceCandidates(execute, options.evidenceIds!)
+    : options.reviewedCandidates ? await selectReviewedCandidates(execute, options.reviewedCandidates)
     : options.acquisitionPages ? await selectAcquisitionCandidates(execute, options.acquisitionPages)
     : await selectSupervisedCandidates(execute, options.mode, limit, { excludeSharedSku: options.excludeSharedSku });
   if (options.dryRun || !selected.length) return { result: options.dryRun ? 'dry_run' : 'no_due_products',
-    mode: options.mode, selected: selected.map(m => ({ id: m.id, name: m.canonical_name, observedAt: m.observed_at })) };
+    mode: options.mode, evidenceOnly: !!options.evidenceOnly, selected: selected.map(m => ({ id: m.id, name: m.canonical_name, observedAt: m.observed_at })) };
 
   const runId = options.resume ?? randomUUID(), owner = randomUUID();
-  const initial: RunState = { protocol: PROTOCOL, mode: options.mode, selected, activeSupervisor: owner };
+  const initial: RunState = { protocol: PROTOCOL, mode: options.mode, evidenceOnly: !!options.evidenceOnly, selected, activeSupervisor: owner };
   // Retain the identifier even if the claim commits but its acknowledgement is lost.
   deps.progress?.({ event: 'starting', runId, mode: options.mode, selected: selected.length });
   // The workspace gate is intentionally disabled for automated egress selection.
@@ -288,12 +317,13 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       then raise exception 'gate_unavailable'; end if;
     -- Invalidate expired owners before transferring this protocol's single gate.
     update scrape_runs set error_summary=(error_summary::jsonb || jsonb_build_object('activeSupervisor',null))::text
-      where id<>${uuid(runId)} and case when run_id like 'tesco_supervised_renewal_%' or run_id like 'tesco_supervised_expansion_%'
+      where id<>${uuid(runId)} and case when run_id like 'tesco_supervised_renewal_%' or run_id like 'tesco_supervised_expansion_%' or run_id like 'tesco_supervised_evidence_%'
         then error_summary::jsonb->>'protocol'=${literal(PROTOCOL)} and error_summary::jsonb->>'activeSupervisor' is not null
         else false end;
     ${options.resume ? `perform 1 from scrape_runs where id=${uuid(runId)} for update;
       if not exists(select 1 from scrape_runs where id=${uuid(runId)} and error_summary::jsonb->>'protocol'=${literal(PROTOCOL)}
         and error_summary::jsonb->>'mode'=${literal(options.mode)}
+        and coalesce((error_summary::jsonb->>'evidenceOnly')::boolean,false)=${!!options.evidenceOnly}
         and coalesce(error_summary::jsonb->>'stopReason','interrupted')='interrupted'
         and coalesce((error_summary::jsonb->>'complete')::boolean,false)=false)
         or exists(select 1 from tesco_direct_collection_pages where run_id=${uuid(runId)} and outcome='pending')
@@ -301,7 +331,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       update scrape_runs set status='running',finished_at=null,error_summary=(error_summary::jsonb ||
         jsonb_build_object('activeSupervisor',${literal(owner)},'stopReason',null))::text where id=${uuid(runId)};`
       : `insert into scrape_runs(id,store,run_id,target_count,retrieval_method,run_scope,error_summary)
-        values(${uuid(runId)},'tesco',${literal(`tesco_supervised_${options.mode}_${runId}`)},${selected.length},
+        values(${uuid(runId)},'tesco',${literal(`tesco_supervised_${options.evidenceOnly ? 'evidence' : options.mode}_${runId}`)},${selected.length},
         'tesco_direct','manual',${literal(initial)});`}
     update tesco_egress_pool set leased_until=now()+interval '10 minutes',updated_at=now()
       where egress_key=${literal(SUPERVISED_GATE)};
@@ -320,6 +350,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         if not (${duePredicate(target, options.mode)}) then raise exception 'not_due_or_observation_changed'; end if;
         if exists(select 1 from tesco_direct_collection_pages where requested_url=${literal(target.store_url)}
           ${target.acquisition ? `and id<>${uuid(target.acquisition.pageId)}` : ''}
+          ${target.reentry ? `and not (id=${uuid(target.reentry.sourcePageId)}
+            and tesco_internal.completed_evidence_source(id))` : ''}
           and (outcome='pending' or created_at>now()-interval '24 hours')) then raise exception 'attempt_already_recorded'; end if;
         if exists(select 1 from tesco_egress_pool where egress_key=${literal(SUPERVISED_GATE)}
           and last_success_at>now()-interval '10 seconds') then raise exception 'pacing_not_elapsed'; end if;
@@ -370,7 +402,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       const disposition = outcome === 'ok'
         ? classifyIdentityOutcome(reasons, product != null, materialDuplicateConflict)
         : 'stop';
-      const accepted = outcome === 'ok' && disposition === 'accept' && product != null;
+      const identityAccepted = outcome === 'ok' && disposition === 'accept' && product != null;
+      const accepted = identityAccepted && !options.evidenceOnly;
       const isHold = outcome === 'ok' && disposition === 'hold_continue';
       // Quarantine-and-continue: an isolated, product-confined canonical-identity
       // rejection on a clean ok page with the SKU found + no duplicate conflict.
@@ -393,7 +426,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
         attempts += 1;
         if (isHold) { totalHolds += 1; consecutiveHolds += 1; consecutiveQuarantines = 0; }
         else if (isQuarantine) { totalQuarantines += 1; consecutiveQuarantines += 1; consecutiveHolds = 0; }
-        else if (accepted) { consecutiveHolds = 0; consecutiveQuarantines = 0; }
+        else if (identityAccepted) { consecutiveHolds = 0; consecutiveQuarantines = 0; }
         // skip_no_price leaves both consecutive counters unchanged.
         breaker = holdCircuitTripped(consecutiveHolds, totalHolds, attempts);
         quarantineBreaker = quarantineCircuitTripped(consecutiveQuarantines, totalQuarantines, attempts);
@@ -409,7 +442,7 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
       await execute(`do $runner$ begin ${owned(runId, owner, !!pauseUntil)}
         if exists(select 1 from tesco_direct_collection_pages where run_id=${uuid(runId)}
           and requested_url=${literal(target.store_url)} and outcome='pending') then
-          ${accepted || isQuarantine ? assertSnapshot(target) + assertAcquisition(target, runId) + assertReentry(target, runId, true) : ''}
+          ${accepted || isQuarantine || options.evidenceOnly ? assertSnapshot(target) + assertAcquisition(target, runId) + assertReentry(target, runId, true) : ''}
           update tesco_direct_collection_pages set final_url=${literal(response.finalUrl)},outcome=${literal(outcome)},
             http_status=${literal(response.status)}::int,retry_after=${literal(response.retryAfter)},elapsed_ms=${literal(response.elapsedMs)}::int,
             body_sha256=${literal(createHash('sha256').update(response.html).digest('hex'))},parsed=${literal(parsed)}::jsonb,
@@ -418,6 +451,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
               resourceUnavailable: unavailable, redirectUrl: response.redirectUrl,
               disposition: outcome === 'ok' ? disposition : undefined,
               quarantined: isQuarantine || undefined,
+              ...(options.evidenceOnly ? { acquisitionOnly: true, pricesInserted: 0,
+                purpose: 'identity_evidence', observedAt: new Date().toISOString() } : {}),
               ...(target.acquisition ? { purpose: 'price_verification', sourceAcquisitionPageId: target.acquisition.pageId,
                 sourceBodySha256: target.acquisition.snapshot.page.body_sha256 } : {}),
               ...(target.reentry ? { purpose: 'audited_hold_reentry', reviewId: target.reentry.reviewId,
@@ -484,5 +519,5 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
             'complete',${stopReason === 'complete'}))::text where id=${uuid(runId)};
       end if; end $runner$; select 1 closed`);
   }
-  return { ...await reconcileSupervisedRun(execute, runId), result: stopReason };
+  return { ...await reconcileSupervisedRun(execute, runId), result: stopReason, evidenceOnly: !!options.evidenceOnly };
 }

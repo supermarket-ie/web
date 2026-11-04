@@ -1,6 +1,29 @@
 # Supermarket.ie — Canonical Project State
 
 
+## 4 November 2026 — supervised source acquisition operation
+
+The existing supervised collector gains explicit `--evidence-only` and
+`--evidence-mappings` options for known mappings lacking retained captures.
+Selection accepts resolved or failed mappings with exact Irish product URLs, a unique numeric SKU,
+a prior successful receipt and an absent current price. Pending and recent
+requests are excluded. Each run is bounded to ten requests and uses the
+existing owned lease, pacing and network/identity circuit breakers.
+
+The persisted purpose prevents resuming an evidence run as a price run.
+Completed pages retain parsed retailer evidence and the original body hash.
+The evidence-only checkpoint has no finaliser call or price receipt. A private
+invoker trigger also rejects price receipts against evidence-only run identifiers. Subsequent
+recovery requires independent assessment, the existing one-time decision and
+a new live request after operational exclusions permit it. Only the exact successful, completed
+source-only acquisition page is exempt for the separately approved follow-up.
+Other recent requests, pending outcomes and failed acquisitions still block.
+
+Before this acquisition operation, the continuation completed twenty guarded
+renewals and recovered three additional trusted Tesco prices after the explicit
+food-count correction. Production coverage at that checkpoint was 416.
+
+
 ## 4 November 2026 — explicit food count verification correction
 
 The independent and database pack checks now recognise bounded descriptive
