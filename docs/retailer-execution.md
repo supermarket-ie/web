@@ -544,9 +544,10 @@ Tesco mapping. Missing amounts and conflicting canonical packs remain blocked.
 
 ### Independently corroborated branded whole packs
 
-A single peer may establish a branded, fully measured Tesco identity when its
+A single peer may establish a manufacturer-branded, fully measured Tesco identity when its
 brand, original mapping, canonical name, total quantity, barcode (if supplied)
-and variant checks agree positively. Preserve all peer evidence, including any
+and variant checks agree positively. Retailer own-label offers remain excluded
+from this route. Preserve all peer evidence, including any
 conflicting other mapping; that peer remains unverified. Never remove a peer
 from a review snapshot to manufacture approval. Missing quantities, different
 rice recipes and different named product ranges remain blocked.

@@ -189,7 +189,8 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
   const sourceTotal = declaredPack(source.name).total ?? structuredMeasure(source.quantity);
   const originalBrand = m.store_brand != null ? sameBrand(m.store_brand,source.brand)
     : (` ${normalized(m.store_product_name)} `).includes(` ${normalized(source.brand)} `);
-  if (m.canonical_brand && sameBrand(m.canonical_brand,source.brand) && originalBrand
+  const manufacturerBrand = !m.is_own_brand && !/^(?:tesco|dunnes|supervalu)(?: |$)/.test(normalized(sourceBrand));
+  if (manufacturerBrand && m.canonical_brand && sameBrand(m.canonical_brand,source.brand) && originalBrand
     && canonicalPack.total != null && canonicalPack.total === sourceTotal
     && titleSupport(m.canonical_name,source.name)
     && e.peers.some(peer => declaredPack(peer.store_product_name).total === sourceTotal

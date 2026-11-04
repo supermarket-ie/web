@@ -100,6 +100,15 @@ describe('independent Tesco naming and pack evidence',()=>{
     e.peers[0].gtin='05000000000000';
     expect(independentExactIdentity(e)).toBe(false);
   });
+  it('does not reuse the branded corroboration path for retailer own-label offers',()=>{
+    const e=evidence('Tesco Milk 100g','Tesco Milk 100g','Tesco Milk 100g',{grams:100},'Tesco');
+    e.mapping.is_own_brand=true;
+    e.peers.push({...e.peers[0],id:'other',store:'dunnes',brand:'Different',
+      store_product_name:'Different Milk 100g'});
+    expect(independentExactIdentity(e)).toBe(false);
+    e.mapping.is_own_brand=false;
+    expect(independentExactIdentity(e)).toBe(false);
+  });
   it.each([
     ['Example Basmati Rice 100g','Example Basmati Microwave Rice 100g','Example Ready to Heat Basmati Rice 100g'],
     ['Example Mini Puddings 100g','Example Mini Puddings 100g','Example Mini Pudding 100g'],

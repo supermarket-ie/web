@@ -2,9 +2,9 @@
 
 ## 4 November 2026 — independent branded whole-pack corroboration
 
-A positively identified branded Tesco offer can use one independent peer when
+A positively identified manufacturer-branded Tesco offer can use one independent peer when
 canonical, source, original mapping and peer positively agree on the manufacturer
-and complete pack measure. An unrelated or conflicting other peer stays in the
+and complete pack measure. Retailer own-label offers cannot use this route. An unrelated or conflicting other peer stays in the
 immutable evidence snapshot and remains unverified. No peer mapping or comparison
 review is changed. Missing corroborating quantities, known barcode contradictions
 and genuine canonical/source conflicts remain blocked.
