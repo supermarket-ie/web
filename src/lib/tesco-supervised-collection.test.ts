@@ -90,6 +90,7 @@ beforeEach(async () => {
   await db.exec(readFileSync('supabase/migrations/20261101182500_tesco_machine_reentry_approvals.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261101220707_tesco_supervised_operational_recovery.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261104121700_tesco_explicit_food_counts.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261104123000_tesco_evidence_receipt_guard.sql', 'utf8'));
   execute = async query => {
     const results = await db.exec(query);
     return results.at(-1)?.rows as Record<string, unknown>[] ?? [];
@@ -1591,4 +1592,63 @@ describe('quarantine-and-continue (PostgreSQL, Heinz case)', () => {
     const r = (await db.query<Record<string, unknown>>(`select error_summary from scrape_runs where id=$1`, [runId])).rows[0];
     return JSON.parse(String(r.error_summary));
   }
+});
+
+describe('supervised evidence-only acquisition', () => {
+  it('captures fresh source evidence without a price receipt or observation', async () => {
+    await seed(0,'8 days');
+    const before=await observations();
+    const queries:string[]=[];
+    const sql:ExecuteSql=async q=>{queries.push(q);return execute(q);};
+    const result=await collectTescoSupervised({mode:'expansion',limit:1,evidenceOnly:true,evidenceIds:[ids[0]]},
+      {execute:sql,sleep,fetchPage:vi.fn().mockResolvedValue(response())});
+    expect(result).toMatchObject({result:'complete',completed:1,inserted:0,unresolved:[]});
+    expect(await observations()).toEqual(before);
+    expect(queries.some(q=>q.includes('perform finalize_store_scrape_product'))).toBe(false);
+    await expect(db.query(`select finalize_store_scrape_product(p_run_uuid=>$1,p_store=>'tesco',p_store_product_id=>$2,
+      p_success=>true,p_price=>99)`,[result.id,ids[0]])).rejects.toThrow('evidence_only_price_forbidden');
+    expect(await observations()).toEqual(before);
+    const [page]=(await db.query<{body_sha256:string;detail:string}>('select body_sha256,detail from tesco_direct_collection_pages where run_id=$1',[result.id])).rows;
+    expect(page.body_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(page.detail)).toMatchObject({acquisitionOnly:true,pricesInserted:0,purpose:'identity_evidence'});
+    expect((result.summary as {evidenceOnly:boolean}).evidenceOnly).toBe(true);
+    await expect(collectTescoSupervised({mode:'expansion',resume:String(result.id)},{execute,sleep})).rejects.toThrow('protocol or mode differs');
+    const fetchPage=vi.fn();
+    expect(await collectTescoSupervised({mode:'expansion',limit:1},{execute,sleep,fetchPage})).toMatchObject({result:'no_due_products'});
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+  it.each(['pending','network_error'])('excludes protected pending and recent requests (%s)', async outcome => {
+    await seed(0,'8 days');
+    await db.query(`insert into tesco_direct_collection_pages(run_id,egress_key,requested_url,mode,outcome,created_at)
+      values($1,$2,$3,'products',$4,now()-$5::interval)`,[historic,SUPERVISED_GATE,url(),outcome,outcome==='pending'?'2 days':'1 hour']);
+    const fetchPage=vi.fn();
+    expect(await collectTescoSupervised({mode:'expansion',limit:1,evidenceOnly:true,evidenceIds:[ids[0]]},{execute,sleep,fetchPage})).toMatchObject({result:'no_due_products'});
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+  it('excludes shared SKUs and mappings without prior successful receipts', async () => {
+    await seed(0,'8 days');await seed(1,'8 days');
+    await db.query('update store_products set store_sku=$1,store_url=$2 where id=$3',[sku(),url(),ids[1]]);
+    const fetchPage=vi.fn();
+    expect(await collectTescoSupervised({mode:'expansion',limit:2,evidenceOnly:true,evidenceIds:[ids[0],ids[1]]},{execute,sleep,fetchPage})).toMatchObject({result:'no_due_products'});
+    await db.query('update store_products set store_sku=$1,store_url=$2 where id=$3',[sku(1),url(1),ids[1]]);
+    await db.query('delete from scrape_product_receipts where store_product_id=$1',[ids[0]]);
+    expect(await collectTescoSupervised({mode:'expansion',limit:1,evidenceOnly:true,evidenceIds:[ids[0]]},{execute,sleep,fetchPage})).toMatchObject({result:'no_due_products'});
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+  it('preserves an unknown evidence request across resume and forbids a purpose switch', async () => {
+    await seed(0,'8 days');
+    const result=await collectTescoSupervised({mode:'expansion',limit:1,evidenceOnly:true,evidenceIds:[ids[0]]},
+      {execute,sleep,fetchPage:vi.fn().mockRejectedValue(new Error('lost response'))});
+    expect(result).toMatchObject({result:'interrupted',unresolved:[url()],inserted:0});
+    expect(await collectTescoSupervised({mode:'expansion',evidenceOnly:true,limit:1,resume:String(result.id)},{execute,sleep})).toMatchObject({result:'unresolved_attempts'});
+    await expect(collectTescoSupervised({mode:'expansion',resume:String(result.id)},{execute,sleep})).rejects.toThrow('protocol or mode differs');
+  });
+  it('requires explicit bounded mappings and prevents approval mixing', async () => {
+    for (const options of [
+      {mode:'renewal' as const,evidenceOnly:true,evidenceIds:[ids[0]]},
+      {mode:'expansion' as const,evidenceOnly:true,limit:11,evidenceIds:[ids[0]]},
+      {mode:'expansion' as const,evidenceOnly:true,limit:1},
+      {mode:'expansion' as const,evidenceOnly:true,limit:1,evidenceIds:[ids[0]],reviewedCandidates:[randomUUID()]},
+    ]) await expect(collectTescoSupervised(options,{execute})).rejects.toThrow('Evidence acquisition requires');
+  });
 });

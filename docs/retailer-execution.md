@@ -481,3 +481,18 @@ canonical identity, retained Tesco evidence and retailer peers. A missing
 count supplies no positive evidence. Different counts and explicit retail
 multipack conflicts remain blocked. Apply the forward private-helper migration
 before using the corresponding reviewed collector revision.
+
+
+### Evidence acquisition for known Tesco mappings
+
+Use the existing supervised CLI in expansion mode with `--evidence-only`,
+`--evidence-mappings` containing explicit mapping identifiers, and a limit of
+at most ten. Dry-run selection precedes an authorised live run. Apply the receipt-guard migration before acquisition. The run stores
+fresh source evidence without calling the price finaliser. A database trigger
+also rejects price receipts against evidence-only runs. The same purpose
+flag is required when resuming an interrupted evidence run. Retain pending
+requests for reconciliation. A source capture is not a recovered price.
+
+Review the new source through the normal audited re-entry workflow after its
+operational exclusion window. That workflow fetches a new live price and
+consumes a one-time decision. Evidence pages retain their original timestamps.
