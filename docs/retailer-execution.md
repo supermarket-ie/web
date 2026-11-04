@@ -531,3 +531,9 @@ Review the new source through the normal audited re-entry workflow. Only the
 exact successful, finished source-only page is exempt from the recent-attempt
 check for its separately approved follow-up. Other recent/pending attempts block. That workflow fetches a new live price and
 consumes a one-time decision. Evidence pages retain their original timestamps.
+
+### Bounded wording review
+
+Retained-source review normalises stir fry/stirfry and multipurpose cleaning
+wording only after separate brand, pack and variant checks. These equivalents
+do not establish a peer relationship or override a quantity or flavour conflict.

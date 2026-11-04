@@ -93,7 +93,10 @@ function titleSupport(a: string, b: string) {
     .replace(/\byoghurt\b/g, 'yogurt')
     .replace(/\b(stick|flake|cake|mealmaker)s\b/g, '$1')
     .replace(/\bpinhead oats\b/g, 'pinhead oatmeal')
-    .replace(/\bmy protein\b/g, 'myprotein').split(' ')
+    .replace(/\bmy protein\b/g, 'myprotein')
+    .replace(/\bstir fry\b/g, 'stirfry')
+    .replace(/\b(?:all purpose|multi purpose)\b/g, 'multipurpose')
+    .replace(/\b(?:cleaner|cleaning)\b/g, 'clean').split(' ')
     .filter(x => x.length >= 3 && !excluded.has(x) && !/^\d+$/.test(x)));
   const left = tokens(a), right = tokens(b);
   return [...left].filter(x => right.has(x)).length / Math.max(1, Math.min(left.size,right.size)) >= 0.65;

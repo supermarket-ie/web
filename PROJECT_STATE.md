@@ -1,5 +1,14 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — bounded retailer wording
+
+The independent retained-evidence title check recognises stir fry/stirfry,
+all purpose/multipurpose and cleaner/cleaning wording. Positive brand, source
+provenance, pack, barcode and variant checks remain mandatory. Regression cases
+reject changed brands, quantities and lemon/lime variants. No database
+permissions, approval mechanism or collection safeguards change. Production
+results are reconciled separately; a naming match does not approve a peer pair.
+
 ## 4 November 2026 — retained formulation details and explicit retailer counts
 
 The continuation following the wider inventory reconciliation completed 22

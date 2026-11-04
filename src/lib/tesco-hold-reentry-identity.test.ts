@@ -36,6 +36,22 @@ describe('independent Tesco naming and pack evidence',()=>{
   ])('accepts supported spelling and presentation for %s',(c,s,p,b)=>{
     expect(independentExactIdentity(evidence(c,s,p,{grams:100},b))).toBe(true);
   });
+  it.each([
+    ['Example Protein Plant Powered Stirfry 450g','Example Protein Stir Fry 450G','Example Protein Plant Powered Stirfry (450 g)',{grams:450},'Example'],
+    ['Example Bleach Multipurpose Cleaning Spray 700ml','Example Bleach Spray All Purpose Multi Surface Cleaner 700ml','Example Bleach Multipurpose Cleaning Spray (700 ml)',{millilitres:700},'Example'],
+  ])('recognises bounded product wording for %s',(c,s,p,q,b)=>{
+    const e=evidence(c,s,p,q,b);
+    expect(independentExactIdentity(e)).toBe(true);
+    e.peers[0].brand='Different';
+    expect(independentExactIdentity(e)).toBe(false);
+    e.peers[0].brand=b;
+    e.page.parsed.products[0].quantity={grams:200};
+    expect(independentExactIdentity(e)).toBe(false);
+  });
+  it('retains variant rejection when product wording is equivalent',()=>{
+    expect(independentExactIdentity(evidence('Example Lemon Multipurpose Cleaning Spray 100g',
+      'Example Lime All Purpose Cleaner Spray 100g','Example Lemon Multipurpose Cleaning Spray 100g'))).toBe(false);
+  });
   it('compares explicit multipacks against their total quantity',()=>{
     expect(independentExactIdentity(evidence('Example Apricot Yogurt 4 Pack','Example Apricot Yogurt 4x90g',
       'Example Apricot Yogurt 4 Pack (360 g)',{grams:360}))).toBe(true);
