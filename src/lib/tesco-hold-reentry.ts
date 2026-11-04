@@ -113,7 +113,7 @@ function qualifiers(name: string) {
     /\b(?:extra|mature) (?:strong|cheddar)\b/, /\b(?:milk|cream) chocolate\b/,
     /\bfrench onion\b/, /\bvegetable soup\b/, /\b(?:light|lighter)\b/,
     /\bbasmati\b/, /\bpilau\b/, /\blong grain\b/, /\bwholegrain\b/,
-    /\brodeo\b/, /\branchos\b/,
+    /\brodeo\b/, /\branchos\b/, /\branchos\b.*\bcubes\b/,
   ];
   return groups.map(regex => regex.test(normalized(name)));
 }

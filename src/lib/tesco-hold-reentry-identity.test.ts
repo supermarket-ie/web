@@ -118,6 +118,7 @@ describe('independent Tesco naming and pack evidence',()=>{
   it.each([
     ['Example Basmati Rice 100g','Example Pilau Microwave Rice 100g','Example Ready to Heat Basmati Rice 100g'],
     ['Example Rodeo Beef Dog Treats 100g','Example Ranchos Beef Dog Treats 100g','Example Rodeo Beef Dog Treats 100g'],
+    ['Example Ranchos Chicken Treats 100g','Example Ranchos Cubes Chicken Treats 100g','Example Ranchos Originals Chicken Treats 100g'],
     ['Example Wholegrain Rice 100g','Example Long Grain Microwave Rice 100g','Example Ready to Heat Wholegrain Rice 100g'],
   ])('preserves named recipe and product-range conflicts for %s',(c,s,p)=>{
     const e=evidence(c,s,p);
