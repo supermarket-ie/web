@@ -551,3 +551,28 @@ from this route. Preserve all peer evidence, including any
 conflicting other mapping; that peer remains unverified. Never remove a peer
 from a review snapshot to manufacture approval. Missing quantities, different
 rice recipes and different named product ranges remain blocked.
+
+### Evidence-first target repair
+
+Use `scripts/tesco-repair-mapping.ts --stage PRIVATE_MANIFEST --dry-run` for
+an explicitly reviewed retained-source hint. Each row supplies `mapping_id`,
+`source_page_id`, `target_sku`, `source_body_sha256` and an independent
+`review_reason`. Stage at most ten with `--confirm-repair` and a private
+`--result-file`. Every mutation emits a unique batch before execution; an
+unknown acknowledgement requires audit-ledger reconciliation, never replay.
+
+Staging writes only the new target URL/SKU and failed status plus the atomic
+prior-state audit. Use the EXISTING supervised collector's `--evidence-only`
+mode on those mapping IDs. Independently inspect each completed new page,
+including formulation, preparation and packaging. An activation manifest
+supplies `audit_id`, the fresh `source_page_id`, `source_body_sha256` and a new
+`review_reason`; use `--activate PRIVATE_MANIFEST --dry-run`, then
+`--confirm-repair` only for supported records. Activation appends another audit
+and changes retailer title, brand, GTIN and resolved status without a price.
+Never alter the canonical identity or barcode to fit a candidate.
+
+Only then use the ordinary evidence-bound one-use review and a separately
+fetched guarded price. Failed/unknown acquisitions stay failed; preserve the
+source record, both mapping snapshots and all pending requests. The operation
+will not clear a lease/cooldown, reuse a pre-staging source, mutate an audit,
+or retry a destination attempted since the selected hint.

@@ -387,3 +387,6 @@ export function consumeReentry(target: Candidate, runId: string) {
 function literalEvidence(value: unknown) {
   return `E'${JSON.stringify(value).replaceAll('\\', '\\\\').replaceAll("'", "''").replaceAll('$', '\\044')}'`;
 }
+
+// Read-only predicates shared by the separate, evidence-first metadata repair.
+export { declaredPack, sameBrand, sameBarcode, titleSupport, canonicalVariantConflict, structuredMeasure };
