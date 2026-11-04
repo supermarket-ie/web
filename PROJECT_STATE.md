@@ -4,17 +4,18 @@
 ## 4 November 2026 — wider Tesco recovery production checkpoint
 
 The wider evidence review recorded 61 new one-time recovery decisions.
-At this checkpoint, 46 product requests had completed and 35 had produced
+At the final checkpoint, 61 product requests had completed and 48 had produced
 new trusted Tesco prices. Fresh coverage increased from 372 at the start
-of the morning review to 402, including intervening price expiries.
-Nine requests produced identity holds and two products redirected to
+of the morning review to 415, including five intervening price expiries.
+Eleven requests produced identity holds and two products redirected to
 unavailable-product categories. All other responses were HTTP 200.
 The seven historical pending requests were preserved.
 
-The deduplicated source snapshot contains 856 non-fresh, previously
-successful unique mappings without pending requests. Of these, 790 retain
-captures bound to both the requested and final exact product URL, while
-66 lack that provenance. Separate review of 334 captured mappings without
+Final strict SKU deduplication found 785 expired, previously successful
+one-to-one products without pending requests. Of these, 751 retain
+SKU-bound product captures and 34 lack them. There are also 59 mappings
+without a Tesco SKU. Earlier non-shared counts included missing-SKU
+mappings and must not be described as one-to-one inventory. Separate review of 334 captured mappings without
 prior successful receipts found none satisfying both strict current
 identity checks and independent canonical barcode support. Discovery
 found no automatically executable mapping corrections. These are review
@@ -22,7 +23,10 @@ and evidence counts, not projected price writes.
 
 Budget accounting conservatively includes every recorded request since
 the original additional-request authorisation rather than resetting at
-later restatements. Detailed source and decision records stay protected.
+later restatements. A total of 456 requests were charged, leaving 544.
+The collector released its lease after consuming all 61 new decisions.
+Production had 203 raw three-retailer overlaps, zero approved exact triples
+and zero approved alternatives. Detailed evidence stays protected.
 
 
 ## 4 November 2026 — broader supervised Tesco recovery review
