@@ -1,5 +1,27 @@
 # Supermarket.ie — Canonical Project State
 
+## 4 November 2026 — SQL bridge deadline correction
+
+The supervised CLI SQL reply watchdog was 90 seconds, shorter than the
+connector's two-minute confirmation window. A committed source checkpoint can
+therefore outlive its waiting process, leaving the run unfinished until ledger
+reconciliation. All three supervised SQL-bridge scripts now allow 180 seconds
+for a database reply. Unknown acknowledgements still stop; the ten-minute gate
+lease, thirty-second retailer fetch timeout, pacing, counters, circuit breakers,
+request budget and one-attempt transport are unchanged.
+
+Eight reviewed targets were staged as failed with complete prior-state audits
+and zero price writes. Five clean current source captures are committed from
+the eight-target acquisition, with no unresolved reservation in that run. The
+unfinished source run must resume the three untouched URLs after natural lease
+expiry and complete normally before any capture can authorise activation.
+The five completed URLs must not be fetched again. Private stdout checkpoints
+preserve emitted SQL and capture evidence across session interruption.
+
+Coverage remains 456 trusted fresh Tesco prices. Charging the five acquisitions
+raises the conservative request total to 573, leaving 427. No source-only capture
+is counted as a price; nine earlier pending reservations remain protected.
+
 ## 4 November 2026 — recovery checkpoint and supervised interruption
 
 Four additional guarded prices raised fresh Tesco coverage from 452 to 456

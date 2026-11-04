@@ -43,7 +43,10 @@ const execute: ExecuteSql = query => new Promise((resolve, reject) => {
   const id = ++sequence;
   const timeout = setTimeout(() => {
     replies.delete(id); reject(new Error('Supervisor response deadline')); disconnect();
-  }, 90_000);
+  // Connector confirmations can take two minutes. Keep the SQL reply deadline
+  // above that window and below the ten-minute lease; retailer fetches retain
+  // their separate thirty-second timeout. Unknown replies still stop the run.
+  }, 180_000);
   replies.set(id, {
     resolve: rows => { clearTimeout(timeout); resolve(rows); },
     reject: e => { clearTimeout(timeout); reject(e); },
