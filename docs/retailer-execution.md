@@ -576,3 +576,16 @@ fetched guarded price. Failed/unknown acquisitions stay failed; preserve the
 source record, both mapping snapshots and all pending requests. The operation
 will not clear a lease/cooldown, reuse a pre-staging source, mutate an audit,
 or retry a destination attempted since the selected hint.
+
+### Interrupted supervisor evidence
+
+Capture every supervised runner invocation's complete stdout in a new private
+file outside the git repository, with restrictive permissions and shell
+`pipefail` enabled. The JSONL stream includes source-bound SQL and may contain
+retailer evidence; never publish it. Preserve the original stdin bridge and
+pacing. After an interruption, inspect pending reservations, receipts, saved
+captures and the exact audit batch before any continuation. A saved statement
+is evidence to reconcile, not authority to replay an unknown mutation. If no
+result was captured for a reserved request, retain it as pending and do not
+fetch it again. A lease is allowed to expire naturally; do not clear it to
+restart work early.
