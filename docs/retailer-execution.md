@@ -471,3 +471,13 @@ identity and provenance independently. This triage option grants no approval.
 Use evidence-bound one-time operational decisions and live guarded collection
 in batches of at most ten. Preserve the campaign request budget across sessions.
 Brand punctuation normalisation does not establish cross-retailer equivalence.
+
+
+### Explicit food counts
+
+The supervised identity gates recognise explicit counts separated from stock
+cubes or bagels by bounded product descriptors. Compare the count across
+canonical identity, retained Tesco evidence and retailer peers. A missing
+count supplies no positive evidence. Different counts and explicit retail
+multipack conflicts remain blocked. Apply the forward private-helper migration
+before using the corresponding reviewed collector revision.

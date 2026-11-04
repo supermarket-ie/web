@@ -1,6 +1,21 @@
 # Supermarket.ie — Canonical Project State
 
 
+## 4 November 2026 — explicit food count verification correction
+
+The independent and database pack checks now recognise bounded descriptive
+count wording for stock cubes and bagels. Examples include twelve reduced
+salt beef stock cubes and six wholemeal bagels. Counts remain explicit.
+Tests cover different counts at equal total weight, conflicting peer counts,
+and single-versus-multipack rejection. The ordinary validator recognises
+the same count nouns. Omitted canonical measures still require the existing
+audited evidence exception, with positive source checks and a new live fetch.
+
+The forward migration replaces only the existing private conflict checker.
+It retains its execution privileges and the existing operational decision
+function. Production collection continues through the guarded finaliser.
+
+
 ## 4 November 2026 — wider Tesco recovery production checkpoint
 
 The wider evidence review recorded 61 new one-time recovery decisions.

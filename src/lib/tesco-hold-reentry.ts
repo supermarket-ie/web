@@ -124,7 +124,7 @@ function declaredPack(name: string) {
   // sticks" or "3 bars", not "7 Pack". Never treat an undisclosed count as
   // evidence that an explicitly different count is safe.
   const count = multi ? Number(multi[1])
-    : n.match(/\b(\d+)\s+(?:(?:standard|dental|jumbo|mini|large|small|sausage)\s+)?(?:rolls?|sheets?|pieces?|packs?|pk|pairs?|sticks?|bars?|pouches?|sachets?|chews?|pods?|cubes?|tablets?|bottles?|tubes?)\b/);
+    : n.match(/\b(\d+)\s+(?:(?:standard|dental|jumbo|mini|large|small|sausage|reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded)\s+){0,6}(?:rolls?|sheets?|pieces?|packs?|pk|pairs?|sticks?|bars?|pouches?|sachets?|chews?|pods?|cubes?|bagels?|tablets?|bottles?|tubes?)\b/);
   // If a product has a stated unit size and no explicit multipack, treat it
   // conservatively as a single unit. "110g" must not silently match "3x110g".
   const units = typeof count === 'number' ? count : count ? Number(count[1]) : amount ? 1 : null;
