@@ -161,4 +161,3 @@ begin
   perform pg_catalog.set_config('tesco.verified_reentry_decision','',true);
   return v_review_id;
 end $function$;
-
