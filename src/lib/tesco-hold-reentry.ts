@@ -144,12 +144,12 @@ function declaredPack(name: string) {
   // sticks" or "3 bars", not "7 Pack". Never treat an undisclosed count as
   // evidence that an explicitly different count is safe.
   const count = multi ? Number(multi[1])
-    : n.match(/\b(\d+)\s+(?:(?:standard|dental|jumbo|mini|large|small|sausage|reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded|ultimate|breaded|fillet)\s+){0,6}(?:rolls?|sheets?|pieces?|packs?|pk|pairs?|sticks?|bars?|pouches?|sachets?|chews?|pods?|cubes?|bagels?|burgers?|pots?|tablets?|bottles?|tubes?)\b/);
+    : n.match(/\b(\d+)\s+(?:(?:standard|dental|jumbo|mini|large|small|sausage|reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded|ultimate|breaded|fillet|pepperoni|and|cheese|triple|pizza)\s+){0,6}(?:rolls?|sheets?|pieces?|packs?|pk|pairs?|sticks?|bars?|pouches?|sachets?|chews?|pods?|cubes?|bagels?|burgers?|pots?|tablets?|bottles?|tubes?|pockets?)\b/);
   // If a product has a stated unit size and no explicit multipack, treat it
   // conservatively as a single unit. "110g" must not silently match "3x110g".
   const units = typeof count === 'number' ? count : count ? Number(count[1]) : amount ? 1 : null;
   const total = multi && amount ? amount.replace(/:[0-9.]+$/, `:${Number(amount.split(':')[1]) * Number(multi[1])}`) : amount;
-  return { amount, total, units };
+  return { amount, total, units, countExplicit: !!(multi || count) };
 }
 function structuredMeasure(quantity: TescoCollectedProduct['quantity']) {
   if (!quantity) return null;
@@ -165,7 +165,29 @@ function independentPackConflict(e: ReentryEvidence, source: TescoCollectedProdu
   if (tesco.total && structured && tesco.total !== structured) return true;
   if (canonical.amount && structured && canonical.amount !== structured
     && (tesco.units === 1 || !tesco.amount)) return true;
-  if (canonical.units != null && tesco.units != null && canonical.units !== tesco.units) return true;
+  if (canonical.units != null && tesco.units != null && canonical.units !== tesco.units) {
+    // A mass-only plural catalogue title names a whole pack, not an explicit
+    // single item. Resolve its inferred count ONLY with a positively branded
+    // fresh peer stating the source count and identical complete pack measure.
+    const m=e.mapping;
+    const wholePackCount = !canonical.countExplicit && tesco.countExplicit
+      && /\b(?:pockets|bars|biscuits|burgers|puddings|sticks|chews|treats|rolls|sachets|pouches|pots|cakes)\b/.test(normalized(m.canonical_name))
+      && !m.is_own_brand && m.canonical_brand != null && source.brand != null
+      && !/^(?:tesco|dunnes|supervalu)(?: |$)/.test(normalized(source.brand))
+      && sameBrand(m.canonical_brand,source.brand)
+      && (m.store_brand != null ? sameBrand(m.store_brand,source.brand)
+        : (` ${normalized(m.store_product_name)} `).includes(` ${normalized(source.brand)} `))
+      && canonical.total != null && canonical.total === tesco.total && tesco.total === structured
+      && e.peers.some(peer => {
+        const p=declaredPack(peer.store_product_name);
+        return !!peer.observed_at && peer.price>0 && p.countExplicit && p.units===tesco.units && p.total===tesco.total
+          && peer.brand!=null && sameBrand(peer.brand,source.brand!)
+          && (peer.gtin==null || sameBarcode(peer.gtin,source.gtin))
+          && titleSupport(source.name,peer.store_product_name)
+          && !canonicalVariantConflict(source.name,peer.store_product_name);
+      });
+    if (!wholePackCount) return true;
+  }
   return false;
 }
 function peerIdentityConflict(e: ReentryEvidence, source: TescoCollectedProduct, peer: ReentryEvidence['peers'][number]) {
