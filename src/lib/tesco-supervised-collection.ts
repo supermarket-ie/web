@@ -158,7 +158,7 @@ async function selectEvidenceCandidates(execute: ExecuteSql, ids: string[]): Pro
       (select count(distinct l.store) from latest_prices l where l.canonical_product_id=m.product_id
         and l.store in ('dunnes','supervalu')) overlap,
       jsonb_build_array(to_jsonb(m)) peers
-    from mappings m where m.id in (${ids.map(uuid).join(',')}) and m.url_status='resolved'
+    from mappings m where m.id in (${ids.map(uuid).join(',')}) and m.url_status in ('resolved','failed')
       and m.store_sku ~ '^[0-9]{6,12}$'
       and m.store_url='https://www.tesco.ie/shop/en-IE/products/'||m.store_sku
       and (select count(*) from mappings x where x.store_sku=m.store_sku)=1

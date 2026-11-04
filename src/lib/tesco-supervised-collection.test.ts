@@ -1658,6 +1658,16 @@ describe('supervised evidence-only acquisition', () => {
     expect(await collectTescoSupervised({mode:'expansion',limit:1},{execute,sleep,fetchPage})).toMatchObject({result:'no_due_products'});
     expect(fetchPage).not.toHaveBeenCalled();
   });
+  it('captures a failed mapping for review without repairing its status or writing a price', async () => {
+    await seed(0,'8 days');
+    await db.query("update store_products set url_status='failed' where id=$1",[ids[0]]);
+    const before=await observations();
+    const result=await collectTescoSupervised({mode:'expansion',limit:1,evidenceOnly:true,evidenceIds:[ids[0]]},
+      {execute,sleep,fetchPage:vi.fn().mockResolvedValue(response())});
+    expect(result).toMatchObject({result:'complete',completed:1,inserted:0});
+    expect((await db.query<{url_status:string}>('select url_status from store_products where id=$1',[ids[0]])).rows[0].url_status).toBe('failed');
+    expect(await observations()).toEqual(before);
+  });
   it.each(['pending','network_error'])('excludes protected pending and recent requests (%s)', async outcome => {
     await seed(0,'8 days');
     await db.query(`insert into tesco_direct_collection_pages(run_id,egress_key,requested_url,mode,outcome,created_at)
