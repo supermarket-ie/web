@@ -537,3 +537,7 @@ consumes a one-time decision. Evidence pages retain their original timestamps.
 Retained-source review normalises stir fry/stirfry and multipurpose cleaning
 wording only after separate brand, pack and variant checks. These equivalents
 do not establish a peer relationship or override a quantity or flavour conflict.
+
+For unsized generic canonical names, a single peer must positively corroborate
+the same branded whole-pack amount, with that brand also anchored in the original
+Tesco mapping. Missing amounts and conflicting canonical packs remain blocked.

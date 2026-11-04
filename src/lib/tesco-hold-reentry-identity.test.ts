@@ -60,6 +60,29 @@ describe('independent Tesco naming and pack evidence',()=>{
     e.mapping.canonical_name='Example Dental Sticks 28pk';
     expect(independentExactIdentity(e)).toBe(true);
   });
+  it('requires positive branded whole-pack evidence for an unsized generic canonical',()=>{
+    const e=evidence('Blackcurrant Conserve','Example Blackcurrant Conserve 100g',
+      'Example Blackcurrant Conserve 100g');
+    e.mapping.canonical_brand=null;
+    e.mapping.store_brand=null;
+    expect(independentExactIdentity(e)).toBe(true);
+    e.mapping.store_product_name='Blackcurrant Conserve';
+    expect(independentExactIdentity(e)).toBe(false);
+    e.mapping.store_product_name='Example Blackcurrant Conserve';
+    e.peers[0].store_product_name='Example Blackcurrant Conserve';
+    expect(independentExactIdentity(e)).toBe(false);
+    e.peers[0].store_product_name='Example Blackcurrant Conserve 200g';
+    expect(independentExactIdentity(e)).toBe(false);
+    e.peers[0].store_product_name='Different Blackcurrant Conserve 100g';
+    e.peers[0].brand='Different';
+    expect(independentExactIdentity(e)).toBe(false);
+  });
+  it('rejects an explicit canonical pack conflict despite a corroborating original brand',()=>{
+    const e=evidence('Blackcurrant Conserve 200g','Example Blackcurrant Conserve 100g',
+      'Example Blackcurrant Conserve 100g');
+    e.mapping.canonical_brand=null;
+    expect(independentExactIdentity(e)).toBe(false);
+  });
   it('compares explicit multipacks against their total quantity',()=>{
     expect(independentExactIdentity(evidence('Example Apricot Yogurt 4 Pack','Example Apricot Yogurt 4x90g',
       'Example Apricot Yogurt 4 Pack (360 g)',{grams:360}))).toBe(true);

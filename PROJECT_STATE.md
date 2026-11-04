@@ -21,7 +21,11 @@ from canonical price overlap. Detailed evidence remains protected.
 
 The independent retained-evidence title check recognises stir fry/stirfry,
 all purpose/multipurpose and cleaner/cleaning wording. Positive brand, source
-provenance, pack, barcode and variant checks remain mandatory. Regression cases
+provenance, pack, barcode and variant checks remain mandatory. A generic unsized
+canonical may use a single peer only when the original Tesco mapping names the
+same manufacturer and that peer positively states the same whole-pack measure.
+An unspecified peer pack, missing original brand anchor or conflicting explicit
+canonical measure remains rejected. Regression cases
 reject changed brands, quantities and lemon/lime variants. Attached pack
 counts also remain explicit constraints, matching the existing database guard. No database
 permissions, approval mechanism or collection safeguards change. Production

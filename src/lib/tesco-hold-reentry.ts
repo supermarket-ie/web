@@ -201,9 +201,19 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
     // pack match. AI reviewer rationale alone cannot replace these checks.
     const canonical = declaredPack(m.canonical_name), tesco = declaredPack(source.name);
     const brandAnchor = m.canonical_brand ?? source.brand;
+    const peerPack = declaredPack(peer.store_product_name);
+    const sourceAmount = tesco.total ?? structuredMeasure(source.quantity);
+    // A generic catalogue title can omit the pack. Require the ORIGINAL Tesco
+    // mapping to name this manufacturer, and independent positive whole-pack
+    // evidence; mere absence of a peer conflict is not enough.
+    const originalBrand = m.store_brand != null ? sameBrand(m.store_brand,source.brand)
+      : normalized(m.store_product_name).replaceAll(' ','')
+        .includes(normalized(source.brand).replaceAll(' ',''));
+    const independentlySizedOriginal = canonical.total == null && originalBrand
+      && sourceAmount != null && peerPack.total === sourceAmount;
     const canonicalSupported = m.canonical_brand != null ? sameBrand(m.canonical_brand,source.brand)
-      : canonical.total != null && canonical.total === tesco.total
-        && titleSupport(m.canonical_name,source.name);
+      : titleSupport(m.canonical_name,source.name)
+        && ((canonical.total != null && canonical.total === tesco.total) || independentlySizedOriginal);
     return canonicalSupported
       && (peer.brand==null ? normalized(peer.store_product_name).replaceAll(' ','').includes(normalized(brandAnchor).replaceAll(' ',''))
         : sameBrand(peer.brand,source.brand))
