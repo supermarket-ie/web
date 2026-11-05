@@ -129,7 +129,10 @@ function packCount(value: string | null | undefined) {
   const text = plain(value);
   const count = text.match(/\b(\d+)\s*x\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|cl|l)\b/)
     ?? text.match(/\b(\d+)\s*(?:pack|pk|rolls?|pieces?|pcs?|bars?|cans?|bottles?)\b/)
-    ?? text.match(/\b(\d+)\s+(?:(?:reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded|ultimate|breaded|fillet)\s+){0,6}(?:cubes?|bagels?|burgers?|pots?)\b/);
+    ?? text.match(/\b(\d+)\s+(?:(?:reduced|salt|beef|chicken|vegetable|stock|be|good|wholemeal|seeded|ultimate|breaded|fillet)\s+){0,6}(?:cubes?|bagels?|burgers?|pots?)\b/)
+    // Catalogue egg titles can end with an explicit bare count: "Eggs 6".
+    // End anchoring excludes measures such as "Eggs 200 g" and recipe text.
+    ?? text.match(/\beggs\s+(\d{1,3})$/);
   return Number(count?.[1] ?? 0) || null;
 }
 

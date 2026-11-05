@@ -1,5 +1,40 @@
 # Supermarket.ie — Canonical Project State
 
+## 5 November 2026 — ranked acquisition tranche reaches 494
+
+Live inventory reconciliation found 2,461 Tesco mappings: 492 fresh and 1,969
+without fresh prices. The remaining unique-SKU pool comprised 713 previously
+successful and 571 never-proven mappings; 626 further mappings shared 276 SKUs
+and 59 lacked a SKU. Of the previously successful unique mappings, 671 were
+eligible for source-only capture. These are investigation candidates, not
+verified recovery opportunities. No unused live approval remained at that point.
+
+The first ranked ten-product source-only run completed all ten captures with
+zero prices and no unresolved request. The run closed successfully before its
+final terminal reconciliation read timed out; live status, completed pages,
+finished time and released owner were verified directly. No capture was replayed.
+Two resulting independent approvals completed separate new guarded live prices,
+raising fresh Tesco coverage to 494. Cumulative charging is 649 since 31 October,
+leaving 351 of the original 1,000 requests; eleven historical pending
+reservations remain preserved.
+
+Fresh count evidence recovered the 100-case product. Exact two-by-125g evidence
+supported the pepperoni baguette. A cucumber approval was refused by the
+database because the original 350g mapping conflicts with the new single-piece
+quantity; its canonical barcode match alone did not override that constraint.
+Glove and available toothbrush quantities remain unknown, another toothbrush
+and lardons were unavailable, and the squash retains a formulation conflict.
+
+The egg capture explicitly states six eggs and matches the canonical barcode
+and original six-pack mapping. The legacy audit recognised 6 Pack but not the
+catalogue title ending Eggs 6. The audit now reads a bare trailing count only
+after eggs, with end anchoring that excludes mass and recipe text. Wrong and
+missing counts still fail. The database helper was not changed: read-only
+production checks accepted matching six and rejected twelve against the
+original six-pack anchor. Focused audit/identity tests, TypeScript and lint
+passed; further collection requires the required validate check for this revision.
+There is no new migration, privilege change or ECS deployment.
+
 ## 5 November 2026 — validated expansion reaches 492
 
 A further four-product reviewed batch completed successfully, adding four fresh

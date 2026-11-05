@@ -12,6 +12,24 @@ function mapping(overrides: Partial<TescoMappingEvidence> = {}): TescoMappingEvi
 }
 
 describe('Tesco mapping risk audit', () => {
+  it.each([
+    ['Tesco Free Range Eggs Large 6 Pack', { pieces: 6 }, 'exact_replacement_candidate', undefined],
+    ['Tesco Free Range Eggs Large 12 Pack', { pieces: 12 }, 'material_mismatch', 'packCountConflict'],
+    ['Tesco Free Range Eggs Large', {}, 'material_mismatch', 'packExactnessFailed'],
+  ])('preserves the trailing egg count against %s', (name, structuredQuantity, expected, reason) => {
+    const m = mapping({ canonicalName: 'Free Range Eggs 6', canonicalBrand: null, storeBrand: null });
+    const result = classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!, name, structuredQuantity });
+    expect(result.classification).toBe(expected);
+    if (reason) expect(result.reasons).toContain(reason);
+  });
+
+  it('does not interpret an egg mass as a count', () => {
+    const m = mapping({ canonicalName: 'Chocolate Eggs 200 g', canonicalBrand: null, storeBrand: null });
+    const result = classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!,
+      name: 'Chocolate Eggs 6 Pack 200g', structuredQuantity: { grams: 200 } });
+    expect(result.reasons).toEqual(['packExactnessFailed']);
+  });
+
   it.each(['Deep RiverRock', 'Deep River Rock'])('recognises the documented %s brand spelling', (brand) => {
     const m = mapping({ canonicalName: 'Deep River Rock Apple & Pear Still Water 750ml',
       canonicalBrand: brand, storeBrand: brand, storeProductName: 'Deep River Rock Apple & Pear Still Water 750ml' });

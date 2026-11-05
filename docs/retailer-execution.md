@@ -1,5 +1,26 @@
 # Retailer Execution — Supermarket.ie
 
+### 5 November 2026: first ranked evidence tranche and explicit egg counts
+
+The first ranked ten-product source-only run completed successfully and inserted
+no prices. Two independently reviewed products then received separate new live
+guarded prices, reaching 494. Cumulative charging is 649/1,000, with eleven
+historical pending reservations and no new unresolved attempt. The final
+terminal status read failed after successful close; database reconciliation
+confirmed all captures and released ownership. Do not rerun completed URLs.
+
+A matching canonical barcode did not override the cucumber mapping's original
+350g versus single-piece conflict. Other holds remain for missing quantity,
+availability or formulation. Preserve all original source evidence and peer
+records; count/style differences do not establish cross-retailer equivalence.
+
+The audit now recognises the explicit trailing egg count in Free Range Eggs 6.
+It does not treat Eggs 200 g as a count or infer an absent count. Six-pack,
+twelve-pack and missing-count regression cases preserve the quantity floor.
+The unchanged database helper accepts matching six and rejects twelve against
+the original six-pack mapping. Fresh source, exact barcode, full identity and
+one-use approval remain required before a new price fetch.
+
 ### 5 November 2026: verified 492-price checkpoint
 
 The final reviewed four-product run completed four new guarded prices, including
