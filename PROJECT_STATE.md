@@ -1,5 +1,38 @@
 # Supermarket.ie — Canonical Project State
 
+## 5 November 2026 — 488 fresh prices and bounded brand spelling repair
+
+Three reviewed expansion batches completed eleven requests, adding nine new
+trusted Tesco prices and holding two unavailable products. A separate ten-product
+renewal batch refreshed all ten prices. Database reconciliation is 488 fresh
+trusted Tesco offers, 633 conservatively charged requests since 31 October and
+367 remaining under the original 1,000-request cap. All four runs finished
+successfully and created no unresolved requests; the eleven historical pending
+reservations remain untouched. At least 100 additional products meet the routine
+four-day renewal threshold; do not mistake that eligibility for expiry today.
+
+Primary retailer/manufacturer descriptions resolved the Bistro pizza-baguette,
+Oral-B Mint/Fresh, John West salmon and tuna naming differences. Canonical,
+source and primary-wholesaler barcode evidence established the Bakers Whirlers
+130g offer while its mismatched Sizzlers 90g peers stayed unverified. Ingredient
+evidence distinguished the Bisto offer from a chicken peer; a loose easy-peeler
+peer does not establish equivalence to a 750g pack. No conflicting peer, canonical
+identity or historical source was edited to obtain a Tesco price.
+
+The previously unused Triple Cheese pizza-pocket approval completed a separate
+live guarded price after normal revalidation. This verifies the PR #325 count
+proof route end to end. The earlier Pepperoni request remains pending and was
+not retried or recovered from saved SQL.
+
+The mapping audit now normalises only the documented spelling Deep RiverRock
+to Deep River Rock. Coca-Cola HBC's Irish brand page uses both spellings:
+https://ie.coca-colahellenic.com/en/our-24-7-portfolio/hydration/deep-river-rock
+This exact text normalization does not join arbitrary brand words, skip a brand
+check, change variant/measure/pack checks, grant approvals or write prices.
+Regression cases preserve other-brand, flavour, size and equal-mass multipack
+rejections. Previously held URLs remain subject to the 24-hour attempt exclusion;
+only untouched reviewed candidates may be considered after validation.
+
 ## 5 November 2026 — expansion reaches 479 fresh Tesco prices
 
 The database now reports 479 trusted fresh Tesco offers, seventeen above the

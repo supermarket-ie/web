@@ -1,5 +1,28 @@
 # Retailer Execution — Supermarket.ie
 
+### 5 November 2026: 488-price reconciliation and documented brand spelling
+
+Coverage is 488 fresh trusted Tesco prices. This continuation renewed ten prices
+and added nine products from eleven reviewed expansion requests, with two
+availability holds and no new unresolved requests. Cumulative requests since
+31 October are 633, leaving 367. Eleven historical pending reservations remain
+preserved, including the Pepperoni capture whose saved SQL must not be replayed.
+The separately approved, previously untouched Triple Cheese count-proof product
+completed a fresh guarded receipt successfully.
+
+The audit recognises the exact Deep RiverRock / Deep River Rock spelling pair
+used on Coca-Cola HBC's Irish brand page. No general joined-word brand matching
+or identity-conflict exemption is introduced. Manufacturer, recipe, variant,
+barcode, complete measure, multipack, fresh-source, one-use approval and normal
+finalisation checks remain mandatory. A corrected text normalizer does not
+authorise retrying a held URL before its normal exclusion period.
+
+Generic Tesco offer recovery is separate from cross-retailer equivalence.
+Whirlers 130g cannot compare as Sizzlers 90g; reduced-salt gravy cannot compare
+as a chicken variant; a 750g fruit bag cannot compare as one loose piece. All
+peer records were retained unchanged and those comparison claims remain
+unverified. Additional four-day renewal candidates remain eligible.
+
 ### 5 November 2026: verified 479-price checkpoint
 
 Fresh trusted Tesco coverage is 479. The conservative cumulative request count
