@@ -1,37 +1,33 @@
 # Supermarket.ie — Canonical Project State
 
-## 4 November 2026 — reconciled 460-price stopping point
+## 5 November 2026 — resumed recovery reaches 462
 
-Trusted fresh Tesco coverage is 460, eight above the 452 starting checkpoint.
-Nineteen requests were charged during this continuation: eight guarded new
-price receipts, eight source-only captures, one held live result and two
-interrupted requests whose pending reservations remain preserved. Conservative
-accounting now charges 581 since 31 October, leaving 419 under the original
-1,000-request ceiling. The ten total pending reservations include the eight
-previously unresolved records and two from this continuation. No budget reset.
+Two new live guarded receipts raised fresh Tesco coverage from 460 to 462.
+Both one-product runs completed successfully, released their leases and created
+no unresolved requests. The renewal preflight returned zero due products.
+Conservative charging is now 583 since 31 October, leaving 417 of the original
+1,000-request budget. The ten pre-existing pending reservations remain untouched.
 
-The eight-target evidence run completed successfully after resuming only its
-three untouched URLs. It inserted no prices and created no unresolved request.
-Seven current-source repairs were activated with independent review and atomic
-audits; the unavailable target stays failed. Four of those seven repaired
-products subsequently received guarded live price receipts. One further live
-request is pending after a database confirmation stalled; its emitted capture
-SQL is saved privately but must never be replayed as a new-timestamp price.
-The final two repaired targets were not requested. Their separate approvals
-remain subject to current validity and all normal safeguards.
+One unused approval snapshot became stale after overnight independent-peer
+refreshes. It was append-only revoked, independently reassessed against current
+peers, and replaced by a new one-use decision before the live request. No old
+decision or source record was edited. The other unused approval remained valid
+and was consumed normally. PR #323 passed required validation and merged.
 
-The supervisor process is stopped. A historical run row still says running;
-that is stale metadata, not an active collector. Its lease has expired naturally.
-Do not clear pending reservations, retry unknown requests or infer success from
-a saved SQL statement. The 180-second SQL reply deadline corrects the earlier
-90-second/two-minute mismatch, but cannot resolve an indefinitely waiting
-connector confirmation. Reconcile the saved capture and immutable ledger before
-continuing. No schema, privilege, provider, transport or request breaker changed.
+The two plural whole-pack pizza-pocket candidates passed the local positive
+count validator, but the database's material_title_conflict helper independently
+rejected its inferred one-versus-two count. No approval or retailer request was
+made for either product. PR #322 therefore fixes the application-side gate only;
+it does not establish end-to-end availability of this recovery route. Keep the
+SQL backstop intact. A separate narrowly scoped, tested database implementation
+must re-derive the positive branded peer count and equal whole-pack measure
+before resolving an inferred count; explicit counts, singular identities,
+barcodes, recipes, original manufacturer anchors and unchanged source evidence
+must remain blocking constraints. Do not bypass the existing function or force
+an approval to make the application validator's result succeed.
 
-PRs #318–#322 passed required validation and merged. The explicit-count route
-has not been used to approve or fetch additional products. Pair-comparison
-verification and alternative status remain unchanged; no raw overlap is
-reported as a verified comparison.
+No collector is running. No price was recovered from an interrupted saved SQL
+statement. Verified pairwise comparisons and alternatives remain unchanged.
 
 ## 4 November 2026 — explicit counts for positively corroborated whole packs
 
