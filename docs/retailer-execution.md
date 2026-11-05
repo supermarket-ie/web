@@ -1,5 +1,17 @@
 # Retailer Execution — Supermarket.ie
 
+### 5 November 2026 — continuous recovery verified at 500
+
+The continuous recovery session completed five separately fetched guarded live prices: Barilla Pesto Rosso200g, Knorr Creamy Vegetable Soup579g, Green Isle Baby Carrots450g, Tesco Tuna Chunks in Brine4x145g and Cirio Plum Peeled Tomatoes400g. Database reconciliation confirms 500 fresh trusted Tesco offers, 668/1,000 charged requests and 332 remaining. All five one-use approvals were consumed. No new pending reservation was created; eleven historical unknown reservations remain untouched. Completed runs have released their supervisor leases.
+
+PR #331 passed required validate, merged normally and its private net/drained migration was applied and verified. Node/SQL proof and identity/parser/transaction suites passed all250 local tests; TypeScript and lint passed. The helper is SECURITY INVOKER with execute restricted to postgres. Security advisory output remained unchanged. Raw source quantities408g and250g remain immutable; only independently corroborated net580g/400g was used for new live prices. Other retailer peers were neither relabelled nor declared equivalent.
+
+A supervisor interruption was reconciled from the durable approval ledger: two decisions existed, so processing resumed at offset2 and recorded only the remaining three. Workspace maintenance had removed a dependency symlink target; npm ci restored the pinned dependencies before resuming. No completed URL or unknown reservation was replayed.
+
+Thirteen further source-only checks since the earlier ten-product tranche inserted no cached prices. Of the original671 eligible historical mappings,23 now have new source-only checks and648 have not yet received one. These648 are investigation candidates, not648 ready price offers; retained evidence already identifies material blockers for many. The latest two source checks found Batchelors title200g versus structured250g without an explicit net declaration, and Jacob's Mediterraneo crackers title/net8x31.25g versus structured per-unit31.25g. Both remain held. Jacob's additionally has a mass-only250g peer and canonical title, so fixing arithmetic alone cannot waive the explicit inner-count proof. No draft multipack migration was applied. Organic celery lacks a complete same-pack independent anchor; loose courgette lacks supported selling quantity and sweet potato's explicit800g conflicts with canonical1kg. Preserve all these holds.
+
+Further expansion requires positive pack evidence or audited mapping corrections, rather than automatically retrying held URLs or spending requests on known identity conflicts. The571 never-proven mappings still require an explicit initial-enrolment workflow. This checkpoint is a completed supervised session, not a background job; no collector is currently active. Continue authorised work from the durable ledger, keeping the original1,000-request cap and avoiding repeated confirmation between routine batches.
+
 ### 5 November 2026 — continuous acquisition and explicit pack proofs
 
 Eight further source-only captures completed without price writes or new pending reservations. Fresh trusted Tesco coverage remains 495; conservative charging is now 658/1,000, leaving 342. Eleven historical pending reservations remain untouched and no collector lease is active.
