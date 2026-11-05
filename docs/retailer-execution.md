@@ -1,5 +1,21 @@
 # Retailer Execution — Supermarket.ie
 
+### 5 November 2026: verified 479-price checkpoint
+
+Fresh trusted Tesco coverage is 479. The conservative cumulative request count
+is 612 since 31 October, leaving 388 under the original 1,000-request cap.
+Twenty-eight ordinary reviewed requests added seventeen guarded prices across
+three successful groups. A separate count-proof request has an expired,
+unacknowledged price checkpoint and remains pending without a price. Total
+unresolved reservations are eleven. Keep all pending evidence and do not replay
+saved SQL, retry unknown URLs or infer a successful price from captured content.
+
+The interrupted ordinary ten-product group resumed only six untouched URLs
+after natural lease expiry; its counters and four saved outcomes were retained.
+The final eight-product group completed six guarded prices, one brand hold and
+one unavailable redirect. No collector is active. Current approvals and fresh
+independent evidence must be checked before the next bounded expansion.
+
 ### Explicit counts and retained formulation evidence
 
 Missing structured size does not authorise guessing. The parser may retain an
