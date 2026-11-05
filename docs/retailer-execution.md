@@ -1,5 +1,25 @@
 # Retailer Execution — Supermarket.ie
 
+### 5 November 2026: verified 492-price checkpoint
+
+The final reviewed four-product run completed four new guarded prices, including
+both untouched water offers after the validated PR #327 spelling correction.
+Live reconciliation is 492 fresh trusted Tesco offers, 637 charged requests
+since 31 October, 363 requests left and eleven preserved historical pending
+reservations. No new unresolved request was created across this continuation's
+five successful batches: thirteen expansion additions, ten renewals and two
+availability holds from twenty-five requests.
+
+Peer records were not edited or declared equivalent to recover Tesco offers.
+The canonical/source variants, mass, barcode and manufacturer checks still
+apply; do not retry earlier held URLs during their exclusion period. The pending
+Pepperoni capture remains unknown and must not be replayed.
+
+No collector is active. Routine four-day renewal eligibility remains for at least
+one hundred products; visible 1 November observations expire on 8 November,
+not today. Expansion is eight short of 500. Remaining form/flavour/count
+uncertainties need independent evidence before another price request.
+
 ### 5 November 2026: 488-price reconciliation and documented brand spelling
 
 Coverage is 488 fresh trusted Tesco prices. This continuation renewed ten prices
