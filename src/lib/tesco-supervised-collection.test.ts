@@ -93,6 +93,7 @@ beforeEach(async () => {
   await db.exec(readFileSync('supabase/migrations/20261104123000_tesco_evidence_receipt_guard.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261104123500_tesco_reviewed_evidence_followup.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261104134000_tesco_evidence_pack_totals.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261105114138_tesco_reviewed_plural_pack_counts.sql', 'utf8'));
   execute = async query => {
     const results = await db.exec(query);
     return results.at(-1)?.rows as Record<string, unknown>[] ?? [];
@@ -121,6 +122,25 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
       '${ids[0]}'::uuid,'${page}'::uuid,${json(suppliedEvidence??evidence)},${json(assessment)}) review_id`);
     return result.review_id as string;
   }
+  it.each([false,true])('server-rederives the explicit peer count; wrong count=%s',async wrong=>{
+    const {page,live}=await heldEvidence({title:'Example Pizza Pockets Pepperoni 2 Pack 250g',brandName:'Example',
+      details:{packSize:[{value:250,units:'g'}]}});
+    await db.query("update products set canonical_name='Example Pepperoni Pizza Pockets 250g',brand='Example' where id=$1",[products[0]]);
+    await db.query("update store_products set brand='Example',is_own_brand=false,store_product_name=case when store='tesco' then 'Example Pizza Pockets Pepperoni 2 Pack' when store='dunnes' then $2 else 'Example Pepperoni Pizza Pockets 250g' end where product_id=$1",
+      [products[0],`Example ${wrong?3:2} Pepperoni and Cheese Pizza Pockets 250g`]);
+    const [row]=await execute(`select ${reentryEvidenceSql(ids[0],page)} evidence`);
+    expect(independentExactIdentity(row.evidence as ReentryEvidence)).toBe(!wrong);
+    if(wrong){
+      await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');
+      expect((await db.query('select * from tesco_hold_reentry_reviews')).rows).toHaveLength(0);
+      return;
+    }
+    const review=await operationalApproval(page);
+    const result=await collectTescoSupervised({mode:'expansion',limit:1,reviewedCandidates:[review]},
+      {execute,sleep,fetchPage:vi.fn().mockResolvedValue(live)});
+    expect(result).toMatchObject({result:'complete',inserted:1,completed:1});
+    expect((await db.query('select * from tesco_hold_reentry_uses where review_id=$1',[review])).rows).toHaveLength(1);
+  });
   it('requires a new reviewed live request after successful evidence acquisition', async () => {
     const {live}=await heldEvidence();
     const acquisition=await collectTescoSupervised({mode:'expansion',limit:1,evidenceOnly:true,evidenceIds:[ids[0]]},

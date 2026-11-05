@@ -14,7 +14,8 @@
     "src/lib/tesco-campaign.test.ts",
     "scripts/tesco-repair-mapping.ts",
     "src/lib/tesco-evidence-repair.ts",
-    "src/lib/tesco-evidence-repair.test.ts"
+    "src/lib/tesco-evidence-repair.test.ts",
+    "src/lib/tesco-reviewed-pack-count.test.ts"
   ],
   "exclude": [
     "node_modules"

@@ -1,5 +1,59 @@
 # Supermarket.ie — Canonical Project State
 
+## 5 November 2026 — database and live whole-pack proof parity
+
+The private hold-review approval function now uses a narrowly scoped positive
+proof when a plural, mass-only canonical title meets an explicit counted source.
+It re-derives matching manufacturer anchors, recipe/product words, complete
+measure, structured source quantity and a fresh peer's explicit matching count
+and optional barcode from the server-generated evidence snapshot. Explicit
+canonical counts, singular identities, missing counts, different recipes,
+changed barcodes/quantities and retailer own labels remain blocked. The ordinary
+material_title_conflict function and original retailer-title check are unchanged.
+
+The helper is private, invoker-only and grants no API role execution. Replacing
+the existing approval function preserves its identity checks and privileges.
+No price, approval, source, canonical identity or existing audit is changed by
+the migration. Normal one-time approval and a separately fetched new live page
+remain mandatory. The live gap handler recognises packExactnessFailed only for
+this positively proven inferred-count discrepancy, with original explicit
+counts and measures still checked. Other failure reasons remain blocking.
+
+Transaction tests cover positive server approval through a new live guarded
+price receipt, and refusal when peer count is wrong even if the caller submits
+a positive assessment. Dedicated SQL proof tests cover nineteen positive and
+negative cases and private/invoker privileges. This route is not a source of
+production price receipts until its migration and collection are verified.
+
+## 5 November 2026 — resumed recovery reaches 462
+
+Two new live guarded receipts raised fresh Tesco coverage from 460 to 462.
+Both one-product runs completed successfully, released their leases and created
+no unresolved requests. The renewal preflight returned zero due products.
+Conservative charging is now 583 since 31 October, leaving 417 of the original
+1,000-request budget. The ten pre-existing pending reservations remain untouched.
+
+One unused approval snapshot became stale after overnight independent-peer
+refreshes. It was append-only revoked, independently reassessed against current
+peers, and replaced by a new one-use decision before the live request. No old
+decision or source record was edited. The other unused approval remained valid
+and was consumed normally. PR #323 passed required validation and merged.
+
+The two plural whole-pack pizza-pocket candidates passed the local positive
+count validator, but the database's material_title_conflict helper independently
+rejected its inferred one-versus-two count. No approval or retailer request was
+made for either product. PR #322 therefore fixes the application-side gate only;
+it does not establish end-to-end availability of this recovery route. Keep the
+SQL backstop intact. A separate narrowly scoped, tested database implementation
+must re-derive the positive branded peer count and equal whole-pack measure
+before resolving an inferred count; explicit counts, singular identities,
+barcodes, recipes, original manufacturer anchors and unchanged source evidence
+must remain blocking constraints. Do not bypass the existing function or force
+an approval to make the application validator's result succeed.
+
+No collector is running. No price was recovered from an interrupted saved SQL
+statement. Verified pairwise comparisons and alternatives remain unchanged.
+
 ## 4 November 2026 — reconciled 460-price stopping point
 
 Trusted fresh Tesco coverage is 460, eight above the 452 starting checkpoint.
@@ -32,7 +86,6 @@ PRs #318–#322 passed required validation and merged. The explicit-count route
 has not been used to approve or fetch additional products. Pair-comparison
 verification and alternative status remain unchanged; no raw overlap is
 reported as a verified comparison.
-
 ## 4 November 2026 — explicit counts for positively corroborated whole packs
 
 A measured plural catalogue title without an explicit item count must not be

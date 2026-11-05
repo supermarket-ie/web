@@ -307,7 +307,7 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
 
 // The legacy lexical validator can reject an exact, independently evidenced
 // held product solely because the canonical description is incomplete or uses
-// a different measurement convention. These TWO negative predicates may be
+// a different measurement convention. These canonical evidence predicates may be
 // resolved only by an approved, evidence-bound hold re-entry, and only after
 // the original source and NEW live product pass the stronger positive gate.
 // In particular, no conflict, missing price, SKU ambiguity or ordinary
@@ -319,7 +319,17 @@ const REVIEWED_CANONICAL_EVIDENCE_GAPS = new Set([
 export function reviewedCanonicalEvidenceGap(
   evidence: ReentryEvidence, live: TescoCollectedProduct, reasons: readonly string[],
 ): boolean {
-  return reasons.length > 0 && reasons.every(reason => REVIEWED_CANONICAL_EVIDENCE_GAPS.has(reason))
+  const canonical=declaredPack(evidence.mapping.canonical_name), source=declaredPack(live.name);
+  const original=declaredPack(evidence.mapping.store_product_name);
+  // Only the independently proven INFERRED count discrepancy may resolve the
+  // legacy pack predicate. Explicit source/original counts remain constraints.
+  const inferredCountGap=!canonical.countExplicit && canonical.units===1
+    && source.countExplicit && source.units!=null && source.units>1
+    && (!original.countExplicit || original.units===source.units)
+    && (original.total==null || original.total===source.total)
+    && !independentPackConflict(evidence,live);
+  return reasons.length > 0 && reasons.every(reason => REVIEWED_CANONICAL_EVIDENCE_GAPS.has(reason)
+      || (reason==='packExactnessFailed' && inferredCountGap))
     && independentExactIdentity(evidence, live);
 }
 
