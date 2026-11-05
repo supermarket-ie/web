@@ -1,5 +1,33 @@
 # Supermarket.ie — Canonical Project State
 
+## 5 November 2026 — validated expansion reaches 492
+
+A further four-product reviewed batch completed successfully, adding four fresh
+guarded Tesco prices. Both untouched Deep River Rock offers passed with the
+validated spelling normalizer from PR #327. Separately reviewed mild salsa and
+unsmoked turkey offers also passed after primary descriptions resolved their
+individual Tesco identities. Doritos, Oakpark and retailer-own-label peers did
+not gain verified equivalence from those Tesco receipts.
+
+The database reconciliation is 492 fresh trusted Tesco offers, 637 conservatively
+charged requests since 31 October, and 363 remaining under the original
+1,000-request cap. This continuation added thirteen products and renewed ten
+prices from twenty-five requests; two unavailable products were held. All five
+batches finished successfully, released their leases and created no unresolved
+requests. The eleven historical pending reservations remain untouched.
+
+At least one hundred products remain eligible for routine four-day renewal;
+the visible oldest observations are from 1 November and reach seven days on
+8 November. They are not expired today. Expansion remains eight products below
+the first 500-price milestone and the wider 600–900 objective is unfinished.
+The remaining triaged uncertainties include differing product forms, explicit
+flavours and missing independent pack evidence. Keep those holds and request
+exclusions intact; deterministic triage alone is never approval.
+
+No collector is active. PR #327 passed required validate and merged before its
+runner revision was used for the final four-product run. There was no ECS
+deployment or new migration, provider or privilege change.
+
 ## 5 November 2026 — 488 fresh prices and bounded brand spelling repair
 
 Three reviewed expansion batches completed eleven requests, adding nine new
