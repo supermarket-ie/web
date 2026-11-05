@@ -17,6 +17,62 @@ function evidence(canonical: string, source: string, peer: string, quantity = { 
   };
 }
 describe('independent Tesco naming and pack evidence',()=>{
+  it('binds net/drained basis reconciliation to the same complete retained facts and barcode',()=>{
+    const e=evidence('Example Tuna 4 Pack 580g','Example Tuna 4x145g','Example Tuna 4x145g',{grams:408});
+    const p=e.page.parsed.products[0];
+    p.identityDetails={packSize:[{value:'408',units:'G'}],netContents:'4x145g',drainedWeight:'4x102g'};
+    const before=JSON.stringify(p);
+    expect(independentExactIdentity(e,{...p,quantity:{grams:580},quantityEvidence:'explicit_net_contents_with_drained_pack'})).toBe(true);
+    expect(JSON.stringify(p)).toBe(before);
+    expect(independentExactIdentity(e,{...p,quantity:{grams:600}})).toBe(false);
+    expect(independentExactIdentity(e,{...p,gtin:'05999999999999',quantity:{grams:580}})).toBe(false);
+    expect(independentExactIdentity(e,{...p,identityDetails:{...p.identityDetails,drainedWeight:'4x100g'},quantity:{grams:580}})).toBe(false);
+  });
+  function genericSoup() {
+    const e=evidence('Creamy Vegetable Soup','Example Creamy Vegetable Soup 579g',
+      'Example Creamy Vegetable Soup 579g',{grams:579});
+    e.mapping.canonical_brand=null;
+    e.peers.push({...e.peers[0],id:'other',store:'dunnes',brand:'Other',
+      store_product_name:'Other Creamy Chicken Vegetable Soup 400g'});
+    return e;
+  }
+  it('requires a complete independently matching manufacturer pack for an abbreviated generic title',()=>{
+    const e=genericSoup(), before=JSON.stringify(e.peers);
+    expect(independentExactIdentity(e)).toBe(true);
+    expect(JSON.stringify(e.peers)).toBe(before);
+    expect(reviewedCanonicalEvidenceGap(e,e.page.parsed.products[0],['measureExactnessFailed'])).toBe(true);
+  });
+  it.each(['manufacturer','original recipe','peer recipe','peer measure','peer count','canonical count','original count','generic category','source measure','peer barcode','missing barcode','extra product form','missing anchor'])
+    ('refuses incomplete generic manufacturer proof: %s',change=>{
+      const e=genericSoup();
+      if(change==='manufacturer')e.peers[0].brand='Different';
+      if(change==='original recipe')e.mapping.store_product_name='Example Creamy Pea Soup 579g';
+      if(change==='peer recipe')e.peers[0].store_product_name='Example Creamy Tomato Soup 579g';
+      if(change==='peer measure')e.peers[0].store_product_name='Example Creamy Vegetable Soup 580g';
+      if(change==='peer count')e.peers[0].store_product_name='Example Creamy Vegetable Soup 2x289.5g';
+      if(change==='canonical count')e.mapping.canonical_name='Creamy Vegetable Soup 2 Pack';
+      if(change==='original count')e.mapping.store_product_name='Example Creamy Vegetable Soup 2 Pack 579g';
+      if(change==='generic category')e.mapping.canonical_name='Soup';
+      if(change==='source measure')e.page.parsed.products[0].quantity={grams:580};
+      if(change==='peer barcode')e.peers[0].gtin='05999999999999';
+      if(change==='missing barcode')e.page.parsed.products[0].gtin=null;
+      if(change==='extra product form')e.page.parsed.products[0].name='Example Creamy Vegetable Soup Powder 579g';
+      if(change==='missing anchor'){e.mapping.store_brand=null;e.mapping.store_product_name='Creamy Vegetable Soup';}
+      expect(independentExactIdentity(e)).toBe(false);
+    });
+  it('does not grant the generic manufacturer route to retailer own labels',()=>{
+    const e=genericSoup();e.mapping.is_own_brand=true;
+    expect(independentExactIdentity(e)).toBe(false);
+  });
+  it('keeps the documented Barilla Rosso wording bounded to its recipe and maker',()=>{
+    const e=evidence('Pesto Rosso','Barilla Pesto Rosso 200g',
+      'Barilla Rosso Tomato Pesto Sauce 200g',{grams:200},'Barilla');
+    e.mapping.canonical_brand=null;
+    e.peers.push({...e.peers[0],id:'other',store:'dunnes',brand:'Other',store_product_name:'Other Pesto Rosso 190g'});
+    expect(independentExactIdentity(e)).toBe(true);
+    e.peers[0].store_product_name='Barilla Basil Rosso Tomato Pesto Sauce 200g';
+    expect(independentExactIdentity(e)).toBe(false);
+  });
   it('resolves only the positively proven inferred count on a new live request',()=>{
     const e=evidence('Example Pepperoni Pizza Pockets 250g','Example Pizza Pockets Pepperoni 2 Pack 250g',
       'Example 2 Pepperoni Pizza Pockets 250g',{grams:250});

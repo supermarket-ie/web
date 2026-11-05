@@ -1,6 +1,7 @@
 import type { TescoCollectedProduct } from './tesco-direct-collection-core';
 import type { Candidate, ExecuteSql } from './tesco-supervised-collection';
 import { isDeepStrictEqual } from 'node:util';
+import { normaliseNetPackQuantity } from './tesco-net-pack-quantity';
 
 // Separate from ordinary expansion: the only override is the old *hold*.
 // Nothing here can grant approval, change a mapping or write a trusted price.
@@ -197,6 +198,43 @@ function peerIdentityConflict(e: ReentryEvidence, source: TescoCollectedProduct,
     || (sourceTotal != null && other.total != null && sourceTotal !== other.total)
     || (tesco.units != null && other.units != null && tesco.units !== other.units);
 }
+function manufacturerProductWords(title: string, brand: string) {
+  const withoutPack = title
+    .replace(/\b\d+\s*x\s*\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|litres?)\b/gi, ' ')
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|litres?)\b/gi, ' ')
+    .replace(/\b\d+\s*(?:packs?|pk|pieces?|bars?|bottles?)\b/gi, ' ');
+  const b=normalized(brand), n=normalized(withoutPack);
+  const unbranded=n.startsWith(b+' ')?n.slice(b.length+1):n;
+  const ignored=new Set(['a','the','and','with','for','from','pack','bottle']);
+  const words=[...new Set(unbranded.split(' ').filter(w=>w&&!ignored.has(w)))].sort().join('|');
+  // The exact Barilla Rosso product has both retailer headings. This is not
+  // a general tomato/sauce synonym; other recipe words remain significant.
+  if (b==='barilla' && ['pesto|rosso|sauce','pesto|rosso|sauce|tomato'].includes(words)) return 'pesto|rosso';
+  return words;
+}
+function genericManufacturerSupport(e: ReentryEvidence, source: TescoCollectedProduct) {
+  const m=e.mapping, brand=source.brand;
+  if(m.canonical_brand!=null||m.is_own_brand||!brand
+    ||/^(?:tesco|dunnes|supervalu)(?: |$)/.test(normalized(brand))
+    ||!/^[0-9]{8,14}$/.test(source.gtin??''))return false;
+  const canonical=declaredPack(m.canonical_name), original=declaredPack(m.store_product_name);
+  const pack=declaredPack(source.name), structured=structuredMeasure(source.quantity);
+  if(canonical.total!=null||!pack.total||pack.total!==structured
+    ||(original.total!=null&&original.total!==pack.total)
+    ||(original.countExplicit&&original.units!==pack.units))return false;
+  const b=normalized(brand);
+  if(!normalized(source.name).startsWith(b+' ')
+    ||(m.store_brand!=null?!sameBrand(m.store_brand,brand):!normalized(m.store_product_name).startsWith(b+' ')))return false;
+  const words=manufacturerProductWords(source.name,brand);
+  if(words.split('|').length<2||manufacturerProductWords(m.canonical_name,brand)!==words
+    ||manufacturerProductWords(m.store_product_name,brand)!==words)return false;
+  return e.peers.some(peer=>declaredPack(peer.store_product_name).total===pack.total
+    &&declaredPack(peer.store_product_name).units===pack.units
+    &&(peer.brand!=null?sameBrand(peer.brand,brand):normalized(peer.store_product_name).startsWith(b+' '))
+    &&manufacturerProductWords(peer.store_product_name,brand)===words
+    &&(peer.gtin==null||sameBarcode(peer.gtin,source.gtin))
+    &&!peerIdentityConflict(e,source,peer));
+}
 function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollectedProduct) {
   const m=e.mapping;
   if (!source.brand || !normalized(source.brand)) return false;
@@ -204,6 +242,10 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
   // A matching canonical barcode independently establishes the Tesco identity.
   // Peer classification stays separate; Tesco/canonical conflicts still fail.
   if (sameBarcode(m.canonical_ean,source.gtin)) return true;
+  // A generic catalogue title can omit its manufacturer and measure. Require
+  // exact original/source product words and one fully matching branded pack;
+  // keep every other peer unchanged and unverified for comparisons.
+  if (genericManufacturerSupport(e,source)) return true;
   // Tesco can be established by ONE independently corroborating branded
   // whole pack. Retain every peer in the snapshot: a conflicting other offer
   // remains unverified and grants no comparison claim or mapping repair.
@@ -269,7 +311,8 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
   return false;
 }
 export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollectedProduct): boolean {
-  const m = e.mapping, source = e.page?.parsed?.products?.[0];
+  const m = e.mapping, rawSource = e.page?.parsed?.products?.[0];
+  const source=rawSource?normaliseNetPackQuantity(rawSource):rawSource;
   if (!m || !source || e.page.parsed.products.length !== 1 || e.page.parsed.listing != null
     || Number(e.sameSkuCount) !== 1 || !e.proven || e.freshTesco || e.pending || e.recentAttempt
     || m.url_status !== 'resolved' || !/^\d{6,12}$/.test(m.store_sku)
@@ -295,6 +338,7 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
   // constraints on the NEW live page. A changed SKU/name/pack/brand/GTIN
   // cannot inherit the approval. New price is never taken from the source.
   if (!live) return true;
+  live=normaliseNetPackQuantity(live);
   return live.sku === source.sku && live.url === source.url
     && !!live.available && live.currency === 'EUR' && live.price !== null && live.price > 0
     && normalized(live.name) === normalized(source.name)

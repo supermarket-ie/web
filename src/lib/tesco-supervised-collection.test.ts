@@ -94,6 +94,7 @@ beforeEach(async () => {
   await db.exec(readFileSync('supabase/migrations/20261104123500_tesco_reviewed_evidence_followup.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261104134000_tesco_evidence_pack_totals.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20261105114138_tesco_reviewed_plural_pack_counts.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261105162825_tesco_explicit_net_pack_quantity.sql', 'utf8'));
   execute = async query => {
     const results = await db.exec(query);
     return results.at(-1)?.rows as Record<string, unknown>[] ?? [];
@@ -140,6 +141,43 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
       {execute,sleep,fetchPage:vi.fn().mockResolvedValue(live)});
     expect(result).toMatchObject({result:'complete',inserted:1,completed:1});
     expect((await db.query('select * from tesco_hold_reentry_uses where review_id=$1',[review])).rows).toHaveLength(1);
+  });
+  it.each([false,true])('retains the original mapping quantity for generic manufacturer recovery; wrong=%s',async wrong=>{
+    const {page,live}=await heldEvidence({title:'Example Creamy Vegetable Soup 579g',brandName:'Example',gtin:'05012345678901',
+      details:{packSize:[{value:579,units:'g'}]}});
+    await db.query("update products set canonical_name='Creamy Vegetable Soup',brand=null where id=$1",[products[0]]);
+    await db.query("update store_products set store_product_name=$1,brand='Example',is_own_brand=false where id=$2",
+      [`Example Creamy Vegetable Soup ${wrong?500:579}g`,ids[0]]);
+    await db.query("update store_products set store_product_name='Example Creamy Vegetable Soup 579g',brand='Example' where store='dunnes'");
+    await db.query("update store_products set store_product_name='Other Creamy Chicken Soup 400g',brand='Other' where store='supervalu'");
+    if(wrong){await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');return;}
+    const review=await operationalApproval(page);
+    const result=await collectTescoSupervised({mode:'expansion',limit:1,reviewedCandidates:[review]},
+      {execute,sleep,fetchPage:vi.fn().mockResolvedValue(live)});
+    expect(result).toMatchObject({result:'complete',inserted:1,completed:1});
+    expect((await db.query('select * from tesco_hold_reentry_uses where review_id=$1',[review])).rows).toHaveLength(1);
+    expect((await db.query<{store_product_name:string}>("select store_product_name from store_products where store='supervalu'")).rows[0].store_product_name)
+      .toBe('Other Creamy Chicken Soup 400g');
+  });
+  it.each(['valid','bad drained','wrong original'])('revalidates an immutable legacy drained capture as a new net-weight price: %s',async kind=>{
+    const {page,live}=await heldEvidence({title:'Example Tomatoes 400g',brandName:'Example',gtin:'05012345678901',
+      details:{packSize:[{value:'250',units:'G'}],netContents:'400g e',drainedWeight:'250g'}});
+    await db.query("update products set canonical_name='Example Tomatoes 400g',brand='Example' where id=$1",[products[0]]);
+    await db.query("update store_products set brand='Example',is_own_brand=false,store_product_name=$1 where id=$2",
+      [`Example Tomatoes ${kind==='wrong original'?500:400}g`,ids[0]]);
+    await db.query("update store_products set brand='Example',store_product_name='Example Tomatoes 400g' where store in ('dunnes','supervalu')");
+    // Test setup represents a capture retained before net/drained reconciliation.
+    await db.query(`update tesco_direct_collection_pages set parsed=jsonb_set(parsed,'{products,0,quantity}','{"grams":250}') where id=$1`,[page]);
+    if(kind==='bad drained')await db.query(`update tesco_direct_collection_pages set parsed=jsonb_set(parsed,'{products,0,identityDetails,drainedWeight}','"240g"') where id=$1`,[page]);
+    if(kind!=='valid'){await expect(operationalApproval(page)).rejects.toThrow('tesco_recovery_pack_or_variant_conflict');return;}
+    const review=await operationalApproval(page);
+    const result=await collectTescoSupervised({mode:'expansion',limit:1,reviewedCandidates:[review]},
+      {execute,sleep,fetchPage:vi.fn().mockResolvedValue(live)});
+    expect(result).toMatchObject({result:'complete',inserted:1,completed:1});
+    const source=(await db.query<{parsed:{products:{quantity:{grams:number}}[]}}>('select parsed from tesco_direct_collection_pages where id=$1',[page])).rows[0];
+    expect(source.parsed.products[0].quantity).toEqual({grams:250});
+    const captured=(await db.query<{parsed:{products:{quantity:{grams:number}}[]}}>('select parsed from tesco_direct_collection_pages where run_id=$1',[result.id])).rows[0];
+    expect(captured.parsed.products[0].quantity).toEqual({grams:400});
   });
   it('requires a new reviewed live request after successful evidence acquisition', async () => {
     const {live}=await heldEvidence();

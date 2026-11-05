@@ -1,4 +1,5 @@
 import { classifyTescoMapping, classifyTescoReplacement, type TescoMappingEvidence } from './tesco-mapping-audit';
+import { normaliseNetPackQuantity } from './tesco-net-pack-quantity';
 
 export type TescoCollectedProduct = {
   sku: string;
@@ -10,7 +11,7 @@ export type TescoCollectedProduct = {
   currency: 'EUR';
   available: boolean;
   quantity: { grams?: number; millilitres?: number; pieces?: number } | null;
-  quantityEvidence?: 'explicit_retailer_title_count';
+  quantityEvidence?: 'explicit_retailer_title_count' | 'explicit_net_contents_with_drained_pack';
   identityDetails?: Record<string, unknown>;
 };
 export type TescoCollectedPage = {
@@ -102,13 +103,13 @@ function productFromCache(value: unknown): TescoCollectedProduct | null {
   }
   const details=object(p.details);
   const identityDetails=boundedIdentityDetails(details);
-  return {
+  return normaliseNetPackQuantity<TescoCollectedProduct>({
     sku, url: tescoProductUrl(sku), name: string(p.title), brand: string(p.brandName) || null,
     gtin: string(p.gtin) || null,
     price: typeof price === 'number' && Number.isFinite(price) && price > 0 ? price : null,
     currency: 'EUR', available: p.isForSale === true && p.status === 'AvailableForSale', quantity,
     ...(quantityEvidence ? {quantityEvidence} : {}), ...(identityDetails ? {identityDetails} : {}),
-  };
+  });
 }
 
 // Read only products referenced by this page's ROOT_QUERY. Other cache entries

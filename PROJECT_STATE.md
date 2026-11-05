@@ -1,5 +1,15 @@
 # Supermarket.ie — Canonical Project State
 
+## 5 November 2026 — continuous acquisition and explicit pack proofs
+
+Eight further source-only captures completed without price writes or new pending reservations. Fresh trusted Tesco coverage remains 495; conservative charging is now 658/1,000, leaving 342. Eleven historical pending reservations remain untouched and no collector lease is active.
+
+The next guarded recovery route recognises a manufacturer-led offer under an abbreviated, unbranded canonical name only with matching original identity, exact product words, full source title/structured quantity and a fresh independently matching manufacturer peer. Other peers remain unverified. The Barilla Rosso wording exception is bounded to that manufacturer and recipe; its retained ingredients match the independently checked Dunnes offer. Conflicting brands, recipes, counts, quantities and GTINs still fail.
+
+A second narrow proof reconciles drained retailer structured mass with explicit whole-pack net mass only when title and net contents agree exactly, structured mass equals the explicit drained total, and all counts agree. Raw source snapshots remain immutable. Node parsing, approval and live verification use the same positive projection; the database independently checks it through a private invoker-only helper. The newly captured tuna and Cirio tomatoes satisfy this proof. Processed peas do not: structured302g differs from explicit drained293g, so that offer stays held. Galia melon is unavailable and the Glenisk target redirects unsafely; neither is retried.
+
+Five candidates are awaiting independent approval and separate new live price requests after required validate, normal merge and database migration verification. No price from retained evidence is promoted. This supervised CLI/data change requires no ECS rollout. The source-only lane still requires genuine prior success, so the 571 never-proven mappings are not silently enrolled. Continue across bounded batches under the existing 1,000-request cap; stop only for an actual blocker, safeguard or exhausted budget.
+
 ## 5 November 2026 — first ranked acquisition tranche completes at 495
 
 The newly captured six-egg carton passed a separate guarded live price request

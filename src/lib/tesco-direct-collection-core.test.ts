@@ -37,6 +37,19 @@ describe('Tesco structured collection', () => {
     const details={packSize:[{value:'1',units:'L'}],ingredients:['Milk'],manufacturer:'Example Dairy'};
     expect(parseTescoCollectedPage(pdp({...milk,details}),tescoProductUrl(sku)).products[0].identityDetails).toEqual(details);
   });
+  it('uses whole-pack net weight only when title, net and structured drained evidence reconcile',()=>{
+    const details={packSize:[{value:'408',units:'G'}],netContents:'4 x 145g ℮',drainedWeight:'4 x 102g'};
+    const p=parseTescoCollectedPage(pdp({...milk,title:'Example Tuna 4 X 145G',details}),tescoProductUrl(sku)).products[0];
+    expect(p.quantity).toEqual({grams:580});
+    expect(p.quantityEvidence).toBe('explicit_net_contents_with_drained_pack');
+    expect(p.identityDetails).toEqual(details);
+  });
+  it('keeps contradictory structured and drained weight declarations unresolved',()=>{
+    const details={packSize:[{value:'302',units:'G'}],netContents:'420g e',drainedWeight:'293g'};
+    const p=parseTescoCollectedPage(pdp({...milk,title:'Example Peas 420G',details}),tescoProductUrl(sku)).products[0];
+    expect(p.quantity).toEqual({grams:302});
+    expect(p.quantityEvidence).toBeUndefined();
+  });
   it('omits oversized fields completely rather than truncating formulation evidence',()=>{
     const details={packSize:[],ingredients:'x'.repeat(5000),manufacturer:'Example Dairy'};
     const parsed=parseTescoCollectedPage(pdp({...milk,details}),tescoProductUrl(sku)).products[0];
