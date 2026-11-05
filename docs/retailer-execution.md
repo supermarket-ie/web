@@ -611,3 +611,15 @@ Keep explicit canonical counts, singular items, manufacturer anchors, variants,
 barcodes, structured quantity and own-label exclusions intact. A peer that omits
 the count cannot supply the positive count proof; never discard it from the
 snapshot or approve its equivalence implicitly.
+
+### Server and live inferred-count proof
+
+Only the server-derived evidence snapshot may establish the private plural-pack
+proof. The canonical and source must share recipe/product words, manufacturer
+and complete structured quantity; a fresh branded peer must explicitly state
+the same count and complete measure. Preserve every peer in the snapshot.
+The ordinary material conflict function and original retailer-title check stay
+unchanged. The live handler may resolve the legacy pack predicate only for that
+same proof and an unchanged new live identity; explicit original counts and
+measures still block. No missing-price, recipe, barcode or ordinary collection
+failure can inherit this exception.

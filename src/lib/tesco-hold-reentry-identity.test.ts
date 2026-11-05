@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { independentExactIdentity, type ReentryEvidence } from './tesco-hold-reentry';
+import { reviewedCanonicalEvidenceGap, independentExactIdentity, type ReentryEvidence } from './tesco-hold-reentry';
 
 function evidence(canonical: string, source: string, peer: string, quantity = { grams: 100 }, brand = 'Example'): ReentryEvidence {
   const url='https://www.tesco.ie/shop/en-IE/products/123456789';
@@ -17,6 +17,19 @@ function evidence(canonical: string, source: string, peer: string, quantity = { 
   };
 }
 describe('independent Tesco naming and pack evidence',()=>{
+  it('resolves only the positively proven inferred count on a new live request',()=>{
+    const e=evidence('Example Pepperoni Pizza Pockets 250g','Example Pizza Pockets Pepperoni 2 Pack 250g',
+      'Example 2 Pepperoni Pizza Pockets 250g',{grams:250});
+    const live=e.page.parsed.products[0];
+    expect(reviewedCanonicalEvidenceGap(e,live,['packExactnessFailed'])).toBe(true);
+    expect(reviewedCanonicalEvidenceGap(e,live,['packExactnessFailed','brandConflict'])).toBe(false);
+    expect(reviewedCanonicalEvidenceGap(e,{...live,available:false},['packExactnessFailed'])).toBe(false);
+    e.mapping.store_product_name='Example Pizza Pockets Pepperoni 1 Pack 250g';
+    expect(reviewedCanonicalEvidenceGap(e,live,['packExactnessFailed'])).toBe(false);
+    e.mapping.store_product_name=live.name;e.peers[0].store_product_name='Example 3 Pepperoni Pizza Pockets 250g';
+    expect(reviewedCanonicalEvidenceGap(e,live,['packExactnessFailed'])).toBe(false);
+  });
+
   it('requires explicit independent count evidence for a plural whole-pack title',()=>{
     const e=evidence('Example Pepperoni Pizza Pockets 250g',
       'Example Pizza Pockets Pepperoni 2 Pack 250g',
