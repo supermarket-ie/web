@@ -1,5 +1,32 @@
 # Supermarket.ie — Canonical Project State
 
+## 5 November 2026 — expansion reaches 479 fresh Tesco prices
+
+The database now reports 479 trusted fresh Tesco offers, seventeen above the
+462 checkpoint. Conservative request charging since 31 October is 612, leaving
+388 of the original 1,000-request allowance. Eleven unresolved reservations
+remain preserved; none may be deleted, retried or treated as a successful price.
+
+Three ordinary reviewed groups used 28 requests and committed seventeen guarded
+price receipts. The middle ten-product run resumed only its six untouched URLs
+after the original lease expired, preserving four completed outcomes and its
+hold counters. All three groups finished successfully with no unresolved pages.
+Brand conflicts and unavailable-product redirects produced no prices.
+
+The positive-count migration from PR #325 was applied with unchanged private
+invoker privileges and no new security-advisor findings. Its separate pizza
+run reserved one request, but the price-checkpoint acknowledgement expired.
+That request remains pending and adds no price; the second product was never
+requested. Do not replay the saved capture SQL, renew its timestamp or retry
+the pending URL. The prior ten pending reservations remain untouched.
+
+The supervisor now joins partial stdout chunks before parsing SQL bridge events
+and services a full bounded run continuously. Private stdout journals retain
+issued SQL for reconciliation. No collector remains running after the final
+eight-product run, and no lease was manually cleared. No ECS deployment, paid
+discovery, canonical identity edit, comparison-equivalence expansion or guard
+relaxation was required for these new prices.
+
 ## 5 November 2026 — database and live whole-pack proof parity
 
 The private hold-review approval function now uses a narrowly scoped positive
