@@ -29,6 +29,38 @@ an approval to make the application validator's result succeed.
 No collector is running. No price was recovered from an interrupted saved SQL
 statement. Verified pairwise comparisons and alternatives remain unchanged.
 
+## 4 November 2026 — reconciled 460-price stopping point
+
+Trusted fresh Tesco coverage is 460, eight above the 452 starting checkpoint.
+Nineteen requests were charged during this continuation: eight guarded new
+price receipts, eight source-only captures, one held live result and two
+interrupted requests whose pending reservations remain preserved. Conservative
+accounting now charges 581 since 31 October, leaving 419 under the original
+1,000-request ceiling. The ten total pending reservations include the eight
+previously unresolved records and two from this continuation. No budget reset.
+
+The eight-target evidence run completed successfully after resuming only its
+three untouched URLs. It inserted no prices and created no unresolved request.
+Seven current-source repairs were activated with independent review and atomic
+audits; the unavailable target stays failed. Four of those seven repaired
+products subsequently received guarded live price receipts. One further live
+request is pending after a database confirmation stalled; its emitted capture
+SQL is saved privately but must never be replayed as a new-timestamp price.
+The final two repaired targets were not requested. Their separate approvals
+remain subject to current validity and all normal safeguards.
+
+The supervisor process is stopped. A historical run row still says running;
+that is stale metadata, not an active collector. Its lease has expired naturally.
+Do not clear pending reservations, retry unknown requests or infer success from
+a saved SQL statement. The 180-second SQL reply deadline corrects the earlier
+90-second/two-minute mismatch, but cannot resolve an indefinitely waiting
+connector confirmation. Reconcile the saved capture and immutable ledger before
+continuing. No schema, privilege, provider, transport or request breaker changed.
+
+PRs #318–#322 passed required validation and merged. The explicit-count route
+has not been used to approve or fetch additional products. Pair-comparison
+verification and alternative status remain unchanged; no raw overlap is
+reported as a verified comparison.
 ## 4 November 2026 — explicit counts for positively corroborated whole packs
 
 A measured plural catalogue title without an explicit item count must not be
