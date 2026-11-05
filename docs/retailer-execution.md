@@ -1,5 +1,21 @@
 # Retailer Execution — Supermarket.ie
 
+### 5 November 2026: ranked tranche verified at 495
+
+The first ten-product evidence tranche produced three separately fetched guarded
+prices: 100 baking cases, pepperoni baguettes2x125g and six large free-range eggs.
+Source-only captures inserted no prices. The final egg request ran only after
+PR #329 passed required validate and merged, then completed successfully.
+
+Reconciled coverage is 495 fresh Tesco offers. Cumulative charging is650/1,000,
+leaving350. All three runs completed without a new unresolved request; eleven
+historical pending reservations remain preserved and no collector lease is active.
+
+The remaining seven targets comprise two unavailable offers, three unsupported
+quantities, one original mass-versus-piece mapping conflict and one formulation
+conflict. Their evidence and peer mappings remain unchanged. Do not treat a
+matching barcode as permission to override another material identity conflict.
+
 ### 5 November 2026: first ranked evidence tranche and explicit egg counts
 
 The first ranked ten-product source-only run completed successfully and inserted

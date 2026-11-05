@@ -1,5 +1,32 @@
 # Supermarket.ie — Canonical Project State
 
+## 5 November 2026 — first ranked acquisition tranche completes at 495
+
+The newly captured six-egg carton passed a separate guarded live price request
+after PR #329 passed required validate and merged. Fresh trusted Tesco coverage
+is now 495. This ranked tranche used ten source-only requests and three separate
+live price requests, adding three products and leaving seven held. Cumulative
+charging since 31 October is 650, with 350 requests remaining under the original
+1,000-request cap. No new pending reservation was created; the eleven historical
+unknown reservations remain untouched. All three runs are complete and no
+collector lease remains active.
+
+The successful products are the 100-count baking cases, two-by-125g pepperoni
+baguettes and six large free-range eggs. Retained-source prices were not promoted.
+Two other targets are unavailable. Three still lack supported quantities. One
+cucumber's old 350g mapping conflicts with the new single-piece offer; its
+approval was refused by the database. One squash retains a formulation conflict.
+Those unresolved identities and differing retailer peers were not relabelled or
+declared equivalent to obtain prices.
+
+The bare trailing egg-count fix recognises an explicit catalogue count; it does
+not infer unknown quantities. The matching barcode, original six-pack anchor,
+new pieces6/title/net contents and immutable one-use approval remained required.
+The unchanged database rejects twelve against the original six-pack. The wider
+500-price and 600–900 expansion objectives remain unfinished: five additional
+trusted products are needed for 500. Next work should address supported quantity
+extraction and audited mapping corrections, preserving all original evidence.
+
 ## 5 November 2026 — ranked acquisition tranche reaches 494
 
 Live inventory reconciliation found 2,461 Tesco mappings: 492 fresh and 1,969
