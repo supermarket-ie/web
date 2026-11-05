@@ -1,5 +1,15 @@
 # Supermarket.ie — Canonical Project State
 
+## 5 November 2026 — audited ham replacements reach 502
+
+PR #332 passed required validate and merged before collection resumed. Rechecking the existing retained repair shortlist against current production state found two newly eligible, one-to-one replacement hints: Brady Family Traditional Ham80g and Brady Family Crumbed Ham80g. Both were processed through the existing audited stage, separate current source capture, source-verified activation, immutable one-use approval and separate fresh guarded price request. All four collection runs completed successfully; both price requests were accepted and both approvals consumed.
+
+Production reconciliation confirms 502 fresh trusted Tesco prices. Cumulative charging since31October is672/1,000, leaving328 requests. Eleven historical pending reservations remain untouched; no new unresolved request or collector lease remains. Of the original671 historical mappings,25 have new source-only checks and646 remain without one. These are investigation candidates, not ready price offers.
+
+Fresh source proved manufacturerBRADY FAMILY, exact respective retained barcodes, structured80g/net80g and the Traditional versus Crumbed recipes. Fresh independent Dunnes and SuperValu full80g product records corroborated each canonical identity. Old mismatched ham titles/SKUs, including misleading nitrite wording, remain only in immutable repair history and were not inherited as product claims. No retained-source price was promoted; no other retailer mapping was relabelled. There was no new parser/database change or ECS deployment.
+
+The remaining reviewed repair hints are blocked by shared old SKU ownership, absent fresh matching peers, insufficient complete identity, or protected recent/pending targets. McCain is already fresh and was not fetched again. Shared old-SKU hints remain excluded by the existing one-to-one repair guard; do not remove that guard to increase coverage. A future audited separation workflow would need to retain every original owner, bind the replacement to an independently proven canonical identity and confirm a unique target with a new source before activation. Existing quantity, peer, held-URL and unknown-reservation safeguards remain unchanged.
+
 ## 5 November 2026 — continuous recovery verified at 500
 
 The continuous recovery session completed five separately fetched guarded live prices: Barilla Pesto Rosso200g, Knorr Creamy Vegetable Soup579g, Green Isle Baby Carrots450g, Tesco Tuna Chunks in Brine4x145g and Cirio Plum Peeled Tomatoes400g. Database reconciliation confirms 500 fresh trusted Tesco offers, 668/1,000 charged requests and 332 remaining. All five one-use approvals were consumed. No new pending reservation was created; eleven historical unknown reservations remain untouched. Completed runs have released their supervisor leases.
