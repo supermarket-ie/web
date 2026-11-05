@@ -1,5 +1,17 @@
 # Retailer Execution — Supermarket.ie
 
+### 5 November 2026 — next20 source targets attempted and reconciled
+
+PR #333 passed required validate and merged. The next two selected source tranches,20 previously unchecked mappings from the original671 cohort, were then attempted through the existing supervised evidence-only collector. Seventeen captures are durably saved and three reservations remain pending. No completed or pending retailer URL was repeated. These checks inserted no prices; fresh trusted Tesco coverage remains502.
+
+Production reconciliation confirms692 requests charged since31October, leaving308 under the original1,000 cap. Pending reservations increased from11 to14. The gate lease is released and all stopped invocations were reconciled; no collector is currently active. In the original671 cohort,42 now have completed new source-only checks and629 lack a completed new check. Of those629, three were attempted in this continuation and are pending;626 have not yet been attempted. Do not describe all629 as untouched, or the17 saved captures as17 new trusted prices.
+
+A connector response explicitly reported that its SQL confirmation expired after two minutes. Other capture checkpoints were not acknowledged around interruptions. Completed database rows were reconciled before advancing to the candidates not yet requested. The second and fourth interrupted runs were closed with the normal owner-conditional cleanup, retaining pending reservations and cooldowns. No unacknowledged capture mutation or retailer request was replayed, no source was retimestamped and no security control changed.
+
+The saved multipacks include Muller Rice6x170g, Glenisk4x105g, Kellogg's Squares4x28g, Walkers6x25g, Philadelphia4x35g, Felix4x10g and Pedigree Rodeo7sticks123g. Peer headings that list one unit's mass cannot establish a whole-pack match automatically; existing identity and quantity checks remain required. Jacob's Malted Milk200g, Flahavan's Jumbo Oat Flakes500g and Green Isle Yorkshire Puddings230g passed ordinary source identity checks but still lack a fresh independent matching peer for audited re-entry. A read-only search across all fresh Dunnes/SuperValu offers found no matching Malted Milk200g, Jumbo Oat Flakes500g or Yorkshire Puddings230g offer; the organic1kg oats are different and were not substituted. Some other pages are unavailable, have recipe/formulation conflicts or remain insufficiently identified. All are evidence outcomes, not approvals.
+
+Keep progressing by triaging retained identities and selecting new supported evidence targets, preserving budget for separate live-price requests. The308 remaining requests cannot cover626 untouched mappings plus price verification. Broader acquisition beyond the existing cap requires a separate budget decision; it is not implied by the size of the remaining investigation queue. Pending URLs and material mismatches remain excluded.
+
 ### 5 November 2026 — audited ham replacements reach 502
 
 PR #332 passed required validate and merged before collection resumed. Rechecking the existing retained repair shortlist against current production state found two newly eligible, one-to-one replacement hints: Brady Family Traditional Ham80g and Brady Family Crumbed Ham80g. Both were processed through the existing audited stage, separate current source capture, source-verified activation, immutable one-use approval and separate fresh guarded price request. All four collection runs completed successfully; both price requests were accepted and both approvals consumed.
