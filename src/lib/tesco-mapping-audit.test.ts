@@ -12,6 +12,39 @@ function mapping(overrides: Partial<TescoMappingEvidence> = {}): TescoMappingEvi
 }
 
 describe('Tesco mapping risk audit', () => {
+  it.each(['Deep RiverRock', 'Deep River Rock'])('recognises the documented %s brand spelling', (brand) => {
+    const m = mapping({ canonicalName: 'Deep River Rock Apple & Pear Still Water 750ml',
+      canonicalBrand: brand, storeBrand: brand, storeProductName: 'Deep River Rock Apple & Pear Still Water 750ml' });
+    expect(classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!,
+      name: 'Deep River Rock Apple & Pear Still Water 750ml', structuredQuantity: { millilitres: 750 } })
+      .classification).toBe('exact_replacement_candidate');
+  });
+
+  it.each([
+    ['Other Brand Apple & Pear Still Water 750ml', 750, 'brandConflict'],
+    ['Deep River Rock Apple & Pear Still Water 500ml', 500, 'measureConflict'],
+    ['Deep River Rock Apple & Pear Still Water 2x750ml', 1500, 'measureConflict'],
+    ['Deep River Rock Apple & Pear Still Water 2x375ml', 750, 'packExactnessFailed'],
+    ['Deep River Rock Orange Still Water 750ml', 750, 'variantConflict'],
+  ])('preserves independent identity conflicts for %s', (name, millilitres, reason) => {
+    const m = mapping({ canonicalName: 'Deep River Rock Apple & Pear Still Water 750ml',
+      canonicalBrand: 'Deep RiverRock', storeBrand: 'Deep RiverRock' });
+    const result = classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!, name,
+      structuredQuantity: { millilitres } });
+    expect(result.classification).toBe('material_mismatch');
+    expect(result.reasons).toContain(reason);
+  });
+
+  it('does not join arbitrary brand words', () => {
+    for (const brand of ['RiverRock', 'DeepRiverRock', 'OtherBrand']) {
+      const m = mapping({ canonicalName: 'Deep River Rock Apple & Pear Still Water 750ml',
+        canonicalBrand: brand, storeBrand: null });
+      expect(classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!,
+        name: 'Deep River Rock Apple & Pear Still Water 750ml', structuredQuantity: { millilitres: 750 } })
+        .classification).not.toBe('exact_replacement_candidate');
+    }
+  });
+
   it.each([
     ['Dr Oetker Bistro Pepperoni Baguettes 2x125g',250,'exact_replacement_candidate'],
     ['Dr Oetker Bistro Pepperoni Baguettes 1x250g',250,'material_mismatch'],

@@ -89,7 +89,10 @@ function plain(value: string | null | undefined) {
     .toLowerCase().replace(/[’']/g, '').replace(/([a-z])\.(?=\s|[a-z]|$)/g, '$1 ').replace(/&(?:amp;)?/g, ' and ')
     .replace(/\bkilograms?\b/g, 'kg').replace(/\bgrams?\b/g, 'g')
     .replace(/\blitres?\b/g, 'l').replace(/\bmillilitres?\b/g, 'ml')
-    .replace(/[^a-z0-9.\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    .replace(/[^a-z0-9.\s]/g, ' ').replace(/\s+/g, ' ').trim()
+    // Coca-Cola HBC's Irish brand page uses both spellings for this brand.
+    // Resolve this exact name only; no generic joined-word brand matching.
+    .replace(/\bdeep riverrock\b/g, 'deep river rock');
 }
 
 function singular(word: string) {
