@@ -1,5 +1,15 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — Green Isle expansion accepted; 503 fresh Tesco prices
+
+PR #343 passed required validate on updated head c51757c7d0a382a3ae6e716b539078ece2e90ce8 and merged normally as a409b6681428ed667e7df3a9289f5bd4605260f8. The original successful CI run was not sufficient at the merge gate after main advanced; merging concurrent main changes and obtaining a new successful check resolved the blocker without bypassing rules.
+
+The bounded ordinary expansion collector then fetched only mapping d7640e61-e5dc-4dbd-a601-cb3782854354 (Tesco SKU 280135493). Run803a2694-cfbe-4d93-9f61-54f889cfa6dc completed successfully: one reservation, one completed page, one successful receipt, zero holds or quarantines. A new live observation for Green Isle 12 Yorkshire Puddings 230g was accepted at EUR3.00, observed_at2026-11-07T15:31:52.537058Z. Retained source evidence was used only to select the candidate; it was not promoted as a fresh price.
+
+Independent read-only database reconciliation confirmed503 fresh trusted Tesco prices,826 requests charged since31October against the1,000 cap (174 remaining),24 pending reservations, run status success and no active collector lease. Combined with the preceding urgent phase, this continuation produced116 renewals and one additional product. The17 deferred/pending old observations expiring8November remain unrenewed. No pending URL was re-fetched.
+
+The historical source cohort remains42 completed new source checks out of671, with629 awaiting completion: three protected pending reservations and626 untouched. This ordinary price expansion does not count as a new check of that cohort. Other ordinary candidates reviewed so far have mismatches or insufficient independent evidence; held/shared-SKU candidates need audited evidence or mapping repair, not relaxed guards. No collector remains running in the background. Future work must retain the remaining174-request ceiling and the existing automatic batch progression authorisation.
+
 ## 7 November 2026 — database restored,116 Tesco renewals and targeted selection
 
 The existing supermarket-ie Supabase project was restored on7November through the connected management tool. ACTIVE_HEALTHY status and SQL access were verified before any Tesco request. The restored ledger retained502 fresh trusted Tesco offers,692 charged requests since31October and14 protected pending reservations. No infrastructure, credentials, egress gate setting, cooldown or identity safeguard was changed.
