@@ -126,6 +126,34 @@ export function denialReason(input: { status?: number | null; errorReason?: stri
 
 // --- Supabase-backed governor I/O -----------------------------------------
 
+// A safeguard must never take down the thing it protects. If the governor RPCs
+// are not provisioned yet (the migration has not been applied to this database),
+// detect exactly that condition and fail OPEN — run ungoverned, with a loud
+// one-time warning — rather than crashing every collection request. Any OTHER
+// error still throws. Once the migration lands, the governor activates with no
+// redeploy.
+export function isGovernorNotProvisioned(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const code = error.code ?? '';
+  const message = error.message ?? '';
+  // PostgREST: PGRST202 = function not found in schema cache; Postgres 42883 =
+  // undefined_function; defensive text match for either phrasing.
+  return code === 'PGRST202'
+    || code === '42883'
+    || /could not find the function|does not exist|schema cache/i.test(message);
+}
+
+let warnedNotProvisioned = false;
+function warnUngovernedOnce(store: GovernedStore, context: string, message: string) {
+  if (warnedNotProvisioned) return;
+  warnedNotProvisioned = true;
+  console.warn('[retailer-governor] RPCs not provisioned; running UNGOVERNED until the migration is applied', { store, context, message });
+}
+
+// The ungoverned fallback: always "allowed", no breaker. Used only when the
+// governor RPCs are absent (pre-migration).
+const UNGOVERNED: SlotDecision = { decision: 'allowed', retryAfterMs: 0, breakerOpen: false, windowCount: 0, consecutiveDenials: 0 };
+
 export async function acquireSlotOnce(store: GovernedStore, config: GovernorConfig): Promise<SlotDecision> {
   const { data, error } = await supabaseAdmin.rpc('acquire_retailer_request_slot', {
     p_store: store,
@@ -133,7 +161,13 @@ export async function acquireSlotOnce(store: GovernedStore, config: GovernorConf
     p_window_seconds: config.windowSeconds,
     p_breaker_cooldown_seconds: config.breakerCooldownSeconds,
   });
-  if (error) throw new Error(`Failed acquiring ${store} request slot: ${error.message}`);
+  if (error) {
+    if (isGovernorNotProvisioned(error)) {
+      warnUngovernedOnce(store, 'acquire', error.message ?? '');
+      return UNGOVERNED;
+    }
+    throw new Error(`Failed acquiring ${store} request slot: ${error.message}`);
+  }
   const row = (Array.isArray(data) ? data[0] : data) as {
     out_decision: string; out_retry_after_ms: number; out_breaker_open: boolean;
     out_window_count: number; out_consecutive_denials: number;
@@ -155,12 +189,18 @@ export async function recordRetailerDenial(store: GovernedStore, reason: string,
     p_trip_threshold: config.breakerTripThreshold,
     p_cooldown_seconds: config.breakerCooldownSeconds,
   });
-  if (error) throw new Error(`Failed recording ${store} denial: ${error.message}`);
+  if (error) {
+    if (isGovernorNotProvisioned(error)) { warnUngovernedOnce(store, 'denial', error.message ?? ''); return; }
+    throw new Error(`Failed recording ${store} denial: ${error.message}`);
+  }
 }
 
 export async function recordRetailerSuccess(store: GovernedStore) {
   const { error } = await supabaseAdmin.rpc('record_retailer_success', { p_store: store });
-  if (error) throw new Error(`Failed recording ${store} success: ${error.message}`);
+  if (error) {
+    if (isGovernorNotProvisioned(error)) { warnUngovernedOnce(store, 'success', error.message ?? ''); return; }
+    throw new Error(`Failed recording ${store} success: ${error.message}`);
+  }
 }
 
 // Acquire a rate-limit slot, waiting through 'wait' decisions (bounded), and
