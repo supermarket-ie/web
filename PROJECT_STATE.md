@@ -1,5 +1,62 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — DEPLOYED: daily schedules + governor worker image (migration + alert recipient OUTSTANDING)
+
+Rolled out the daily Dunnes/SuperValu refresh and the reliability-governor
+worker image to AWS prod. Governor code (PRs #338, #339) and the daily cron
+(PR #336) are now on `main` at `a0b77a9`. Deployed via the authorised local
+Terraform workspace (account 611622961299, eu-west-1); web image untouched.
+
+What is LIVE and verified:
+- Worker image `a0b77a9-prod` (digest sha256:99f36aac…) built via the ECR
+  workflow from `main` (temporary `aws-prod` main deploy-branch policy added for
+  the build, then removed; existing OIDC role, no new identity).
+- `tofu apply` (2 add / 12 change / 2 destroy) moved `smie-prod-scheduled` and
+  `smie-prod-sqs-consumer` to the new image (task defs `:4`), updated the
+  sqs-consumer service, re-pinned the scheduler RunTask IAM policy to the new
+  scheduled revision (same actions/PassRole targets + existing `:*` wildcard —
+  reviewed, no privilege change), and set the three retailer schedules to DAILY:
+  Dunnes `cron(10 5 * * ? *)`, SuperValu `cron(20 5 * * ? *)`, watchdog
+  `cron(45 7 * * ? *)` — all ENABLED, targeting `smie-prod-scheduled:4`.
+- sqs-consumer reached steady state (1/1, rollout COMPLETED) and started cleanly
+  on the new image, polling all topics. Web service unchanged (`smie-prod:16`,
+  `d81d019-prod`, 2/2). Networking unchanged (ephemeral public-IP Fargate).
+- Default rate-limit ceiling is 30 req/min per retailer (env vars unset → code
+  default), matching the agreed value.
+
+OUTSTANDING (two operator inputs this workspace cannot supply):
+1. **Migration not applied.** `supabase/migrations/20261107150000_retailer_request_governor.sql`
+   is NOT yet in prod (verified: `retailer_request_governor` REST → 404;
+   watchdog `retailer_governor_state()` → PGRST202). This workspace has only the
+   PostgREST service-role key (REST), not a Postgres DDL connection string or a
+   Supabase access token (checked Secrets Manager, SSM, env, GH secrets — none).
+   By design the governor FAILS OPEN until the RPCs exist: collection runs
+   UNGOVERNED (today's pre-#338 behaviour) with a one-time warning, never
+   crashing. **The rate limit and circuit breaker are therefore NOT yet active.**
+   Apply the migration with a DB-level credential to activate them (no redeploy
+   needed afterwards).
+2. **Alert channel not deliverable.** `SCRAPE_ALERT_EMAIL` is empty on the
+   deployed task defs (no recipient is stored anywhere in the repo; it is a
+   documented operator input). A manual watchdog run confirmed the code refuses
+   to claim delivery: it logged `ALERT NOT DELIVERED — channel unconfigured`.
+   `RESEND_API_KEY` is present; only the recipient is missing. Set the
+   `scrape_alert_email` tfvar (or the env) and re-apply to enable delivery.
+
+Catch-up: deliberately NOT run. Today's daily slots (05:10/05:20) passed with no
+run (last runs were 5 Nov, old Mon/Thu, 1,000-capped); the watchdog correctly
+flagged both as missed. A 2,500-target catch-up now would be UNGOVERNED (burst,
+unpaced) — contrary to the whole point of this change — so it is held until the
+migration activates the governor. The daily schedule next fires 8 Nov 05:10/05:20.
+
+Verification evidence: manual `scrape-watchdog` run (exit 0, HTTP 200) detected
+the two missed daily slots with correct per-retailer grace and the SuperValu
+degraded streak; reported governor telemetry unavailable (PGRST202) without
+crashing; and refused to deliver the alert (channel unconfigured).
+
+Daily refreshes are NOT yet fully active in the intended governed form: the
+schedules and worker image are live, but the governor is dormant (fail-open)
+and alerting is log-only until the migration and alert recipient are supplied.
+
 ## 7 November 2026 — reliability governor for automated Dunnes/SuperValu collection
 
 Added a shared per-retailer request governor to the AUTOMATED Dunnes/SuperValu
