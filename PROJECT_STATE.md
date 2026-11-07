@@ -1,5 +1,64 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — governor ACTIVATED: alert channel live, schedules re-enabled, governed catch-up running
+
+With all three governor migrations verified applied in production (independently
+re-checked: both tables REST 200, hardened RPCs present incl. `acquire` 5-arg and
+`retailer_governor_state()` returning `deadline_until`/`generation`, both retailer
+rows initialized), completed activation of the daily Dunnes/SuperValu refresh.
+
+1. **Alert channel configured + delivery verified.** Set
+   `scrape_alert_email = colin@supermarket.ie` (tfvars) and applied — worker task
+   defs now carry `SCRAPE_ALERT_EMAIL=colin@supermarket.ie` alongside the existing
+   `RESEND_API_KEY` secret, with `DISABLE_OUTBOUND_EMAIL=false` and
+   `APP_ENV=production` (so `outboundEmailBlocked()` is false and
+   `channelConfigured` is true). Verified delivery end-to-end with a test send via
+   Resend to colin@supermarket.ie from the watchdog's sender
+   (hello@mail.supermarket.ie): accepted, id 01a1b6c1-…, no error. NOTE: the
+   deployed WEB image (d81d019-prod) predates this and reports
+   channelConfigured=false over HTTP — alert delivery is a WORKER-path concern and
+   the scheduled watchdog runs on the worker, which is correctly configured.
+2. **Watchdog governor RPCs succeed.** Ran scrape-watchdog via the deployed worker
+   (`smie-prod-scheduled`, image b9b1a92-prod): governor RPC calls succeed with NO
+   PGRST202 and no telemetry_unavailable; it reported real freshness (dunnes 908 /
+   supervalu 1083 displayed prices overdue >30h) and the degraded-SuperValu streak.
+3. **Schedules re-enabled (reviewed Terraform, PR #346).** Restored
+   dunnes/supervalu triggers to the git-tracked `enabled_schedules` default and
+   applied. Live: dunnes `cron(10 5 * * ? *)` ENABLED, supervalu `cron(20 5 * * ? *)`
+   ENABLED, watchdog `cron(45 7 * * ? *)` ENABLED, all on `smie-prod-scheduled:6`.
+   (One apply stalled on an expired SSO token leaving a self-owned stale S3
+   `.tflock`; re-authed, force-unlocked my own lock, re-applied cleanly.)
+4. **Governed Dunnes catch-up running.** Confirmed no active dunnes/supervalu
+   scheduled_full run first (the long-standing `running` rows are orphaned
+   Tesco/discovery statuses, not active collection). Launched a one-off
+   `CRON_JOB=dunnes-scrape-trigger` task → run `vercel_dunnes_20261107220645`,
+   **target_count 1053** (full eligible inventory, not the old 1,000 cap), 211
+   batches. The governor paces it precisely: `window_count` pinned at 30,
+   `total_requests` climbing 30/window, `breaker_open=false`, `total_denials=0`.
+   Early outcomes are healthy: mostly `unchanged` (prices confirmed current), a
+   few `inserted`, and the only failures are benign `no_confident_match` /
+   `no_search_results` — NOT denials (proving blocked≠not-found holds live).
+
+Step 5 reconciliation (snapshot while the Dunnes catch-up is still draining):
+- Dunnes displayed prices overdue >30h fell from 908 to **776** and continues to
+  drop as the governed run proceeds (≈22–26 products/min effective). `inserted`
+  low and `unchanged_count` dominant: most displayed prices are confirmed current,
+  not changed. Benign no-match failures ≈ normal catalogue drift.
+- SuperValu overdue >30h is still **1083/1083** — its catch-up has NOT run yet.
+
+SuperValu catch-up: deliberately NOT started concurrently (the task requires
+SEQUENTIAL catch-ups). It should run after the Dunnes run drains, OR will be
+covered by the now-enabled daily 05:20 UTC schedule tomorrow. The ~30 req/min
+governed pacing means each full-inventory run takes tens of minutes to a couple
+of hours (the intended overnight spread), so completion is asynchronous via the
+SQS consumer.
+
+Outstanding/monitoring: let the Dunnes catch-up finish and then run (or let the
+schedule run) SuperValu; after both, reconcile successful checks vs
+rejected/unavailable products vs remaining overdue displayed prices. Networking
+unchanged (ephemeral public-IP Fargate); 30 req/min default unchanged.
+
+
 ## 7 November 2026 — database restored,116 Tesco renewals and targeted selection
 
 The existing supermarket-ie Supabase project was restored on7November through the connected management tool. ACTIVE_HEALTHY status and SQL access were verified before any Tesco request. The restored ledger retained502 fresh trusted Tesco offers,692 charged requests since31October and14 protected pending reservations. No infrastructure, credentials, egress gate setting, cooldown or identity safeguard was changed.
