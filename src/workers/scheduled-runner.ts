@@ -25,7 +25,9 @@ type JobDef = {
   path: string;
 };
 
-// Mirrors vercel.json `crons`. Keys are stable job identifiers for EventBridge.
+// Keys are stable job identifiers for EventBridge. The 2,500-product bound
+// covers the complete current resolved inventory, rather than a demand-ranked
+// 1,000-product subset. The selector pages past the Data API row limit.
 const JOBS: Record<string, JobDef> = {
   'weekly-digest': {
     load: () => import('@/app/api/cron/weekly-digest/route'),
@@ -57,11 +59,11 @@ const JOBS: Record<string, JobDef> = {
   },
   'dunnes-scrape-trigger': {
     load: () => import('@/app/api/workers/dunnes-scrape-trigger/route'),
-    path: '/api/workers/dunnes-scrape-trigger?limit=1000&scope=scheduled_full',
+    path: '/api/workers/dunnes-scrape-trigger?limit=2500&scope=scheduled_full',
   },
   'supervalu-scrape-trigger': {
     load: () => import('@/app/api/workers/supervalu-scrape-trigger/route'),
-    path: '/api/workers/supervalu-scrape-trigger?limit=1000&scope=scheduled_full',
+    path: '/api/workers/supervalu-scrape-trigger?limit=2500&scope=scheduled_full',
   },
   'pepesto-tesco-retrieve': {
     load: () => import('@/app/api/workers/pepesto-tesco-retrieve/route'),

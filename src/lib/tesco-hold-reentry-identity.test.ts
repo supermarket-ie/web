@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reviewedCanonicalEvidenceGap, independentExactIdentity, type ReentryEvidence } from './tesco-hold-reentry';
 
-function evidence(canonical: string, source: string, peer: string, quantity = { grams: 100 }, brand = 'Example'): ReentryEvidence {
+function evidence(canonical: string, source: string, peer: string, quantity: ReentryEvidence['page']['parsed']['products'][number]['quantity'] = { grams: 100 }, brand = 'Example'): ReentryEvidence {
   const url='https://www.tesco.ie/shop/en-IE/products/123456789';
   return {
     mapping:{id:'mapping',product_id:'product',canonical_name:canonical,canonical_brand:brand,

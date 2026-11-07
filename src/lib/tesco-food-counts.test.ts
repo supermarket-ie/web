@@ -36,7 +36,7 @@ describe('explicit food counts across the independent and database gates', () =>
       const e = evidence(row.canonical,row.source,row.peer,row.grams);
       expect(independentExactIdentity(e)).toBe(true);
       const legacy = classifyTescoReplacement({ storeProductId:'mapping',canonicalName:row.canonical,canonicalBrand:'Example',
-        storeProductName:row.source,storeBrand:'Example',storeSku:'123456789',storeUrl:e.mapping.store_url,duplicateSkuCount:1 },
+        storeProductName:row.source,storeBrand:'Example',storeSku:'123456789',storeUrl:e.mapping.store_url,duplicateSkuCount:1,isFresh:false },
         { sku:'123456789',url:e.mapping.store_url,name:row.source,structuredQuantity:{grams:row.grams},evidenceSource:'tesco_direct_structured' });
       expect(legacy.classification === 'exact_replacement_candidate'
         || reviewedCanonicalEvidenceGap(e, e.page.parsed.products[0], legacy.reasons)).toBe(true);

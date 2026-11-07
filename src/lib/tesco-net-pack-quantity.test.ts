@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {normaliseNetPackQuantity,NET_PACK_EVIDENCE} from './tesco-net-pack-quantity';
-function source(){return {name:'Example Tuna 4 x 145g',quantity:{grams:408},identityDetails:{
+function source(){return {name:'Example Tuna 4 x 145g',quantity:{grams:408},quantityEvidence:undefined as string|undefined,identityDetails:{
   packSize:[{value:'408',units:'G'}],netContents:'4 x 145g ℮',drainedWeight:'4 x 102g'}};}
 describe('explicit whole-pack net/drained reconciliation',()=>{
   it('projects the corroborated full pack without editing retained evidence',()=>{

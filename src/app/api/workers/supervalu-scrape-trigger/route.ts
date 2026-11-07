@@ -38,8 +38,8 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const url = new URL(request.url);
-  const configuredLimit = parsePositiveInt(process.env.SUPERVALU_VERCEL_RUN_LIMIT ?? null, 25, 1000);
-  const limit = parsePositiveInt(url.searchParams.get('limit'), configuredLimit, 1000);
+  const configuredLimit = parsePositiveInt(process.env.SUPERVALU_VERCEL_RUN_LIMIT ?? null, 25, 2500);
+  const limit = parsePositiveInt(url.searchParams.get('limit'), configuredLimit, 2500);
   const batchSize = parsePositiveInt(process.env.SUPERVALU_VERCEL_BATCH_SIZE ?? null, 3, 10);
   const staggerSeconds = parsePositiveInt(process.env.SUPERVALU_VERCEL_BATCH_STAGGER_SECONDS ?? null, 2, 120);
   const query = url.searchParams.get('q')?.trim() || undefined;
