@@ -1,5 +1,83 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — FRESH Tesco fetch proof from AWS runtime: BLOCKED (403/Akamai); concrete provider decision needed
+
+Ran a bounded, read-only egress proof from the EXACT intended unattended runtime
+— a one-off ECS Fargate task on `smie-prod-cluster`, deployed worker image
+`b9b1a92-prod`, same VPC / public subnets / `sg-0f382e9d266cbb4dc` / task role /
+eu-west-1 as `smie-prod-scheduled` and `smie-prod-sqs-consumer`. It mirrored the
+production `directFetch` exactly (Chrome UA, `en-IE` accept-language, canonical
+`https://www.tesco.ie/shop/en-IE/products/<sku>` URL, 20s timeout, follow
+redirects, same `looksBlocked` detector) over ≤10 product requests, stopping on
+the first terminal condition. It wrote NOTHING (verified after: gate counters
+still 0 success / 2 blocks, pending pages still 24, no lease claimed).
+
+FRESH result (not a stale counter): request 1 → **HTTP 403, Akamai challenge
+HTML** (70,746 bytes, 226ms, content-type text/html), `hasApollo:false`,
+`mentionsSku:false` → classified `challenge`; the probe stopped immediately
+(1 of 10 used). This is a genuine current TLS+HTTP exchange that COMPLETED with
+a 403 challenge, confirming the AWS datacenter egress is blocked at Tesco's edge
+today — consistent with the historical 403, now freshly re-observed from the
+real production route. Accepted unattended Tesco access remains UNPROVEN and, on
+this evidence, is not available from the direct AWS route.
+
+External access is therefore necessary. CONCRETE RECOMMENDATION (one provider):
+
+**Apify — "Tesco Scraper — UK & Ireland" actor (`parsebird/tesco-scraper`).**
+- Verified Tesco Ireland support: explicitly covers tesco.ie, EUR prices, Irish
+  departments; accepts `region: "IE"` or tesco.ie product/search/category URLs.
+- Fields available (match our identity + price needs): `gtin` (EAN/barcode),
+  `brand_name`, `name`, `pack_size`+`pack_size_unit`, `net_contents`,
+  `price` (shelf, EUR), `unit_price`+`unit_of_measure`, `promotions` with
+  start/end + clubcard flag, `in_stock`/`status`, `product_id` (URL SKU),
+  category path. Reads the logged-out public site data (standard online prices).
+- Access demonstrated: the actor advertises working tesco.ie extraction via
+  Tesco's own public JSON (no login/proxy). NOT yet demonstrated by US against
+  our mappings — a paid trial run is required to confirm before committing.
+- Pricing: pay-per-event, product-scraped per 1,000 = $1.99 (Free) / $1.79
+  (Bronze) / $1.59 (Silver) / $1.39 (Gold); compute + proxy included. 1,000
+  free platform credits to trial.
+- Cost at daily refresh (the task's volume basis):
+  - 500 products/day × 30 = 15,000 fetches/mo → **~$30/mo** (Free rate) to
+    **~$21/mo** (Gold).
+  - 900 products/day × 30 = 27,000/mo → **~$54/mo** (Free) to **~$38/mo** (Gold).
+  - Note: this actor renews by product URL/keyword at 1 billed event/product, so
+    there is no separate per-page discovery multiplier; retries are absorbed in
+    the event price. (The task's "~15,000 base fetches" assumes multi-page HTML
+    fetching; the actor bills per saved product, so our effective volume equals
+    the product count, ~15k–27k events/mo.)
+- Limitation: a third-party actor (not an official Tesco feed); subject to the
+  actor's continued maintenance and Tesco's structure. We keep ALL existing
+  identity/evidence gates — the provider only replaces the blocked fetch, never
+  the verification.
+
+Fallback considered (NOT recommended as first choice): **ScrapingBee** generic
+proxy — a Tesco product page needs JS rendering + premium proxy = 25 credits/req
+(stealth 75). 15,000 req/mo = 375k credits and 27,000 = 675k credits both fit
+the $99/mo Startup plan (1M credits). But tesco.ie acceptance is NOT demonstrated
+and we would still have to build + maintain Tesco anti-bot handling and parsing.
+Apify is cheaper at our volume AND ships the Tesco-specific extraction.
+
+AI cost (separate, as required): identity assessment uses the existing Bedrock
+Claude path. ~1 generateObject call per verified/uncertain product at renewal;
+at ~15k–27k assessments/mo and a few ¢ per short structured call, on the order
+of low-hundreds €/mo at most, and only on products that reach assessment
+(most renewals are unchanged and need no deep inference). Exact figure depends
+on how many products trigger deep inference vs reuse of prior evidence.
+
+SINGLE CONCRETE DECISION NEEDED FROM OWNER: approve a paid Apify trial +
+subscription for `parsebird/tesco-scraper` (budget: the Gold tier ~$21–38/mo at
+500–900 daily products, plus a one-off trial on the free credits to confirm
+acceptance against our mappings). On approval I will: wire the provider behind
+the existing egress-gate/lease/cooldown/identity gates (provider replaces the
+fetch only), run a ≤10-product real acceptance proof, then continue the
+unattended DB adapter, mapping verification/repair and scheduler work and fix
+the assessment-consistency / evidence-binding items before relying on the AI
+module for acceptance. No IP rotation, repeated probing, challenge solving, or
+static-IP assumption was used. Paid Pepesto discovery remains NOT authorised.
+SuperValu/Dunnes continue on their existing schedules, untouched.
+
+
 ## 8 November 2026 — independent AI identity assessment for Tesco mappings (built + tested); unattended fetch route STILL BLOCKED
 
 Added `src/lib/tesco-identity-assessment.ts`: an independent AI second opinion
