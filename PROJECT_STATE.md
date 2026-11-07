@@ -38,6 +38,14 @@ Removed fail-open: if the governor RPCs are absent, `acquire` now throws
 `RetailerBlockedError`, makes NO retailer request) — the worker re-enqueues and
 waits. Unavailable safeguards pause collection rather than run ungoverned.
 
+DEPLOYED (7 Nov): the corrected worker image `b9b1a92-prod` is live on both
+worker task defs (`smie-prod-scheduled:5`, `smie-prod-sqs-consumer:5`); the
+consumer rollout COMPLETED and started cleanly. Web untouched (`smie-prod:16`).
+Because the migrations are not yet applied, the fail-closed design means the
+consumer would DEFER any retailer request — and the schedules are PAUSED anyway,
+so no collection occurs until re-enabled. Verified schedule states live:
+dunnes/supervalu DISABLED, watchdog ENABLED.
+
 ORDERED MIGRATIONS for ChatGPT to apply (authenticated Supabase), in order:
   1. `supabase/migrations/20261107150000_retailer_request_governor.sql` (base)
   2. `supabase/migrations/20261107173000_retailer_governor_recovery_hardening.sql`
