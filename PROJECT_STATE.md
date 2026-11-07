@@ -1,5 +1,23 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — five more source checks; quantity stop preserved
+
+A seven-target evidence-only run35d74ec9-a747-46b5-8d8b-fa39c54cf69a saved five fresh source captures and then stopped with identity_hold_consecutive_exceeded after five quantity holds. This is a real collector safeguard; it was not bypassed by opening another batch. No price was inserted and no pending reservation was added. Knorr Roasted Garlic Stock Pot and Avonmore Salted Caramel Protein Coffee were not requested.
+
+The saved facts are: Alpro tropical fruit protein yoghurt has structured/net200g while its title also contains the15g protein claim; Felix Soup Tender Strips has explicit6x48g net contents and288g structured total; Dr. Oetker Gelatine has3x12g in its title,36g structured total and a12g per-sachet net declaration; John West sunflower-oil tuna has3x145g net and3x95g drained contents,435g structured total; Whiskas milk has3x200ml net and600ml structured total. All remain held. Protein-claim disambiguation, explicit inner counts and net-versus-unit interpretations require independent canonical/peer proof and consistently enforced approval/live checks before a separate price request. Retained prices are not promoted.
+
+Database reconciliation confirms503 fresh trusted Tesco prices,831/1,000 charged requests (169 remaining),24 unchanged pending reservations and no collector lease. The original671 cohort now has47 completed new source checks and624 awaiting completion: three pending and621 untouched. The preceding503-price entry is an intermediate snapshot; these counts supersede its826-request/626-untouched figures. The source run is durably closed as degraded at the safeguard. No collector is running in the background.
+
+## 7 November 2026 — Green Isle expansion accepted; 503 fresh Tesco prices
+
+PR #343 passed required validate on updated head c51757c7d0a382a3ae6e716b539078ece2e90ce8 and merged normally as a409b6681428ed667e7df3a9289f5bd4605260f8. The original successful CI run was not sufficient at the merge gate after main advanced; merging concurrent main changes and obtaining a new successful check resolved the blocker without bypassing rules.
+
+The bounded ordinary expansion collector then fetched only mapping d7640e61-e5dc-4dbd-a601-cb3782854354 (Tesco SKU 280135493). Run803a2694-cfbe-4d93-9f61-54f889cfa6dc completed successfully: one reservation, one completed page, one successful receipt, zero holds or quarantines. A new live observation for Green Isle 12 Yorkshire Puddings 230g was accepted at EUR3.00, observed_at2026-11-07T15:31:52.537058Z. Retained source evidence was used only to select the candidate; it was not promoted as a fresh price.
+
+Independent read-only database reconciliation confirmed503 fresh trusted Tesco prices,826 requests charged since31October against the1,000 cap (174 remaining),24 pending reservations, run status success and no active collector lease. Combined with the preceding urgent phase, this continuation produced116 renewals and one additional product. The17 deferred/pending old observations expiring8November remain unrenewed. No pending URL was re-fetched.
+
+The historical source cohort remains42 completed new source checks out of671, with629 awaiting completion: three protected pending reservations and626 untouched. This ordinary price expansion does not count as a new check of that cohort. Other ordinary candidates reviewed so far have mismatches or insufficient independent evidence; held/shared-SKU candidates need audited evidence or mapping repair, not relaxed guards. No collector remains running in the background. Future work must retain the remaining174-request ceiling and the existing automatic batch progression authorisation.
+
 ## 7 November 2026 — database restored,116 Tesco renewals and targeted selection
 
 The existing supermarket-ie Supabase project was restored on7November through the connected management tool. ACTIVE_HEALTHY status and SQL access were verified before any Tesco request. The restored ledger retained502 fresh trusted Tesco offers,692 charged requests since31October and14 protected pending reservations. No infrastructure, credentials, egress gate setting, cooldown or identity safeguard was changed.
