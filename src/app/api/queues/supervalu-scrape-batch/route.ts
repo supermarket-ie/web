@@ -1,4 +1,4 @@
-import { handleCallback } from '@/lib/queue';
+import { handleCallback, send } from '@/lib/queue';
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishAgentProductChange } from '@/lib/agent-events';
 import {
@@ -7,9 +7,13 @@ import {
   processSupervaluProduct,
   type SupervaluBatchMessage,
 } from '@/lib/supervalu-direct-worker';
-import { RetailerBlockedError, backoffDelayMs } from '@/lib/retailer-request-governor';
+import { RetailerBlockedError, backoffDelayMs, recordNetworkAttempt } from '@/lib/retailer-request-governor';
 
-const MAX_TRANSIENT_DELIVERIES = 4;
+const TOPIC = 'supervalu-scrape-batches';
+// Max REAL transient network attempts per product before a permanent failure,
+// counted durably per (run, product) — NOT from SQS delivery count.
+const MAX_NETWORK_ATTEMPTS = 4;
+
 function sleep(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 async function alreadyFinalized(runUuid: string, storeProductId: string) {
   const { data, error } = await supabaseAdmin.from('scrape_product_receipts').select('store_product_id').eq('run_id', runUuid).eq('store_product_id', storeProductId).maybeSingle();
@@ -17,7 +21,13 @@ async function alreadyFinalized(runUuid: string, storeProductId: string) {
   return Boolean(data);
 }
 
-export const POST = handleCallback<SupervaluBatchMessage>('supervalu-scrape-batches', async (message, metadata) => {
+// Thrown after a paused batch has been re-enqueued as a FRESH message; the retry
+// closure acknowledges this delivery so paused redeliveries never DLQ valid work.
+class SupervaluBatchRequeued extends Error {
+  constructor() { super('supervalu batch re-enqueued after pause'); this.name = 'SupervaluBatchRequeued'; }
+}
+
+export const POST = handleCallback<SupervaluBatchMessage>(TOPIC, async (message, metadata) => {
   if (process.env.SUPERVALU_VERCEL_WORKER_ENABLED !== 'true') throw new Error('SUPERVALU_VERCEL_WORKER_ENABLED is not true');
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('SuperValu queue worker Supabase credential is not configured');
   if (!message?.runUuid || !Array.isArray(message.products) || message.products.length === 0) throw new Error('Invalid SuperValu queue message');
@@ -31,16 +41,34 @@ export const POST = handleCallback<SupervaluBatchMessage>('supervalu-scrape-batc
       await processSupervaluProduct(message, product);
       finalized = true;
     } catch (error) {
-      // Retailer paused (breaker open / rate-limit wait exhausted): redeliver
-      // the whole batch later without finalising any product and without
-      // consuming its network retry budget.
+      // Retailer paused (breaker open / rate-limit wait / governor unavailable):
+      // NOT a product failure and NO network request made. Re-enqueue the
+      // remaining unfinalised products as a FRESH message and ack this delivery,
+      // so paused redeliveries never accrue toward the DLQ or the per-product
+      // network-retry budget.
       if (error instanceof RetailerBlockedError) {
-        console.warn('[supervalu-queue] retailer paused; deferring batch', { runId: message.runId, batchIndex: message.batchIndex, deliveryCount: metadata.deliveryCount, retryAfterMs: error.retryAfterMs, consecutiveDenials: error.consecutiveDenials });
-        throw error;
+        const remaining: typeof message.products = [];
+        for (let j = index; j < message.products.length; j += 1) {
+          const p = message.products[j];
+          if (!(await alreadyFinalized(message.runUuid, p.storeProductId))) remaining.push(p);
+        }
+        if (remaining.length > 0) {
+          const delaySeconds = Math.min(900, Math.max(30, Math.ceil(error.retryAfterMs / 1000)));
+          await send(TOPIC, { ...message, products: remaining }, {
+            idempotencyKey: `${message.runUuid}:pause:${message.batchIndex}:${remaining[0].storeProductId}`,
+            retentionSeconds: 86_400,
+            delaySeconds,
+          });
+          console.warn('[supervalu-queue] retailer paused; re-enqueued remaining batch', { runId: message.runId, batchIndex: message.batchIndex, remaining: remaining.length, delaySeconds, retryAfterMs: error.retryAfterMs });
+        }
+        throw new SupervaluBatchRequeued();
       }
       if (error instanceof TransientSupervaluError) {
-        if (metadata.deliveryCount < MAX_TRANSIENT_DELIVERIES) {
-          console.warn('[supervalu-queue] transient direct-fetch failure; retrying batch', { runId: message.runId, batchIndex: message.batchIndex, storeProductId: product.storeProductId, deliveryCount: metadata.deliveryCount, reason: error.reason });
+        // A REAL network attempt failed transiently. Count it durably and give
+        // up only after MAX_NETWORK_ATTEMPTS genuine attempts (not deliveries).
+        const attempts = await recordNetworkAttempt(message.runUuid, product.storeProductId, error.reason);
+        if (attempts < MAX_NETWORK_ATTEMPTS) {
+          console.warn('[supervalu-queue] transient direct-fetch failure; retrying batch', { runId: message.runId, batchIndex: message.batchIndex, storeProductId: product.storeProductId, attempts, reason: error.reason });
           throw error;
         }
         await finalizeSupervaluPermanentFailure(message, product, `transient_exhausted_${error.reason}`, error.message);
@@ -61,9 +89,8 @@ export const POST = handleCallback<SupervaluBatchMessage>('supervalu-scrape-batc
 }, {
   visibilityTimeoutSeconds: 300,
   retry: (error, metadata) => {
-    if (error instanceof RetailerBlockedError) {
-      const seconds = Math.ceil(backoffDelayMs({ attempt: metadata.deliveryCount, retryAfterMs: error.retryAfterMs, baseMs: 30_000, capMs: 900_000 }) / 1000);
-      return { afterSeconds: Math.max(30, seconds) };
+    if (error instanceof SupervaluBatchRequeued) {
+      return { acknowledge: true };
     }
     const retryAfterMs = error instanceof TransientSupervaluError ? error.retryAfterMs : null;
     const capMs = retryAfterMs != null ? 900_000 : 180_000;

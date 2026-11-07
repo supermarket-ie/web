@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
     store: String(g.store),
     breaker_open: Boolean(g.breaker_open),
     breaker_open_until: g.breaker_open_until ? String(g.breaker_open_until) : null,
+    deadline_until: g.deadline_until ? String(g.deadline_until) : null,
     consecutive_denials: g.consecutive_denials as number | null,
     last_denial_reason: g.last_denial_reason as string | null,
   }));

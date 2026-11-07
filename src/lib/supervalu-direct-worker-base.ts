@@ -55,14 +55,14 @@ export class TransientSupervaluError extends Error {
 }
 
 // Count HTTP denials (403/429/5xx) and timeouts/network errors toward the
-// breaker; a normal not-found/parse outcome is not a denial.
-function supervaluDenialReason(error: unknown): string | null {
-  if (!(error instanceof TransientSupervaluError)) return null;
-  return /_http_(403|429|5\d\d)$/.test(error.reason)
+// breaker; a normal not-found/parse outcome is not a denial. Surface any server
+// Retry-After so the governor persists the full deadline durably.
+function supervaluDenialReason(error: unknown): { reason: string | null; retryAfterMs?: number | null } {
+  if (!(error instanceof TransientSupervaluError)) return { reason: null };
+  const isDenial = /_http_(403|429|5\d\d)$/.test(error.reason)
     || /^http_(403|429|5\d\d)$/.test(error.reason)
-    || /timeout|network_error/.test(error.reason)
-    ? error.reason
-    : null;
+    || /timeout|network_error/.test(error.reason);
+  return { reason: isDenial ? error.reason : null, retryAfterMs: error.retryAfterMs };
 }
 
 function decodeHtml(value: string) {
