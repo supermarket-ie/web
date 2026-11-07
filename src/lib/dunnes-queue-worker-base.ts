@@ -379,11 +379,14 @@ async function fetchCandidates(queryName: string, product: DunnesQueueProduct): 
     }
   }, {
     // Count HTTP denials and timeouts/network errors toward the breaker; a
-    // normal "no results" (non-ok handled above by returning []) is not an error.
-    classifyError: (error) =>
-      error instanceof TransientDunnesError
-        ? (/^http_(403|429|5\d\d)$/.test(error.reason) || /timeout|network_error/.test(error.reason) ? error.reason : null)
-        : null,
+    // normal "no results" (non-ok handled above by returning []) is not an
+    // error. Surface any server Retry-After so the governor persists the full
+    // deadline durably (not clamped to the queue delivery cap).
+    classifyError: (error) => {
+      if (!(error instanceof TransientDunnesError)) return { reason: null };
+      const isDenial = /^http_(403|429|5\d\d)$/.test(error.reason) || /timeout|network_error/.test(error.reason);
+      return { reason: isDenial ? error.reason : null, retryAfterMs: error.retryAfterMs };
+    },
   });
 }
 

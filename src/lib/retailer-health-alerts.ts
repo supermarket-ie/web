@@ -66,6 +66,7 @@ export type GovernorStateRow = {
   store: string;
   breaker_open: boolean;
   breaker_open_until: string | null;
+  deadline_until?: string | null;
   consecutive_denials: number | null;
   last_denial_reason: string | null;
 };
@@ -131,8 +132,13 @@ export function evaluateRetailerHealth(input: RetailerHealthInput): RetailerHeal
   // never masked by an unrelated view failure.
   for (const g of input.governor ?? []) {
     if (!g.breaker_open) continue;
-    const until = g.breaker_open_until ? new Date(g.breaker_open_until).getTime() : null;
-    const untilText = until && Number.isFinite(until) ? ` until ${new Date(until).toISOString()}` : '';
+    // Pause runs until the LATER of the cooldown and any durable deadline
+    // (e.g. a long Retry-After persisted across restarts).
+    const times = [g.breaker_open_until, g.deadline_until]
+      .map((t) => (t ? new Date(t).getTime() : NaN))
+      .filter((t) => Number.isFinite(t));
+    const until = times.length ? Math.max(...times) : null;
+    const untilText = until ? ` until ${new Date(until).toISOString()}` : '';
     const reason = g.last_denial_reason ? ` after ${g.consecutive_denials ?? 0}× ${g.last_denial_reason}` : '';
     issues.push({
       store: g.store,

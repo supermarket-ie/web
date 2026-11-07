@@ -245,6 +245,12 @@ variable "enabled_schedules" {
     a PR); avoid overriding enabled_schedules in the local tfvars, which would
     reintroduce the drift risk. Enable a schedule only after its collection path
     is verified.
+
+    PAUSED (7 Nov 2026): dunnes-scrape-trigger and supervalu-scrape-trigger are
+    intentionally OMITTED while the request governor is unavailable (its
+    migration is not yet applied). The scrape-watchdog stays ENABLED so health
+    monitoring continues. Re-add both triggers (reviewed PR) only after the
+    governor migration is applied and verified, so collection resumes governed.
   EOT
   type        = list(string)
   default = [
@@ -255,8 +261,6 @@ variable "enabled_schedules" {
     "price-watchdog-thursday",
     "product-embeddings",
     "scrape-watchdog",
-    "supervalu-scrape-trigger",
-    "dunnes-scrape-trigger",
   ]
 }
 

@@ -1,4 +1,4 @@
-import { handleCallback } from '@/lib/queue';
+import { handleCallback, send } from '@/lib/queue';
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishAgentProductChange } from '@/lib/agent-events';
 import {
@@ -7,9 +7,14 @@ import {
   processDunnesProduct,
   type DunnesBatchMessage,
 } from '@/lib/dunnes-queue-worker';
-import { RetailerBlockedError, backoffDelayMs } from '@/lib/retailer-request-governor';
+import { RetailerBlockedError, backoffDelayMs, recordNetworkAttempt } from '@/lib/retailer-request-governor';
 
-const MAX_TRANSIENT_DELIVERIES = 4;
+const TOPIC = 'dunnes-scrape-batches';
+// Max REAL transient network attempts per product before a permanent failure.
+// Counted durably per (run, product) — NOT from SQS delivery count — so paused
+// redeliveries (breaker/rate-limit) never consume this budget.
+const MAX_NETWORK_ATTEMPTS = 4;
+
 function sleep(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 async function alreadyFinalized(runUuid: string, storeProductId: string) {
   const { data, error } = await supabaseAdmin.from('scrape_product_receipts').select('store_product_id').eq('run_id', runUuid).eq('store_product_id', storeProductId).maybeSingle();
@@ -17,7 +22,14 @@ async function alreadyFinalized(runUuid: string, storeProductId: string) {
   return Boolean(data);
 }
 
-export const POST = handleCallback<DunnesBatchMessage>('dunnes-scrape-batches', async (message, metadata) => {
+// Thrown after a paused batch has been re-enqueued as a FRESH message. The retry
+// closure acknowledges (deletes) the current delivery, so the SQS receive count
+// resets and a long pause can never push still-valid work to the DLQ.
+class DunnesBatchRequeued extends Error {
+  constructor() { super('dunnes batch re-enqueued after pause'); this.name = 'DunnesBatchRequeued'; }
+}
+
+export const POST = handleCallback<DunnesBatchMessage>(TOPIC, async (message, metadata) => {
   if (process.env.DUNNES_VERCEL_WORKER_ENABLED !== 'true') throw new Error('DUNNES_VERCEL_WORKER_ENABLED is not true');
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('Dunnes queue worker Supabase credential is not configured');
   if (!message?.runUuid || !Array.isArray(message.products) || message.products.length === 0) throw new Error('Invalid Dunnes queue message');
@@ -31,23 +43,40 @@ export const POST = handleCallback<DunnesBatchMessage>('dunnes-scrape-batches', 
       await processDunnesProduct(message, product);
       finalized = true;
     } catch (error) {
-      // Circuit breaker open or rate-limit wait exhausted: the retailer is
-      // paused, NOT this product failing. Redeliver the whole batch later
-      // without finalising any product and without spending its network retry
-      // budget. Unfinalised products are simply picked up on redelivery (the
-      // idempotency receipt skips the ones already done).
+      // Retailer paused (breaker open / rate-limit wait exhausted / governor
+      // unavailable). This is NOT a product failure and made NO network request
+      // for this product. Re-enqueue the remaining unfinalised products as a
+      // FRESH message (idempotency receipts skip any already done) and ack this
+      // delivery, so paused redeliveries never accrue toward the DLQ threshold
+      // or a product's network-retry budget.
       if (error instanceof RetailerBlockedError) {
-        console.warn('[dunnes-queue] retailer paused; deferring batch', { runId: message.runId, batchIndex: message.batchIndex, deliveryCount: metadata.deliveryCount, retryAfterMs: error.retryAfterMs, consecutiveDenials: error.consecutiveDenials });
-        throw error;
+        const remaining: typeof message.products = [];
+        for (let j = index; j < message.products.length; j += 1) {
+          const p = message.products[j];
+          if (!(await alreadyFinalized(message.runUuid, p.storeProductId))) remaining.push(p);
+        }
+        if (remaining.length > 0) {
+          const delaySeconds = Math.min(900, Math.max(30, Math.ceil(error.retryAfterMs / 1000)));
+          await send(TOPIC, { ...message, products: remaining }, {
+            idempotencyKey: `${message.runUuid}:pause:${message.batchIndex}:${remaining[0].storeProductId}`,
+            retentionSeconds: 86_400,
+            delaySeconds,
+          });
+          console.warn('[dunnes-queue] retailer paused; re-enqueued remaining batch', { runId: message.runId, batchIndex: message.batchIndex, remaining: remaining.length, delaySeconds, retryAfterMs: error.retryAfterMs });
+        }
+        throw new DunnesBatchRequeued();
       }
       if (error instanceof TransientDunnesError) {
-        if (metadata.deliveryCount < MAX_TRANSIENT_DELIVERIES) {
-          console.warn('[dunnes-queue] transient API failure; retrying batch', { runId: message.runId, batchIndex: message.batchIndex, storeProductId: product.storeProductId, deliveryCount: metadata.deliveryCount, reason: error.reason });
+        // A REAL network attempt failed transiently. Count it durably and give
+        // up only after MAX_NETWORK_ATTEMPTS genuine attempts (not deliveries).
+        const attempts = await recordNetworkAttempt(message.runUuid, product.storeProductId, error.reason);
+        if (attempts < MAX_NETWORK_ATTEMPTS) {
+          console.warn('[dunnes-queue] transient API failure; retrying batch', { runId: message.runId, batchIndex: message.batchIndex, storeProductId: product.storeProductId, attempts, reason: error.reason });
           throw error;
         }
         await finalizeDunnesPermanentFailure(message, product, `transient_exhausted_${error.reason}`, error.message);
         finalized = true;
-        console.warn('[dunnes-queue] transient retries exhausted', { runId: message.runId, storeProductId: product.storeProductId, deliveryCount: metadata.deliveryCount, reason: error.reason });
+        console.warn('[dunnes-queue] transient retries exhausted', { runId: message.runId, storeProductId: product.storeProductId, attempts, reason: error.reason });
       } else throw error;
     }
 
@@ -64,17 +93,14 @@ export const POST = handleCallback<DunnesBatchMessage>('dunnes-scrape-batches', 
 }, {
   visibilityTimeoutSeconds: 300,
   retry: (error, metadata) => {
-    // A paused retailer (breaker open / wait exhausted): defer at least the
-    // breaker's own hint, so we don't re-probe before the cooldown.
-    if (error instanceof RetailerBlockedError) {
-      const seconds = Math.ceil(backoffDelayMs({ attempt: metadata.deliveryCount, retryAfterMs: error.retryAfterMs, baseMs: 30_000, capMs: 900_000 }) / 1000);
-      return { afterSeconds: Math.max(30, seconds) };
+    // Paused batch already re-enqueued as a fresh message: ACK this delivery so
+    // its receive count cannot climb toward the DLQ threshold.
+    if (error instanceof DunnesBatchRequeued) {
+      return { acknowledge: true };
     }
-    // Honour a server Retry-After when present (up to SQS's 900s delivery cap);
-    // otherwise exponential — both with jitter so a cohort of failing batches
-    // does not retry in lock-step. The exponential schedule stays modest
-    // (base 10s) while an explicit long Retry-After is respected rather than
-    // clamped to the exponential ceiling.
+    // A transient network failure: honour a server Retry-After when present
+    // (up to SQS's 900s delivery cap) else exponential — both jittered so a
+    // cohort of failing batches does not retry in lock-step.
     const retryAfterMs = error instanceof TransientDunnesError ? error.retryAfterMs : null;
     const capMs = retryAfterMs != null ? 900_000 : 180_000;
     const seconds = Math.ceil(backoffDelayMs({ attempt: metadata.deliveryCount, retryAfterMs, baseMs: 10_000, capMs }) / 1000);

@@ -22,6 +22,9 @@ export type GovernorConfig = {
   windowSeconds: number;
   breakerTripThreshold: number;
   breakerCooldownSeconds: number;
+  // Half-open probe lease duration: how long the single probe holder has to
+  // resolve before the lease expires and another probe may be granted.
+  probeLeaseSeconds: number;
   // Upper bound on total time spent waiting for rate-limit slots for a single
   // request acquisition, so a pathological backlog cannot wedge a worker.
   maxAcquireWaitMs: number;
@@ -40,6 +43,7 @@ export function governorConfig(store: GovernedStore): GovernorConfig {
     windowSeconds: num(`${prefix}_RATE_WINDOW_SECONDS`, 60, 1, 3_600),
     breakerTripThreshold: num(`${prefix}_BREAKER_TRIP_THRESHOLD`, 5, 1, 1_000),
     breakerCooldownSeconds: num(`${prefix}_BREAKER_COOLDOWN_SECONDS`, 900, 30, 86_400),
+    probeLeaseSeconds: num(`${prefix}_BREAKER_PROBE_LEASE_SECONDS`, 60, 5, 900),
     maxAcquireWaitMs: num(`${prefix}_MAX_ACQUIRE_WAIT_MS`, 120_000, 1_000, 900_000),
   };
 }
@@ -65,6 +69,11 @@ export type SlotDecision = {
   breakerOpen: boolean;
   windowCount: number;
   consecutiveDenials: number;
+  // Generation of the breaker state this slot was granted under, and the
+  // exclusive half-open probe token when this 'allowed' is a probe. A later
+  // success is bound to these so a stale success cannot clear a newer cooldown.
+  generation: number;
+  probeToken: string | null;
 };
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
@@ -124,35 +133,35 @@ export function denialReason(input: { status?: number | null; errorReason?: stri
   return null;
 }
 
+// Classification of a thrown request error: whether it is a denial (and its
+// reason), plus any server Retry-After the governor should persist durably.
+export type ErrorClassification = { reason: string | null; retryAfterMs?: number | null };
+
 // --- Supabase-backed governor I/O -----------------------------------------
 
-// A safeguard must never take down the thing it protects. If the governor RPCs
-// are not provisioned yet (the migration has not been applied to this database),
-// detect exactly that condition and fail OPEN — run ungoverned, with a loud
-// one-time warning — rather than crashing every collection request. Any OTHER
-// error still throws. Once the migration lands, the governor activates with no
-// redeploy.
+// Detect "the governor RPCs are not provisioned yet" (migration not applied).
+// Unlike the earlier design, this NO LONGER fails open: unavailable safeguards
+// must DEFER collection (make no retailer request), so this condition is
+// surfaced as a RetailerBlockedError by the caller.
 export function isGovernorNotProvisioned(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   const code = error.code ?? '';
   const message = error.message ?? '';
-  // PostgREST: PGRST202 = function not found in schema cache; Postgres 42883 =
+  // PostgREST PGRST202 = function not found in schema cache; Postgres 42883 =
   // undefined_function; defensive text match for either phrasing.
   return code === 'PGRST202'
     || code === '42883'
     || /could not find the function|does not exist|schema cache/i.test(message);
 }
 
-let warnedNotProvisioned = false;
-function warnUngovernedOnce(store: GovernedStore, context: string, message: string) {
-  if (warnedNotProvisioned) return;
-  warnedNotProvisioned = true;
-  console.warn('[retailer-governor] RPCs not provisioned; running UNGOVERNED until the migration is applied', { store, context, message });
+// Raised when the governor itself is unavailable (RPCs not provisioned). Callers
+// MUST defer — never make the retailer request — when they see this.
+export class GovernorUnavailableError extends Error {
+  constructor(public readonly store: GovernedStore, public readonly context: string, message: string) {
+    super(`${store} governor unavailable (${context}): ${message}`);
+    this.name = 'GovernorUnavailableError';
+  }
 }
-
-// The ungoverned fallback: always "allowed", no breaker. Used only when the
-// governor RPCs are absent (pre-migration).
-const UNGOVERNED: SlotDecision = { decision: 'allowed', retryAfterMs: 0, breakerOpen: false, windowCount: 0, consecutiveDenials: 0 };
 
 export async function acquireSlotOnce(store: GovernedStore, config: GovernorConfig): Promise<SlotDecision> {
   const { data, error } = await supabaseAdmin.rpc('acquire_retailer_request_slot', {
@@ -160,17 +169,16 @@ export async function acquireSlotOnce(store: GovernedStore, config: GovernorConf
     p_max_per_minute: config.maxPerMinute,
     p_window_seconds: config.windowSeconds,
     p_breaker_cooldown_seconds: config.breakerCooldownSeconds,
+    p_probe_lease_seconds: config.probeLeaseSeconds,
   });
   if (error) {
-    if (isGovernorNotProvisioned(error)) {
-      warnUngovernedOnce(store, 'acquire', error.message ?? '');
-      return UNGOVERNED;
-    }
+    if (isGovernorNotProvisioned(error)) throw new GovernorUnavailableError(store, 'acquire', error.message ?? '');
     throw new Error(`Failed acquiring ${store} request slot: ${error.message}`);
   }
   const row = (Array.isArray(data) ? data[0] : data) as {
     out_decision: string; out_retry_after_ms: number; out_breaker_open: boolean;
     out_window_count: number; out_consecutive_denials: number;
+    out_generation: number; out_probe_token: string | null;
   } | null;
   if (!row) throw new Error(`Empty slot decision for ${store}`);
   return {
@@ -179,26 +187,54 @@ export async function acquireSlotOnce(store: GovernedStore, config: GovernorConf
     breakerOpen: Boolean(row.out_breaker_open),
     windowCount: Number(row.out_window_count ?? 0),
     consecutiveDenials: Number(row.out_consecutive_denials ?? 0),
+    generation: Number(row.out_generation ?? 0),
+    probeToken: row.out_probe_token ?? null,
   };
 }
 
-export async function recordRetailerDenial(store: GovernedStore, reason: string, config: GovernorConfig) {
+export async function recordRetailerDenial(
+  store: GovernedStore,
+  reason: string,
+  config: GovernorConfig,
+  retryAfterMs?: number | null,
+) {
   const { error } = await supabaseAdmin.rpc('record_retailer_denial', {
     p_store: store,
     p_reason: reason,
     p_trip_threshold: config.breakerTripThreshold,
     p_cooldown_seconds: config.breakerCooldownSeconds,
+    p_retry_after_ms: retryAfterMs != null && retryAfterMs > 0 ? Math.floor(retryAfterMs) : null,
   });
   if (error) {
-    if (isGovernorNotProvisioned(error)) { warnUngovernedOnce(store, 'denial', error.message ?? ''); return; }
+    if (isGovernorNotProvisioned(error)) throw new GovernorUnavailableError(store, 'denial', error.message ?? '');
     throw new Error(`Failed recording ${store} denial: ${error.message}`);
   }
 }
 
-export async function recordRetailerSuccess(store: GovernedStore) {
-  const { error } = await supabaseAdmin.rpc('record_retailer_success', { p_store: store });
+// Increment and return the count of REAL transient network attempts for a
+// product in this run. Called ONLY after an actual request failed transiently,
+// so the exhaustion decision is independent of SQS delivery count. A paused
+// redelivery (breaker/rate-limit) makes no request and never calls this.
+export async function recordNetworkAttempt(runUuid: string, storeProductId: string, reason: string): Promise<number> {
+  const { data, error } = await supabaseAdmin.rpc('record_retailer_network_attempt', {
+    p_run_uuid: runUuid,
+    p_store_product_id: storeProductId,
+    p_reason: reason,
+  });
+  if (error) throw new Error(`Failed recording network attempt: ${error.message}`);
+  return Number(data ?? 0);
+}
+
+// Record a success, bound to the generation + probe token of the slot that was
+// granted, so only the current-generation probe can clear the breaker.
+export async function recordRetailerSuccess(store: GovernedStore, generation?: number, probeToken?: string | null) {
+  const { error } = await supabaseAdmin.rpc('record_retailer_success', {
+    p_store: store,
+    p_generation: generation ?? null,
+    p_probe_token: probeToken ?? null,
+  });
   if (error) {
-    if (isGovernorNotProvisioned(error)) { warnUngovernedOnce(store, 'success', error.message ?? ''); return; }
+    if (isGovernorNotProvisioned(error)) throw new GovernorUnavailableError(store, 'success', error.message ?? '');
     throw new Error(`Failed recording ${store} success: ${error.message}`);
   }
 }
@@ -213,14 +249,15 @@ export async function recordRetailerSuccess(store: GovernedStore) {
 //    network retry applies. A non-denial outcome records a success (closing a
 //    half-open breaker) and is returned/thrown unchanged.
 //
-// `classify` maps fn's thrown error to a denial reason (or null). `onSuccess`
-// controls whether a clean completion resets the breaker (default true).
+// `classifyError` maps fn's thrown error to an ErrorClassification: a denial
+// reason (or null) plus any server Retry-After to persist. A `true` return and
+// a bare-string return are accepted for convenience.
 export async function withRetailerRequestSlot<T>(
   store: GovernedStore,
   fn: () => Promise<T>,
   options: {
     config?: GovernorConfig;
-    classifyError?: (error: unknown) => string | null;
+    classifyError?: (error: unknown) => ErrorClassification | string | null;
     now?: () => number;
     sleepFn?: (ms: number) => Promise<void>;
   } = {},
@@ -230,18 +267,34 @@ export async function withRetailerRequestSlot<T>(
   const doSleep = options.sleepFn ?? sleep;
   const deadline = now() + config.maxAcquireWaitMs;
 
+  const classify = (error: unknown): ErrorClassification => {
+    const raw = options.classifyError ? options.classifyError(error) : null;
+    if (raw == null) return { reason: null };
+    if (typeof raw === 'string') return { reason: raw };
+    return raw;
+  };
+
+  // If the governor itself is unavailable (RPCs not provisioned), DEFER — make
+  // no retailer request. Surface it as a RetailerBlockedError so the worker
+  // redelivers the batch later without finalising any product.
+  let slot: SlotDecision;
   // Acquire loop: only 'wait' spins here, bounded by maxAcquireWaitMs.
   for (;;) {
-    const slot = await acquireSlotOnce(store, config);
+    try {
+      slot = await acquireSlotOnce(store, config);
+    } catch (error) {
+      if (error instanceof GovernorUnavailableError) {
+        throw new RetailerBlockedError(store, config.breakerCooldownSeconds * 1000, 0);
+      }
+      throw error;
+    }
     if (slot.decision === 'blocked') {
       throw new RetailerBlockedError(store, slot.retryAfterMs, slot.consecutiveDenials);
     }
     if (slot.decision === 'wait') {
       if (now() >= deadline) {
-        // Treated as a transient rate-limit wait exhaustion, surfaced to the
-        // caller so the worker can redeliver the batch later (not a product
-        // failure). Using RetailerBlockedError keeps it distinct from a match
-        // outcome; retryAfterMs communicates when to come back.
+        // Rate-limit wait exhausted: surface so the worker redelivers the batch
+        // later (not a product failure). Distinct from a match outcome.
         throw new RetailerBlockedError(store, slot.retryAfterMs, slot.consecutiveDenials);
       }
       await doSleep(Math.min(slot.retryAfterMs, config.maxAcquireWaitMs));
@@ -250,20 +303,38 @@ export async function withRetailerRequestSlot<T>(
     break; // allowed
   }
 
-  // Slot granted: perform the request.
+  // Slot granted: perform the request. Success/denial are bound to this slot's
+  // generation + probe token so only the current-generation probe can recover.
+  const recordUnavailableAsDefer = (error: unknown): never => {
+    if (error instanceof GovernorUnavailableError) {
+      throw new RetailerBlockedError(store, config.breakerCooldownSeconds * 1000, 0);
+    }
+    throw error;
+  };
+
+  let result: T;
   try {
-    const result = await fn();
-    await recordRetailerSuccess(store);
-    return result;
+    result = await fn();
   } catch (error) {
-    const reason = options.classifyError ? options.classifyError(error) : null;
-    if (reason) {
-      await recordRetailerDenial(store, reason, config);
-    } else {
-      // A non-denial failure (e.g. a parse error) still proves the retailer is
-      // reachable, so close any half-open breaker.
-      await recordRetailerSuccess(store);
+    const { reason, retryAfterMs } = classify(error);
+    try {
+      if (reason) {
+        await recordRetailerDenial(store, reason, config, retryAfterMs);
+      } else {
+        // A non-denial failure (e.g. a parse error) still proves the retailer
+        // is reachable, so a current-generation probe may clear the breaker.
+        await recordRetailerSuccess(store, slot.generation, slot.probeToken);
+      }
+    } catch (recordError) {
+      recordUnavailableAsDefer(recordError);
     }
     throw error;
   }
+
+  try {
+    await recordRetailerSuccess(store, slot.generation, slot.probeToken);
+  } catch (recordError) {
+    recordUnavailableAsDefer(recordError);
+  }
+  return result;
 }

@@ -1,5 +1,62 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — governor hardening (review fixes) + collection schedules PAUSED
+
+Independent review of the request governor found four correctness gaps; all are
+fixed, with regression tests, and the fail-open behaviour is removed. While the
+governor migrations are not yet applied, the Dunnes/SuperValu collection
+schedules are PAUSED (watchdog kept enabled).
+
+Schedules: `aws_scheduler_schedule.cron["dunnes-scrape-trigger"]` and
+`["supervalu-scrape-trigger"]` are now DISABLED (git-tracked default of
+`var.enabled_schedules` edited to drop both triggers; `scrape-watchdog` remains
+ENABLED). Applied via a targeted `tofu apply` (0 add / 2 change / 0 destroy);
+verified live DISABLED/DISABLED/ENABLED. Re-add the two triggers (reviewed PR)
+only after the governor migrations are applied and verified.
+
+Fixes (all in the durable layer so they hold across concurrent tasks/restarts):
+1. **Exclusive half-open probe.** After cooldown the breaker no longer closes
+   before the probe resolves. `acquire_retailer_request_slot` grants an
+   expiring, exclusive probe lease (`probe_token` + `probe_leased_until`) to
+   exactly ONE caller; concurrent callers stay blocked until it resolves/expires.
+2. **Generation-bound recovery.** Each open advances a `generation`.
+   `record_retailer_success` only clears the breaker when it carries the CURRENT
+   generation AND the active probe token; a stale in-flight success records
+   reachability but cannot clear a newer cooldown.
+3. **Durable full deadline.** A long Retry-After is persisted as an absolute
+   `deadline_until` (max of existing/cooldown/hint, never shortened) and enforced
+   across deliveries and restarts — not clamped to the SQS 900s delivery cap.
+4. **Network attempts ≠ queue deliveries.** New `retailer_network_attempts`
+   ledger counts REAL transient attempts per (run, product); the batch routes use
+   it (not SQS deliveryCount) for the MAX=4 exhaustion decision. A paused batch is
+   RE-ENQUEUED as a fresh message and the current delivery is ACKed, so paused
+   redeliveries never consume a product's retry budget or push valid work to the
+   DLQ (maxReceiveCount=10).
+
+Removed fail-open: if the governor RPCs are absent, `acquire` now throws
+`GovernorUnavailableError` and `withRetailerRequestSlot` DEFERS (raises
+`RetailerBlockedError`, makes NO retailer request) — the worker re-enqueues and
+waits. Unavailable safeguards pause collection rather than run ungoverned.
+
+ORDERED MIGRATIONS for ChatGPT to apply (authenticated Supabase), in order:
+  1. `supabase/migrations/20261107150000_retailer_request_governor.sql` (base)
+  2. `supabase/migrations/20261107173000_retailer_governor_recovery_hardening.sql`
+  3. `supabase/migrations/20261107181500_retailer_network_attempt_ledger.sql`
+Verify after apply: `retailer_request_governor` and `retailer_network_attempts`
+exist; `retailer_governor_state()` returns rows (no PGRST202). THEN re-enable the
+two schedules (reviewed PR re-adding them to `enabled_schedules`), run the
+governed catch-up per retailer, and reconcile price freshness against the
+1,053 (Dunnes) / 1,851 (SuperValu) targets.
+
+Tests: 1,072 pass. `retailer-governor-sql.test.ts` (PGlite, all three
+migrations) proves the exclusive single probe, generation-bound stale-success
+rejection, durable 1-hour deadline, and the attempt ledger;
+`retailer-request-governor.test.ts` proves defer-on-unavailable (no request) and
+probe/generation-bound success; `dunnes-batch-governor.test.ts` proves paused
+redeliveries don't exhaust the per-product budget and a pause re-enqueues + acks.
+Default 30 req/min per retailer and the existing ephemeral-IP networking are
+unchanged.
+
 ## 7 November 2026 — DEPLOYED: daily schedules + governor worker image (migration + alert recipient OUTSTANDING)
 
 Rolled out the daily Dunnes/SuperValu refresh and the reliability-governor
