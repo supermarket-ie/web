@@ -4,7 +4,7 @@
 // It takes the durable observability data the watchdog already reads and returns
 // a typed list of issues with severity. Keeping this pure (no I/O) makes the
 // four alert conditions unit-testable:
-//   1. missed_run     — an expected scheduled run (Mon/Thu) did not happen
+//   1. missed_run     — an expected daily scheduled run did not happen
 //   2. degraded_streak— the last N scheduled_full runs were degraded/failed
 //   3. coverage_expiry— trusted coverage is low or about to expire
 //   4. comparison_drop— genuine three-retailer comparisons fell sharply
@@ -23,6 +23,7 @@ export type RetailerHealthIssue = {
     | 'degraded_streak'
     | 'coverage_low'
     | 'coverage_expiring'
+    | 'daily_refresh_overdue'
     | 'coverage_regression'
     | 'comparison_low'
     | 'comparison_drop'
@@ -48,6 +49,7 @@ export type CoverageRow = {
   store: string;
   live_coverage_pct: number | null;
   expiring_within_24h: number | null;
+  daily_overdue_products?: number | null;
 };
 
 export type CoverageSnapshot = {
@@ -82,7 +84,8 @@ export type RetailerHealthInput = {
 
 // Tunables (conservative; documented in the alerting proposal).
 export const STUCK_HOURS = 3;
-export const MISSED_RUN_GRACE_HOURS = 26; // after a Mon/Thu 05:10 slot
+export const MISSED_RUN_GRACE_HOURS = 2;
+export const DAILY_REFRESH_WARNING_HOURS = 30; // daily cycle plus completion margin
 export const DEGRADED_STREAK = 3; // consecutive scheduled_full degraded/failed
 export const COVERAGE_LOW_PCT = 50;
 export const COVERAGE_REGRESSION_PP = 3; // percentage-point drop between snapshots
@@ -97,20 +100,12 @@ function hoursSince(iso: string, now: number): number {
   return (now - new Date(iso).getTime()) / HOUR;
 }
 
-// The scheduled retailer cron is Mon & Thu 05:10 UTC. Given "now", return the
-// most recent scheduled slot strictly in the past (as epoch ms), or null if the
-// cadence can't be computed.
+// Daily UTC slot, strictly before now. SuperValu uses 05:20; Dunnes 05:10.
 export function previousScheduledSlot(now: number, hourUtc = 5, minuteUtc = 10): number | null {
-  // Walk back day by day up to 8 days to find the latest Mon(1)/Thu(4) slot < now.
-  for (let back = 0; back <= 8; back += 1) {
-    const d = new Date(now - back * DAY);
-    const dow = d.getUTCDay(); // Sun=0, Mon=1, Thu=4
-    if (dow === 1 || dow === 4) {
-      const slot = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hourUtc, minuteUtc, 0, 0);
-      if (slot < now) return slot;
-    }
-  }
-  return null;
+  if (!Number.isFinite(now)) return null;
+  const d = new Date(now);
+  const slot = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hourUtc, minuteUtc);
+  return slot < now ? slot : slot - DAY;
 }
 
 export function evaluateRetailerHealth(input: RetailerHealthInput): RetailerHealthIssue[] {
@@ -126,17 +121,16 @@ export function evaluateRetailerHealth(input: RetailerHealthInput): RetailerHeal
     const latest = scheduledRuns[0] ?? null;
 
     // 1. Missed scheduled run — only for actively-scheduled stores. Expected a
-    //    run shortly after the previous Mon/Thu slot; none within the grace
-    //    window => missed. This is the 29-Oct failure mode.
+    //    Check the latest slot whose completion grace has elapsed. Checking
+    //    only today's slot would hide a missed yesterday run every morning.
     if (scheduled.has(store)) {
-      const slot = previousScheduledSlot(now);
+      const slot = previousScheduledSlot(now - MISSED_RUN_GRACE_HOURS * HOUR, 5, store === 'supervalu' ? 20 : 10);
       if (slot != null && now - slot <= 8 * DAY) {
         const ranForSlot = scheduledRuns.some((r) => {
           const t = new Date(r.started_at).getTime();
           return t >= slot - HOUR && t <= slot + MISSED_RUN_GRACE_HOURS * HOUR;
         });
-        const pastGrace = now - slot > MISSED_RUN_GRACE_HOURS * HOUR;
-        if (!ranForSlot && pastGrace) {
+        if (!ranForSlot) {
           issues.push({
             store,
             kind: 'missed_run',
@@ -148,7 +142,7 @@ export function evaluateRetailerHealth(input: RetailerHealthInput): RetailerHeal
     }
 
     if (!latest) {
-      if (scheduled.has(store)) {
+      if (scheduled.has(store) && !issues.some((issue) => issue.store === store && issue.kind === 'missed_run')) {
         issues.push({ store, kind: 'missed_run', severity: 'high', message: `${store}: no scheduled_full run on record` });
       }
       continue;
@@ -188,6 +182,14 @@ export function evaluateRetailerHealth(input: RetailerHealthInput): RetailerHeal
     issues.push({ store: null, kind: 'telemetry_unavailable', severity: 'medium', message: 'retailer coverage telemetry could not be loaded' });
   } else {
     for (const row of input.coverage) {
+      if (scheduled.has(row.store) && Number(row.daily_overdue_products ?? 0) > 0) {
+        issues.push({
+          store: row.store,
+          kind: 'daily_refresh_overdue',
+          severity: 'high',
+          message: `${row.store}: ${row.daily_overdue_products} displayed trusted prices have not been checked within ${DAILY_REFRESH_WARNING_HOURS}h — a completed run does not prove full daily refresh coverage`,
+        });
+      }
       const live = Number(row.live_coverage_pct ?? 0);
       if (live < COVERAGE_LOW_PCT) {
         issues.push({ store: row.store, kind: 'coverage_low', severity: live <= 0 ? 'high' : 'medium', message: `${row.store}: trusted catalogue coverage is ${live.toFixed(1)}% (target ${COVERAGE_LOW_PCT}%)` });

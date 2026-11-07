@@ -124,17 +124,17 @@ resource "aws_ecs_service" "sqs_consumer" {
 # --- EventBridge Scheduler cron jobs (scheduled one-off ECS tasks) ------------
 
 locals {
-  # job key -> cron expression (UTC), mirroring vercel.json crons.
+  # Job key -> cron expression (UTC). Retailer prices refresh every day.
   cron_jobs = {
     "weekly-digest"            = "cron(0 8 ? * SUN *)"
     "check-alerts"             = "cron(30 7 * * ? *)"
     "agent-tasks"              = "cron(35 7 * * ? *)"
     "price-watchdog"           = "cron(30 7 * * ? *)"
     "price-watchdog-thursday"  = "cron(0 9 ? * THU *)"
-    "dunnes-scrape-trigger"    = "cron(10 5 ? * MON,THU *)"
-    "supervalu-scrape-trigger" = "cron(20 5 ? * MON,THU *)"
+    "dunnes-scrape-trigger"    = "cron(10 5 * * ? *)"
+    "supervalu-scrape-trigger" = "cron(20 5 * * ? *)"
     "pepesto-tesco-retrieve"   = "cron(0/10 * * * ? *)"
-    "scrape-watchdog"          = "cron(45 7 ? * MON,THU *)"
+    "scrape-watchdog"          = "cron(45 7 * * ? *)"
     "product-embeddings"       = "cron(0 4 ? * SUN *)"
   }
   cron_set = local.workers ? local.cron_jobs : {}

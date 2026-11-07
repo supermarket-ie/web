@@ -1,5 +1,17 @@
 # Retailer Execution — Supermarket.ie
 
+### 7 November 2026 — daily Dunnes/SuperValu refresh prepared, NOT DEPLOYED
+
+The owner requested daily checks of displayed prices. The prepared change
+updates the existing AWS cadence to daily and raises the bounded scheduled
+selection from 1,000 to 2,500, with complete paginated retrieval before queueing.
+Current eligible inventories are 1,053 Dunnes and 1,851 SuperValu. Keep exact
+matching, source timestamps, batches and receipt idempotency intact. The
+watchdog now checks daily execution and observations older than 30 hours.
+Production remains on the previous cadence until the worker image and Terraform
+changes are deployed from the existing authorised AWS workspace. See
+`docs/daily-retailer-refresh.md`; no live collection or schedule changed here.
+
 ### 5 November 2026 — next20 source targets attempted and reconciled
 
 PR #333 passed required validate and merged. The next two selected source tranches,20 previously unchecked mappings from the original671 cohort, were then attempted through the existing supervised evidence-only collector. Seventeen captures are durably saved and three reservations remain pending. No completed or pending retailer URL was repeated. These checks inserted no prices; fresh trusted Tesco coverage remains502.

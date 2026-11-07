@@ -7,9 +7,8 @@ import {
   DEGRADED_STREAK,
 } from './retailer-health-alerts';
 
-// A fixed "now": Thursday 30 Oct 2026 09:00 UTC (dow=4). The previous Mon/Thu
-// 05:10 slot is Thu 30 Oct 05:10 (same day, ~3.8h earlier).
-const NOW = Date.UTC(2026, 9, 30, 9, 0, 0); // month 9 = October
+// Saturday, after the daily retailer slots and their two-hour completion grace.
+const NOW = Date.UTC(2026, 10, 7, 9, 0, 0);
 
 function run(partial: Partial<ScrapeRunRow>): ScrapeRunRow {
   return {
@@ -44,14 +43,19 @@ function baseInput(overrides: Partial<RetailerHealthInput> = {}): RetailerHealth
 }
 
 describe('previousScheduledSlot', () => {
-  it('returns the most recent Mon/Thu 05:10 UTC slot strictly before now', () => {
+  it('returns the daily 05:10 UTC slot even on Saturday', () => {
     const slot = previousScheduledSlot(NOW);
     expect(slot).not.toBeNull();
     const d = new Date(slot!);
-    expect(d.getUTCDay()).toBe(4); // Thursday
+    expect(d.getUTCDay()).toBe(6);
     expect(d.getUTCHours()).toBe(5);
     expect(d.getUTCMinutes()).toBe(10);
     expect(slot!).toBeLessThan(NOW);
+  });
+
+  it('returns yesterday before or exactly at the daily slot', () => {
+    expect(previousScheduledSlot(Date.UTC(2026, 10, 7, 5, 10))).toBe(Date.UTC(2026, 10, 6, 5, 10));
+    expect(previousScheduledSlot(Date.UTC(2026, 10, 7, 4))).toBe(Date.UTC(2026, 10, 6, 5, 10));
   });
 });
 
@@ -76,10 +80,35 @@ describe('evaluateRetailerHealth — healthy baseline', () => {
 });
 
 describe('condition 1: missed scheduled run', () => {
+  it('detects a missed Saturday run even when Friday succeeded', () => {
+    const input = baseInput({
+      stores: ['dunnes'], scheduledStores: ['dunnes'],
+      runs: [run({ started_at: '2026-11-06T05:11:00Z' })],
+    });
+    expect(evaluateRetailerHealth(input).some((i) => i.kind === 'missed_run')).toBe(true);
+  });
+
+  it('keeps yesterday accountable before today has passed its completion grace', () => {
+    const input = baseInput({
+      now: Date.UTC(2026, 10, 7, 6), stores: ['dunnes'], scheduledStores: ['dunnes'],
+      runs: [run({ started_at: '2026-11-05T05:11:00Z' })],
+    });
+    expect(evaluateRetailerHealth(input).some((i) => i.kind === 'missed_run')).toBe(true);
+  });
+
+  it('honours SuperValu\'s 05:20 slot and its completion grace', () => {
+    const input = baseInput({
+      now: Date.UTC(2026, 10, 7, 7, 15), stores: ['supervalu'], scheduledStores: ['supervalu'],
+      runs: [run({ store: 'supervalu', started_at: '2026-11-06T05:21:00Z' })],
+    });
+    expect(evaluateRetailerHealth(input).some((i) => i.kind === 'missed_run')).toBe(false);
+    input.now = Date.UTC(2026, 10, 7, 7, 25);
+    expect(evaluateRetailerHealth(input).some((i) => i.kind === 'missed_run')).toBe(true);
+  });
   it('flags a missed run when no scheduled_full ran for the latest slot and grace elapsed', () => {
     // Latest Dunnes scheduled_full is 8 days ago -> missed the recent slot.
     const input = baseInput({
-      now: Date.UTC(2026, 9, 30, 9, 0, 0),
+      now: NOW,
       runs: [run({ store: 'dunnes', started_at: new Date(NOW - 8 * 86_400_000).toISOString() })],
       // keep supervalu fresh so only dunnes is missed
       coverage: [{ store: 'dunnes', live_coverage_pct: 80, expiring_within_24h: 0 }],
@@ -111,6 +140,27 @@ describe('condition 1: missed scheduled run', () => {
     });
     const issues = evaluateRetailerHealth(input);
     expect(issues.some((i) => i.kind === 'missed_run')).toBe(false);
+  });
+});
+
+describe('daily price freshness', () => {
+  it('flags overdue displayed prices even when the daily run succeeded', () => {
+    const input = baseInput({
+      stores: ['supervalu'], scheduledStores: ['supervalu'],
+      runs: [run({ store: 'supervalu', started_at: '2026-11-07T05:21:00Z', status: 'success' })],
+      coverage: [{ store: 'supervalu', live_coverage_pct: 80, expiring_within_24h: 0, daily_overdue_products: 356 }],
+    });
+    expect(evaluateRetailerHealth(input)).toContainEqual(expect.objectContaining({
+      store: 'supervalu', kind: 'daily_refresh_overdue', severity: 'high', message: expect.stringContaining('356'),
+    }));
+  });
+
+  it('does not apply the daily target to intentionally unscheduled retailers', () => {
+    const input = baseInput({
+      stores: ['tesco'], scheduledStores: [], runs: [],
+      coverage: [{ store: 'tesco', live_coverage_pct: 80, expiring_within_24h: 0, daily_overdue_products: 100 }],
+    });
+    expect(evaluateRetailerHealth(input).some((i) => i.kind === 'daily_refresh_overdue')).toBe(false);
   });
 });
 

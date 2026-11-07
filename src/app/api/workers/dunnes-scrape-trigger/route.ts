@@ -38,8 +38,8 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const url = new URL(request.url);
-  const configuredLimit = parsePositiveInt(process.env.DUNNES_VERCEL_RUN_LIMIT ?? null, 50, 1000);
-  const limit = parsePositiveInt(url.searchParams.get('limit'), configuredLimit, 1000);
+  const configuredLimit = parsePositiveInt(process.env.DUNNES_VERCEL_RUN_LIMIT ?? null, 50, 2500);
+  const limit = parsePositiveInt(url.searchParams.get('limit'), configuredLimit, 2500);
   const batchSize = parsePositiveInt(process.env.DUNNES_VERCEL_BATCH_SIZE ?? null, 5, 20);
   const staggerSeconds = parsePositiveInt(process.env.DUNNES_VERCEL_BATCH_STAGGER_SECONDS ?? null, 3, 120);
   const query = url.searchParams.get('q')?.trim() || undefined;

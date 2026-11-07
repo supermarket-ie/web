@@ -18,7 +18,7 @@ describe('Tesco mapping risk audit', () => {
     ['Tesco Free Range Eggs Large', {}, 'material_mismatch', 'packExactnessFailed'],
   ])('preserves the trailing egg count against %s', (name, structuredQuantity, expected, reason) => {
     const m = mapping({ canonicalName: 'Free Range Eggs 6', canonicalBrand: null, storeBrand: null });
-    const result = classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!, name, structuredQuantity });
+    const result = classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!, name, structuredQuantity, evidenceSource: 'tesco_direct_structured' });
     expect(result.classification).toBe(expected);
     if (reason) expect(result.reasons).toContain(reason);
   });
@@ -26,7 +26,7 @@ describe('Tesco mapping risk audit', () => {
   it('does not interpret an egg mass as a count', () => {
     const m = mapping({ canonicalName: 'Chocolate Eggs 200 g', canonicalBrand: null, storeBrand: null });
     const result = classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!,
-      name: 'Chocolate Eggs 6 Pack 200g', structuredQuantity: { grams: 200 } });
+      name: 'Chocolate Eggs 6 Pack 200g', structuredQuantity: { grams: 200 }, evidenceSource: 'tesco_direct_structured' });
     expect(result.reasons).toEqual(['packExactnessFailed']);
   });
 
@@ -34,7 +34,7 @@ describe('Tesco mapping risk audit', () => {
     const m = mapping({ canonicalName: 'Deep River Rock Apple & Pear Still Water 750ml',
       canonicalBrand: brand, storeBrand: brand, storeProductName: 'Deep River Rock Apple & Pear Still Water 750ml' });
     expect(classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!,
-      name: 'Deep River Rock Apple & Pear Still Water 750ml', structuredQuantity: { millilitres: 750 } })
+      name: 'Deep River Rock Apple & Pear Still Water 750ml', structuredQuantity: { millilitres: 750 }, evidenceSource: 'tesco_direct_structured' })
       .classification).toBe('exact_replacement_candidate');
   });
 
@@ -48,7 +48,7 @@ describe('Tesco mapping risk audit', () => {
     const m = mapping({ canonicalName: 'Deep River Rock Apple & Pear Still Water 750ml',
       canonicalBrand: 'Deep RiverRock', storeBrand: 'Deep RiverRock' });
     const result = classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!, name,
-      structuredQuantity: { millilitres } });
+      structuredQuantity: { millilitres }, evidenceSource: 'tesco_direct_structured' });
     expect(result.classification).toBe('material_mismatch');
     expect(result.reasons).toContain(reason);
   });
@@ -58,7 +58,7 @@ describe('Tesco mapping risk audit', () => {
       const m = mapping({ canonicalName: 'Deep River Rock Apple & Pear Still Water 750ml',
         canonicalBrand: brand, storeBrand: null });
       expect(classifyTescoReplacement(m, { sku: m.storeSku!, url: m.storeUrl!,
-        name: 'Deep River Rock Apple & Pear Still Water 750ml', structuredQuantity: { millilitres: 750 } })
+        name: 'Deep River Rock Apple & Pear Still Water 750ml', structuredQuantity: { millilitres: 750 }, evidenceSource: 'tesco_direct_structured' })
         .classification).not.toBe('exact_replacement_candidate');
     }
   });
@@ -70,7 +70,7 @@ describe('Tesco mapping risk audit', () => {
     ['Other Brand Bistro Pepperoni Baguettes 2x125g',250,'material_mismatch'],
   ])('checks punctuation, total amount and count for %s',(name,grams,expected)=>{
     const m=mapping({canonicalName:'Dr. Oetker Bistro Pepperoni Baguettes 2 Pack 250g',canonicalBrand:'Dr. Oetker'});
-    expect(classifyTescoReplacement(m,{sku:m.storeSku!,url:m.storeUrl!,name,structuredQuantity:{grams}}).classification).toBe(expected);
+    expect(classifyTescoReplacement(m,{sku:m.storeSku!,url:m.storeUrl!,name,structuredQuantity:{grams},evidenceSource:'tesco_direct_structured'}).classification).toBe(expected);
   });
   it('accepts a current internally consistent unique mapping', () => {
     expect(classifyTescoMapping(mapping()).classification).toBe('exact_unique');

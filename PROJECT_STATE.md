@@ -1,5 +1,35 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — daily retailer refresh prepared, NOT DEPLOYED
+
+The owner requested daily SuperValu/Dunnes price checks after seeing 2 November
+timestamps. Production SELECTs confirmed 360 displayed SuperValu prices still
+dated 2 November; 356 fall outside the existing demand-ranked 1,000-product
+selection. Current eligible resolved inventories are 1,851 SuperValu and 1,053
+Dunnes. Trusted fresh coverage remains 1,083 and 908 respectively. Both latest
+scheduled runs finished on 5 November. The current Mon/Thu cadence plus the
+1,000-product cap leaves displayed products without a check on each run.
+
+The prepared change makes the existing EventBridge retailer schedules daily at
+05:10/05:20 UTC and scrape-watchdog daily at 07:45 UTC. The scheduled runner and
+authenticated producer routes support the database's existing 2,500-product
+bound; the selector pages in 500-row requests instead of silently accepting a
+capped response. It fetches all pages before queueing and fails on pagination
+errors/duplicates. Existing SQS processing and exact-identity protections stay
+unchanged. Watchdog detection now uses daily slots/two-hour grace and separately
+counts displayed observations older than 30 hours, so run success cannot mask
+incomplete refresh coverage. Test fixture types from previous Tesco work were
+completed to unblock the required TypeScript/build validation; no Tesco runtime
+or matching policy changed.
+
+This is NOT a production rollout. This session has no authenticated AWS deploy
+identity, and the AWS console returned Site Unavailable. No schedule, ECS task
+definition, retailer request or price observation has changed. Activation needs
+the new worker image and a reviewed plan in the existing authorised Terraform
+workspace, preserving the live web image/configuration. The protected
+web-image-only release guard must remain unchanged. See
+`docs/daily-retailer-refresh.md` for scope, acceptance checks and rollback.
+
 ## 5 November 2026 — next20 source targets attempted and reconciled
 
 PR #333 passed required validate and merged. The next two selected source tranches,20 previously unchecked mappings from the original671 cohort, were then attempted through the existing supervised evidence-only collector. Seventeen captures are durably saved and three reservations remain pending. No completed or pending retailer URL was repeated. These checks inserted no prices; fresh trusted Tesco coverage remains502.

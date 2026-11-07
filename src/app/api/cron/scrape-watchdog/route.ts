@@ -4,6 +4,7 @@ import { resend } from '@/lib/resend';
 import {
   evaluateRetailerHealth,
   summariseSeverity,
+  DAILY_REFRESH_WARNING_HOURS,
   type ScrapeRunRow,
   type RetailerHealthInput,
 } from '@/lib/retailer-health-alerts';
@@ -53,6 +54,17 @@ export async function GET(request: NextRequest) {
   }
 
   const runs = (data ?? []) as ScrapeRunRow[];
+  const scheduled = scheduledStores();
+  // Exact counts are not capped by PostgREST's result-row limit. Measure the
+  // timestamps customers actually see, independently of run-level success.
+  const freshnessCutoff = new Date(now - DAILY_REFRESH_WARNING_HOURS * 3_600_000).toISOString();
+  const priceFreshness = await Promise.all(scheduled.map(async (store) => {
+    const { count, error } = await supabaseAdmin.from('latest_prices')
+      .select('store_product_id', { count: 'exact', head: true })
+      .eq('store', store)
+      .lt('observed_at', freshnessCutoff);
+    return { store, overdue_products: count, error: error?.message ?? null };
+  }));
 
   const [{ data: coverage, error: coverageError }, { data: comparison, error: comparisonError }, { data: snapshots, error: snapshotError }] = await Promise.all([
     supabaseAdmin.from('retailer_coverage_current').select('store, live_coverage_pct, expiring_within_24h'),
@@ -60,17 +72,17 @@ export async function GET(request: NextRequest) {
     supabaseAdmin.from('retailer_coverage_snapshots').select('store, live_coverage_pct, captured_at').order('captured_at', { ascending: false }).limit(8),
   ]);
 
-  const telemetryUnavailable = Boolean(coverageError || comparisonError || snapshotError);
+  const telemetryUnavailable = Boolean(coverageError || comparisonError || snapshotError || priceFreshness.some((row) => row.error));
   if (telemetryUnavailable) {
     console.error('[scrape-watchdog] coverage telemetry unavailable', { coverageError, comparisonError, snapshotError });
   }
 
   const input: RetailerHealthInput = {
     now,
-    scheduledStores: scheduledStores(),
+    scheduledStores: scheduled,
     stores: [...STORES],
     runs,
-    coverage: (coverage ?? []).map((r) => ({ store: String(r.store), live_coverage_pct: r.live_coverage_pct as number | null, expiring_within_24h: r.expiring_within_24h as number | null })),
+    coverage: (coverage ?? []).map((r) => ({ store: String(r.store), live_coverage_pct: r.live_coverage_pct as number | null, expiring_within_24h: r.expiring_within_24h as number | null, daily_overdue_products: priceFreshness.find((row) => row.store === r.store)?.overdue_products })),
     coverageSnapshots: (snapshots ?? []).map((s) => ({ store: String(s.store), live_coverage_pct: s.live_coverage_pct as number | null, captured_at: String(s.captured_at) })),
     comparison: comparison ? { both_live_pct: (comparison as { both_live_pct: number | null }).both_live_pct } : null,
     telemetryUnavailable,
@@ -80,7 +92,7 @@ export async function GET(request: NextRequest) {
 
   if (issues.length === 0) {
     console.log('[scrape-watchdog] all stores healthy');
-    return NextResponse.json({ healthy: true, issues: [], severity: { high: 0, medium: 0 } });
+    return NextResponse.json({ healthy: true, issues: [], severity: { high: 0, medium: 0 }, priceFreshness });
   }
 
   const severity = summariseSeverity(issues);
@@ -104,7 +116,7 @@ export async function GET(request: NextRequest) {
       to: alertEmail!,
       subject: `Scrape alert — ${severity.high} high / ${severity.medium} medium`,
       html: `<h2>supermarket.ie retailer refresh health</h2>
-        <p>${issues.length} issue${issues.length === 1 ? '' : 's'} detected across the Mon/Thu retailer refresh.</p>
+        <p>${issues.length} issue${issues.length === 1 ? '' : 's'} detected across the daily retailer refresh.</p>
         <ul>${list}</ul>
         <p>Runs execute on AWS ECS (EventBridge → smie-prod-scheduled → SQS → smie-prod-sqs-consumer).
         Review CloudWatch logs for the <code>scheduled</code> / <code>sqs-consumer</code> streams and the
@@ -127,5 +139,6 @@ export async function GET(request: NextRequest) {
     channelConfigured,
     emailSent,
     deliveryError,
+    priceFreshness,
   });
 }
