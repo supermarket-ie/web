@@ -8,7 +8,7 @@ The supervised collector then processed all133 eligible offers initially expirin
 
 The SQL connector intermittently reported a two-minute confirmation expiry. Interrupted invocations were reconciled from database pages/receipts and closed with the existing owner-conditional cleanup before advancing to unrequested products. A supervisor interruption with six completed products and no pending write was resumed through the existing resume protocol, preserving the original batch and counters. Read-only permission inspection confirmed Supabase was already set to Allow all actions; no permission expansion was made or requested as a batch prerequisite. A pending reservation remains an unknown outcome, not proof of a Tesco denial.
 
-Added an optional ordinary-selection --mapping-ids filter so an independently reviewed eligible product can be collected without sending requests for known mismatches earlier in the bulk selector. It accepts1–10 distinct validated UUIDs within the batch limit, treats UUID case consistently, filters before deduplication/limit, and checks the returned IDs again. It only narrows ordinary renewal/expansion selection: pending/recent, failed status, prior-success, freshness, shared-SKU exclusion when requested, live identity, immutable mapping, lease/cooldown, receipt and guarded finalisation rules remain unchanged. It cannot be combined with resume, evidence-only acquisition, acquisition-page handoff or audited hold re-entry. The selected immutable run snapshot still supports normal resume without resupplying IDs. Eight focused PostgreSQL tests passed before final case-normalisation refinements; full155-test collector plus50-test identity validation and required validate are running.
+Added an optional ordinary-selection --mapping-ids filter so an independently reviewed eligible product can be collected without sending requests for known mismatches earlier in the bulk selector. It accepts1–10 distinct validated UUIDs within the batch limit, treats UUID case consistently, filters before deduplication/limit, and checks the returned IDs again. It only narrows ordinary renewal/expansion selection: pending/recent, failed status, prior-success, freshness, shared-SKU exclusion when requested, live identity, immutable mapping, lease/cooldown, receipt and guarded finalisation rules remain unchanged. It cannot be combined with resume, evidence-only acquisition, acquisition-page handoff or audited hold re-entry. The selected immutable run snapshot still supports normal resume without resupplying IDs. All 155 collector and 50 identity tests passed, along with supervised TypeScript and lint. GitHub CI run42385639500 also completed validate successfully. The branch was updated with concurrent main changes after GitHub continued to report validate as missing at the merge gate; live expansion remains blocked until a normal merge succeeds.
 
 Independent source review identified Green Isle Yorkshire Puddings230g as an ordinary, non-held expansion candidate. Retained manufacturerGREEN ISLE, barcode05391520183188, structured/net230g, marketing explicitly12 light and crispy Yorkshire puddings and12 portions corroborate canonical Green Isle12 Yorkshire Puddings230g. A separate new guarded live fetch is still required after validate and merge; no retained price has been promoted. Several other ordinary candidates have known juice/drink, recipe, size, count or completely unrelated-product conflicts and must not be fetched merely to fill a batch. This operator CLI change requires no database migration or ECS rollout. Automated Dunnes/SuperValu governor deployment, migration and schedule status remains as recorded in its separate operational entries.
 
@@ -49,6 +49,14 @@ Removed fail-open: if the governor RPCs are absent, `acquire` now throws
 `GovernorUnavailableError` and `withRetailerRequestSlot` DEFERS (raises
 `RetailerBlockedError`, makes NO retailer request) — the worker re-enqueues and
 waits. Unavailable safeguards pause collection rather than run ungoverned.
+
+DEPLOYED (7 Nov): the corrected worker image `b9b1a92-prod` is live on both
+worker task defs (`smie-prod-scheduled:5`, `smie-prod-sqs-consumer:5`); the
+consumer rollout COMPLETED and started cleanly. Web untouched (`smie-prod:16`).
+Because the migrations are not yet applied, the fail-closed design means the
+consumer would DEFER any retailer request — and the schedules are PAUSED anyway,
+so no collection occurs until re-enabled. Verified schedule states live:
+dunnes/supervalu DISABLED, watchdog ENABLED.
 
 ORDERED MIGRATIONS for ChatGPT to apply (authenticated Supabase), in order:
   1. `supabase/migrations/20261107150000_retailer_request_governor.sql` (base)
