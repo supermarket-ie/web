@@ -6,7 +6,7 @@ import { collectTescoSupervised, reconcileSupervisedRun, type CollectionMode, ty
 
 const args = process.argv.slice(2);
 function option(name: string) { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; }
-const allowed = new Set(['--mode', '--limit', '--resume', '--reconcile', '--dry-run', '--confirm-run', '--acquisition-pages', '--reviewed-candidates', '--exclude-shared-sku', '--evidence-only', '--evidence-mappings']);
+const allowed = new Set(['--mode', '--limit', '--resume', '--reconcile', '--dry-run', '--confirm-run', '--acquisition-pages', '--reviewed-candidates', '--exclude-shared-sku', '--evidence-only', '--evidence-mappings', '--mapping-ids']);
 for (let i = 0; i < args.length; i++) {
   if (!allowed.has(args[i])) throw new Error('Unknown option');
   if (!['--dry-run', '--confirm-run', '--exclude-shared-sku', '--evidence-only'].includes(args[i])) {
@@ -60,6 +60,7 @@ async function main() {
       resume: option('--resume'), dryRun: args.includes('--dry-run'),
       acquisitionPages: option('--acquisition-pages')?.split(','),
       reviewedCandidates: option('--reviewed-candidates')?.split(','),
+      mappingIds: option('--mapping-ids')?.split(','),
       evidenceOnly: args.includes('--evidence-only'), evidenceIds: option('--evidence-mappings')?.split(','),
       excludeSharedSku: args.includes('--exclude-shared-sku') }, {
       execute, progress: value => send({ type: 'progress', ...value }),
