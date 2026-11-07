@@ -246,11 +246,13 @@ variable "enabled_schedules" {
     reintroduce the drift risk. Enable a schedule only after its collection path
     is verified.
 
-    PAUSED (7 Nov 2026): dunnes-scrape-trigger and supervalu-scrape-trigger are
-    intentionally OMITTED while the request governor is unavailable (its
-    migration is not yet applied). The scrape-watchdog stays ENABLED so health
-    monitoring continues. Re-add both triggers (reviewed PR) only after the
-    governor migration is applied and verified, so collection resumes governed.
+    RE-ENABLED (7 Nov 2026): dunnes-scrape-trigger and supervalu-scrape-trigger
+    are restored to the daily schedule now that all three governor migrations
+    are applied and verified in production (tables + hardened RPCs present,
+    rows initialized) and the corrected worker image b9b1a92-prod is deployed.
+    Collection resumes governed (30 req/min default, circuit breaker, durable
+    Retry-After). They were paused earlier in the day while the governor DB
+    layer was unavailable.
   EOT
   type        = list(string)
   default = [
@@ -261,6 +263,8 @@ variable "enabled_schedules" {
     "price-watchdog-thursday",
     "product-embeddings",
     "scrape-watchdog",
+    "supervalu-scrape-trigger",
+    "dunnes-scrape-trigger",
   ]
 }
 
