@@ -1,6 +1,7 @@
 import { captureIdentityResponse, type IdentityResponse } from './retailer-identity-response';
 import { retainIdentityResponse } from './retailer-identity-retention';
 import { supabaseAdmin } from '@/lib/supabase';
+import { parseRetryAfterMs, withRetailerRequestSlot } from '@/lib/retailer-request-governor';
 
 const STORE = 'supervalu';
 const STORE_PATH = '/sm/delivery/rsid/5550';
@@ -45,10 +46,23 @@ export class TransientSupervaluError extends Error {
     message: string,
     public readonly product: SupervaluQueueProduct,
     public readonly reason: string,
+    // Server-provided Retry-After in ms, when present.
+    public readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = 'TransientSupervaluError';
   }
+}
+
+// Count HTTP denials (403/429/5xx) and timeouts/network errors toward the
+// breaker; a normal not-found/parse outcome is not a denial.
+function supervaluDenialReason(error: unknown): string | null {
+  if (!(error instanceof TransientSupervaluError)) return null;
+  return /_http_(403|429|5\d\d)$/.test(error.reason)
+    || /^http_(403|429|5\d\d)$/.test(error.reason)
+    || /timeout|network_error/.test(error.reason)
+    ? error.reason
+    : null;
 }
 
 function decodeHtml(value: string) {
@@ -420,43 +434,51 @@ export function classifySupervaluProductPage(html: string): SupervaluFetchResult
 }
 
 export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Promise<SupervaluFetchResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
-  try {
-    const response = await fetch(product.storeUrl, {
-      signal: controller.signal,
-      cache: 'no-store',
-      redirect: 'follow',
-      headers: {
-        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'accept-language': 'en-IE,en;q=0.9',
-      },
-    });
-    if (response.status === 429 || response.status >= 500) {
-      throw new TransientSupervaluError(`SuperValu returned HTTP ${response.status}`, product, `http_${response.status}`);
+  return withRetailerRequestSlot('supervalu', async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const response = await fetch(product.storeUrl, {
+        signal: controller.signal,
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: {
+          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'accept-language': 'en-IE,en;q=0.9',
+        },
+      });
+      // Access denial / throttle: distinct from a 404 "product not found".
+      if (response.status === 403 || response.status === 429 || response.status >= 500) {
+        throw new TransientSupervaluError(
+          `SuperValu returned HTTP ${response.status}`,
+          product,
+          `http_${response.status}`,
+          parseRetryAfterMs(response.headers.get('retry-after')),
+        );
+      }
+      if (!response.ok) {
+        return {
+          candidate: null,
+          failureReason: response.status === 404 ? 'product_not_found' : 'no_product_data',
+        };
+      }
+      const body = await response.text();
+      const result = classifySupervaluProductPage(body);
+      if (result.candidate) result.candidate.identityResponse = captureIdentityResponse({ store: STORE,
+        sku: result.candidate.sku, title: result.candidate.name, productUrl: result.candidate.url ?? product.storeUrl,
+        requestedUrl: product.storeUrl, finalUrl: response.url || product.storeUrl,
+        contentType: response.headers.get('content-type') ?? '', body });
+      return result;
+    } catch (error) {
+      if (error instanceof TransientSupervaluError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      const reason = error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'network_error';
+      throw new TransientSupervaluError(message, product, reason);
+    } finally {
+      clearTimeout(timeout);
     }
-    if (!response.ok) {
-      return {
-        candidate: null,
-        failureReason: response.status === 404 ? 'product_not_found' : 'no_product_data',
-      };
-    }
-    const body = await response.text();
-    const result = classifySupervaluProductPage(body);
-    if (result.candidate) result.candidate.identityResponse = captureIdentityResponse({ store: STORE,
-      sku: result.candidate.sku, title: result.candidate.name, productUrl: result.candidate.url ?? product.storeUrl,
-      requestedUrl: product.storeUrl, finalUrl: response.url || product.storeUrl,
-      contentType: response.headers.get('content-type') ?? '', body });
-    return result;
-  } catch (error) {
-    if (error instanceof TransientSupervaluError) throw error;
-    const message = error instanceof Error ? error.message : String(error);
-    const reason = error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'network_error';
-    throw new TransientSupervaluError(message, product, reason);
-  } finally {
-    clearTimeout(timeout);
-  }
+  }, { classifyError: supervaluDenialReason });
 }
 
 function compactSupervaluSearchQuery(value: string) {
@@ -490,39 +512,46 @@ export function selectSupervaluRemapCandidate(product: SupervaluQueueProduct, ca
 }
 
 async function fetchSupervaluSearchCandidates(query: string, product: SupervaluQueueProduct) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
-  try {
-    const url = `${GATEWAY_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(query)}&take=12&page=1&skip=0`;
-    const response = await fetch(url, {
-      signal: controller.signal,
-      cache: 'no-store',
-      redirect: 'follow',
-      headers: {
-        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        accept: 'application/json, text/plain, */*',
-        'accept-language': 'en-IE,en;q=0.9',
-        'x-site-host': SITE_URL,
-        'x-site-location': 'HeadersBuilderInterceptor',
-        'x-correlation-id': crypto.randomUUID(),
-      },
-    });
-    if (response.status === 429 || response.status >= 500) {
-      throw new TransientSupervaluError(`SuperValu search returned HTTP ${response.status}`, product, `search_http_${response.status}`);
+  return withRetailerRequestSlot('supervalu', async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const url = `${GATEWAY_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(query)}&take=12&page=1&skip=0`;
+      const response = await fetch(url, {
+        signal: controller.signal,
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: {
+          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          accept: 'application/json, text/plain, */*',
+          'accept-language': 'en-IE,en;q=0.9',
+          'x-site-host': SITE_URL,
+          'x-site-location': 'HeadersBuilderInterceptor',
+          'x-correlation-id': crypto.randomUUID(),
+        },
+      });
+      if (response.status === 403 || response.status === 429 || response.status >= 500) {
+        throw new TransientSupervaluError(
+          `SuperValu search returned HTTP ${response.status}`,
+          product,
+          `search_http_${response.status}`,
+          parseRetryAfterMs(response.headers.get('retry-after')),
+        );
+      }
+      if (!response.ok) return [];
+      const body = await response.text();
+      return parseSupervaluSearchResponse(JSON.parse(body)).map(candidate => ({ ...candidate,
+        identityResponse: captureIdentityResponse({ store: STORE, sku: candidate.sku, title: candidate.name, productUrl: candidate.url,
+          requestedUrl: url, finalUrl: response.url || url, contentType: response.headers.get('content-type') ?? '', body }) }));
+    } catch (error) {
+      if (error instanceof TransientSupervaluError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      const reason = error instanceof Error && error.name === 'AbortError' ? 'search_timeout' : 'search_network_error';
+      throw new TransientSupervaluError(message, product, reason);
+    } finally {
+      clearTimeout(timeout);
     }
-    if (!response.ok) return [];
-    const body = await response.text();
-    return parseSupervaluSearchResponse(JSON.parse(body)).map(candidate => ({ ...candidate,
-      identityResponse: captureIdentityResponse({ store: STORE, sku: candidate.sku, title: candidate.name, productUrl: candidate.url,
-        requestedUrl: url, finalUrl: response.url || url, contentType: response.headers.get('content-type') ?? '', body }) }));
-  } catch (error) {
-    if (error instanceof TransientSupervaluError) throw error;
-    const message = error instanceof Error ? error.message : String(error);
-    const reason = error instanceof Error && error.name === 'AbortError' ? 'search_timeout' : 'search_network_error';
-    throw new TransientSupervaluError(message, product, reason);
-  } finally {
-    clearTimeout(timeout);
-  }
+  }, { classifyError: supervaluDenialReason });
 }
 
 export async function selectSupervaluProducts(limit: number, query?: string): Promise<SupervaluQueueProduct[]> {

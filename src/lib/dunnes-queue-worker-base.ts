@@ -3,6 +3,7 @@ import { retainIdentityResponse } from './retailer-identity-retention';
 import { supabaseAdmin } from '@/lib/supabase';
 import { dunnesPackSignature, hasDunnesVariantConflict } from '@/lib/dunnes-discovery';
 import { isStrictExactResolution } from '@/lib/product-resolution';
+import { parseRetryAfterMs, withRetailerRequestSlot } from '@/lib/retailer-request-governor';
 
 const STORE = 'dunnes';
 const STORE_ID = 258;
@@ -53,6 +54,9 @@ export class TransientDunnesError extends Error {
     message: string,
     public readonly product: DunnesQueueProduct,
     public readonly reason: string,
+    // Server-provided Retry-After in ms, when present (honoured by the batch
+    // route's backoff). Null for timeouts/network errors with no hint.
+    public readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = 'TransientDunnesError';
@@ -311,55 +315,76 @@ function makeProductUrl(item: DunnesApiItem) {
 async function fetchCandidates(queryName: string, product: DunnesQueueProduct): Promise<Candidate[]> {
   const trimmedQuery = queryName.split(/\s+/).slice(0, 8).join(' ').slice(0, 90);
   const url = `${GATEWAY_BASE}/stores/${STORE_ID}/search?q=${encodeURIComponent(trimmedQuery)}&take=8&page=1&skip=0`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
 
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json, text/plain, */*',
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        'x-site-host': SITE_URL,
-        'x-site-location': 'HeadersBuilderInterceptor',
-        'x-correlation-id': generateCorrelationId(),
-        'x-shopping-mode': '22222222-2222-2222-2222-222222222222',
-      },
-    });
+  // Every request (search here, and each retry delivery of the batch) passes
+  // through the shared per-retailer governor: it rate-limits and will refuse
+  // via RetailerBlockedError when the circuit breaker is open. A 403/429/5xx or
+  // timeout is classified as a denial so the breaker can trip; a Retry-After
+  // header is honoured by the batch route's jittered backoff.
+  return withRetailerRequestSlot('dunnes', async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          'x-site-host': SITE_URL,
+          'x-site-location': 'HeadersBuilderInterceptor',
+          'x-correlation-id': generateCorrelationId(),
+          'x-shopping-mode': '22222222-2222-2222-2222-222222222222',
+        },
+      });
 
-    if (response.status === 429 || response.status >= 500) {
-      throw new TransientDunnesError(`Dunnes API returned HTTP ${response.status}`, product, `http_${response.status}`);
+      // Access denial / throttle: distinct from a missing product. Carry any
+      // Retry-After hint. 403 is included so sustained blocks trip the breaker.
+      if (response.status === 403 || response.status === 429 || response.status >= 500) {
+        throw new TransientDunnesError(
+          `Dunnes API returned HTTP ${response.status}`,
+          product,
+          `http_${response.status}`,
+          parseRetryAfterMs(response.headers.get('retry-after')),
+        );
+      }
+      if (!response.ok) return [];
+
+      const originalBody = await response.text();
+      const body = JSON.parse(originalBody) as DunnesApiResponse;
+      return (body.items ?? []).map((item) => {
+        const activeTpr = (item.tprPrice ?? []).find((entry) => entry.active === true);
+        const price = typeof item.priceNumeric === 'number' ? item.priceNumeric : null;
+        const rawWas = item.wasPriceNumeric ?? item.wasWholePrice ?? null;
+        const wasPrice = typeof rawWas === 'number' && price && rawWas > price ? rawWas : null;
+        return {
+          sku: item.sku == null ? null : String(item.sku),
+          name: item.name ?? '',
+          price,
+          wasPrice,
+          onPromotion: Boolean(activeTpr || wasPrice),
+          url: makeProductUrl(item),
+          identityResponse: captureIdentityResponse({ store: STORE, sku: item.sku == null ? null : String(item.sku),
+            title: item.name ?? '', productUrl: makeProductUrl(item), requestedUrl: url, finalUrl: response.url || url,
+            contentType: response.headers.get('content-type') ?? '', body: originalBody }),
+        };
+      });
+    } catch (error) {
+      if (error instanceof TransientDunnesError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      const reason = error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'network_error';
+      throw new TransientDunnesError(message, product, reason);
+    } finally {
+      clearTimeout(timeout);
     }
-    if (!response.ok) return [];
-
-    const originalBody = await response.text();
-    const body = JSON.parse(originalBody) as DunnesApiResponse;
-    return (body.items ?? []).map((item) => {
-      const activeTpr = (item.tprPrice ?? []).find((entry) => entry.active === true);
-      const price = typeof item.priceNumeric === 'number' ? item.priceNumeric : null;
-      const rawWas = item.wasPriceNumeric ?? item.wasWholePrice ?? null;
-      const wasPrice = typeof rawWas === 'number' && price && rawWas > price ? rawWas : null;
-      return {
-        sku: item.sku == null ? null : String(item.sku),
-        name: item.name ?? '',
-        price,
-        wasPrice,
-        onPromotion: Boolean(activeTpr || wasPrice),
-        url: makeProductUrl(item),
-        identityResponse: captureIdentityResponse({ store: STORE, sku: item.sku == null ? null : String(item.sku),
-          title: item.name ?? '', productUrl: makeProductUrl(item), requestedUrl: url, finalUrl: response.url || url,
-          contentType: response.headers.get('content-type') ?? '', body: originalBody }),
-      };
-    });
-  } catch (error) {
-    if (error instanceof TransientDunnesError) throw error;
-    const message = error instanceof Error ? error.message : String(error);
-    const reason = error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'network_error';
-    throw new TransientDunnesError(message, product, reason);
-  } finally {
-    clearTimeout(timeout);
-  }
+  }, {
+    // Count HTTP denials and timeouts/network errors toward the breaker; a
+    // normal "no results" (non-ok handled above by returning []) is not an error.
+    classifyError: (error) =>
+      error instanceof TransientDunnesError
+        ? (/^http_(403|429|5\d\d)$/.test(error.reason) || /timeout|network_error/.test(error.reason) ? error.reason : null)
+        : null,
+  });
 }
 
 export async function selectDunnesProducts(limit: number, query?: string): Promise<DunnesQueueProduct[]> {

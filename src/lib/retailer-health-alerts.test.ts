@@ -164,6 +164,46 @@ describe('daily price freshness', () => {
   });
 });
 
+describe('circuit breaker: retailer access blocked', () => {
+  it('raises a HIGH actionable alert when a retailer breaker is open', () => {
+    const input = baseInput({
+      stores: ['dunnes'], scheduledStores: ['dunnes'],
+      runs: [run({ store: 'dunnes', started_at: new Date(previousScheduledSlot(NOW)! + 60_000).toISOString() })],
+      coverage: [{ store: 'dunnes', live_coverage_pct: 80, expiring_within_24h: 0 }],
+      governor: [{ store: 'dunnes', breaker_open: true, breaker_open_until: new Date(NOW + 600_000).toISOString(), consecutive_denials: 6, last_denial_reason: 'http_429' }],
+    });
+    const issues = evaluateRetailerHealth(input);
+    const breaker = issues.find((i) => i.kind === 'retailer_access_blocked');
+    expect(breaker).toBeTruthy();
+    expect(breaker?.severity).toBe('high');
+    expect(breaker?.store).toBe('dunnes');
+    expect(breaker?.message).toContain('http_429');
+    expect(breaker?.message).toContain('paused');
+  });
+
+  it('does NOT alert when the breaker is closed', () => {
+    const input = baseInput({
+      stores: ['dunnes'], scheduledStores: ['dunnes'],
+      runs: [run({ store: 'dunnes', started_at: new Date(previousScheduledSlot(NOW)! + 60_000).toISOString() })],
+      coverage: [{ store: 'dunnes', live_coverage_pct: 80, expiring_within_24h: 0 }],
+      governor: [{ store: 'dunnes', breaker_open: false, breaker_open_until: null, consecutive_denials: 0, last_denial_reason: null }],
+    });
+    expect(evaluateRetailerHealth(input).some((i) => i.kind === 'retailer_access_blocked')).toBe(false);
+  });
+
+  it('reports an open breaker even if coverage telemetry is unavailable', () => {
+    const input = baseInput({
+      stores: ['dunnes'], scheduledStores: ['dunnes'],
+      runs: [run({ store: 'dunnes', started_at: new Date(previousScheduledSlot(NOW)! + 60_000).toISOString() })],
+      telemetryUnavailable: true,
+      governor: [{ store: 'supervalu', breaker_open: true, breaker_open_until: new Date(NOW + 600_000).toISOString(), consecutive_denials: 5, last_denial_reason: 'http_403' }],
+    });
+    const issues = evaluateRetailerHealth(input);
+    expect(issues.some((i) => i.kind === 'retailer_access_blocked' && i.store === 'supervalu')).toBe(true);
+    expect(issues.some((i) => i.kind === 'telemetry_unavailable')).toBe(true);
+  });
+});
+
 describe('condition 2: degraded/failed streak', () => {
   it(`flags a streak of ${DEGRADED_STREAK} consecutive degraded scheduled_full runs`, () => {
     const slot = previousScheduledSlot(NOW)!;

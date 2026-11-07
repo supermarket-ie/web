@@ -24,6 +24,7 @@ export type RetailerHealthIssue = {
     | 'coverage_low'
     | 'coverage_expiring'
     | 'daily_refresh_overdue'
+    | 'retailer_access_blocked'
     | 'coverage_regression'
     | 'comparison_low'
     | 'comparison_drop'
@@ -60,6 +61,15 @@ export type CoverageSnapshot = {
 
 export type ComparisonRow = { both_live_pct: number | null } | null;
 
+// Circuit-breaker state for a governed retailer (automated collection path).
+export type GovernorStateRow = {
+  store: string;
+  breaker_open: boolean;
+  breaker_open_until: string | null;
+  consecutive_denials: number | null;
+  last_denial_reason: string | null;
+};
+
 export type ComparisonSnapshot = {
   // Optional history of the three-retailer (both-live) comparison percentage.
   both_live_pct: number | null;
@@ -80,6 +90,9 @@ export type RetailerHealthInput = {
   comparison: ComparisonRow;
   comparisonSnapshots?: ComparisonSnapshot[];
   telemetryUnavailable?: boolean;
+  // Per-retailer request-governor state. An open circuit breaker is a
+  // high-severity, actionable alert: collection to that retailer is paused.
+  governor?: GovernorStateRow[];
 };
 
 // Tunables (conservative; documented in the alerting proposal).
@@ -112,6 +125,22 @@ export function evaluateRetailerHealth(input: RetailerHealthInput): RetailerHeal
   const issues: RetailerHealthIssue[] = [];
   const { now, runs } = input;
   const scheduled = new Set(input.scheduledStores);
+
+  // Circuit breaker: surface any OPEN retailer breaker as a high-severity,
+  // actionable alert. Independent of coverage telemetry so a paused retailer is
+  // never masked by an unrelated view failure.
+  for (const g of input.governor ?? []) {
+    if (!g.breaker_open) continue;
+    const until = g.breaker_open_until ? new Date(g.breaker_open_until).getTime() : null;
+    const untilText = until && Number.isFinite(until) ? ` until ${new Date(until).toISOString()}` : '';
+    const reason = g.last_denial_reason ? ` after ${g.consecutive_denials ?? 0}× ${g.last_denial_reason}` : '';
+    issues.push({
+      store: g.store,
+      kind: 'retailer_access_blocked',
+      severity: 'high',
+      message: `${g.store}: collection circuit breaker is OPEN${reason} — requests are paused${untilText}. Check for access denials/throttling (403/429) before resuming; do not lower matching thresholds.`,
+    });
+  }
 
   for (const store of input.stores) {
     // scheduled_full runs for this store, newest first.

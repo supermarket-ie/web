@@ -1,5 +1,71 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — reliability governor for automated Dunnes/SuperValu collection
+
+Added a shared per-retailer request governor to the AUTOMATED Dunnes/SuperValu
+collection path, ahead of activating the daily (~2,900 checks/day) refresh.
+Tesco's supervised collector and its own egress gate are untouched.
+
+New durable state (`supabase/migrations/20261107150000_retailer_request_governor.sql`):
+table `retailer_request_governor` (one row per retailer) plus SECURITY INVOKER,
+service_role-only RPCs `acquire_retailer_request_slot`, `record_retailer_denial`,
+`record_retailer_success`, `retailer_governor_state`. Atomicity across
+concurrent SQS-consumer tasks and restarts comes from a row lock
+(`select … for update`) and persisted state, mirroring the `tesco_egress_pool`
+pattern.
+
+Behaviour (`src/lib/retailer-request-governor.ts`, wired into
+`dunnes-queue-worker-base` and `supervalu-direct-worker-base`):
+- EVERY outbound request — product fetch, each search query, and every retry
+  delivery — passes through `withRetailerRequestSlot`, which consumes one token
+  from a fixed-window bucket. Default ceiling 30 req/min per retailer, env-tunable
+  (`DUNNES_MAX_REQUESTS_PER_MINUTE` / `SUPERVALU_MAX_REQUESTS_PER_MINUTE`, plus
+  window/breaker vars) with no redeploy. Rate-limit-driven pacing naturally
+  spreads the workload across the overnight window.
+- Waiting for a rate-limit slot or a shared cooldown is NOT a network attempt:
+  the client sleeps and re-acquires (bounded by `*_MAX_ACQUIRE_WAIT_MS`, default
+  120s) without consuming the product's bounded retry budget and without
+  finalising it as failed.
+- Access denials/throttling (HTTP 403/429/5xx, timeouts) are recorded as
+  denials and remain a DISTINCT signal (`RetailerBlockedError` /
+  `Transient*Error`) — a blocked response is never collapsed into
+  "no search results" or a not-found/no-match outcome. A 404/parse/no-match is
+  not a denial and does not trip the breaker.
+- Circuit breaker: after N consecutive denials (default 5) the retailer's
+  breaker opens for a cooldown (default 900s); `acquire` then returns `blocked`
+  so workers pause that retailer, the batch is redelivered (not failed), and
+  one half-open probe is allowed after the cooldown. A success resets the streak
+  and closes the breaker.
+- Backoff now honours `Retry-After` (delta-seconds and HTTP-date, including long
+  values up to SQS's 900s delivery cap) with full jitter; the exponential
+  fallback is also jittered to avoid lock-step retry spikes.
+
+Operational alert: the scrape-watchdog reads `retailer_governor_state()` and
+raises a high-severity, delivered `retailer_access_blocked` issue whenever a
+retailer breaker is open, independent of coverage telemetry. Breaker state is
+also returned in the watchdog JSON for monitoring.
+
+Networking: workers remain on public-subnet Fargate tasks with
+`assign_public_ip=true` and no NAT (verified live: running consumer task had
+ephemeral public IP `108.129.240.83`). The outbound address rotates per task
+placement — no fixed-IP/allow-list assumption is safe, and none is made. A
+stable egress IP (NAT + EIP, private subnets) remains available but deliberately
+unused.
+
+Tests: 1,068 total pass (was 1,034). New — `retailer-governor-sql.test.ts`
+applies the real migration in PGlite and proves the ceiling, window refill,
+10-way concurrent acquisition (exactly N granted), breaker trip/block/half-open,
+success reset and restart durability; `retailer-request-governor.test.ts`
+covers Retry-After parsing (incl. long/HTTP-date), jittered backoff,
+denial-vs-not-found classification, and the wait/blocked/denial/success
+orchestration; `dunnes-batch-governor.test.ts` proves a paused retailer defers
+the batch without finalising a product and that retry honours a long Retry-After.
+`tsc`, eslint and `next build` (compile) are clean.
+
+Deployment: this is a WORKER-image + migration change (no web image, no release
+guard change). Activation and live verification are tracked below; do not treat
+merge as activation.
+
 ## 7 November 2026 — PR #336 independent review: code sound, STILL NOT DEPLOYED
 
 An independent review of PR #336 (merged to `main` at
