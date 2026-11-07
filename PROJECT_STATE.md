@@ -1,5 +1,59 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — independent AI identity assessment for Tesco mappings (built + tested); unattended fetch route STILL BLOCKED
+
+Added `src/lib/tesco-identity-assessment.ts`: an independent AI second opinion
+on Tesco mapping identity, sitting BESIDE (never replacing) the deterministic
+gate. It reuses the existing deterministic validators
+(`independentExactIdentity`, `classifyTescoMapping`/`classifyTescoReplacement`,
+barcode/pack/variant helpers) and the existing `MachineAssessment` ->
+`approvedReview` -> guarded-finalisation path; it adds no new privileged SQL
+endpoint and no new schema.
+
+Design + enforced safety invariants (15 new tests, 1,095 total pass):
+- Candidate DISCOVERY stays separate from VERIFICATION. This module only
+  verifies a concrete (canonical, fresh live Tesco product, peers) triple that
+  discovery proposed, via Bedrock (`resolveAgentModel`, AWS task role, no key)
+  with a strict Zod schema -> `verified_exact | rejected | uncertain` plus the
+  supporting per-attribute facts (sku/brand/barcode/product-type/flavour/
+  quantity/pack/selling-unit) and a rationale.
+- A `verified_exact` MachineAssessment is emitted ONLY when the model AND the
+  deterministic gate agree. Model `rejected`/`uncertain` -> HOLD even if the
+  deterministic gate would pass (fail-closed on disagreement). The model can
+  NEVER turn a deterministic rejection into an acceptance — confidence alone
+  never authorises acceptance; `approvedReview` still requires
+  `independentExactIdentity(current)` downstream.
+- The emitted assessment pins `mapping_id`, `source_page_id` and
+  `source_body_sha256`, so a changed page/snapshot between assessment and write
+  (stale approval) fails the existing binding.
+- Tesco identity is kept separate from cross-retailer equivalence: peers only
+  corroborate the Tesco item's identity; the verdict carries no price-comparison
+  claim. SuperValu/Dunnes collection is untouched and remains operational.
+- Tests cover misleading names, wrong flavours, equal-weight multipacks
+  (2x290g vs 4x145g), wrong quantities, barcode conflicts and stale approvals,
+  and assert the model cannot override a deterministic reject.
+
+EXTERNAL BLOCKER (unchanged, re-verified live) — unattended end-to-end Tesco
+collection cannot be PROVEN because the required `scheduled job -> accepted Tesco
+response` step has never succeeded from AWS:
+- Egress gate `vercel-dub1-canary-20260920` (the shared AWS/Vercel deployment
+  path): 0 successes, 2 blocks. AWS datacenter egress returns 403
+  (`docs/tesco-recovery-plan.md` section 6, `docs/tesco-direct-collection.md`).
+- Gate `workspace-supervised-20260929` (ChatGPT workspace, `enabled=false`): its
+  2 successes came from the workspace, not AWS ("not Vercel failover").
+Single concrete owner decision to unblock: authorise a paid retailer-tolerant
+fetch provider (EU/residential rendering) fronting the Tesco fetch behind the
+existing egress-gate/lease/cooldown/identity gates — est. a few hundred EUR/month
+for ~2,900+ fetches/mo — OR provide an approved alternative accepted egress.
+Paid Pepesto discovery remains NOT authorised and was not enabled. No IP
+rotation, repeated probing of the blocked gate, or static-AWS-IP assumption was
+used. Current fresh trusted Tesco prices: 503 (coverage target remains 600–900+,
+gated on the fetch route).
+
+What deploys now: the AI assessment library + tests (worker-side, no migration).
+What waits on the owner decision: proving the live unattended sequence end to end.
+
+
 ## 7 November 2026 — governor ACTIVATED: alert channel live, schedules re-enabled, governed catch-up running
 
 With all three governor migrations verified applied in production (independently
