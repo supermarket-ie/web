@@ -1,5 +1,64 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — PR #336 independent review: code sound, STILL NOT DEPLOYED
+
+An independent review of PR #336 (merged to `main` at
+`6e4bf47ad42f7b260cf8d229622f719d08ecbd7b`) reviewed the full commit diff
+against its parent `9ebfb15` (17 files, +429/−67). Verdict: the implementation
+is sound and no code fix is required.
+
+Verified by reasoning + local reproduction:
+- Pagination is correct. `select_store_products_for_refresh` applies its
+  priority `ORDER BY` + `LIMIT 2500` to fix cohort membership; PostgREST then
+  applies the outer `.order('store_product_id')` + `.range()` to paginate that
+  fixed set in 500-row pages. Every page re-passes `p_limit=2500` against a
+  `stable` function, so offsets are deterministic. The duplicate-ID guard
+  rejects a cohort shift; a later-page error throws rather than queueing a
+  partial inventory. No omissions or silent truncation.
+- Safeguards preserved: exact-SKU/resolved-URL eligibility, trusted-price
+  provenance, receipt idempotency (`runUuid:batchIndex`), batch sizes, and the
+  rule that a failed identity/availability check never advances the old
+  observation time are all untouched.
+- Overdue monitoring is independent of run success for the two scheduled
+  stores: `retailer_coverage_current` is built `FROM stores(values supervalu,
+  dunnes) CROSS JOIN ...`, so it always emits a row per scheduled store for the
+  watchdog's `daily_overdue_products` to attach to. Latent coupling only: if
+  `SCHEDULED_RETAILERS` is ever set to a store absent from that view, its
+  overdue alert would be dropped — not the shipped default.
+- Local validation reproduced the PR's claims: 1,034 tests pass (83 files),
+  `tsc --noEmit` clean, eslint clean. GitHub required `validate` check is green
+  on the merge commit (the `Vercel` fail is the known-irrelevant status).
+
+Operational note (not a code defect): at 2,500 products with the default
+small batches, batch indices beyond ~300 (Dunnes) / ~450 (SuperValu) collapse
+to the SQS 900-second delay cap, so a large cohort is delivered as one burst
+~15 minutes in. The SQS adapter clamps and logs this (tested). The consumer
+buffers and drains at its own concurrency with idempotent receipts, so this is
+a pacing degradation at volume, not a correctness problem.
+
+LIVE STATE VERIFIED — daily refreshes are NOT active:
+- EventBridge schedules are still the OLD `cron(... ? * MON,THU *)` for
+  `smie-prod-dunnes-scrape-trigger` (10 5), `smie-prod-supervalu-scrape-trigger`
+  (20 5) and `smie-prod-scrape-watchdog` (45 7). The merged daily cron in
+  `infra/terraform/workers.tf` has not been applied.
+- The deployed scheduled worker is `smie-prod-scheduled:3` on image
+  `df9f0c1-prod` (pre-#336). No `6e4bf47-prod` image exists in ECR; the merged
+  commit has never been built.
+- The deployed scheduled task def has NO `SCRAPE_ALERT_EMAIL` (nor
+  `SCHEDULED_RETAILERS`). Until `SCRAPE_ALERT_EMAIL` + `RESEND_API_KEY` are set
+  on the worker, the watchdog's `channelConfigured` is false and alerts are
+  logged, not delivered. A green watchdog run must not be read as delivered
+  alerting.
+
+Outstanding to activate (per `docs/daily-retailer-refresh.md`): build
+`6e4bf47-prod` via the ECR workflow; in the authorised Terraform workspace plan
+with `image_tag` pinned to the current web tag and `image_tag_worker` set to the
+new image (only worker task defs, consumer service reference, schedule
+task-def references and the three daily crons should change); apply; verify the
+schedules show daily expressions and target the updated task def; configure the
+alert channel; then run per-retailer catch-up if the slot has passed and
+reconcile observation ages against the 1,053/1,851 targets.
+
 ## 7 November 2026 — daily retailer refresh prepared, NOT DEPLOYED
 
 The owner requested daily SuperValu/Dunnes price checks after seeing 2 November
