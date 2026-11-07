@@ -38,7 +38,7 @@ type RunState = {
   consecutiveQuarantines?: number; totalQuarantines?: number;
 };
 export type Options = { mode: CollectionMode; limit?: number; resume?: string; dryRun?: boolean;
-  acquisitionPages?: string[]; reviewedCandidates?: string[]; excludeSharedSku?: boolean; evidenceOnly?: boolean; evidenceIds?: string[] };
+  acquisitionPages?: string[]; reviewedCandidates?: string[]; excludeSharedSku?: boolean; evidenceOnly?: boolean; evidenceIds?: string[]; mappingIds?: string[] };
 export type Dependencies = {
   execute: ExecuteSql;
   fetchPage?: (url: string) => Promise<TescoPageResponse>;
@@ -56,6 +56,13 @@ function literal(value: unknown): string {
 function uuid(value: string): string {
   if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)) throw new Error('Invalid run ID');
   return literal(value);
+}
+function validateMappingSelection(ids: string[] | undefined, limit: number) {
+  if (ids === undefined) return;
+  if (!ids.length || ids.length > Math.min(10, limit)
+    || new Set(ids.map(id => id.toLowerCase())).size !== ids.length)
+    throw new Error('Select 1–10 distinct ordinary mapping IDs within the batch limit');
+  ids.forEach(uuid);
 }
 const mappingFields = `s.id,s.product_id,p.canonical_name,p.brand canonical_brand,
   s.store_product_name,s.brand store_brand,s.is_own_brand,s.store_sku,s.store_url,s.url_status`;
@@ -94,9 +101,12 @@ export async function selectSupervisedCandidates(
   execute: ExecuteSql,
   mode: CollectionMode,
   limit: number,
-  options: { excludeSharedSku?: boolean } = {},
+  options: { excludeSharedSku?: boolean; mappingIds?: string[] } = {},
 ): Promise<Candidate[]> {
   if (!['renewal', 'expansion'].includes(mode) || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid selection');
+  validateMappingSelection(options.mappingIds, limit);
+  // A narrowing filter only: all ordinary eligibility and live guards remain.
+  const mappingSelection = options.mappingIds ? `and c.id in (${options.mappingIds.map(uuid).join(',')})` : '';
   // Pre-selection exclusion of shared-SKU canonical groups. When on, any product
   // whose Tesco SKU is mapped by more than one canonical product (incl. genuine
   // synonyms) is conservatively deferred. Applied in the `eligible` CTE — BEFORE
@@ -121,6 +131,7 @@ export async function selectSupervisedCandidates(
       from candidates c where url_status='resolved' and proven and not held
         and store_url='https://www.tesco.ie/shop/en-IE/products/'||store_sku
         and ${mode === 'renewal' ? 'due' : 'observed_at is null'}
+        ${mappingSelection}
         ${sharedSkuExclusion}),
     -- One row per requested URL: two canonical mappings can share a SKU/URL
     -- (incl. equivalent synonyms). Collapsing to a single representative here —
@@ -138,7 +149,8 @@ export async function selectSupervisedCandidates(
       && (mode === 'renewal' ? m.due === true : !m.observed_at)
       // Belt-and-braces for the exclusion: never return a shared-SKU product when
       // excludeSharedSku is set, even if the SQL predicate ever regressed.
-      && (!options.excludeSharedSku || (Array.isArray(m.peers) ? m.peers.length <= 1 : true)));
+      && (!options.excludeSharedSku || (Array.isArray(m.peers) ? m.peers.length <= 1 : true))
+      && (!options.mappingIds || options.mappingIds.some(id => id.toLowerCase() === m.id.toLowerCase())));
   // Belt-and-braces: guarantee URL uniqueness in the returned batch even if the
   // SQL dedup ever regressed. Keeps the first (ordering-preferred) per URL.
   const seenUrls = new Set<string>();
@@ -262,6 +274,10 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   if (!['renewal', 'expansion'].includes(options.mode)) throw new Error('Explicit renewal or expansion mode required');
   const limit = options.limit ?? 25;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Limit must be 1–100');
+  validateMappingSelection(options.mappingIds, limit);
+  if (options.mappingIds && (options.resume || options.acquisitionPages || options.reviewedCandidates
+    || options.evidenceOnly || options.evidenceIds))
+    throw new Error('Ordinary mapping selection cannot be mixed with another collection lane');
   if (options.acquisitionPages && (options.mode !== 'expansion' || options.resume || options.acquisitionPages.length > limit))
     throw new Error('Acquisition handoff requires a new bounded expansion run');
   if (options.reviewedCandidates && (options.mode !== 'expansion' || options.resume ||
@@ -300,7 +316,8 @@ export async function collectTescoSupervised(options: Options, deps: Dependencie
   } else selected = options.evidenceOnly ? await selectEvidenceCandidates(execute, options.evidenceIds!)
     : options.reviewedCandidates ? await selectReviewedCandidates(execute, options.reviewedCandidates)
     : options.acquisitionPages ? await selectAcquisitionCandidates(execute, options.acquisitionPages)
-    : await selectSupervisedCandidates(execute, options.mode, limit, { excludeSharedSku: options.excludeSharedSku });
+    : await selectSupervisedCandidates(execute, options.mode, limit, {
+      excludeSharedSku: options.excludeSharedSku, mappingIds: options.mappingIds });
   if (options.dryRun || !selected.length) return { result: options.dryRun ? 'dry_run' : 'no_due_products',
     mode: options.mode, evidenceOnly: !!options.evidenceOnly, selected: selected.map(m => ({ id: m.id, name: m.canonical_name, observedAt: m.observed_at })) };
 

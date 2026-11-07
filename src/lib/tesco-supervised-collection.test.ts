@@ -950,6 +950,45 @@ describe('explicit acquisition handoff with PostgreSQL finalisation', () => {
   });
 });
 
+describe('ordinary mapping selection only narrows eligibility', () => {
+  it('filters before the limit and fetches only the selected eligible mapping', async () => {
+    await seed(0,'8 days'); await seed(1,'8 days');
+    const target=ids[0]>ids[1]?0:1;
+    expect((await selectSupervisedCandidates(execute,'expansion',1,{mappingIds:[ids[target].toUpperCase()]})).map(x=>x.id))
+      .toEqual([ids[target]]);
+    const fetchPage=vi.fn().mockResolvedValue(response(target));
+    const result=await collectTescoSupervised({mode:'expansion',limit:1,mappingIds:[ids[target]],excludeSharedSku:true},
+      {execute,sleep,fetchPage});
+    expect(result).toMatchObject({result:'complete',reserved:1,completed:1,inserted:1});
+    expect(fetchPage.mock.calls.map(x=>x[0])).toEqual([url(target)]);
+    expect((await db.query<{store_product_id:string}>('select store_product_id from scrape_product_receipts where run_id=$1',[result.id])).rows)
+      .toEqual([{store_product_id:ids[target]}]);
+  });
+  it.each(['pending','recent','failed','unproven','shared','fresh'])('does not override an ordinary %s exclusion',async kind=>{
+    await seed(0,kind==='fresh'?'1 day':'8 days'); await seed(1,'8 days');
+    if(kind==='pending'||kind==='recent')await db.query(`insert into tesco_direct_collection_pages(run_id,egress_key,requested_url,mode,outcome,created_at)
+      values($1,$2,$3,'products',$4,now()-$5::interval)`,[historic,SUPERVISED_GATE,url(),kind==='pending'?'pending':'ok',kind==='pending'?'2 days':'1 hour']);
+    if(kind==='failed')await db.query("update store_products set url_status='failed' where id=$1",[ids[0]]);
+    if(kind==='unproven')await db.query('delete from scrape_product_receipts where store_product_id=$1',[ids[0]]);
+    if(kind==='shared')await db.query('update store_products set store_sku=$1,store_url=$2 where id=$3',[sku(),url(),ids[1]]);
+    const fetchPage=vi.fn();
+    expect(await collectTescoSupervised({mode:'expansion',limit:1,mappingIds:[ids[0]],excludeSharedSku:true},
+      {execute,sleep,fetchPage})).toMatchObject({result:'no_due_products'});
+    expect(fetchPage).not.toHaveBeenCalled();
+    expect((await gate()).leased_until).toBeNull();
+  });
+  it('rejects invalid selections and mixing collection lanes before any SQL',async()=>{
+    const sql=vi.fn(),fetchPage=vi.fn();
+    for(const mappingIds of [[],[ids[0],ids[0]],[ids[0],ids[0].toUpperCase()],['invalid'],[ids[0],ids[1]]])
+      await expect(collectTescoSupervised({mode:'expansion',limit:1,mappingIds},{execute:sql,fetchPage})).rejects.toThrow();
+    await expect(selectSupervisedCandidates(sql,'expansion',100,{mappingIds:Array.from({length:11},()=>randomUUID())})).rejects.toThrow();
+    for(const lane of [{resume:historic},{reviewedCandidates:[historic]},{acquisitionPages:[historic]},
+      {evidenceOnly:true,evidenceIds:[ids[0]]},{evidenceIds:[ids[0]]}])
+      await expect(collectTescoSupervised({mode:'expansion',limit:1,mappingIds:[ids[0]],...lane},{execute:sql,fetchPage})).rejects.toThrow('cannot be mixed');
+    expect(sql).not.toHaveBeenCalled(); expect(fetchPage).not.toHaveBeenCalled();
+  });
+});
+
 describe('supervised renewal with PostgreSQL finalisation', () => {
   it('exposes a reconcilable run ID when the lease claim acknowledgement is lost', async () => {
     await seed();
