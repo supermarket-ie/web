@@ -7,6 +7,7 @@ import {
   processSupervaluProduct,
   type SupervaluBatchMessage,
 } from '@/lib/supervalu-direct-worker';
+import { RetailerBlockedError, backoffDelayMs } from '@/lib/retailer-request-governor';
 
 const MAX_TRANSIENT_DELIVERIES = 4;
 function sleep(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
@@ -30,6 +31,13 @@ export const POST = handleCallback<SupervaluBatchMessage>('supervalu-scrape-batc
       await processSupervaluProduct(message, product);
       finalized = true;
     } catch (error) {
+      // Retailer paused (breaker open / rate-limit wait exhausted): redeliver
+      // the whole batch later without finalising any product and without
+      // consuming its network retry budget.
+      if (error instanceof RetailerBlockedError) {
+        console.warn('[supervalu-queue] retailer paused; deferring batch', { runId: message.runId, batchIndex: message.batchIndex, deliveryCount: metadata.deliveryCount, retryAfterMs: error.retryAfterMs, consecutiveDenials: error.consecutiveDenials });
+        throw error;
+      }
       if (error instanceof TransientSupervaluError) {
         if (metadata.deliveryCount < MAX_TRANSIENT_DELIVERIES) {
           console.warn('[supervalu-queue] transient direct-fetch failure; retrying batch', { runId: message.runId, batchIndex: message.batchIndex, storeProductId: product.storeProductId, deliveryCount: metadata.deliveryCount, reason: error.reason });
@@ -50,4 +58,16 @@ export const POST = handleCallback<SupervaluBatchMessage>('supervalu-scrape-batc
     if (index + 1 < message.products.length) await sleep(spacingMs);
   }
   console.log('[supervalu-queue] batch complete', { runId: message.runId, batchIndex: message.batchIndex, totalBatches: message.totalBatches, products: message.products.length, deliveryCount: metadata.deliveryCount });
-}, { visibilityTimeoutSeconds: 300, retry: (_error, metadata) => ({ afterSeconds: Math.min(180, Math.max(10, 10 * 2 ** Math.max(0, metadata.deliveryCount - 1))) }) });
+}, {
+  visibilityTimeoutSeconds: 300,
+  retry: (error, metadata) => {
+    if (error instanceof RetailerBlockedError) {
+      const seconds = Math.ceil(backoffDelayMs({ attempt: metadata.deliveryCount, retryAfterMs: error.retryAfterMs, baseMs: 30_000, capMs: 900_000 }) / 1000);
+      return { afterSeconds: Math.max(30, seconds) };
+    }
+    const retryAfterMs = error instanceof TransientSupervaluError ? error.retryAfterMs : null;
+    const capMs = retryAfterMs != null ? 900_000 : 180_000;
+    const seconds = Math.ceil(backoffDelayMs({ attempt: metadata.deliveryCount, retryAfterMs, baseMs: 10_000, capMs }) / 1000);
+    return { afterSeconds: Math.max(10, seconds) };
+  },
+});

@@ -66,16 +66,24 @@ export async function GET(request: NextRequest) {
     return { store, overdue_products: count, error: error?.message ?? null };
   }));
 
-  const [{ data: coverage, error: coverageError }, { data: comparison, error: comparisonError }, { data: snapshots, error: snapshotError }] = await Promise.all([
+  const [{ data: coverage, error: coverageError }, { data: comparison, error: comparisonError }, { data: snapshots, error: snapshotError }, { data: governor, error: governorError }] = await Promise.all([
     supabaseAdmin.from('retailer_coverage_current').select('store, live_coverage_pct, expiring_within_24h'),
     supabaseAdmin.from('retailer_comparison_coverage_current').select('both_live_pct').single(),
     supabaseAdmin.from('retailer_coverage_snapshots').select('store, live_coverage_pct, captured_at').order('captured_at', { ascending: false }).limit(8),
+    supabaseAdmin.rpc('retailer_governor_state'),
   ]);
 
-  const telemetryUnavailable = Boolean(coverageError || comparisonError || snapshotError || priceFreshness.some((row) => row.error));
+  const telemetryUnavailable = Boolean(coverageError || comparisonError || snapshotError || governorError || priceFreshness.some((row) => row.error));
   if (telemetryUnavailable) {
-    console.error('[scrape-watchdog] coverage telemetry unavailable', { coverageError, comparisonError, snapshotError });
+    console.error('[scrape-watchdog] coverage telemetry unavailable', { coverageError, comparisonError, snapshotError, governorError });
   }
+  const governorState = ((governor ?? []) as Array<Record<string, unknown>>).map((g) => ({
+    store: String(g.store),
+    breaker_open: Boolean(g.breaker_open),
+    breaker_open_until: g.breaker_open_until ? String(g.breaker_open_until) : null,
+    consecutive_denials: g.consecutive_denials as number | null,
+    last_denial_reason: g.last_denial_reason as string | null,
+  }));
 
   const input: RetailerHealthInput = {
     now,
@@ -86,13 +94,14 @@ export async function GET(request: NextRequest) {
     coverageSnapshots: (snapshots ?? []).map((s) => ({ store: String(s.store), live_coverage_pct: s.live_coverage_pct as number | null, captured_at: String(s.captured_at) })),
     comparison: comparison ? { both_live_pct: (comparison as { both_live_pct: number | null }).both_live_pct } : null,
     telemetryUnavailable,
+    governor: governorState,
   };
 
   const issues = evaluateRetailerHealth(input);
 
   if (issues.length === 0) {
     console.log('[scrape-watchdog] all stores healthy');
-    return NextResponse.json({ healthy: true, issues: [], severity: { high: 0, medium: 0 }, priceFreshness });
+    return NextResponse.json({ healthy: true, issues: [], severity: { high: 0, medium: 0 }, priceFreshness, governor: governorState });
   }
 
   const severity = summariseSeverity(issues);
@@ -140,5 +149,6 @@ export async function GET(request: NextRequest) {
     emailSent,
     deliveryError,
     priceFreshness,
+    governor: governorState,
   });
 }

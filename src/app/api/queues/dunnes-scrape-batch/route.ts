@@ -7,6 +7,7 @@ import {
   processDunnesProduct,
   type DunnesBatchMessage,
 } from '@/lib/dunnes-queue-worker';
+import { RetailerBlockedError, backoffDelayMs } from '@/lib/retailer-request-governor';
 
 const MAX_TRANSIENT_DELIVERIES = 4;
 function sleep(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
@@ -30,6 +31,15 @@ export const POST = handleCallback<DunnesBatchMessage>('dunnes-scrape-batches', 
       await processDunnesProduct(message, product);
       finalized = true;
     } catch (error) {
+      // Circuit breaker open or rate-limit wait exhausted: the retailer is
+      // paused, NOT this product failing. Redeliver the whole batch later
+      // without finalising any product and without spending its network retry
+      // budget. Unfinalised products are simply picked up on redelivery (the
+      // idempotency receipt skips the ones already done).
+      if (error instanceof RetailerBlockedError) {
+        console.warn('[dunnes-queue] retailer paused; deferring batch', { runId: message.runId, batchIndex: message.batchIndex, deliveryCount: metadata.deliveryCount, retryAfterMs: error.retryAfterMs, consecutiveDenials: error.consecutiveDenials });
+        throw error;
+      }
       if (error instanceof TransientDunnesError) {
         if (metadata.deliveryCount < MAX_TRANSIENT_DELIVERIES) {
           console.warn('[dunnes-queue] transient API failure; retrying batch', { runId: message.runId, batchIndex: message.batchIndex, storeProductId: product.storeProductId, deliveryCount: metadata.deliveryCount, reason: error.reason });
@@ -51,4 +61,23 @@ export const POST = handleCallback<DunnesBatchMessage>('dunnes-scrape-batches', 
     if (index + 1 < message.products.length) await sleep(spacingMs);
   }
   console.log('[dunnes-queue] batch complete', { runId: message.runId, batchIndex: message.batchIndex, totalBatches: message.totalBatches, products: message.products.length, deliveryCount: metadata.deliveryCount });
-}, { visibilityTimeoutSeconds: 300, retry: (_error, metadata) => ({ afterSeconds: Math.min(180, Math.max(10, 10 * 2 ** Math.max(0, metadata.deliveryCount - 1))) }) });
+}, {
+  visibilityTimeoutSeconds: 300,
+  retry: (error, metadata) => {
+    // A paused retailer (breaker open / wait exhausted): defer at least the
+    // breaker's own hint, so we don't re-probe before the cooldown.
+    if (error instanceof RetailerBlockedError) {
+      const seconds = Math.ceil(backoffDelayMs({ attempt: metadata.deliveryCount, retryAfterMs: error.retryAfterMs, baseMs: 30_000, capMs: 900_000 }) / 1000);
+      return { afterSeconds: Math.max(30, seconds) };
+    }
+    // Honour a server Retry-After when present (up to SQS's 900s delivery cap);
+    // otherwise exponential — both with jitter so a cohort of failing batches
+    // does not retry in lock-step. The exponential schedule stays modest
+    // (base 10s) while an explicit long Retry-After is respected rather than
+    // clamped to the exponential ceiling.
+    const retryAfterMs = error instanceof TransientDunnesError ? error.retryAfterMs : null;
+    const capMs = retryAfterMs != null ? 900_000 : 180_000;
+    const seconds = Math.ceil(backoffDelayMs({ attempt: metadata.deliveryCount, retryAfterMs, baseMs: 10_000, capMs }) / 1000);
+    return { afterSeconds: Math.max(10, seconds) };
+  },
+});
