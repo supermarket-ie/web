@@ -8,6 +8,8 @@ import {
   parseRetryAfterMs,
   backoffDelayMs,
   denialReason,
+  isGovernorNotProvisioned,
+  acquireSlotOnce,
   RetailerBlockedError,
   withRetailerRequestSlot,
   governorConfig,
@@ -207,6 +209,30 @@ describe('withRetailerRequestSlot', () => {
 //     that every attempt consults the shared governor exactly once per request,
 //     so N concurrent workers each acquire before issuing a request, and a
 //     restart simply re-reads the persisted row on the next acquire. ---------
+
+describe('fail-open when the governor RPCs are not provisioned (pre-migration)', () => {
+  it('detects the not-provisioned condition by code or message', () => {
+    expect(isGovernorNotProvisioned({ code: 'PGRST202' })).toBe(true);
+    expect(isGovernorNotProvisioned({ code: '42883' })).toBe(true);
+    expect(isGovernorNotProvisioned({ message: 'Could not find the function public.acquire_retailer_request_slot' })).toBe(true);
+    expect(isGovernorNotProvisioned({ message: 'function does not exist' })).toBe(true);
+    // A real operational error is NOT swallowed.
+    expect(isGovernorNotProvisioned({ code: '', message: 'connection reset' })).toBe(false);
+    expect(isGovernorNotProvisioned(null)).toBe(false);
+  });
+
+  it('acquireSlotOnce returns an ungoverned "allowed" when the RPC is absent', async () => {
+    mock.rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    const slot = await acquireSlotOnce('dunnes', CONFIG);
+    expect(slot.decision).toBe('allowed');
+    expect(slot.breakerOpen).toBe(false);
+  });
+
+  it('still throws on a genuine RPC error (not swallowed as ungoverned)', async () => {
+    mock.rpc.mockResolvedValueOnce({ data: null, error: { code: '', message: 'permission denied' } });
+    await expect(acquireSlotOnce('supervalu', CONFIG)).rejects.toThrow(/permission denied/);
+  });
+});
 
 describe('shared-governor contract across workers/restarts', () => {
   it('each concurrent request acquires its own slot (no client-side caching of the budget)', async () => {
