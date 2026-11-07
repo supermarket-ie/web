@@ -1,5 +1,61 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — diagnostic block recorded; Apify acceptance test BLOCKED on missing token; pricing corrected
+
+Step 1 (block reconciliation, done): recorded the diagnostic 403 through the
+supported control process — `mark_tesco_egress_blocked('vercel-dub1-canary-20260920',48)`
+(HTTP 204). The deployment-path gate is now `consecutive_blocks=3, total_blocks=3,
+total_successes=0`, `last_block_at` 2026-11-07T23:29:59Z, cooldown_until
+2026-11-09T23:29:59Z (48h quarantine). The direct request will NOT be repeated
+during the window. Campaign ledger: 831 requests charged since 31 Oct (the
+diagnostic probe itself claimed no lease and wrote nothing, so it did not consume
+the campaign request budget; the block is recorded as an egress-gate event).
+
+Steps 2–4 (Apify acceptance test) BLOCKED — no Apify credential exists. Secrets
+Manager holds only the 8 existing app secrets; there is no Apify token in
+Secrets Manager, SSM, repo env, or anywhere reachable. I will not paste a token
+in chat, purchase a subscription, or enable paid overages. The ≤10 eligible
+tesco.ie product URLs and their canonical identities are staged and ready to run
+the moment a token is available.
+
+SINGLE SETUP STEP NEEDED (secure, no secret in chat): the owner
+1. creates a free Apify account and generates an API token
+   (Apify Console → Settings → Integrations → Personal API token), then
+2. stores it in AWS Secrets Manager under the existing secure prefix, e.g.
+   `aws --profile smie-prod --region eu-west-1 secretsmanager create-secret \
+      --name smie-prod/apify --secret-string '<APIFY_TOKEN>'`
+Once it exists I read it with the existing admin/SSO access and pass it to the
+one-off ECS acceptance-test task as a task-scoped env override — no Terraform
+change, no new IAM identity, and nothing committed. (For the LATER unattended
+worker to read it continuously, a Terraform `secret_arns` addition would grant
+the ARN to the least-privilege execution role — but that is deferred until after
+access is demonstrated, per the pause.)
+
+Step 5 — PROJECT_STATE pricing CORRECTION (the earlier entry was wrong):
+- The **Gold $1.39/1,000 rate requires the paid Business subscription**; it is
+  NOT available on free credits. On free credits the only applicable rate is the
+  **Free tier event price, $1.99 per 1,000 products**.
+- **Apify free credits are DOLLAR-denominated** (monthly platform credit, ~$5 on
+  the free plan), not a product-count allowance. ~$5 / $1.99 per 1,000 ≈ ~2,500
+  products of free testing — ample for a ≤10-product acceptance test.
+- Subscription-inclusive recurring estimate (usage PLUS the monthly plan fee the
+  discounted per-event tiers require), at daily refresh:
+  - Free tier ($1.99/1,000, $0 plan, but limited free $-credits): 500/day =
+    15,000/mo ≈ **$30/mo usage**; 900/day = 27,000/mo ≈ **$54/mo usage** — only
+    viable once paid (free $-credits won't cover a full month at this volume).
+  - Discounted tiers need the paid plan fee ON TOP of usage (e.g. Business for
+    the $1.39 rate). The realistic recurring cost is **plan fee + usage**, not
+    usage alone; exact plan fee depends on the Apify tier chosen and is not yet
+    confirmed from a logged-in account.
+- Unmeasured costs (explicitly flagged): the monthly Apify platform/subscription
+  fee itself; any per-run minimum-billing; failed/retried-run overhead; and our
+  SEPARATE Bedrock AI identity-assessment cost. None of these are captured by the
+  per-1,000-product figure.
+
+Pause honoured: no collector integration, scheduling or AI development proceeded.
+SuperValu/Dunnes remain ENABLED on their existing schedules; no manual runs were
+launched.
+
 ## 8 November 2026 — FRESH Tesco fetch proof from AWS runtime: BLOCKED (403/Akamai); concrete provider decision needed
 
 Ran a bounded, read-only egress proof from the EXACT intended unattended runtime
