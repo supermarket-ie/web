@@ -1,5 +1,50 @@
 # Supermarket.ie — Canonical Project State
 
+## 7 November 2026 — production governor migrations APPLIED and database verification passed
+
+Applied the three reviewed files from the deployed `b9b1a92-prod` worker's
+main-history revision through the authenticated Supabase migration connector.
+The source files were applied unchanged and in order. Supabase records the
+actual apply timestamps as migration versions (as with earlier connector applies):
+
+| Repository migration | Production version | Migration name |
+| --- | --- | --- |
+| `20261107150000_retailer_request_governor.sql` | `20261107152618` | `retailer_request_governor` |
+| `20261107173000_retailer_governor_recovery_hardening.sql` | `20261107152633` | `retailer_governor_recovery_hardening` |
+| `20261107181500_retailer_network_attempt_ledger.sql` | `20261107152638` | `retailer_network_attempt_ledger` |
+
+Production verification at 15:27:59 UTC confirms both tables and all five
+current RPC signatures exist. RLS is enabled on both tables; anon/authenticated
+have neither table SELECT nor RPC EXECUTE; service_role has the intended
+permissions. Functions remain SECURITY INVOKER. The obsolete RPC signatures
+were removed by the hardening migration.
+
+Executed rollback-only checks AS service_role against the actual production
+functions: requests 1–30 allowed and request 31 waits; only the first half-open
+caller receives a probe; stale-generation success cannot clear a newer block;
+a one-hour Retry-After remains enforced beyond the shorter breaker cooldown
+and cannot be shortened; the real-attempt ledger increments atomically. All
+checks passed and their mutations were rolled back. No retailer requests or
+price observations were created. The attempt ledger remains empty.
+
+Initialized only the two normal governor rows (`dunnes`, `supervalu`) with
+zero counters, closed breakers and no deadlines. `retailer_governor_state()`
+returns both rows. Sent the PostgREST schema-reload notification. Local focused
+governor/queue/watchdog tests passed 58/58; GitHub validate is green for the
+deployed worker commit. Security advisors introduced no new warning/error;
+the two additional informational RLS-without-policy findings are the intended
+service-role-only internal tables.
+
+The database prerequisite is COMPLETE; this is not a claim of a completed
+price refresh or end-to-end AWS verification. Kiro's latest deployment record
+has both collection schedules DISABLED and the watchdog ENABLED on task defs
+`:5`. No AWS configuration changed in this database step. Next: verify the
+live worker's service-role RPC calls via the watchdog, configure the
+owner-designated operations recipient and verify delivery, re-enable the daily
+retailer schedules through reviewed Terraform, run the governed catch-ups
+without overlapping work, and reconcile successful checks/rejections/displayed
+observation ages. Alert delivery and fresh-price results remain outstanding.
+
 ## 7 November 2026 — governor hardening (review fixes) + collection schedules PAUSED
 
 Independent review of the request governor found four correctness gaps; all are
