@@ -159,6 +159,19 @@ COPY --from=builder --chown=node:node /app/components.json ./components.json
 COPY --chown=node:node docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
+# Optional headless-browser support (Playwright/Chromium), OFF by default so the
+# normal web/worker image is unchanged. Build with --build-arg INSTALL_BROWSER=1
+# ONLY for the bounded Tesco browser-access test image. Installs Chromium and its
+# system libraries into the shared cache so the non-root `node` user can launch
+# it at runtime.
+ARG INSTALL_BROWSER=0
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN if [ "$INSTALL_BROWSER" = "1" ]; then \
+      mkdir -p /ms-playwright && \
+      npx --yes playwright@1.58.2 install --with-deps chromium && \
+      chown -R node:node /ms-playwright ; \
+    fi
+
 # Eve writes runtime data under <appRoot>/.eve/.workflow-data. The container
 # runs as the non-root `node` user, but WORKDIR /app is root-owned, so `node`
 # cannot create .eve/ at runtime (observed: EACCES, Eve server exits). Give the

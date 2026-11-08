@@ -206,6 +206,20 @@ export function tescoResourceUnavailable(response: TescoPageResponse): boolean {
     && !/captcha|challenge|login|security|auth/i.test(target);
 }
 
+// Shared challenge + outcome classification for a retrieved page, so the plain
+// fetch path and any alternative transport (e.g. a headless browser) classify
+// an access block / rate limit / ok IDENTICALLY. A challenge is a hard access
+// block regardless of HTTP status.
+export function isTescoChallengeHtml(html: string): boolean {
+  return /<title[^>]*>\s*Access Denied|(?:complete|pass|failed|perform) (?:the )?security checks|not (?:quite )?right[\s\S]{0,150}security/i.test(html)
+    || (!html.includes('application/discover+json') && /captcha|verify (?:that )?you are human/i.test(html));
+}
+export function classifyTescoHtmlOutcome(status: number | null, html: string): TescoFetchOutcome {
+  const challenge = isTescoChallengeHtml(html);
+  return status === 401 || status === 403 || challenge ? 'access_block'
+    : status === 429 ? 'rate_limited' : status === 200 ? 'ok' : 'http_error';
+}
+
 // One attempt only, with no cookies, login, browser impersonation or proxy
 // rotation. A challenge stops the caller's entire collection, including listings.
 export async function fetchTescoCollectedPage(url: string, fetcher: typeof fetch = fetch): Promise<TescoPageResponse> {
@@ -244,10 +258,7 @@ export async function fetchTescoCollectedPage(url: string, fetcher: typeof fetch
       }
       phase = 'body';
       const html = await response.text();
-      const challenge = /<title[^>]*>\s*Access Denied|(?:complete|pass|failed|perform) (?:the )?security checks|not (?:quite )?right[\s\S]{0,150}security/i.test(html)
-        || (!html.includes('application/discover+json') && /captcha|verify (?:that )?you are human/i.test(html));
-      const outcome: TescoFetchOutcome = response.status === 401 || response.status === 403 || challenge ? 'access_block'
-        : response.status === 429 ? 'rate_limited' : response.status === 200 ? 'ok' : 'http_error';
+      const outcome = classifyTescoHtmlOutcome(response.status, html);
       return { ...result, html, outcome, elapsedMs: Date.now() - start };
     }
     throw new Error('Redirect limit exceeded');
