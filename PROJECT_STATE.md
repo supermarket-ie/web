@@ -1,5 +1,78 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — Apify `parsebird/tesco-scraper` read-only acceptance test PASSED for retrieval; EXPOSED stale/mismatched Tesco mappings (identity gates must run before any price is trusted)
+
+Ran the agreed bounded, read-only acceptance test of the third-party provider
+**Apify actor `parsebird/tesco-scraper`** against 10 eligible existing Tesco
+Ireland product URLs, driven from our authorised AWS-credentialed runtime (same
+account/role as production; the actor itself executes on Apify infra, so no
+tesco.ie request left our AWS egress and the blocked direct route was NOT
+re-triggered). Token read from Secrets Manager `smie-prod/apify` (stored as JSON
+under key `smie-prod/apify`); never logged, never in a URL.
+
+Provider run: id `gg8WgR2kkMJXffsQk`, actor `v6Dx4kBtxWYDAd55V`, dataset
+`ZXqXQB2Tgr4tHp0MK`, region `IE`. Started 2026-11-08T18:51:18.551Z, finished
+2026-11-08T18:51:22.652Z (run time ~4.0s). Evidence (10 dataset items, 67,455
+bytes) sha256 `6a97d18af75e643bc50012866f69f3fd3de3a4e02e51cb82a1d6fb65a62f3ed8`.
+
+RETRIEVAL verdict — PASS. All 10 URLs returned usable Irish-storefront data in
+EUR: expected SKU (`product_id`), region IE, regular shelf price, brand, GTIN,
+`pack_size`/`pack_size_unit`/`net_contents` (quantity + pack), variant/name,
+stock status, and promotions. Promotional/Clubcard prices are returned as a
+SEPARATE `clubcard_price` + `promotions[]` block, distinct from the regular
+shelf `price` (e.g. SKU 257267584 Carmex: regular €3.50, Clubcard €2.80; SKU
+274416918 Gillette: regular €13.50, Clubcard €9.00). Freshly retrieved: every
+item's `scraped_at` was 2026-11-08T18:51:22Z — a live read at request time, not
+cached. So the provider demonstrably reaches tesco.ie where our direct AWS
+route is 403-blocked.
+
+IDENTITY verdict — the test did its job and surfaced a real data-quality
+problem. For the SKUs where we hold a canonical brand/EAN, the LIVE Tesco
+product frequently does NOT match our stored mapping:
+- Brand match to canonical: 0 of 4 SKUs that have a canonical brand.
+- EAN/GTIN match to canonical: 1 of 7 SKUs that have a canonical EAN (only SKU
+  254877356 Tesco Easy Cook Long Grain Rice 1kg matched, gtin 05000119309228).
+- Concrete mismatches: SKU 322842145 mapped as Alpro oat milk → live = Califia
+  Farms; 313855241 mapped Kellogg's Cornflakes → live = Nestlé Go Free gluten
+  free; 257267584 mapped Vaseline Lip Balm → live = Carmex; 274416918 mapped BIC
+  razors → live = Gillette Mach 3; 275356601 → live = Kinder; 259417448 "Ripen
+  at Home Avocado" → live = Tesco Ripen at Home Kiwi; 260300754 eggs SKU returns
+  a different GTIN than canonical. Several canonical rows also lack brand/EAN to
+  compare at all (missing identity evidence recorded per SKU in the artifact).
+This means the SKUs in these mappings are stale or re-pointed; the live prices
+are real but would attach to the WRONG canonical product if trusted blindly.
+This is exactly why collection keeps the exact-SKU/brand/barcode/quantity/pack/
+variant identity gates and the reviewed mapping-repair path — the provider
+replaces only the blocked fetch, never the verification. NO mapping was changed
+and NO price was written on this evidence; repairs remain a separate reviewed
+step.
+
+Budget / charges (honoured "free credits, no subscription, no paid overage"):
+Apify account plan STARTER (`isPaying:true`, pre-existing — NOT created or
+upgraded by me). Month-to-date usage was $0.00 against a hard `maxMonthlyUsageUsd`
+cap of **$19** (the existing overage guard; left unchanged). This run's ACTUAL
+charge was **$0.01795** (1 actor-start + 10 `product-scraped` events), absorbed
+by the included monthly credit, far under the cap. No plan, limit, or overage
+setting was modified. `maxItems:10` bounded the run as a second guard.
+
+Read-only / isolation confirmed after the run: egress gate
+`vercel-dub1-canary-20260920` UNCHANGED (cooldown_until 2026-11-10T18:22:06Z,
+blocks 5/5, 0 successes, no lease); zero new `tesco_direct_collection_pages`
+(the direct-route ledger and its 24h recent-request exclusion are intact — the
+2 excluded SKUs 303350127/318168902 were correctly skipped when selecting the
+10); zero `price_observations`; zero `scrape_runs`. SuperValu/Dunnes schedules
+both still ENABLED, untouched. Full per-SKU evidence retained in the run dataset
+(`ZXqXQB2Tgr4tHp0MK`) and the local diagnostic artifact.
+
+Attempted 10 / usable 10 / failures 0 / missing-canonical-identity-to-compare:
+4 SKUs lack a stored brand and/or EAN. Where this leaves Tesco: we now have a
+DEMONSTRATED working retrieval route (Apify) that returns Irish EUR pricing with
+full identity + Clubcard/promo separation and fresh reads. Integration,
+scheduling and further AI development stay PAUSED per instruction until live
+retrieval is demonstrated — which this test now does — and pending an owner
+decision to proceed; the mapping mismatches this test exposed must be handled by
+the reviewed repair path before any Apify-sourced price is finalised.
+
 ## 8 November 2026 — Corrected-config browser test (Chromium's ACTUAL identity) from AWS → still HTTP 403; two AWS browser configs now tested, both blocked
 
 Re-ran the browser acceptance test from the intended unattended AWS runtime
