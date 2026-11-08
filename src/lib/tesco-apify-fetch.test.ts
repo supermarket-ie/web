@@ -30,7 +30,9 @@ function apifyItem(overrides: Partial<ApifyItem> = {}): ApifyItem {
     status: 'AvailableForSale',
     has_promotion: false,
     promotions: [],
-    scraped_at: '2026-11-08T18:51:22Z',
+    // Default a few seconds in the FUTURE vs now so the transport's internal
+    // request-submit reference is strictly before it (active freshness proof).
+    scraped_at: new Date(Date.now() + 2000).toISOString(),
     url: 'https://www.tesco.ie/groceries/en-IE/products/322842145',
     ...overrides,
   };
@@ -104,38 +106,45 @@ describe('renderApifyProductPage → parseTescoCollectedPage (single parser, sin
   });
 });
 
-describe('verifyApifyFreshness — reflects the ESTABLISHED actor behaviour', () => {
-  // Established empirically: scraped_at tracks the actor's per-run retrieval
-  // time; billing is inconsistent and is NOT a freshness signal; no cache field
-  // exists so an uncached upstream read cannot be independently proven. Minimum
-  // required freshness = scraped_at present and in-window.
-  const base = {
-    runStartedAt: '2026-11-08T18:51:18.551Z',
-    runFinishedAt: '2026-11-08T18:51:22.652Z',
-    itemsReturned: 1,
-  };
+describe('verifyApifyFreshness — active per-request proof (owner rule: timestamps/billing alone are insufficient)', () => {
+  // Reference point is OUR request submit time. Only a scraped_at strictly AFTER
+  // submit qualifies; a prior/equal stamp (possible replay) HOLDS; billing is
+  // audit-only.
+  const submit = '2026-11-08T18:51:18.000Z';
+  const base = { requestSubmittedAt: submit, runFinishedAt: '2026-11-08T18:51:22.652Z', itemsReturned: 1 };
 
-  it('meets required freshness when scraped_at is in-window (regardless of billing)', () => {
-    const billed = verifyApifyFreshness({ ...base, scrapedAt: '2026-11-08T18:51:22Z', productScrapedEvents: 1 });
-    const unbilled = verifyApifyFreshness({ ...base, scrapedAt: '2026-11-08T18:51:22Z', productScrapedEvents: 0 });
-    expect(billed.requiredFreshnessMet).toBe(true);
-    expect(unbilled.requiredFreshnessMet).toBe(true); // billing is NOT a freshness signal
-    expect(billed.level).toBe('in_window_unproven_cache');
-    // It never claims proof of an uncached upstream read.
-    expect(billed.reason).toMatch(/not independently provable/);
+  it('qualifies ONLY when scraped_at is strictly after our submit time', () => {
+    const f = verifyApifyFreshness({ ...base, scrapedAt: '2026-11-08T18:51:21Z', productScrapedEvents: 1 });
+    expect(f.requiredFreshnessMet).toBe(true);
+    expect(f.level).toBe('fresh_after_submit');
+    expect(f.afterSubmit).toBe(true);
   });
 
-  it('holds (required freshness NOT met) when scraped_at is outside the run window', () => {
-    const f = verifyApifyFreshness({ ...base, scrapedAt: '2026-10-01T00:00:00Z', productScrapedEvents: 1 });
+  it('HOLDS when scraped_at is at/before submit (possible cached replay) — regardless of billing', () => {
+    const atSubmit = verifyApifyFreshness({ ...base, scrapedAt: submit, productScrapedEvents: 1 });
+    const before = verifyApifyFreshness({ ...base, scrapedAt: '2026-11-08T18:51:10Z', productScrapedEvents: 1 });
+    expect(atSubmit.requiredFreshnessMet).toBe(false);
+    expect(before.requiredFreshnessMet).toBe(false);
+    expect(before.level).toBe('not_after_submit');
+    expect(before.reason).toMatch(/cached\/replayed/);
+  });
+
+  it('billing being present does NOT by itself qualify a stale timestamp', () => {
+    const f = verifyApifyFreshness({ ...base, scrapedAt: '2026-10-01T00:00:00Z', productScrapedEvents: 5 });
     expect(f.requiredFreshnessMet).toBe(false);
-    expect(f.withinRunWindow).toBe(false);
-    expect(f.level).toBe('stale_or_out_of_window');
   });
 
-  it('holds when the provider returns no scraped_at at all', () => {
+  it('HOLDS when the provider returns no scraped_at', () => {
     const f = verifyApifyFreshness({ ...base, scrapedAt: null, productScrapedEvents: 1 });
     expect(f.requiredFreshnessMet).toBe(false);
     expect(f.level).toBe('no_timestamp');
+  });
+
+  it('HOLDS an implausibly-future scraped_at', () => {
+    const future = new Date(Date.now() + 60 * 60_000).toISOString();
+    const f = verifyApifyFreshness({ requestSubmittedAt: new Date().toISOString(), runFinishedAt: null, itemsReturned: 1, scrapedAt: future, productScrapedEvents: 1 });
+    expect(f.requiredFreshnessMet).toBe(false);
+    expect(f.level).toBe('implausible_future');
   });
 });
 
@@ -176,17 +185,24 @@ describe('createApifyFetchPage — the transport', () => {
     expect(res.outcome).toBe('network_error');
   });
 
-  it('with requireVerifiedFreshness, an out-of-window item is held as a transport error (no ok page)', async () => {
-    // scraped_at long before the run window → required freshness not met → hold.
+  it('fail-closed by DEFAULT: a stale (pre-submit) scraped_at is held as a transport error', async () => {
+    // scraped_at well before our submit → not fresh → hold. No explicit flag.
     const run = fakeRun([apifyItem({ scraped_at: '2026-01-01T00:00:00Z' })]);
-    const fetchPage = createApifyFetchPage({ client: fakeClient(run), requireVerifiedFreshness: true });
+    const fetchPage = createApifyFetchPage({ client: fakeClient(run) });
     const res = await fetchPage(URL_322);
     expect(res.outcome).toBe('network_error');
   });
 
-  it('with requireVerifiedFreshness, an in-window item returns an ok page (billing irrelevant)', async () => {
+  it('an after-submit scraped_at returns an ok page (billing irrelevant to freshness)', async () => {
     const run = fakeRun([apifyItem()], { productScrapedEvents: 0 });
-    const fetchPage = createApifyFetchPage({ client: fakeClient(run), requireVerifiedFreshness: true });
+    const fetchPage = createApifyFetchPage({ client: fakeClient(run) });
+    const res = await fetchPage(URL_322);
+    expect(res.outcome).toBe('ok');
+  });
+
+  it('with requireVerifiedFreshness:false (diagnostics only), a stale item still returns ok (never used for price writes)', async () => {
+    const run = fakeRun([apifyItem({ scraped_at: '2026-01-01T00:00:00Z' })]);
+    const fetchPage = createApifyFetchPage({ client: fakeClient(run), requireVerifiedFreshness: false });
     const res = await fetchPage(URL_322);
     expect(res.outcome).toBe('ok');
   });

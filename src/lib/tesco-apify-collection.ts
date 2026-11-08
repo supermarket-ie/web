@@ -253,7 +253,12 @@ export async function collectTescoApify(
         : ['missing_exact_product'];
       const unavailable = tescoResourceUnavailable(response);
       const transportStop = outcome !== 'ok' && !unavailable;
-      const accept = outcome === 'ok' && !!product && reasons.length === 0;
+      // Freshness is REQUIRED to finalise: advancing timestamps or billing alone
+      // do not qualify. The transport already fails-closed (holds as a transport
+      // error when the per-request proof fails); this is belt-and-braces so a
+      // relaxed transport can never cause a stale finalisation here.
+      const freshnessOk = provider?.freshness.requiredFreshnessMet === true;
+      const accept = outcome === 'ok' && !!product && reasons.length === 0 && freshnessOk;
 
       const pauseUntil = transportStop
         ? tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter)

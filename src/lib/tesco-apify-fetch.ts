@@ -60,31 +60,44 @@ export type ApifyProviderIdentity = {
 
 // Established actor retrieval/cache behaviour (empirically probed 2026-11-08,
 // actor parsebird/tesco-scraper, three back-to-back runs of the same product):
-//   • `scraped_at` is stamped with the actor's OWN retrieval time and advances
+//   • `scraped_at` is stamped with the actor's OWN retrieval time and ADVANCES
 //     on every run (20:38:51 → 20:38:57 → 20:39:21 across three runs seconds
 //     apart) — consistent with a per-run upstream fetch, not a fixed cache stamp;
 //   • the `product-scraped` BILLING event is INCONSISTENT for identical work
 //     (0 on one run, 1 on the next) — so a billed event is NOT a reliable proof
-//     of a fresh upstream read and must not be used as a freshness signal;
-//   • the actor exposes NO cache-hit / cache-age field. The only freshness
-//     signal available is `scraped_at` plus the `source` URL.
-// Therefore "uncached upstream retrieval" CANNOT be independently PROVEN from
-// the provider's response. The honest policy: require `scraped_at` inside the
-// run window (necessary), classify that as corroborated-but-unproven, and hold
-// any result whose `scraped_at` is missing or outside the window.
-export type ApifyFreshnessLevel = 'in_window_unproven_cache' | 'stale_or_out_of_window' | 'no_timestamp';
+//     of a fresh upstream read and must NOT be used as a freshness signal;
+//   • the actor exposes NO cache-hit / cache-age field.
+//
+// The owner's rule: advancing timestamps or billing events ALONE must not
+// qualify a price as freshly checked. So freshness is established ACTIVELY,
+// PER REQUEST, with a fail-closed test:
+//   REQUIRED: scraped_at is present AND strictly AFTER the instant WE submitted
+//   THIS request (proving the fetch happened for this request, not a replay of
+//   an earlier dataset), AND not in the future beyond a small clock-skew margin.
+// A cached/replayed item carries a scraped_at from a PRIOR run — i.e. at or
+// before our submit time — and is therefore HELD. A missing, equal-to-submit,
+// before-submit, or implausibly-future timestamp is HELD. Billing counts and a
+// mere "in some window" timestamp are recorded for audit but never qualify a
+// price on their own.
+export type ApifyFreshnessLevel =
+  | 'fresh_after_submit'        // scraped_at strictly after our request submit → qualifies
+  | 'not_after_submit'          // at/<= submit (possible replay) → hold
+  | 'implausible_future'        // beyond skew margin ahead → hold
+  | 'no_timestamp';             // provider gave no scraped_at → hold
 export type ApifyFreshness = {
   // scraped_at the provider reported for this item.
   scrapedAt: string | null;
-  // Whether scraped_at falls inside this run's own window (necessary condition).
-  withinRunWindow: boolean;
+  // The instant WE submitted this request (the freshness reference point).
+  requestSubmittedAt: string;
+  // scraped_at strictly after requestSubmittedAt (the active proof).
+  afterSubmit: boolean;
   // Billed product-scraped events for the run (RECORDED for audit only; NOT a
   // freshness signal — the actor bills this inconsistently for identical work).
   productScrapedEvents: number;
   level: ApifyFreshnessLevel;
-  // Whether the minimum required freshness (scraped_at in-window) is met. We do
-  // NOT claim proof of an uncached upstream read — only that the provider's own
-  // retrieval timestamp is consistent with this run.
+  // Whether the REQUIRED freshness proof is met (scraped_at strictly after
+  // submit and not implausibly future). Only this qualifies a price as freshly
+  // checked; everything else HOLDS.
   requiredFreshnessMet: boolean;
   reason: string;
 };
@@ -275,34 +288,43 @@ export function renderApifyProductPage(url: string, item: ApifyItem): string {
 
 // ---- Freshness verification ---------------------------------------------------
 
-// Freshness verdict based on the ESTABLISHED actor behaviour above. The minimum
-// required freshness is: a `scraped_at` present and inside this run's window.
-// We deliberately DO NOT assert proof of an uncached upstream read — the
-// provider offers no signal that could establish it (billing is inconsistent;
-// no cache field exists). Missing or out-of-window timestamps are held.
+// Active, per-request freshness proof. The reference point is OUR request
+// submit time; the provider's scraped_at must be strictly AFTER it (and not
+// implausibly in the future). Fail-closed: anything else HOLDS. Billing count
+// is recorded for audit only and never qualifies a price.
 export function verifyApifyFreshness(args: {
   scrapedAt: string | null;
-  runStartedAt: string;
+  requestSubmittedAt: string;
   runFinishedAt: string | null;
   productScrapedEvents: number;
   itemsReturned: number;
 }): ApifyFreshness {
-  const start = Date.parse(args.runStartedAt);
-  const end = args.runFinishedAt ? Date.parse(args.runFinishedAt) : Date.now();
+  const submit = Date.parse(args.requestSubmittedAt);
   const scraped = args.scrapedAt ? Date.parse(args.scrapedAt) : NaN;
-  // Allow a small clock-skew margin either side of the run window.
-  const margin = 5 * 60_000;
   const hasTimestamp = Number.isFinite(scraped);
-  const withinRunWindow = hasTimestamp && scraped >= start - margin && scraped <= end + margin;
-  const level: ApifyFreshnessLevel = !hasTimestamp ? 'no_timestamp'
-    : withinRunWindow ? 'in_window_unproven_cache' : 'stale_or_out_of_window';
-  const requiredFreshnessMet = withinRunWindow;
+  // Small forward clock-skew tolerance: a scraped_at more than this far in the
+  // future (relative to now) is implausible and held.
+  const skew = 5 * 60_000;
+  const now = Date.now();
+  const afterSubmit = hasTimestamp && scraped > submit;
+  const implausibleFuture = hasTimestamp && scraped > now + skew;
+  let level: ApifyFreshnessLevel;
+  if (!hasTimestamp) level = 'no_timestamp';
+  else if (implausibleFuture) level = 'implausible_future';
+  else if (afterSubmit) level = 'fresh_after_submit';
+  else level = 'not_after_submit';
+  const requiredFreshnessMet = level === 'fresh_after_submit';
   const reason = !hasTimestamp
-    ? 'provider returned no scraped_at — required freshness cannot be established; hold'
-    : withinRunWindow
-      ? 'scraped_at falls within this run window (provider retrieval timestamp consistent with this run); upstream cache state not independently provable'
-      : 'scraped_at falls outside this run window — required freshness not met; hold';
-  return { scrapedAt: args.scrapedAt, withinRunWindow, productScrapedEvents: args.productScrapedEvents, level, requiredFreshnessMet, reason };
+    ? 'provider returned no scraped_at — freshness cannot be established; hold'
+    : implausibleFuture
+      ? 'scraped_at is implausibly in the future vs local clock — held'
+      : afterSubmit
+        ? 'scraped_at is strictly after our request submit time — the upstream fetch happened for this request (fresh)'
+        : 'scraped_at is at/before our request submit time — possible cached/replayed item; held (advancing-timestamp/billing alone do not qualify)';
+  return {
+    scrapedAt: args.scrapedAt, requestSubmittedAt: args.requestSubmittedAt,
+    afterSubmit, productScrapedEvents: args.productScrapedEvents, level, requiredFreshnessMet, reason,
+  };
 }
 
 // ---- The fetchPage transport --------------------------------------------------
@@ -312,11 +334,11 @@ export type ApifyFetchDeps = {
   // Optional provenance sink called once per fetched product with the provider
   // identity + freshness. The caller persists it alongside the page evidence.
   onProviderIdentity?: (identity: ApifyProviderIdentity) => void;
-  // Require the minimum established freshness (scraped_at present and in the run
-  // window) before returning an `ok` page. When it cannot be established the
-  // page is returned as a transport error so the collector HOLDS rather than
-  // finalising a result whose freshness is unknown. This does NOT claim proof
-  // of an uncached upstream read (the provider cannot establish that).
+  // Require the active per-request freshness proof (scraped_at strictly after
+  // our request submit) before returning an `ok` page. DEFAULT true (fail
+  // closed): when freshness is not established the page is returned as a
+  // transport error so the collector HOLDS rather than finalising. Set false
+  // ONLY for diagnostics that must not write prices.
   requireVerifiedFreshness?: boolean;
 };
 
@@ -330,6 +352,9 @@ export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string) => Pro
     const sku = skuFromUrl(url);
     if (!sku) throw new Error('Apify transport is product-URL only');
     const start = Date.now();
+    // The freshness reference point: the instant WE submit this request. A
+    // genuine upstream fetch for this request stamps scraped_at AFTER this.
+    const requestSubmittedAt = new Date().toISOString();
 
     let run: ApifyRunResult;
     try {
@@ -349,7 +374,7 @@ export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string) => Pro
 
     const freshness = verifyApifyFreshness({
       scrapedAt: typeof item.scraped_at === 'string' ? item.scraped_at : null,
-      runStartedAt: run.startedAt,
+      requestSubmittedAt,
       runFinishedAt: run.finishedAt,
       productScrapedEvents: run.productScrapedEvents,
       itemsReturned: run.items.length,
@@ -382,10 +407,11 @@ export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string) => Pro
       freshness,
     });
 
-    // If the minimum established freshness is required and not met, return a
-    // transport error so the collector holds rather than finalising a result
-    // whose freshness is unknown.
-    if (deps.requireVerifiedFreshness && !freshness.requiredFreshnessMet) {
+    // Fail-closed freshness: unless explicitly relaxed, a result whose active
+    // per-request freshness proof is not met is returned as a transport error so
+    // the collector HOLDS rather than finalising a possibly-stale price.
+    const requireFreshness = deps.requireVerifiedFreshness !== false;
+    if (requireFreshness && !freshness.requiredFreshnessMet) {
       return { outcome: 'network_error', status: null, finalUrl: url, html: '', retryAfter: null, elapsedMs: Date.now() - start };
     }
 
