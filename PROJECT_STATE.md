@@ -1,5 +1,41 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — Tesco Apify: review + freshness rework merged (PR #363, main cb1e376); production run still blocked ONLY by two platform gates
+
+Reviewed the merged Apify migration/collector/identity changes and fixed the
+defects before any apply/deploy:
+- FRESHNESS (owner rule): advancing timestamps/billing alone must not qualify a
+  price. Replaced the "scraped_at in a window" check with an ACTIVE per-request
+  proof — scraped_at must be strictly AFTER our request-submit instant (a
+  cached/replayed item carries an earlier stamp → HELD), not implausibly future,
+  present; billing is audit-only; fail-closed by default; belt-and-braces guard
+  in the collector so finalise needs verified freshness even if the transport is
+  relaxed.
+- MIGRATION: removed a fragile max(observed_at) source post-patch (racy, no
+  run_id); provider provenance lives in tesco_apify_provider_evidence. Safe edit
+  — migration never applied (RPCs/gate still 404 in prod).
+- Added scripts/validate-apify-migration.mjs (PGlite) — begin/reserve/record/
+  finalise/close pass end-to-end: price written, provider evidence + identity
+  verification stored, run closes success. 45 unit tests + lint + typecheck pass.
+
+INDEPENDENT WORK COMPLETE; the production run is blocked ONLY by two platform
+gates that require the owner (confirmed still blocking as of main cb1e376):
+1. MIGRATION NOT APPLIED — `apify_begin_tesco_run` RPC returns 404 and gate
+   `apify-tesco-ie-20261108` is absent. service_role cannot run DDL; apply is
+   out-of-band via the operator/management connector for project
+   ytyzwiqnobxehdqrnzhx. Verify after apply: POST rpc/apify_begin_tesco_run != 404.
+2. NO PROD IMAGE for current main — newest ECR tags are `-browsertest`; no
+   `cb1e376-prod`. Building one needs the `aws-ecr-deploy-image.yml` workflow
+   `image_mode=prod`, gated by the required-reviewer protection on the `aws-prod`
+   GitHub environment (a prior prod build from main was rejected pending approval).
+Neither can be done with the available service-role/AWS creds. The collector
+cannot even start without (1) (its first RPC 404s). Once (1)+(2) are cleared:
+register the ECS task-def (pattern smie-prod-browser-probe) running
+scripts/tesco-apify-collect.ts (APIFY_MODE=renewal, APIFY_BATCH_LIMIT=25,
+APIFY_BUDGET_USD=10), run due renewals (308 due) then expansion, verify prices
+on the site, continue batches within $10. SuperValu/Dunnes still ENABLED,
+untouched. Native sandbox (PR #362) left unmerged for separate review per owner.
+
 ## 8 November 2026 — Tesco Apify unattended collection BUILT + merged (PR #359, main aa1c57c); two owner-controlled gates block the production run
 
 Built and merged the unattended Tesco Apify production refresh. All code is in;
