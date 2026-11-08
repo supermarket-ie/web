@@ -1,5 +1,54 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — Tesco Apify: five-defect correction merged (PR #365, main aa4fadb); ready for apply+deploy, blocked only by the two platform gates
+
+Independent review found the implementation not yet ready; completed a focused
+five-defect correction (PR #365):
+1. FRESHNESS — dropped the over-claim that scraped_at>submit proves an upstream
+   fetch. It is now a NECESSARY precondition only; freshness is ESTABLISHED per
+   batch by a single audit re-run that must ADVANCE scraped_at (live behaviour),
+   else the WHOLE batch is HELD. Finalisation is staged until after the audit.
+2. IDENTITY + AI — deterministic gate + independent AI assessAndCombine wired
+   into the real acceptance path for new/changed/uncertain mappings (AI never
+   overrides a deterministic reject; barcode/brand/variant/quantity/multipack
+   conflicts reject); unchanged verified mappings use the cheap deterministic
+   renewal check.
+3. REUSABLE VERIFICATION — readActiveVerification + verificationReusable bind
+   reuse to unchanged canonical/mapping/live fingerprint + current rule_version
+   + expiry + not-invalidated.
+4. ATOMIC GUARDS — new RPC apify_finalise_tesco_page rechecks mode/due/
+   observation + a recorded ok page immediately before writing and FENCES the
+   lease (expired/non-owner writes nothing, never extends/releases a successor's
+   lease). Record and finalise are now separate (freshness audit runs between).
+5. BUDGET — durable accounting: spentUsd seeded from recorded provider charges
+   (tesco_apify_provider_evidence count × perRequestUsd) so the $10 cap holds
+   across invocations; the end-of-batch audit request is reserved in the cap.
+
+Tested against the REAL finaliser + schema via PGlite (scripts/
+validate-apify-migration.mjs) with NEGATIVE assertions: wrong gate, pending-URL
+exclusion, non-owner reserve/finalise (lease fencing), non-positive price,
+receipt idempotency (no double-write), fingerprint-change invalidation. 57 unit
+tests + 16 migration assertions pass; lint + typecheck clean.
+
+TWO PLATFORM GATES REMAIN (owner-controlled; confirmed still blocking at main
+aa4fadb):
+1. Apply migration supabase/migrations/20261108200000_tesco_apify_unattended_
+   collection.sql through the Supabase management connection for project
+   ytyzwiqnobxehdqrnzhx (service_role cannot run DDL). Now defines 6 RPCs
+   (begin/reserve/record/FINALISE/close + record_identity_verification) + gate
+   apify-tesco-ie-20261108 + tables tesco_apify_provider_evidence,
+   tesco_identity_verifications. Verify applied: POST rpc/apify_finalise_tesco_page
+   != 404.
+2. Build the prod image for aa4fadb via aws-ecr-deploy-image.yml image_mode=prod
+   — rejected by the aws-prod environment protection (branch main not allowed);
+   needs the authorised reviewer to approve/run it. Then ECS one-off task-def
+   runs scripts/tesco-apify-collect.ts (APIFY_MODE=renewal, APIFY_BATCH_LIMIT=25,
+   APIFY_BUDGET_USD=10; freshness enforced by default). After both: run due
+   renewals (308 due) then expansion, verify on site, continue batches within
+   $10 without approvals between ordinary batches.
+
+SuperValu/Dunnes unchanged. Sandbox task (PR #362) left for separate review.
+
 ## 8 November 2026 — Tesco Apify: review + freshness rework merged (PR #363, main cb1e376); production run still blocked ONLY by two platform gates
 
 Reviewed the merged Apify migration/collector/identity changes and fixed the
