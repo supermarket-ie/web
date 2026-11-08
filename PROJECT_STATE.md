@@ -1,5 +1,80 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — Tesco Apify unattended collection BUILT + merged (PR #359, main aa1c57c); two owner-controlled gates block the production run
+
+Built and merged the unattended Tesco Apify production refresh. All code is in;
+execution is blocked only on two DELIBERATE human-controlled boundaries (below).
+
+ARCHITECTURE (the smallest adapter around the existing guards):
+- Transport corrected. The `service_role` key is a PostgREST key, NOT a Postgres
+  SQL executor, so it cannot run the supervised collector's `do $runner$`
+  blocks or the privileged `tesco_internal.*` functions. Migration
+  `20261108200000` adds narrow, parameterised **SECURITY DEFINER** RPCs — one
+  per supervised transaction boundary — granted ONLY to service_role:
+  `apify_begin_tesco_run`, `apify_reserve_tesco_request`,
+  `apify_record_tesco_page`, `apify_close_tesco_run`,
+  `apify_record_identity_verification`. No arbitrary-SQL endpoint; no
+  reentry-approval INSERT grant; no new Auth account; the restricted
+  `tesco_internal.record_verified_hold_reentry` is UNTOUCHED. Scope: ordinary
+  renewal/expansion of already-proven mappings only. Receipt idempotency,
+  positive regular price, lease ownership, due recheck and the 24h
+  pending/recent exclusion are all enforced inside the RPCs; identity is
+  re-validated in TypeScript (`validateTescoCollectedIdentity`) before the
+  record/finalise RPC. Clubcard/promo never enter the price path.
+- Dedicated egress gate `apify-tesco-ie-20261108` (separate from the blocked
+  direct-AWS `vercel-dub1-canary-20260920` and the workspace gate), so the
+  campaign never disturbs their cooldowns/leases.
+- Adapter `src/lib/tesco-apify-fetch.ts` renders each Apify item into the EXACT
+  `application/discover+json` envelope the existing `parseTescoCollectedPage`
+  reads — ONE parser, ONE identity path. The synthetic HTML is clearly labelled
+  (`x-smie-evidence-origin: synthetic-apify-adapter; not-a-tesco-response`) and
+  the ORIGINAL Apify payload + its own hash are preserved as provider evidence
+  (`tesco_apify_provider_evidence`), distinct from the adapter-HTML hash.
+- Runner `src/lib/tesco-apify-collection.ts` + entry `scripts/tesco-apify-collect.ts`
+  (service-role client, real Apify API client, one run per URL so one request =
+  one run = one budget unit; $-budget guard; 10s pacing).
+- Reusable verification `tesco_identity_verifications`: identity records (stable
+  price/promotion-excluding fingerprint, canonical+Tesco snapshots, decision,
+  rationale, method, rule_version, model, source refs, reusable_until), NOT a
+  price-write approval — renewals rerun a cheap identity check; any change / new
+  conflict / stale rule version invalidates reuse.
+
+FRESHNESS corrected (empirically established, actor parsebird/tesco-scraper):
+back-to-back runs of one SKU showed `scraped_at` is the actor's per-run
+retrieval time (advanced 20:38:51 → 20:38:57 → 20:39:21), `product-scraped`
+BILLING is inconsistent for identical work (0 then 1), and there is NO
+cache-hit/age field. So an uncached upstream read CANNOT be independently
+proven from the provider response. Policy: require `scraped_at` in the run
+window (necessary), record level `in_window_unproven_cache`, and HOLD
+missing/out-of-window results. Billing is NOT used as a freshness signal.
+
+AI acceptance gaps fixed (tesco-identity-assessment.ts): (a) contradictory
+model facts now block acceptance; (b) each assessment binds to a stable
+identity fingerprint; (c) stale rule-version assessments cannot authorise a
+write. 91 unit tests across the new/changed modules pass; validate (CI run
+42523732284) passed; merged PR #359.
+
+TWO OWNER-CONTROLLED GATES REMAIN before the production run (both by design,
+NOT something the agent bypasses):
+1. **Apply migration `20261108200000`** via the privileged Supabase connection.
+   service_role cannot run DDL and there is no Postgres superuser connection /
+   Supabase management token in the agent environment (confirmed: no exec_sql
+   RPC, the apify_* RPCs + gate return 404/empty until applied). This matches
+   the established process where migrations are applied out-of-band through the
+   Supabase management tool.
+2. **Approve the `prod` deploy image build.** The `aws-ecr-deploy-image.yml`
+   workflow's `aws-prod` GitHub environment has a required-reviewer protection
+   rule; a `prod`-mode build from `main` was rejected pending that approval. The
+   image for `aa1c57c` must be built+pushed, then the ECS task-def runs
+   `scripts/tesco-apify-collect.ts` (env: APIFY_TOKEN, NEXT_PUBLIC_SUPABASE_URL,
+   SUPABASE_SERVICE_ROLE_KEY, APIFY_MODE=renewal, APIFY_BUDGET_USD=10).
+
+Baseline at build time: 492 fresh trusted Tesco prices; 308 due for renewal
+(priority); 2,379 resolved mappings. Campaign Apify budget $10 (account cap $19
+unchanged; MTD usage ~$0.02). SuperValu/Dunnes unchanged. Once both gates are
+cleared the first guarded tranche runs in Fargate, prioritising the 308 due
+renewals, then continues automatically through eligible batches within $10.
+
 ## 8 November 2026 — Apify `parsebird/tesco-scraper` read-only acceptance test PASSED for retrieval; EXPOSED stale/mismatched Tesco mappings (identity gates must run before any price is trusted)
 
 Ran the agreed bounded, read-only acceptance test of the third-party provider
