@@ -62,7 +62,7 @@ function okFetch(it: ApifyItem): (url: string) => Promise<ApifyFetchResult> {
       provider: 'apify', actorId: 'A', actorBuildId: 'B', actorBuildNumber: '1', runId: 'r', datasetId: 'd',
       requestedUrl: url, sku: '254877356', bodySha256: 'a'.repeat(64), scrapedAt: it.scraped_at as string,
       rawItem: it, rawItemSha256: 'b'.repeat(64),
-      freshness: { scrapedAt: it.scraped_at as string, withinRunWindow: true, productScrapedEvents: 1, level: 'in_window_unproven_cache', requiredFreshnessMet: true, reason: 'ok' },
+      freshness: { scrapedAt: it.scraped_at as string, requestSubmittedAt: new Date(Date.now() - 1000).toISOString(), afterSubmit: true, productScrapedEvents: 1, level: 'fresh_after_submit', requiredFreshnessMet: true, reason: 'ok' },
     },
   });
 }
@@ -119,6 +119,23 @@ describe('collectTescoApify — control flow through the RPC transport', () => {
     expect(rec.p_accept).toBe(false);
     expect(rec.p_regular_price).toBeNull();
     // No reusable verification recorded for a held product.
+    expect(calls.some(c => c.fn === 'apify_record_identity_verification')).toBe(false);
+  });
+
+  it('HOLDS (no finalise) when provider freshness is not verified, even if identity matches', async () => {
+    const fx = fixtures();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    // Identity matches, but the provider says freshness NOT met.
+    const staleFetch: (url: string) => Promise<ApifyFetchResult> = async (url) => {
+      const r = await okFetch(item())(url);
+      return { response: r.response, provider: { ...r.provider!, freshness: { ...r.provider!.freshness, requiredFreshnessMet: false, level: 'not_after_submit' } } };
+    };
+    const res = await collectTescoApify('renewal', 10, {
+      sb, fetchApify: staleFetch, budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
+    });
+    expect(res.accepted).toBe(0);
+    const rec = calls.find(c => c.fn === 'apify_record_tesco_page')!.args;
+    expect(rec.p_accept).toBe(false);
     expect(calls.some(c => c.fn === 'apify_record_identity_verification')).toBe(false);
   });
 

@@ -331,14 +331,13 @@ begin
       p_success => true, p_price => p_regular_price, p_previous_price => p_previous_price,
       p_store_url => p_store_url, p_store_sku => p_store_sku, p_store_product_name => p_store_product_name,
       p_fetched => 1, p_extracted => 1);
-    -- The generic finaliser sets source = lower(store)||'_direct'. Correct the
-    -- provenance of the row THIS run just wrote to the provider-specific value.
-    if v_finalised then
-      update public.price_observations po set source = 'tesco_apify'
-        where po.store_product_id = p_store_product_id
-          and po.observed_at = (select max(observed_at) from public.price_observations
-            where store_product_id = p_store_product_id);
-    end if;
+    -- Provider provenance is recorded authoritatively in
+    -- tesco_apify_provider_evidence (actor/run/dataset/raw-item hash), bound to
+    -- this run + page below. We deliberately do NOT post-patch
+    -- price_observations.source here: the only reliable key would be a fragile
+    -- max(observed_at) lookup (racy, and price_observations has no run_id). The
+    -- finaliser's own source value stands; provider attribution is the evidence
+    -- row, which is exact.
   end if;
 
   -- Heartbeat the lease + record a success for pacing.
