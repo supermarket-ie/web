@@ -23,6 +23,9 @@ type BrowserPageResult = {
   finalUrl: string;
   html: string;
   retryAfter: string | null;
+  // The browser's ACTUAL identity used for the request (no spoofing), recorded
+  // for the diagnostic: Chromium's own default user-agent and version.
+  browserIdentity?: { userAgent: string | null; chromiumVersion: string | null };
 };
 export type BrowserRenderer = (url: string, timeoutMs: number) => Promise<BrowserPageResult>;
 
@@ -32,14 +35,14 @@ async function playwrightRenderer(url: string, timeoutMs: number): Promise<Brows
   const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({
-      locale: 'en-IE',
-      // A real, current desktop Chrome UA; Playwright supplies a genuine browser
-      // fingerprint (TLS/JA3, JS execution) rather than a bare fetch.
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      extraHTTPHeaders: { 'Accept-Language': 'en-IE,en;q=0.9' },
-    });
+    // Use Chromium's ACTUAL identity: do NOT set a userAgent or spoof headers.
+    // Only locale is set (en-IE) for the Irish store; the UA, TLS/JA3 and all
+    // headers are Playwright/Chromium's genuine defaults.
+    const context = await browser.newContext({ locale: 'en-IE' });
     const page = await context.newPage();
+    // Capture the browser's real identity for the diagnostic record.
+    const chromiumVersion = browser.version();
+    const userAgent = await page.evaluate(() => navigator.userAgent).catch(() => null);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     // Give client-rendered product JSON a brief chance to settle (bounded).
     await page.waitForTimeout(Math.min(3_000, Math.max(0, timeoutMs - 1_000))).catch(() => {});
@@ -49,6 +52,7 @@ async function playwrightRenderer(url: string, timeoutMs: number): Promise<Brows
       finalUrl: page.url(),
       html,
       retryAfter: response ? response.headers()['retry-after'] ?? null : null,
+      browserIdentity: { userAgent, chromiumVersion },
     };
   } finally {
     await browser.close().catch(() => {});
@@ -62,7 +66,14 @@ async function playwrightRenderer(url: string, timeoutMs: number): Promise<Brows
  */
 export async function fetchTescoCollectedPageViaBrowser(
   url: string,
-  options: { renderer?: BrowserRenderer; timeoutMs?: number } = {},
+  options: {
+    renderer?: BrowserRenderer;
+    timeoutMs?: number;
+    // Optional sink for the browser's ACTUAL identity (UA + Chromium version),
+    // so a caller can record it in diagnostics without changing the shared
+    // TescoPageResponse shape.
+    onBrowserIdentity?: (identity: { userAgent: string | null; chromiumVersion: string | null }) => void;
+  } = {},
 ): Promise<TescoPageResponse> {
   if (!isTescoCollectionUrl(url)) throw new Error('Unsafe Tesco collection URL');
   const renderer = options.renderer ?? playwrightRenderer;
@@ -70,6 +81,7 @@ export async function fetchTescoCollectedPageViaBrowser(
   const start = Date.now();
   try {
     const r = await renderer(url, timeoutMs);
+    if (r.browserIdentity && options.onBrowserIdentity) options.onBrowserIdentity(r.browserIdentity);
     // A cross-origin / out-of-scope final URL is treated as an unsafe redirect,
     // exactly as the fetch path refuses to trust an off-site destination.
     if (!isTescoCollectionUrl(r.finalUrl)) {
