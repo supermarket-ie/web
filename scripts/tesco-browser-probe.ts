@@ -34,13 +34,17 @@ async function main() {
   log('PROBE_INPUT', { count: probeProductUrls.length });
 
   // Drive the real collector in probe mode with the browser transport. All
-  // accounting / stop / lease logic is inside collectTescoDirect.
+  // accounting / stop / lease logic is inside collectTescoDirect. The browser
+  // uses its ACTUAL identity (no spoofed UA); record what it actually sent.
+  let browserIdentity: { userAgent: string | null; chromiumVersion: string | null } | null = null;
   const result = await collectTescoDirect({
     mode: 'probe',
     probeProductUrls,
-    fetcher: (url) => fetchTescoCollectedPageViaBrowser(url),
+    fetcher: (url) => fetchTescoCollectedPageViaBrowser(url, {
+      onBrowserIdentity: (id) => { browserIdentity = id; log('PROBE_BROWSER_IDENTITY', id); },
+    }),
   });
-  log('PROBE_RESULT', result);
+  log('PROBE_RESULT', { ...result, browserIdentity });
 
   // Read back the evidence the collection wrote for this run (read-only report).
   if ('runUuid' in result && result.runUuid) {

@@ -52,4 +52,14 @@ describe('tesco browser fetch — mirrors the fetch path classification', () => 
     await expect(fetchTescoCollectedPageViaBrowser('https://evil.example/x', { renderer: renderer({ status: 200, html: genuineHtml }) }))
       .rejects.toThrow('Unsafe Tesco collection URL');
   });
+
+  it('surfaces the browser ACTUAL identity (UA + Chromium version) via onBrowserIdentity', async () => {
+    const identityRenderer = async (url: string) => ({
+      status: 200, finalUrl: url, html: genuineHtml, retryAfter: null,
+      browserIdentity: { userAgent: 'Mozilla/5.0 ... HeadlessChrome/140.0.0.0 ...', chromiumVersion: '140.0.7259.5' },
+    });
+    let captured: { userAgent: string | null; chromiumVersion: string | null } | null = null;
+    await fetchTescoCollectedPageViaBrowser(URL, { renderer: identityRenderer, onBrowserIdentity: (id) => { captured = id; } });
+    expect(captured).toEqual({ userAgent: 'Mozilla/5.0 ... HeadlessChrome/140.0.0.0 ...', chromiumVersion: '140.0.7259.5' });
+  });
 });
