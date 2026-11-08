@@ -6,6 +6,10 @@ import {
   combineIdentityVerdict,
   assessAndCombine,
   assessmentSchema,
+  factsSupportExact,
+  fingerprintFor,
+  identityFingerprint,
+  IDENTITY_ASSESSMENT_RULE_VERSION,
   type IdentityAssessment,
 } from './tesco-identity-assessment';
 
@@ -192,5 +196,102 @@ describe('Tesco identity is separate from cross-retailer equivalence', () => {
     // The machine assessment is about Tesco identity only — no comparison field.
     expect(Object.keys(v.machineAssessment!)).not.toContain('comparison');
     expect(v.machineAssessment!.source).toBe('independent_ai_identity_assessment');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GAP FIXES (owner-required before using the AI module for acceptance):
+//   (a) contradictory attribute findings must prevent acceptance
+//   (b) assessments must bind to the exact mapping + evidence assessed
+//   (c) stale assessments must not be rebound to new evidence
+// ---------------------------------------------------------------------------
+
+describe('GAP (a) — contradictory model facts cannot be accepted', () => {
+  it('verified_exact with a contradictory fact (quantity_matches=false) HOLDS as uncertain', async () => {
+    const e = exactEvidence();
+    const live = exactLive();
+    // Model (wrongly) says verified_exact AND the deterministic gate passes,
+    // but the model's own facts contradict exactness.
+    const a = await assessTescoIdentity(e, live, { runModel: fakeModel('verified_exact', { quantity_matches: false }) });
+    expect(a.deterministic_exact).toBe(true); // deterministic would accept
+    const v = combineIdentityVerdict(e, live, a, e.page.id);
+    expect(v.decision).not.toBe('verified_exact');
+    expect(v.machineAssessment).toBeNull();
+    expect(v.holdReason).toMatch(/contradict/);
+  });
+
+  it('verified_exact with a barcode conflict fact HOLDS', async () => {
+    const e = exactEvidence();
+    const live = exactLive();
+    const a = await assessTescoIdentity(e, live, { runModel: fakeModel('verified_exact', { barcode_matches: 'conflict' }) });
+    const v = combineIdentityVerdict(e, live, a, e.page.id);
+    expect(v.decision).not.toBe('verified_exact');
+    expect(v.machineAssessment).toBeNull();
+  });
+
+  it('factsSupportExact is false whenever any material fact dissents', () => {
+    expect(factsSupportExact(facts())).toBe(true);
+    expect(factsSupportExact(facts({ pack_count_matches: false }))).toBe(false);
+    expect(factsSupportExact(facts({ barcode_matches: 'conflict' }))).toBe(false);
+    // barcode unavailable is allowed (not a conflict).
+    expect(factsSupportExact(facts({ barcode_matches: 'unavailable' }))).toBe(true);
+  });
+});
+
+describe('GAP (b) — an assessment is bound to the exact identity it was made about', () => {
+  it('a verdict made about one identity cannot be rebound to a DIFFERENT live product', async () => {
+    const e = exactEvidence();
+    const a = await assessTescoIdentity(e, exactLive(), { runModel: fakeModel('verified_exact') });
+    expect(a.identity_fingerprint).toBe(fingerprintFor(e, exactLive()));
+    // Now try to combine the SAME assessment against a different live product
+    // (same SKU/url so the deterministic live-arm might otherwise be probed).
+    const otherLive = { ...exactLive(), name: 'Example Tuna In Sunflower Oil 4x145g' };
+    const v = combineIdentityVerdict(e, otherLive, a, e.page.id);
+    expect(v.decision).not.toBe('verified_exact');
+    expect(v.machineAssessment).toBeNull();
+    expect(v.holdReason).toMatch(/fingerprint|reassessment|stale/);
+  });
+
+  it('the fingerprint excludes price and promotions (volatile fields)', () => {
+    const base = {
+      canonical: { name: 'Example Tuna 4 Pack 580g', brand: 'Example', ean: null },
+      tesco: { sku: '123456789', name: 'Example Tuna 4x145g', brand: 'Example', gtin: '05012345678901', quantity: { grams: 580 } },
+    };
+    const f1 = identityFingerprint(base);
+    // Changing price/promotions is not an input, so the fingerprint is unchanged
+    // (there is no price field in the input at all) — assert stability over two calls.
+    expect(identityFingerprint(base)).toBe(f1);
+    // Changing a material attribute DOES change the fingerprint.
+    const f2 = identityFingerprint({ ...base, tesco: { ...base.tesco, quantity: { grams: 600 } } });
+    expect(f2).not.toBe(f1);
+  });
+});
+
+describe('GAP (c) — stale rule version invalidates reuse', () => {
+  it('an assessment stamped with an older rule version cannot authorise acceptance', async () => {
+    const e = exactEvidence();
+    const live = exactLive();
+    const a = await assessTescoIdentity(e, live, { runModel: fakeModel('verified_exact') });
+    const stale = { ...a, rule_version: 'tesco-identity-v1-OLD' };
+    const v = combineIdentityVerdict(e, live, stale, e.page.id);
+    expect(v.decision).not.toBe('verified_exact');
+    expect(v.holdReason).toMatch(/stale|reassessment/);
+  });
+
+  it('the current assessment carries the current rule version and a timestamp', async () => {
+    const a = await assessTescoIdentity(exactEvidence(), exactLive(), { runModel: fakeModel('verified_exact') });
+    expect(a.rule_version).toBe(IDENTITY_ASSESSMENT_RULE_VERSION);
+    expect(Number.isFinite(Date.parse(a.assessed_at))).toBe(true);
+  });
+});
+
+describe('the happy path still works end-to-end after the gap fixes', () => {
+  it('a genuinely exact, consistent, correctly-bound current assessment accepts', async () => {
+    const e = exactEvidence();
+    const live = exactLive();
+    const v = await assessAndCombine(e, live, e.page.id, { runModel: fakeModel('verified_exact') });
+    expect(v.decision).toBe('verified_exact');
+    expect(v.machineAssessment).not.toBeNull();
+    expect(v.machineAssessment!.source_body_sha256).toBe(e.page.body_sha256);
   });
 });

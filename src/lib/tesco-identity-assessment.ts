@@ -19,6 +19,7 @@
 // peers are used only to corroborate the Tesco item's identity, never to assert
 // a Dunnes/SuperValu price comparison.
 
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { LanguageModel } from 'ai';
 import { generateObject } from 'ai';
@@ -35,6 +36,67 @@ import {
 import { resolveAgentModel } from './agent/model';
 
 export type AssessmentDecision = 'verified_exact' | 'rejected' | 'uncertain';
+
+// Prompt/rule version. Bump when the system prompt, the fact schema or the
+// combination logic changes in a way that invalidates prior verdicts. It is
+// folded into the identity fingerprint so a verdict produced by an older rule
+// set cannot be reused once the rules change.
+export const IDENTITY_ASSESSMENT_RULE_VERSION = 'tesco-identity-v2-20261108';
+
+// A STABLE identity fingerprint over the material identity attributes ONLY,
+// excluding price, promotions, availability and any other volatile field. It
+// binds an assessment to the exact (canonical identity, Tesco identity) pair it
+// was made about, so a verdict cannot be silently rebound to different evidence,
+// and reuse can be invalidated when any material attribute changes.
+export type IdentityFingerprintInput = {
+  canonical: { name: string; brand: string | null; ean: string | null };
+  tesco: {
+    sku: string;
+    name: string;
+    brand: string | null;
+    gtin: string | null;
+    quantity: TescoCollectedProduct['quantity'];
+  };
+};
+function fp(value: string | null | undefined): string {
+  return (value ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+export function identityFingerprint(input: IdentityFingerprintInput): string {
+  // Deterministic, order-stable serialisation of material attributes only.
+  const material = {
+    rule: IDENTITY_ASSESSMENT_RULE_VERSION,
+    canonical: { name: fp(input.canonical.name), brand: fp(input.canonical.brand), ean: (input.canonical.ean ?? '').replace(/^0+/, '') },
+    tesco: {
+      sku: input.tesco.sku,
+      name: fp(input.tesco.name),
+      brand: fp(input.tesco.brand),
+      gtin: (input.tesco.gtin ?? '').replace(/^0+/, ''),
+      quantity: input.tesco.quantity ?? null,
+    },
+  };
+  return createHash('sha256').update(JSON.stringify(material)).digest('hex');
+}
+export function fingerprintFor(evidence: ReentryEvidence, live: TescoCollectedProduct): string {
+  return identityFingerprint({
+    canonical: { name: evidence.mapping.canonical_name, brand: evidence.mapping.canonical_brand, ean: evidence.mapping.canonical_ean },
+    tesco: { sku: live.sku, name: live.name, brand: live.brand, gtin: live.gtin, quantity: live.quantity },
+  });
+}
+
+// Facts that must all agree for the model's own structured findings to be
+// internally consistent with a verified_exact verdict. A model that returns
+// verified_exact while reporting a contradictory fact (e.g. quantity_matches
+// false, or a barcode conflict) is self-contradictory and must NOT be accepted.
+export function factsSupportExact(facts: AssessmentFacts): boolean {
+  return facts.sku_matches
+    && facts.brand_matches
+    && facts.barcode_matches !== 'conflict'
+    && facts.product_type_matches
+    && facts.flavour_formulation_matches
+    && facts.quantity_matches
+    && facts.pack_count_matches
+    && facts.selling_unit_matches;
+}
 
 // The structured facts the model must extract and commit to. These are the
 // attributes the deterministic gate also checks; the model must agree on each,
@@ -61,6 +123,12 @@ export type IdentityAssessment = z.infer<typeof assessmentSchema> & {
   // The deterministic gate's independent verdict, recorded alongside so the
   // final (combined) decision is fully explainable.
   deterministic_exact: boolean;
+  // Binding: the rule version, the exact identity fingerprint assessed, and when
+  // the assessment was made. These prevent a verdict being reused against a
+  // different identity or after the rules changed, and record staleness.
+  rule_version: string;
+  identity_fingerprint: string;
+  assessed_at: string;
 };
 
 const MODEL_ID = () => process.env.AGENT_MODEL_ID ?? 'eu.anthropic.claude-sonnet-4-6';
@@ -153,7 +221,14 @@ export async function assessTescoIdentity(
   // (and the live page). This is authoritative; the model is advisory.
   const deterministicExact = independentExactIdentity(evidence, live);
 
-  return { ...raw, model: MODEL_ID(), deterministic_exact: deterministicExact };
+  return {
+    ...raw,
+    model: MODEL_ID(),
+    deterministic_exact: deterministicExact,
+    rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
+    identity_fingerprint: fingerprintFor(evidence, live),
+    assessed_at: new Date().toISOString(),
+  };
 }
 
 export type CombinedVerdict = {
@@ -187,7 +262,22 @@ export function combineIdentityVerdict(
   const modelExact = assessment.decision === 'verified_exact';
   const deterministicExact = assessment.deterministic_exact;
 
-  if (modelExact && deterministicExact) {
+  // GAP FIX (b)+(c): the assessment must bind to the EXACT identity being
+  // combined, and must be produced by the current rule set. Recompute the
+  // fingerprint from the evidence+live in hand; if the assessment was made about
+  // a different identity (rebinding), or under an older rule version (stale),
+  // it cannot authorise acceptance.
+  const currentFingerprint = fingerprintFor(evidence, live);
+  const boundToThisIdentity = assessment.identity_fingerprint === currentFingerprint
+    && assessment.rule_version === IDENTITY_ASSESSMENT_RULE_VERSION;
+
+  // GAP FIX (a): the model's own structured facts must be internally consistent
+  // with an exact verdict. A verified_exact verdict that reports a contradictory
+  // attribute (barcode conflict, quantity/pack/brand mismatch, etc.) is
+  // self-contradictory and cannot be accepted.
+  const factsConsistent = factsSupportExact(assessment.facts);
+
+  if (modelExact && deterministicExact && boundToThisIdentity && factsConsistent) {
     const reason = (modelReason ?? assessment.rationale).trim();
     const machineAssessment: MachineAssessment = {
       decision: 'verified_exact',
@@ -202,8 +292,19 @@ export function combineIdentityVerdict(
     return { decision: 'verified_exact', assessment, machineAssessment, holdReason: null };
   }
 
-  // Disagreement or any non-exact verdict → hold. Describe why, for the audit.
+  // Anything else → hold (rejected or uncertain), NEVER a write. Describe why.
   let holdReason: string;
+  if (modelExact && deterministicExact && !boundToThisIdentity) {
+    // A self-contradictory binding is treated as uncertain, not a clean reject.
+    holdReason = assessment.rule_version !== IDENTITY_ASSESSMENT_RULE_VERSION
+      ? `assessment rule version (${assessment.rule_version}) is stale vs current ${IDENTITY_ASSESSMENT_RULE_VERSION} — reassessment required`
+      : 'assessment identity fingerprint does not match the evidence being finalised — not bound to this identity';
+    return { decision: 'uncertain', assessment, machineAssessment: null, holdReason };
+  }
+  if (modelExact && deterministicExact && !factsConsistent) {
+    holdReason = 'model returned verified_exact but its own structured facts contradict an exact match — held as uncertain';
+    return { decision: 'uncertain', assessment, machineAssessment: null, holdReason };
+  }
   if (!modelExact && !deterministicExact) {
     holdReason = `both independent AI (${assessment.decision}) and deterministic gate rejected the identity`;
   } else if (!deterministicExact) {
