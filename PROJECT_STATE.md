@@ -1,5 +1,53 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — DEFINITIVE: browser (Playwright/Chromium) from AWS is ALSO blocked (403) — Tesco not reachable from our infra
+
+Ran the authorised one-time bounded browser acceptance test from the intended
+unattended AWS runtime. Result: the headless-browser route gets the SAME HTTP
+403 / Akamai access block as the plain fetch. A full browser fingerprint does
+NOT clear the edge from AWS datacenter egress. This settles the browser-on-AWS
+option: it does not work for Tesco from our infrastructure.
+
+Owner exception (honoured narrowly): the owner authorised a ONE-TIME documented
+exception to OUR OWN 48h application timer (explicitly NOT a retailer
+Retry-After). Original state recorded: gate `vercel-dub1-canary-20260920`
+cooldown_until 2026-11-09T23:29:59Z, consecutive/total blocks 3/3, 0 successes.
+The exception moved ONLY that gate's `cooldown_until` to now (counters/history
+preserved); it was consumed by the single test and self-closed when the real
+403 re-applied a fresh 48h cooldown. No permanent bypass; no other gate changed.
+
+Evidence (run `tesco_direct_probe_20261108134937663`, task
+smie-prod-browser-probe rev3, image `20f2cf5-browsertest`, prod VPC/subnets/SG/
+task role, eu-west-1):
+- product 318168902 -> HTTP 403, outcome `access_block`, 4291ms genuine browser
+  navigation, region IE, body sha256 ed48904c…, no product parsed.
+- Probe STOPPED on the first block (1 of 10 requests used), charged 1 request to
+  the ledger, wrote NO price (pricesWritten 0; run inserted 0 / target 0), and
+  recorded the block via the supported control path.
+- Gate after: cooldown_until 2026-11-10T13:49:42Z, consecutive/total blocks 4/4,
+  0 successes, lease released. Read-only confirmed (no price_observations, no
+  finalisation, no mapping change).
+
+How the test was built/run (all merged): the bounded probe drives the existing
+`collectTescoDirect` in probe mode with the headless-browser transport injected
+(PR #351 browser transport, #352 probe-via-collector accounting, #353 browser-
+image CI workflow, #354 Dockerfile copies scripts/). Two first attempts failed
+on packaging (scripts/ not in image; missing `--conditions=react-server` for the
+`server-only` guard) — both fixed; neither made a Tesco request.
+
+Where this leaves Tesco unattended collection: the direct network routes we can
+test from AWS (plain fetch AND headless browser) are both blocked at Tesco's
+edge. The remaining viable paths are the ones needing an owner decision/resource
+and not testable from here: (a) a paid Tesco-tolerant data provider — concrete
+costed recommendation already on file: Apify `parsebird/tesco-scraper` (verified
+tesco.ie, EUR, gtin/pack/price; free-tier $1.99/1,000, est. ~$30–54/mo usage at
+500–900/day; needs an Apify token stored as `smie-prod/apify`); (b) a collector
+on an owner-provided always-on machine with permitted egress; (c) an agreed
+Tesco feed/permitted access. Integration/scheduling/AI acceptance stay paused
+until a working accepted route exists. SuperValu/Dunnes remain on their existing
+schedules; no manual runs; no scraping service purchased.
+
+
 ## 8 November 2026 — browser (Playwright/Chromium) Tesco collector BUILT + tested; bounded live test HELD until cooldown clears
 
 Assessed the owner's three no-subscription options and built the browser-based
