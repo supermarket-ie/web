@@ -4,7 +4,7 @@ import { claimTescoEgress, markTescoEgressSuccess, releaseTescoEgress } from '@/
 import { classifyTescoMapping, type TescoMappingEvidence } from '@/lib/tesco-mapping-audit';
 import {
   fetchTescoCollectedPage, parseTescoCollectedPage, tescoListingUrl, tescoPauseUntil, tescoProductUrl,
-  validateTescoCollectedIdentity, type TescoCollectedPage, type TescoCollectedProduct,
+  isTescoCollectionUrl, validateTescoCollectedIdentity, type TescoCollectedPage, type TescoCollectedProduct,
 } from '@/lib/tesco-direct-collection-core';
 
 type MappingRow = {
@@ -79,8 +79,23 @@ async function pauseEgress(egressKey: string, until: string, blocked: boolean) {
   if (error) throw new Error(`Persisting Tesco pause: ${error.message}`);
 }
 
-export async function collectTescoDirect(options: { mode: TescoCollectionMode; maxPages?: number; query?: string }) {
-  const maxPages = options.mode === 'probe' ? 2 : Math.max(1, Math.min(options.maxPages ?? 5, 6));
+export async function collectTescoDirect(options: {
+  mode: TescoCollectionMode;
+  maxPages?: number;
+  query?: string;
+  // Injectable transport. Defaults to the plain-fetch path. A headless-browser
+  // transport (tesco-browser-fetch) can be supplied for the bounded browser
+  // acceptance test so the SAME accounting, stop conditions, lease handling and
+  // identity checks are reused verbatim — only the fetch is swapped.
+  fetcher?: (url: string) => Promise<Awaited<ReturnType<typeof fetchTescoCollectedPage>>>;
+  // Explicit product-URL list for a bounded probe (<=10). Each still passes the
+  // pending/recent-request cache exclusion below. Only used in 'probe' mode.
+  probeProductUrls?: string[];
+}) {
+  const fetchPage = options.fetcher ?? fetchTescoCollectedPage;
+  const maxPages = options.mode === 'probe'
+    ? Math.max(1, Math.min(options.probeProductUrls?.length ?? 2, 10))
+    : Math.max(1, Math.min(options.maxPages ?? 5, 6));
   const query = options.query?.trim() || 'milk';
   const listingUrl = tescoListingUrl(query); // validate before opening work
   const { count, error: gateError } = await supabaseAdmin.from('tesco_egress_pool').select('egress_key', { count: 'exact', head: true }).eq('enabled', true);
@@ -105,7 +120,11 @@ export async function collectTescoDirect(options: { mode: TescoCollectionMode; m
       .filter(m => ['exact_unique', 'obsolete_mapping', 'exact_synonym_duplicate'].includes(classifyTescoMapping(m).classification))
       .sort((a, b) => Number(a.isFresh) - Number(b.isFresh) || b.demand - a.demand || (a.observedAt ?? '').localeCompare(b.observedAt ?? '') || a.storeProductId.localeCompare(b.storeProductId));
     const urls = options.mode === 'probe'
-      ? [tescoProductUrl('317297946'), listingUrl]
+      ? (options.probeProductUrls && options.probeProductUrls.length
+          // Bounded explicit product probe: validate each URL, drop any excluded
+          // by the pending/recent-request (24h) cache, cap at maxPages (<=10).
+          ? [...new Set(options.probeProductUrls)].filter(url => isTescoCollectionUrl(url) && !cache.has(url)).slice(0, maxPages)
+          : [tescoProductUrl('317297946'), listingUrl])
       : options.mode === 'listings' ? [listingUrl]
         : [...new Set(targets.map(m => tescoProductUrl(m.storeSku!)))].filter(url => !cache.has(url)).slice(0, maxPages);
     if (!urls.length) return { status: 'no_due_products', requests: 0, pricesWritten: 0 };
@@ -138,7 +157,7 @@ export async function collectTescoDirect(options: { mode: TescoCollectionMode; m
         run_id: runUuid, egress_key: lease.egressKey, requested_url: url, mode: options.mode, outcome: 'pending',
       }).select('id').single();
       if (insertError || !pageRow) throw new Error(`Reserving Tesco request: ${insertError?.message}`);
-      const response = await fetchTescoCollectedPage(url);
+      const response = await fetchPage(url);
       requests += 1;
       let parsed: TescoCollectedPage | null = null;
       let outcome: string = response.outcome;
