@@ -1,0 +1,68 @@
+;; Enforced isolation profile for the Supermarket.ie task (macOS Seatbelt /
+;; sandbox-exec). Default-deny; then allow ONLY the Supermarket workspace, the
+;; system runtime paths needed to execute Node/tsx, HTTPS egress, and the temp
+;; dir. The host login keychain, ~/.aws, ~/.ssh, ~/.config and every unrelated
+;; home/project path are therefore unreachable (covered by default-deny — a
+;; process under this profile cannot read them and cannot lift its own sandbox).
+;;
+;; This is OS-enforced isolation, NOT a cd / written rule / blocked CLI name /
+;; placeholder env var. Supply Supermarket credentials ONLY as explicit env vars
+;; to the launched process; never from the keychain.
+;;
+;; Usage:
+;;   sandbox-exec -D WORKSPACE=/abs/resolved/path/to/web -f supermarket-task.sb <cmd...>
+
+(version 1)
+(import "bsd.sb")
+
+(deny default)
+
+;; Process + basic runtime services (lets a program exec and link at all).
+(allow process*)
+(allow sysctl-read)
+(allow signal (target self))
+
+;; Allow general Mach lookups the dynamic linker/runtime need, but DENY the
+;; keychain/Security daemons specifically so the `security` tool (or any
+;; keychain API) cannot reach securityd — this is the surface that leaked the
+;; out-of-scope CLI token. Explicit denies take precedence over the allow.
+(allow mach-lookup)
+(deny mach-lookup
+  (global-name "com.apple.SecurityServer")
+  (global-name "com.apple.securityd")
+  (global-name "com.apple.secd")
+  (global-name "com.apple.ocspd")
+  (global-name "com.apple.security.agent")
+  (global-name "com.apple.CoreAuthentication.daemon")
+  (global-name "com.apple.SecurityServer.rootless"))
+
+;; ---- Filesystem READ: system runtime + the workspace only ----
+(allow file-read*
+  (subpath "/usr")
+  (subpath "/bin")
+  (subpath "/sbin")
+  (subpath "/opt/homebrew")
+  (subpath "/System")
+  (subpath "/Library/Developer")
+  (subpath "/private/var/db/timezone")
+  (literal "/dev/null")
+  (literal "/dev/zero")
+  (literal "/dev/random")
+  (literal "/dev/urandom")
+  (literal "/private/etc/hosts")
+  (literal "/private/etc/resolv.conf")
+  (literal "/private/etc/ssl/cert.pem")
+  (subpath (param "WORKSPACE")))
+
+;; ---- Filesystem WRITE: workspace + temp only (nothing in $HOME) ----
+(allow file-write* (subpath (param "WORKSPACE")))
+(allow file-read* file-write*
+  (subpath "/private/tmp")
+  (subpath "/private/var/folders"))
+
+;; ---- Network: HTTPS egress (Supabase REST / Apify / AWS). Keychain and
+;;      credential stores are local, so this does not reopen the cred surface.
+(allow network-outbound (remote tcp "*:443"))
+(allow network-outbound (remote tcp "*:5432"))
+(allow network-bind (local ip))
+(allow system-socket)
