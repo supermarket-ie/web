@@ -155,6 +155,9 @@ COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
 # Eve runtime references the agent app root. Copy the app + agent sources.
 COPY --from=builder --chown=node:node /app/src ./src
 COPY --from=builder --chown=node:node /app/agent ./agent
+# Operational scripts (e.g. the bounded Tesco browser probe) run via the worker
+# command override; they must be present in the image.
+COPY --from=builder --chown=node:node /app/scripts ./scripts
 COPY --from=builder --chown=node:node /app/components.json ./components.json
 COPY --chown=node:node docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
