@@ -10,7 +10,7 @@
 //   APIFY_BUDGET_USD    = campaign budget cap            (default 10)
 //   APIFY_PER_REQUEST_USD = marginal cost per request    (default 0.002)
 //   APIFY_MAX_BATCHES   = batches this invocation        (default 1)
-//   APIFY_REQUIRE_FRESHNESS = '1' to hold when freshness not established
+//   APIFY_REQUIRE_FRESHNESS = '0' to RELAX freshness (default: enforced)
 import { createClient } from '@supabase/supabase-js';
 import { collectTescoApify, type ApifyCollectionResult } from '../src/lib/tesco-apify-collection';
 import { createApifyRunClient, createApifyFetchPage, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
@@ -31,7 +31,8 @@ async function main() {
   const budgetUsd = Number(process.env.APIFY_BUDGET_USD ?? 10);
   const perRequestUsd = Number(process.env.APIFY_PER_REQUEST_USD ?? 0.002);
   const maxBatches = Number(process.env.APIFY_MAX_BATCHES ?? 1);
-  const requireFreshness = process.env.APIFY_REQUIRE_FRESHNESS === '1';
+  // Freshness is ENFORCED by default (fail closed); only '0' relaxes it.
+  const requireFreshness = process.env.APIFY_REQUIRE_FRESHNESS !== '0';
 
   const client = createApifyRunClient({ maxItems: Math.max(1, limit) });
 
@@ -46,12 +47,24 @@ async function main() {
     fetchPage(u).then((response) => resolve({ response, provider: captured })).catch(reject);
   });
 
-  let spentUsd = 0;
+  // Durable campaign budget accounting (defect 5): seed spentUsd from the actual
+  // provider usage already recorded for this campaign's runs, so the cap holds
+  // across invocations/restarts — not just within one process.
+  async function reconciledSpendUsd(): Promise<number> {
+    // Sum recorded provider charges from prior Apify runs' evidence. Each
+    // provider-evidence row corresponds to one billed provider request.
+    const { count } = await sb.from('tesco_apify_provider_evidence')
+      .select('id', { count: 'exact', head: true });
+    return (count ?? 0) * perRequestUsd;
+  }
+  let spentUsd = await reconciledSpendUsd();
+  console.log(JSON.stringify({ event: 'budget_seed', reconciledSpentUsd: spentUsd, cap: budgetUsd }));
+
   const batches: ApifyCollectionResult[] = [];
   for (let b = 0; b < maxBatches; b += 1) {
     if (spentUsd + perRequestUsd > budgetUsd) { console.log(JSON.stringify({ event: 'budget_reached', spentUsd })); break; }
     const result = await collectTescoApify(mode, limit, {
-      sb, fetchApify, budgetUsd, perRequestUsd, spentUsd,
+      sb, fetchApify, auditClient: client, budgetUsd, perRequestUsd, spentUsd,
       log: (e) => console.log(JSON.stringify(e)),
     });
     spentUsd = result.spentUsd;

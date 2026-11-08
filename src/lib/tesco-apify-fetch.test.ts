@@ -3,6 +3,7 @@ import { parseTescoCollectedPage } from './tesco-direct-collection-core';
 import {
   renderApifyProductPage,
   verifyApifyFreshness,
+  auditBatchFreshness,
   createApifyFetchPage,
   type ApifyItem,
   type ApifyRunClient,
@@ -110,41 +111,78 @@ describe('verifyApifyFreshness — active per-request proof (owner rule: timesta
   // Reference point is OUR request submit time. Only a scraped_at strictly AFTER
   // submit qualifies; a prior/equal stamp (possible replay) HOLDS; billing is
   // audit-only.
+  // Per-item: a scraped_at after submit is only a NECESSARY precondition — it
+  // does NOT by itself qualify a price (that needs the per-batch audit).
   const submit = '2026-11-08T18:51:18.000Z';
   const base = { requestSubmittedAt: submit, runFinishedAt: '2026-11-08T18:51:22.652Z', itemsReturned: 1 };
 
-  it('qualifies ONLY when scraped_at is strictly after our submit time', () => {
+  it('precondition met (not final) when scraped_at is strictly after submit', () => {
     const f = verifyApifyFreshness({ ...base, scrapedAt: '2026-11-08T18:51:21Z', productScrapedEvents: 1 });
-    expect(f.requiredFreshnessMet).toBe(true);
-    expect(f.level).toBe('fresh_after_submit');
-    expect(f.afterSubmit).toBe(true);
+    expect(f.perItemPreconditionMet).toBe(true);
+    expect(f.level).toBe('after_submit_precondition_met');
+    expect(f.reason).toMatch(/NECESSARY precondition/);
   });
 
   it('HOLDS when scraped_at is at/before submit (possible cached replay) — regardless of billing', () => {
     const atSubmit = verifyApifyFreshness({ ...base, scrapedAt: submit, productScrapedEvents: 1 });
     const before = verifyApifyFreshness({ ...base, scrapedAt: '2026-11-08T18:51:10Z', productScrapedEvents: 1 });
-    expect(atSubmit.requiredFreshnessMet).toBe(false);
-    expect(before.requiredFreshnessMet).toBe(false);
+    expect(atSubmit.perItemPreconditionMet).toBe(false);
+    expect(before.perItemPreconditionMet).toBe(false);
     expect(before.level).toBe('not_after_submit');
-    expect(before.reason).toMatch(/cached\/replayed/);
   });
 
-  it('billing being present does NOT by itself qualify a stale timestamp', () => {
+  it('billing present does NOT qualify a stale timestamp', () => {
     const f = verifyApifyFreshness({ ...base, scrapedAt: '2026-10-01T00:00:00Z', productScrapedEvents: 5 });
-    expect(f.requiredFreshnessMet).toBe(false);
+    expect(f.perItemPreconditionMet).toBe(false);
   });
 
   it('HOLDS when the provider returns no scraped_at', () => {
     const f = verifyApifyFreshness({ ...base, scrapedAt: null, productScrapedEvents: 1 });
-    expect(f.requiredFreshnessMet).toBe(false);
+    expect(f.perItemPreconditionMet).toBe(false);
     expect(f.level).toBe('no_timestamp');
   });
 
   it('HOLDS an implausibly-future scraped_at', () => {
     const future = new Date(Date.now() + 60 * 60_000).toISOString();
     const f = verifyApifyFreshness({ requestSubmittedAt: new Date().toISOString(), runFinishedAt: null, itemsReturned: 1, scrapedAt: future, productScrapedEvents: 1 });
-    expect(f.requiredFreshnessMet).toBe(false);
+    expect(f.perItemPreconditionMet).toBe(false);
     expect(f.level).toBe('implausible_future');
+  });
+});
+
+describe('auditBatchFreshness — the per-batch live-behaviour corroboration', () => {
+  const seedUrl = URL_322;
+  const auditClient = (secondScrapedAt: string | null) => ({
+    runProductUrls: async () => ({ items: secondScrapedAt === null ? [] : [{ product_id: '322842145', scraped_at: secondScrapedAt }] }),
+  });
+
+  it('ESTABLISHED when the re-run scraped_at strictly advances', async () => {
+    const a = await auditBatchFreshness(auditClient('2026-11-08T18:52:00Z'), seedUrl, '2026-11-08T18:51:20Z');
+    expect(a.established).toBe(true);
+    expect(a.advanced).toBe(true);
+  });
+
+  it('NOT established when the re-run returns the same scraped_at (static/replay)', async () => {
+    const a = await auditBatchFreshness(auditClient('2026-11-08T18:51:20Z'), seedUrl, '2026-11-08T18:51:20Z');
+    expect(a.established).toBe(false);
+    expect(a.reason).toMatch(/did not advance/);
+  });
+
+  it('NOT established when the re-run returns no item/timestamp', async () => {
+    const a = await auditBatchFreshness(auditClient(null), seedUrl, '2026-11-08T18:51:20Z');
+    expect(a.established).toBe(false);
+  });
+
+  it('NOT established when there is no seed to audit', async () => {
+    const a = await auditBatchFreshness(auditClient('2026-11-08T18:52:00Z'), null, null);
+    expect(a.established).toBe(false);
+  });
+
+  it('NOT established when the audit re-run throws', async () => {
+    const throwing = { runProductUrls: async () => { throw new Error('down'); } };
+    const a = await auditBatchFreshness(throwing, seedUrl, '2026-11-08T18:51:20Z');
+    expect(a.established).toBe(false);
+    expect(a.reason).toMatch(/failed/);
   });
 });
 
@@ -162,7 +200,7 @@ describe('createApifyFetchPage — the transport', () => {
     expect(captured).toMatchObject({
       provider: 'apify', actorId: 'v6Dx4kBtxWYDAd55V', runId: 'run1', datasetId: 'ds1', sku: '322842145',
     });
-    expect((captured as { freshness: { requiredFreshnessMet: boolean } }).freshness.requiredFreshnessMet).toBe(true);
+    expect((captured as { freshness: { perItemPreconditionMet: boolean } }).freshness.perItemPreconditionMet).toBe(true);
     expect((captured as { bodySha256: string }).bodySha256).toMatch(/^[a-f0-9]{64}$/);
     // Provider-origin evidence hash is distinct from the synthetic adapter HTML hash.
     const c = captured as { bodySha256: string; rawItemSha256: string };
