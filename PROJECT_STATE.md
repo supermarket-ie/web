@@ -1,5 +1,60 @@
 # Supermarket.ie — Canonical Project State
 
+## 8 November 2026 — browser (Playwright/Chromium) Tesco collector BUILT + tested; bounded live test HELD until cooldown clears
+
+Assessed the owner's three no-subscription options and built the browser-based
+AWS collector so one bounded live test is ready to run the moment the egress
+cooldown permits. NO live Tesco request was made (the gate is still quarantined).
+
+Gating fact: the diagnostic 403 I recorded put `vercel-dub1-canary-20260920`
+into a 48h cooldown — `cooldown_until = 2026-11-09T23:29:59Z` (now 2026-11-08
+~11:1x UTC, ~36h remain). The owner said to test only "when the cooldown
+permits", so the single bounded Playwright test WAITS; firing now would bypass
+the stop-condition just recorded. `claim_tesco_egress` will refuse until then,
+and the probe runner treats that refusal as a hard stop.
+
+Options assessed:
+- Browser collector on existing AWS (the one to test): reuses the exact
+  production parser + identity gates — a Playwright page load replaces ONLY the
+  fetch, producing the same HTML -> `parseTescoCollectedPage` -> identity/price
+  checks unchanged. Acceptance is genuinely untested; a real browser fingerprint
+  may clear the Akamai edge a bare fetch did not, but that is unproven. Cost:
+  Chromium must be baked into the image (the slim runner has the `playwright`
+  npm pkg but NO browser binary/libs), ~+400MB image, heavier Fargate task
+  (seconds + hundreds of MB RAM per page) and ongoing Chromium/markup upkeep.
+- Always-on-machine collector: $0 extra infra, unattended, but couples freshness
+  to one external machine's power/connectivity/availability (owner-side; I can't
+  stand it up from here).
+- Agreed Tesco feed / permitted access: cleanest if it exists; availability and
+  price unestablished (owner to pursue in parallel).
+
+Built this session (ready, no live request):
+- `src/lib/tesco-browser-fetch.ts` — `fetchTescoCollectedPageViaBrowser()` renders
+  a Tesco page with headless Chromium and returns the SAME `TescoPageResponse`
+  shape, reusing a new shared `classifyTescoHtmlOutcome`/`isTescoChallengeHtml`
+  (extracted from the fetch path, behaviour unchanged — 28 core tests still pass)
+  so access_block/rate_limited/ok/unsafe_redirect classify identically.
+- `scripts/tesco-browser-probe.ts` — bounded read-only runner: claims the egress
+  lease (refuses if cooldown/lease not clear), <=10 products one at a time with
+  10s pacing, stops + `mark_tesco_egress_blocked` on access_block/rate_limited,
+  `mark_tesco_egress_success` on a clean genuine retrieval, releases the lease,
+  and reports per product: SKU match, IE region, regular EUR shelf price
+  (Clubcard/promos kept separate — parser returns only `price.actual`), brand,
+  quantity, pack/variant, final URL, capture time, HTTP outcome, body SHA-256.
+  It writes NO price_observations, NO finalisation, NO mapping change.
+- `Dockerfile` — `--build-arg INSTALL_BROWSER=1` installs Chromium + deps into
+  `/ms-playwright` (OFF by default, so the normal web/worker image is unchanged).
+- Tests: 7 new browser-fetch cases (genuine ok / challenge / 403 / 429+Retry-
+  After / off-site redirect / renderer failure / unsafe URL); 81 targeted Tesco
+  tests pass; tsc + eslint clean.
+
+Next (after 2026-11-09 23:29 UTC): build the browser image (INSTALL_BROWSER=1)
+via the existing ECR workflow, run the one bounded ECS probe from the prod VPC
+against <=10 eligible tesco.ie URLs, and report the fetch evidence FIRST. Do not
+describe Tesco scraping as working unless the browser route returns a genuine
+live price. Collector integration / scheduling / AI acceptance remain paused.
+SuperValu/Dunnes stay on their existing schedules; no manual runs launched.
+
 ## 8 November 2026 — diagnostic block recorded; Apify acceptance test BLOCKED on missing token; pricing corrected
 
 Step 1 (block reconciliation, done): recorded the diagnostic 403 through the
