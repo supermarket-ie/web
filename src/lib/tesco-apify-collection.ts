@@ -23,8 +23,14 @@ import {
   type TescoPageResponse,
 } from './tesco-direct-collection-core';
 import type { TescoMappingEvidence } from './tesco-mapping-audit';
-import { identityFingerprint, IDENTITY_ASSESSMENT_RULE_VERSION } from './tesco-identity-assessment';
-import type { ApifyProviderIdentity } from './tesco-apify-fetch';
+import {
+  assessAndCombine,
+  identityFingerprint,
+  IDENTITY_ASSESSMENT_RULE_VERSION,
+  type AssessOptions,
+} from './tesco-identity-assessment';
+import type { ReentryEvidence } from './tesco-hold-reentry';
+import { auditBatchFreshness, type ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
 
@@ -51,16 +57,28 @@ export type ApifyMapping = {
 
 export type ApifyFetchResult = { response: TescoPageResponse; provider: ApifyProviderIdentity | null };
 
+// Raw Apify run client, needed for the per-batch freshness audit (one re-run).
+export interface ApifyAuditClient { runProductUrls(urls: string[]): Promise<{ items: Array<Record<string, unknown>> }>; }
+
 export type ApifyCollectionDeps = {
   sb: SupabaseClient;
   // Runs the Apify fetch for one URL and returns the page response plus the
   // captured provider identity (original payload + hash + freshness).
   fetchApify: (url: string) => Promise<ApifyFetchResult>;
-  // Budget guard in USD; the loop stops before exceeding it. The caller feeds
-  // the per-request marginal cost estimate.
+  // Client used ONLY for the per-batch freshness audit re-run. Separate so the
+  // audit never writes a price and is clearly accounted in the budget.
+  auditClient: ApifyAuditClient;
+  // Budget guard in USD, enforced against DURABLE accounting (the provider
+  // charges reconciled from past runs) + this run's requests. The loop stops
+  // before the next request could exceed the cap.
   budgetUsd: number;
   perRequestUsd: number;
+  // USD already spent by this campaign BEFORE this invocation (durable; read by
+  // the caller from provider-evidence accounting). Defaults 0.
   spentUsd?: number;
+  // AI inference options (model/runner). When omitted, the real Bedrock model
+  // is used by assessAndCombine. Injectable for tests.
+  assessOptions?: AssessOptions;
   sleep?: (ms: number) => Promise<void>;
   log?: (event: Record<string, unknown>) => void;
 };
@@ -178,6 +196,56 @@ function mappingEvidence(m: ApifyMapping): TescoMappingEvidence {
   };
 }
 
+// A ReentryEvidence envelope wrapping the mapping + the fresh live product, for
+// the independent AI assessment (assessAndCombine). Peers are empty: this path
+// verifies Tesco identity only (never a cross-retailer price comparison), and
+// the AI never overrides a deterministic rejection.
+function assessmentEvidence(m: ApifyMapping, pageId: string, bodySha256: string, live: TescoCollectedProduct): ReentryEvidence {
+  return {
+    mapping: {
+      id: m.id, product_id: m.product_id, canonical_name: m.canonical_name,
+      canonical_brand: m.canonical_brand, canonical_ean: m.canonical_ean,
+      store_product_name: m.store_product_name, store_brand: m.store_brand,
+      is_own_brand: m.is_own_brand, store_sku: m.store_sku, store_url: m.store_url,
+      url_status: m.url_status, gtin: m.gtin,
+    },
+    sameSkuCount: m.sameSkuCount, proven: true, freshTesco: false, pending: false, recentAttempt: false,
+    page: {
+      id: pageId, requested_url: m.store_url, final_url: m.store_url, outcome: 'ok', http_status: 200,
+      body_sha256: bodySha256, mode: 'products', parsed: { products: [live], listing: null },
+    },
+    sourceRun: { status: 'success', finished_at: new Date().toISOString() },
+    peers: [],
+  };
+}
+
+export type ReusableVerification = {
+  identity_fingerprint: string;
+  rule_version: string;
+  reusable_until: string;
+  invalidated_at: string | null;
+} | null;
+
+// Read the ACTIVE reusable identity verification for a mapping (defect 3). A
+// renewal may reuse a cheap deterministic check ONLY when a stored verification
+// exists AND binds to the unchanged canonical/mapping/live identity fingerprint,
+// the current rule version, has not expired, and is not invalidated/held.
+export async function readActiveVerification(sb: SupabaseClient, storeProductId: string): Promise<ReusableVerification> {
+  const { data, error } = await sb.from('tesco_identity_verifications')
+    .select('identity_fingerprint,rule_version,reusable_until,invalidated_at')
+    .eq('store_product_id', storeProductId).is('invalidated_at', null)
+    .order('verified_at', { ascending: false }).limit(1);
+  if (error) throw new Error(`Reading identity verification: ${error.message}`);
+  return (data?.[0] as ReusableVerification) ?? null;
+}
+
+export function verificationReusable(v: ReusableVerification, liveFingerprint: string): boolean {
+  return !!v && v.invalidated_at == null
+    && v.identity_fingerprint === liveFingerprint
+    && v.rule_version === IDENTITY_ASSESSMENT_RULE_VERSION
+    && Date.parse(v.reusable_until) > Date.now();
+}
+
 export type ApifyCollectionResult = {
   runId: string;
   mode: ApifyCollectionMode;
@@ -215,28 +283,38 @@ export async function collectTescoApify(
   result.runId = runId;
   deps.log?.({ event: 'run_started', runId, mode, eligible: mappings.length });
 
+  // Per-batch freshness audit state (defect 1): the FIRST fetched item's
+  // scraped_at seeds the audit; a single re-run at batch end must advance it, or
+  // NO result in this batch may finalise. Because the audit runs at the end, we
+  // stage accepted-but-pending finalisations and only commit them once the
+  // audit establishes live behaviour.
+  let auditSeedUrl: string | null = null;
+  let auditSeedScrapedAt: string | null = null;
+  const staged: Array<{ m: ApifyMapping; product: TescoCollectedProduct; adapterBody: string;
+    method: 'deterministic' | 'deterministic_plus_ai'; rationale: string; model: string | null;
+    fingerprint: string }> = [];
+
   try {
     for (const m of mappings) {
-      // Budget guard: stop before the next request would exceed the cap.
-      if (spentUsd + deps.perRequestUsd > deps.budgetUsd) { result.stopped = 'budget_exhausted'; break; }
+      // Budget guard (defect 5): stop before the next request + the required
+      // end-of-batch audit request could exceed the cap. Durable spentUsd is
+      // seeded by the caller from reconciled provider charges.
+      const auditReserve = staged.length === 0 && auditSeedUrl === null ? 0 : deps.perRequestUsd;
+      if (spentUsd + deps.perRequestUsd + auditReserve > deps.budgetUsd) { result.stopped = 'budget_exhausted'; break; }
 
-      // Pacing: 10s between requests (the RPC also enforces it).
       if (result.requested > 0) await sleep(10_000);
 
-      // Reserve the request (atomic guard: ownership, due, pending/recent, pacing).
+      // Reserve (atomic guard: ownership, mode, due/observation, pending/recent, pacing).
       try {
         await rpc(sb, 'apify_reserve_tesco_request', {
           p_run_id: runId, p_egress_key: APIFY_GATE, p_owner: owner,
           p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
         });
       } catch (e) {
-        // A reservation refusal (recently attempted, not due, etc.) skips this
-        // product without a fetch; continue the batch.
         deps.log?.({ event: 'reserve_skipped', sku: m.store_sku, reason: (e as Error).message });
         continue;
       }
 
-      // Fetch via Apify (one run == one request == one budget unit).
       const { response, provider } = await deps.fetchApify(m.store_url);
       spentUsd += deps.perRequestUsd;
       result.requested += 1;
@@ -246,80 +324,156 @@ export async function collectTescoApify(
       try { if (outcome === 'ok') parsed = parseTescoCollectedPage(response.html, response.finalUrl); }
       catch { outcome = 'parse_error'; }
       const product: TescoCollectedProduct | undefined = parsed?.products.find(p => p.sku === m.store_sku);
-
-      // Identity gate (same deterministic validator the supervised collector uses).
-      const reasons = product
-        ? validateTescoCollectedIdentity(mappingEvidence(m), product)
-        : ['missing_exact_product'];
       const unavailable = tescoResourceUnavailable(response);
       const transportStop = outcome !== 'ok' && !unavailable;
-      // Freshness is REQUIRED to finalise: advancing timestamps or billing alone
-      // do not qualify. The transport already fails-closed (holds as a transport
-      // error when the per-request proof fails); this is belt-and-braces so a
-      // relaxed transport can never cause a stale finalisation here.
-      const freshnessOk = provider?.freshness.requiredFreshnessMet === true;
-      const accept = outcome === 'ok' && !!product && reasons.length === 0 && freshnessOk;
+      const adapterBody = createHash('sha256').update(response.html).digest('hex');
+
+      // Seed the freshness audit with the first ok item that met its per-item
+      // precondition (scraped_at present + after submit).
+      if (auditSeedUrl === null && outcome === 'ok' && provider?.freshness.perItemPreconditionMet && provider.scrapedAt) {
+        auditSeedUrl = m.store_url;
+        auditSeedScrapedAt = provider.scrapedAt;
+      }
+
+      // --- Identity + inference acceptance path (defects 2 + 3) ---
+      // Deterministic gate FIRST (authoritative; AI can never override a reject).
+      const deterministicReasons = product
+        ? validateTescoCollectedIdentity(mappingEvidence(m), product)
+        : ['missing_exact_product'];
+      const perItemFreshOk = provider?.freshness.perItemPreconditionMet === true;
+
+      let decision: 'accept_pending_audit' | 'hold' = 'hold';
+      let method: 'deterministic' | 'deterministic_plus_ai' = 'deterministic';
+      let rationale = '';
+      let model: string | null = null;
+      let liveFingerprint = '';
+      const reasons = [...deterministicReasons];
+
+      if (outcome === 'ok' && product && perItemFreshOk && deterministicReasons.length === 0) {
+        liveFingerprint = identityFingerprint({
+          canonical: { name: m.canonical_name, brand: m.canonical_brand, ean: m.canonical_ean },
+          tesco: { sku: product.sku, name: product.name, brand: product.brand, gtin: product.gtin, quantity: product.quantity },
+        });
+        // Reuse path (defect 3): an UNCHANGED, previously-verified mapping in
+        // RENEWAL may use the cheap deterministic check alone.
+        const existing = await readActiveVerification(sb, m.id);
+        const reuse = mode === 'renewal' && verificationReusable(existing, liveFingerprint);
+        if (reuse) {
+          decision = 'accept_pending_audit';
+          method = 'deterministic';
+          rationale = 'Unchanged mapping: reused active identity verification; deterministic renewal check passed against fresh evidence.';
+        } else {
+          // New, changed or uncertain → run the independent AI inference and
+          // require BOTH it and the deterministic gate to agree (and its own
+          // facts to be internally consistent, and bound to this identity).
+          const ev = assessmentEvidence(m, runId, adapterBody, product);
+          const verdict = await assessAndCombine(ev, product, runId, deps.assessOptions);
+          model = verdict.assessment.model;
+          if (verdict.decision === 'verified_exact' && verdict.machineAssessment
+            && verdict.assessment.identity_fingerprint === liveFingerprint) {
+            decision = 'accept_pending_audit';
+            method = 'deterministic_plus_ai';
+            rationale = verdict.machineAssessment.reason;
+          } else {
+            reasons.push(`ai_${verdict.decision}`);
+            if (verdict.holdReason) deps.log?.({ event: 'ai_hold', sku: m.store_sku, holdReason: verdict.holdReason });
+          }
+        }
+      } else if (outcome === 'ok' && product && !perItemFreshOk) {
+        reasons.push('freshness_precondition_not_met');
+      }
 
       const pauseUntil = transportStop
         ? tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter)
         : null;
       const blocked = response.outcome === 'access_block';
-
-      const adapterBody = createHash('sha256').update(response.html).digest('hex');
       const providerJson = provider ? {
         sku: provider.sku, actorId: provider.actorId, actorBuildId: provider.actorBuildId,
         actorBuildNumber: provider.actorBuildNumber, runId: provider.runId, datasetId: provider.datasetId,
         rawItem: provider.rawItem, rawItemSha256: provider.rawItemSha256,
         scrapedAt: provider.scrapedAt, freshness: provider.freshness,
-        freshnessVerified: provider.freshness.requiredFreshnessMet,
+        freshnessVerified: false, // set true only after the batch audit establishes it
       } : null;
 
-      const rec = await rpc<{ finalised: boolean; paused?: boolean }>(sb, 'apify_record_tesco_page', {
+      // Record the page NOW (evidence), but DO NOT finalise yet — finalisation
+      // waits for the per-batch audit. p_accept=false here; staged items are
+      // finalised after the audit via a second record call.
+      await rpc(sb, 'apify_record_tesco_page', {
         p_run_id: runId, p_egress_key: APIFY_GATE, p_owner: owner,
         p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
         p_outcome: outcome, p_http_status: response.status, p_retry_after: response.retryAfter,
         p_elapsed_ms: response.elapsedMs, p_adapter_body_sha256: adapterBody,
         p_parsed: parsed, p_identity_results: [{ storeProductId: m.id, sku: m.store_sku, reasons }],
         p_detail: {
-          provider: 'apify', disposition: accept ? 'accept' : outcome === 'ok' ? 'hold_continue' : undefined,
+          provider: 'apify',
+          disposition: decision === 'accept_pending_audit' ? 'accept_pending_audit' : outcome === 'ok' ? 'hold_continue' : undefined,
           resourceUnavailable: unavailable || undefined, freshness: provider?.freshness.level ?? null,
-          evidenceOrigin: 'synthetic-apify-adapter',
+          method, evidenceOrigin: 'synthetic-apify-adapter',
         },
-        p_accept: accept, p_regular_price: accept ? product!.price : null, p_previous_price: m.price,
+        p_accept: false, p_regular_price: null, p_previous_price: m.price,
         p_store_sku: m.store_sku, p_store_product_name: product?.name ?? m.store_product_name,
         p_pause: !!pauseUntil, p_pause_until: pauseUntil, p_blocked: blocked,
         p_provider: providerJson,
       });
 
-      // Persist / refresh the reusable identity verification on acceptance.
-      if (accept && product) {
-        const fp = identityFingerprint({
-          canonical: { name: m.canonical_name, brand: m.canonical_brand, ean: m.canonical_ean },
-          tesco: { sku: product.sku, name: product.name, brand: product.brand, gtin: product.gtin, quantity: product.quantity },
-        });
-        await rpc(sb, 'apify_record_identity_verification', {
-          p_store_product_id: m.id, p_identity_fingerprint: fp,
-          p_canonical: { name: m.canonical_name, brand: m.canonical_brand, ean: m.canonical_ean },
-          p_tesco: { sku: product.sku, name: product.name, brand: product.brand, gtin: product.gtin, quantity: product.quantity },
-          p_rationale: 'Deterministic identity gate (validateTescoCollectedIdentity) passed against fresh Apify evidence.',
-          p_method: 'deterministic', p_rule_version: IDENTITY_ASSESSMENT_RULE_VERSION, p_model: null,
-          p_source_page_id: null, p_source_body_sha256: adapterBody, p_reusable_hours: 720,
-        });
+      if (decision === 'accept_pending_audit' && product) {
+        staged.push({ m, product, adapterBody, method, rationale, model, fingerprint: liveFingerprint });
+      } else {
+        result.perProduct.push({ storeProductId: m.id, sku: m.store_sku, outcome, accepted: false,
+          reasons, price: null, freshness: provider?.freshness.level ?? null });
+        if (unavailable) result.unavailable += 1; else if (outcome === 'ok') result.held += 1;
+      }
+      deps.log?.({ event: 'product', sku: m.store_sku, outcome, decision, method, reasons });
+      if (pauseUntil) { result.stopped = outcome; break; }
+    }
+
+    // --- Per-batch freshness audit + staged finalisation (defects 1 + 4) ---
+    if (staged.length) {
+      let auditEstablished = false; let auditReason = 'no staged acceptances';
+      if (spentUsd + deps.perRequestUsd <= deps.budgetUsd && auditSeedUrl) {
+        const audit = await auditBatchFreshness(deps.auditClient, auditSeedUrl, auditSeedScrapedAt);
+        spentUsd += deps.perRequestUsd; // the audit re-run is a real charge
+        auditEstablished = audit.established;
+        auditReason = audit.reason;
+        deps.log?.({ event: 'freshness_audit', ...audit });
+      } else {
+        auditReason = auditSeedUrl ? 'insufficient budget for freshness audit' : 'no audit seed available';
       }
 
-      result.perProduct.push({
-        storeProductId: m.id, sku: m.store_sku, outcome, accepted: accept,
-        reasons, price: accept ? (product?.price ?? null) : null,
-        freshness: provider?.freshness.level ?? null,
-      });
-      if (rec?.finalised) result.accepted += 1;
-      else if (unavailable) result.unavailable += 1;
-      else if (outcome === 'ok') result.held += 1;
-
-      deps.log?.({ event: 'product', sku: m.store_sku, outcome, accepted: !!rec?.finalised, reasons });
-
-      // Transport stop ends the batch (gate paused by the RPC).
-      if (pauseUntil) { result.stopped = outcome; break; }
+      for (const s of staged) {
+        if (!auditEstablished) {
+          // Freshness could not be established for the batch → HOLD everything.
+          result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
+            accepted: false, reasons: ['batch_freshness_not_established'], price: null, freshness: 'held_batch_audit' });
+          result.held += 1;
+          continue;
+        }
+        // Finalise now, with an immediate pre-finalisation recheck inside the
+        // RPC (defect 4: due/observation/lease rechecked atomically).
+        const rec = await rpc<{ finalised: boolean }>(sb, 'apify_finalise_tesco_page', {
+          p_run_id: runId, p_egress_key: APIFY_GATE, p_owner: owner,
+          p_store_product_id: s.m.id, p_store_url: s.m.store_url, p_mode: mode,
+          p_regular_price: s.product.price, p_previous_price: s.m.price,
+          p_store_sku: s.m.store_sku, p_store_product_name: s.product.name,
+        });
+        if (rec?.finalised) {
+          result.accepted += 1;
+          await rpc(sb, 'apify_record_identity_verification', {
+            p_store_product_id: s.m.id, p_identity_fingerprint: s.fingerprint,
+            p_canonical: { name: s.m.canonical_name, brand: s.m.canonical_brand, ean: s.m.canonical_ean },
+            p_tesco: { sku: s.product.sku, name: s.product.name, brand: s.product.brand, gtin: s.product.gtin, quantity: s.product.quantity },
+            p_rationale: s.rationale, p_method: s.method, p_rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
+            p_model: s.model, p_source_page_id: null, p_source_body_sha256: s.adapterBody, p_reusable_hours: 720,
+          });
+          result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
+            accepted: true, reasons: [], price: s.product.price, freshness: 'fresh_batch_audited' });
+        } else {
+          result.held += 1;
+          result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
+            accepted: false, reasons: ['finalise_recheck_failed'], price: null, freshness: 'fresh_batch_audited' });
+        }
+      }
+      if (!auditEstablished) { result.stopped = result.stopped ?? 'freshness_not_established'; deps.log?.({ event: 'batch_held', reason: auditReason }); }
     }
   } finally {
     await rpc(sb, 'apify_close_tesco_run', {

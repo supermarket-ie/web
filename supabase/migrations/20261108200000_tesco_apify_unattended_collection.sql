@@ -352,6 +352,79 @@ begin
 end;
 $$;
 
+-- Finalise a staged, already-recorded + freshness-audited page. Separated from
+-- apify_record_tesco_page so the freshness audit runs BEFORE any price write.
+-- Rechecks mode/due/observation, lease ownership and the recorded page outcome
+-- IMMEDIATELY before finalising (defect 4). The page row for this URL must be an
+-- 'ok' page recorded earlier in THIS run. Receipt idempotency + positive price
+-- are enforced by finalize_store_scrape_product.
+create or replace function public.apify_finalise_tesco_page(
+  p_run_id uuid,
+  p_egress_key text,
+  p_owner text,
+  p_store_product_id uuid,
+  p_store_url text,
+  p_mode text,
+  p_regular_price numeric,
+  p_previous_price numeric,
+  p_store_sku text,
+  p_store_product_name text
+) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_finalised boolean := false;
+begin
+  if p_egress_key <> 'apify-tesco-ie-20261108' then raise exception 'apify_gate_only'; end if;
+  if p_regular_price is null or p_regular_price <= 0 then raise exception 'positive_regular_price_required'; end if;
+
+  -- Lease fencing: lock gate+run, confirm THIS owner still holds a LIVE lease.
+  -- An expired worker (lease elapsed, or ownership transferred) finalises
+  -- nothing and never extends/releases a successor's lease.
+  perform 1 from public.tesco_egress_pool where egress_key = p_egress_key for update;
+  perform 1 from public.scrape_runs where id = p_run_id for update;
+  if not exists (select 1 from public.tesco_egress_pool where egress_key = p_egress_key
+      and leased_until > now() and coalesce(cooldown_until, now()) <= now())
+    or not exists (select 1 from public.scrape_runs where id = p_run_id
+      and error_summary::jsonb->>'activeOwner' = p_owner)
+  then raise exception 'ownership_or_lease_lost'; end if;
+
+  -- The page recorded earlier this run for this URL must exist and be ok.
+  if not exists (select 1 from public.tesco_direct_collection_pages
+    where run_id = p_run_id and requested_url = p_store_url and outcome = 'ok')
+  then raise exception 'no_recorded_ok_page_for_url'; end if;
+
+  -- Immediate pre-finalisation recheck of due/observation (defect 4): the
+  -- snapshot that justified acceptance must still hold.
+  if p_mode = 'renewal' then
+    if not exists (select 1 from public.latest_prices
+      where store_product_id = p_store_product_id and store = 'tesco'
+      and observed_at <= now() - interval '4 days')
+    then raise exception 'observation_changed'; end if;
+  elsif p_mode = 'expansion' then
+    if exists (select 1 from public.latest_prices where store_product_id = p_store_product_id and store = 'tesco')
+    then raise exception 'already_observed'; end if;
+  else
+    raise exception 'mode_must_be_renewal_or_expansion';
+  end if;
+
+  v_finalised := public.finalize_store_scrape_product(
+    p_run_uuid => p_run_id, p_store => 'tesco', p_store_product_id => p_store_product_id,
+    p_success => true, p_price => p_regular_price, p_previous_price => p_previous_price,
+    p_store_url => p_store_url, p_store_sku => p_store_sku, p_store_product_name => p_store_product_name,
+    p_fetched => 1, p_extracted => 1);
+
+  -- Heartbeat only (do not extend beyond a live lease we already confirmed).
+  update public.tesco_egress_pool
+    set last_success_at = now(), updated_at = now()
+    where egress_key = p_egress_key and leased_until > now();
+  update public.scrape_runs
+    set error_summary = (error_summary::jsonb || jsonb_build_object('heartbeatAt', now()))::text
+    where id = p_run_id;
+  return jsonb_build_object('finalised', v_finalised);
+end;
+$$;
+
 -- Close the run: release the lease (never clear/shorten cooldown) and set the
 -- terminal status. Owner-guarded so a successor's lease is never cleared.
 create or replace function public.apify_close_tesco_run(
@@ -430,9 +503,11 @@ $$;
 revoke all on function public.apify_begin_tesco_run(text, text, integer, text) from public, anon, authenticated;
 revoke all on function public.apify_reserve_tesco_request(uuid, text, text, uuid, text, text) from public, anon, authenticated;
 revoke all on function public.apify_record_tesco_page(uuid, text, text, uuid, text, text, text, integer, text, integer, text, jsonb, jsonb, jsonb, boolean, numeric, numeric, text, text, boolean, timestamptz, boolean, jsonb) from public, anon, authenticated;
+revoke all on function public.apify_finalise_tesco_page(uuid, text, text, uuid, text, text, numeric, numeric, text, text) from public, anon, authenticated;
 revoke all on function public.apify_close_tesco_run(uuid, text, text, text) from public, anon, authenticated;
 revoke all on function public.apify_record_identity_verification(uuid, text, jsonb, jsonb, text, text, text, text, uuid, text, integer) from public, anon, authenticated;
 
+grant execute on function public.apify_finalise_tesco_page(uuid, text, text, uuid, text, text, numeric, numeric, text, text) to service_role;
 grant execute on function public.apify_begin_tesco_run(text, text, integer, text) to service_role;
 grant execute on function public.apify_reserve_tesco_request(uuid, text, text, uuid, text, text) to service_role;
 grant execute on function public.apify_record_tesco_page(uuid, text, text, uuid, text, text, text, integer, text, integer, text, jsonb, jsonb, jsonb, boolean, numeric, numeric, text, text, boolean, timestamptz, boolean, jsonb) to service_role;
