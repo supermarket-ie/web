@@ -1,0 +1,15 @@
+// TEMPLATE — copy this into the LIVE sandbox config, which the agent is (correctly)
+// denied from writing. Put it at ONE of:
+//   workspace: <workspace-root>/.kiro/settings/sandbox.json
+//   global:    ~/.kiro/settings/sandbox.json
+// Kiro 1.4.86 native "Local command sandbox" (macOS Seatbelt backend, sandbox-exec).
+// enabled:true turns on the OS boundary around agent shell commands + children.
+// networkAccess COMMON_DEPENDENCIES allows package/build/HTTPS egress the Tesco
+//   Apify run needs (Supabase REST, Apify API, AWS) while blocking the rest.
+// mcpSandboxing:true also wraps stdio MCP processes (none configured today, but
+//   safe default).
+{
+  "enabled": true,
+  "networkAccess": "COMMON_DEPENDENCIES",
+  "mcpSandboxing": true
+}

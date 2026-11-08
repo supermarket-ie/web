@@ -1,0 +1,48 @@
+# TEMPLATE — the LIVE workspace permissions file is at
+#   ~/.kiro/workspace-roots/8f43d57f5cb65ecd/permissions.yaml
+# (per-user, OUTSIDE the repo; the agent is correctly DENIED from editing it).
+# This template shows the two hardening changes to apply to it:
+#
+#   1. Scope the file tools to the workspace only (fs_read/fs_write -> ./**),
+#      so unrelated projects and home-dir credential stores are outside reach.
+#   2. Remove the keychain surface from the shell allow-list: delete the
+#      `security *` and `/usr/bin/security *` entries (the macOS keychain access
+#      path that surfaced the out-of-scope CLI token). Keep the rest as needed.
+#
+# `deny` always wins over `allow`, so the explicit fs denies below guarantee the
+# credential dirs stay unreadable even if a broad allow is ever added.
+
+rules:
+  # --- File tools: workspace-only ---
+  - capability: fs_read
+    effect: allow
+    match: ["./**"]
+  - capability: fs_write
+    effect: allow
+    match: ["./**"]
+  # Belt-and-braces: never read host credential stores via the file tool.
+  - capability: fs_read
+    effect: deny
+    match:
+      - "~/Library/Keychains/**"
+      - "~/.aws/**"
+      - "~/.ssh/**"
+      - "~/.config/**"
+      - "~/.zsh_history"
+
+  # --- Shell: keep the project's existing allow-list BUT drop keychain access ---
+  # Remove these two entries from the live file's shell allow list:
+  #   - security *
+  #   - /usr/bin/security *
+  # (Do not re-add them. The Supermarket task never needs the keychain.)
+
+  # --- MCP: none configured; leave default-deny (no mcp allow rule) ---
+
+  - capability: web_search
+    effect: allow
+  - capability: web_fetch
+    effect: allow
+    match:
+      - apify.com
+      - www.scrapingbee.com
+      - thunderbit.com
