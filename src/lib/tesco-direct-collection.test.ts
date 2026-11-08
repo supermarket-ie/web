@@ -72,6 +72,39 @@ describe('Tesco collection orchestration', () => {
     expect(mocks.success).toHaveBeenCalledTimes(1);
     expect(mocks.release).not.toHaveBeenCalled();
   });
+  it('uses the INJECTED fetcher (browser transport) in probe mode, charges the request, writes no price', async () => {
+    const globalFetch = vi.fn(); vi.stubGlobal('fetch', globalFetch);
+    // Injected transport returns a genuine TescoPageResponse (the shape the
+    // browser module yields). Probe mode must call THIS, not global fetch.
+    const injected = vi.fn().mockResolvedValue({ outcome: 'ok', status: 200,
+      finalUrl: 'https://www.tesco.ie/shop/en-IE/products/123456789', html, retryAfter: null, elapsedMs: 10 });
+    const result = await collectTescoDirect({
+      mode: 'probe',
+      probeProductUrls: ['https://www.tesco.ie/shop/en-IE/products/123456789'],
+      fetcher: injected,
+    });
+    expect(injected).toHaveBeenCalledTimes(1);
+    expect(injected).toHaveBeenCalledWith('https://www.tesco.ie/shop/en-IE/products/123456789');
+    expect(globalFetch).not.toHaveBeenCalled();
+    // Request charged (one page reserved), but probe mode writes NO price.
+    expect(result).toMatchObject({ requests: 1, pricesWritten: 0 });
+    expect(mocks.rpc).not.toHaveBeenCalledWith('finalize_store_scrape_product', expect.anything());
+  });
+
+  it('stops a probe on a challenge from the INJECTED fetcher and quarantines without a price', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const injected = vi.fn().mockResolvedValue({ outcome: 'access_block', status: 403,
+      finalUrl: 'https://www.tesco.ie/shop/en-IE/products/123456789', html: 'Access Denied', retryAfter: null, elapsedMs: 5 });
+    const result = await collectTescoDirect({
+      mode: 'probe',
+      probeProductUrls: ['https://www.tesco.ie/shop/en-IE/products/123456789'],
+      fetcher: injected,
+    });
+    expect(result).toMatchObject({ status: 'access_block', requests: 1, pricesWritten: 0 });
+    expect(mocks.rpc).toHaveBeenCalledWith('pause_tesco_collection_egress', expect.objectContaining({ p_blocked: true }));
+    expect(mocks.success).not.toHaveBeenCalled();
+  });
+
   it('does not refetch or redate cached product evidence', async () => {
     mocks.cache = [{ requested_url: 'https://www.tesco.ie/shop/en-IE/products/123456789', outcome: 'ok', parsed: null }];
     const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
