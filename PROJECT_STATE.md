@@ -1,43 +1,71 @@
 # Supermarket.ie — Canonical Project State
 
-## 8 November 2026 — DEFINITIVE: browser (Playwright/Chromium) from AWS is ALSO blocked (403) — Tesco not reachable from our infra
+## 8 November 2026 — Corrected-config browser test (Chromium's ACTUAL identity) from AWS → still HTTP 403; two AWS browser configs now tested, both blocked
 
-Ran the authorised one-time bounded browser acceptance test from the intended
-unattended AWS runtime. Result: the headless-browser route gets the SAME HTTP
-403 / Akamai access block as the plain fetch. A full browser fingerprint does
-NOT clear the edge from AWS datacenter egress. This settles the browser-on-AWS
-option: it does not work for Tesco from our infrastructure.
+Re-ran the browser acceptance test from the intended unattended AWS runtime
+after correcting a configuration fault in the earlier run. The earlier browser
+image hardcoded a spoofed desktop Mac Chrome 124 user-agent (and a spoofed
+Accept-Language); that config is not what Playwright/Chromium actually presents.
+The corrected build removes the hardcoded UA and the spoofed Accept-Language and
+lets Chromium use its own identity (keeping only `locale: 'en-IE'`), capturing
+the real UA and Chromium version in the diagnostic output.
 
-Owner exception (honoured narrowly): the owner authorised a ONE-TIME documented
-exception to OUR OWN 48h application timer (explicitly NOT a retailer
-Retry-After). Original state recorded: gate `vercel-dub1-canary-20260920`
-cooldown_until 2026-11-09T23:29:59Z, consecutive/total blocks 3/3, 0 successes.
-The exception moved ONLY that gate's `cooldown_until` to now (counters/history
-preserved); it was consumed by the single test and self-closed when the real
-403 re-applied a fresh 48h cooldown. No permanent bypass; no other gate changed.
+Result of the corrected test: HeadlessChrome/145.0.7632.6 on Linux x86_64
+(real UA `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)
+HeadlessChrome/145.0.7632.6 Safari/537.36`) still received HTTP 403 /
+`access_block` from Tesco's edge on AWS datacenter egress.
 
-Evidence (run `tesco_direct_probe_20261108134937663`, task
-smie-prod-browser-probe rev3, image `20f2cf5-browsertest`, prod VPC/subnets/SG/
-task role, eu-west-1):
-- product 318168902 -> HTTP 403, outcome `access_block`, 4291ms genuine browser
-  navigation, region IE, body sha256 ed48904c…, no product parsed.
-- Probe STOPPED on the first block (1 of 10 requests used), charged 1 request to
-  the ledger, wrote NO price (pricesWritten 0; run inserted 0 / target 0), and
-  recorded the block via the supported control path.
-- Gate after: cooldown_until 2026-11-10T13:49:42Z, consecutive/total blocks 4/4,
-  0 successes, lease released. Read-only confirmed (no price_observations, no
-  finalisation, no mapping change).
+What this demonstrates — and what it does NOT: this shows that the corrected
+browser configuration (Chromium's genuine Linux headless identity) is also
+blocked from our AWS egress. It does NOT establish that the hardcoded Mac UA
+caused the earlier 403, nor that any particular identity would or would not
+clear the edge. Two distinct AWS browser configurations have now returned 403
+(spoofed Mac Chrome 124 UA, and genuine Linux HeadlessChrome 145); both are
+consistent with an edge decision driven by AWS datacenter egress rather than by
+the specific browser string, but this test set does not prove the cause.
+
+Owner exceptions (both honoured narrowly, explicitly NOT retailer Retry-After):
+the owner authorised TWO separate ONE-TIME documented exceptions to OUR OWN 48h
+application timer — exception #1 for the first (Mac-UA) test, exception #2 for
+this corrected test. Each moved ONLY gate `vercel-dub1-canary-20260920`'s
+`cooldown_until` to now (counters/history preserved) and self-closed when the
+real 403 re-applied a fresh 48h cooldown. No permanent bypass; no other gate
+changed; `claim_tesco_egress` and the request-exclusion window untouched.
+
+Exception #2 record (this test):
+- Gate BEFORE (recorded immediately prior): cooldown_until 2026-11-10T13:49:42Z,
+  consecutive/total blocks 4/4, 0 successes, leased_until null.
+- Exception applied 2026-11-08T18:21:02Z: cooldown_until → now, counters
+  preserved.
+- Launch verified BEFORE touching the cooldown: Chromium 145.0.7632.6 launched
+  successfully in the corrected image (no Tesco request made for the check).
+- Evidence (task smie-prod-browser-probe rev4, image `1ce3444-browsertest`, prod
+  VPC/subnets/SG/task role, eu-west-1, run `d90ef1f6-1288-4ab3-aa4a-911ddc2e51f4`):
+  product 303350127 → HTTP 403, outcome `access_block`, 5956ms genuine browser
+  navigation, region IE, body sha256
+  `f104df875cafa045ca53894ceb087f3eb6be52d72407159ad3eae63d086a1a61`, captured
+  2026-11-08T18:22:00.799Z, no product parsed, no SKU/price available.
+- Probe made exactly 1 request, STOPPED on the first block, charged 1 request to
+  the ledger, wrote NO price (pricesWritten 0; run inserted 0 / target 0),
+  released its lease, and recorded the block via the supported control path.
+- Gate AFTER (self-closed): cooldown_until 2026-11-10T18:22:06Z, consecutive/
+  total blocks 5/5, 0 successes, lease released. Read-only confirmed (no
+  price_observations, no finalisation, no mapping change).
 
 How the test was built/run (all merged): the bounded probe drives the existing
 `collectTescoDirect` in probe mode with the headless-browser transport injected
 (PR #351 browser transport, #352 probe-via-collector accounting, #353 browser-
-image CI workflow, #354 Dockerfile copies scripts/). Two first attempts failed
-on packaging (scripts/ not in image; missing `--conditions=react-server` for the
-`server-only` guard) — both fixed; neither made a Tesco request.
+image CI workflow, #354 Dockerfile copies scripts/, #356 removes the hardcoded
+UA/Accept-Language and records Chromium's actual identity).
 
-Where this leaves Tesco unattended collection: the direct network routes we can
-test from AWS (plain fetch AND headless browser) are both blocked at Tesco's
-edge. The remaining viable paths are the ones needing an owner decision/resource
+Where this leaves Tesco unattended collection: every direct network route we
+have been able to test from AWS so far (plain fetch, and the browser route in
+two configurations) returns 403 at Tesco's edge. We have not found an AWS-egress
+configuration that reaches Tesco, and the evidence points at the datacenter
+egress rather than the request shape — but we have not proven that cause, and
+further probing from the same egress is bounded by our 48h cooldown and the
+no-repeated-probing rule. The remaining viable paths are the ones needing an
+owner decision/resource
 and not testable from here: (a) a paid Tesco-tolerant data provider — concrete
 costed recommendation already on file: Apify `parsebird/tesco-scraper` (verified
 tesco.ie, EUR, gtin/pack/price; free-tier $1.99/1,000, est. ~$30–54/mo usage at
