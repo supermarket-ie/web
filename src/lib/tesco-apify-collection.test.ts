@@ -10,6 +10,7 @@ type Row = Record<string, unknown>;
 // verification read, and lets a test control finalise outcomes.
 function makeFakeSb(opts: {
   mappings: Row[]; latest: Row[]; receipts: Row[]; recent: Row[]; verifications?: Row[];
+  peers?: Row[]; // dunnes/supervalu rows with nested latest_prices, for attachFreshPeers
   finaliseResult?: (args: Row) => { finalised: boolean };
   reserveResult?: (args: Row) => { data: unknown; error: { message: string } | null };
   initialCommittedUsd?: number;
@@ -38,7 +39,11 @@ function makeFakeSb(opts: {
     };
   };
   const table = (name: string) => {
-    const dataFor = (): Row[] => name === 'store_products' ? opts.mappings
+    // attachFreshPeers queries store_products filtered to dunnes/supervalu via
+    // .in('store', [...]) and resolves via await on the query (no .range). We
+    // detect that by the 'store' in-filter and serve opts.peers.
+    const state = { peerQuery: false };
+    const dataFor = (): Row[] => name === 'store_products' ? (state.peerQuery ? (opts.peers ?? []) : opts.mappings)
       : name === 'latest_prices' ? opts.latest
       : name === 'scrape_product_receipts' ? opts.receipts
       : name === 'tesco_identity_verifications' ? (opts.verifications ?? [])
@@ -47,6 +52,11 @@ function makeFakeSb(opts: {
     const chain = () => builder;
     builder.select = chain; builder.eq = chain; builder.not = chain; builder.gte = chain;
     builder.is = chain; builder.order = chain;
+    builder.in = (col: string) => { if (col === 'store') state.peerQuery = true; return builder; };
+    // attachFreshPeers awaits the builder directly (no .range/.limit); support
+    // that by making the builder thenable, resolving to the peer rows.
+    builder.then = (resolve: (v: { data: Row[]; error: null }) => unknown) =>
+      resolve({ data: state.peerQuery ? (opts.peers ?? []) : [], error: null });
     builder.limit = async () => ({ data: dataFor(), error: null });
     builder.range = async (from: number) => ({ data: from === 0 ? dataFor() : [], error: null });
     return builder;
@@ -159,6 +169,33 @@ function fixtures(overMapping: Row = {}, overLatest: Row = {}) {
   };
 }
 
+// A fixture whose canonical has NO ean and whose mapping has NO gtin, so the
+// barcode path in independentExactIdentity cannot pass on its own. With no
+// peers supplied, independentExactIdentity returns false and the ONLY accept
+// route is AI agreement — this isolates the AI-path tests from the new
+// peer/barcode-corroborated route.
+function noBarcodeFixtures(overMapping: Row = {}, overLatest: Row = {}) {
+  const id = '22222222-2222-2222-2222-222222222222';
+  return {
+    id,
+    mappings: [{
+      id, product_id: 'p2', store_sku: '254877356',
+      store_url: 'https://www.tesco.ie/shop/en-IE/products/254877356',
+      store_product_name: 'Tesco Easy Cook Long Grain Rice 1kg', brand: 'Tesco', is_own_brand: true,
+      url_status: 'resolved', gtin: null,
+      products: { canonical_name: 'Long Grain Rice 1kg', brand: null, ean: null }, ...overMapping,
+    }],
+    latest: [{ store_product_id: id, observed_at: '2026-10-01T00:00:00Z', price: 1.3, ...overLatest }],
+    receipts: [{ store_product_id: id, outcome: 'success' }],
+    recent: [] as Row[],
+  };
+}
+// An Apify item that keeps a valid GTIN (so the renderer is happy) — the
+// no-barcode property comes from the MAPPING having gtin=null and canonical
+// ean=null, so independentExactIdentity's barcode path cannot apply and, with
+// no peers + own-brand, it returns false (isolating the AI path).
+const noBarcodeItem = (over: Partial<ApifyItem> = {}) => item({ ...over });
+
 const baseDeps = (sb: SupabaseClient, fetchApify: (u: string, maxChargeUsd?: number) => Promise<ApifyFetchResult>, over: Record<string, unknown> = {}) => ({
   sb, fetchApify, campaign: 'tesco-apify-test', budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
   assessOptions: { runModel: aiRunner('verified_exact') as never }, ...over,
@@ -166,6 +203,9 @@ const baseDeps = (sb: SupabaseClient, fetchApify: (u: string, maxChargeUsd?: num
 
 describe('collectTescoApify — identity + AI inference acceptance path', () => {
   it('finalises a new/changed mapping only when AI + deterministic agree, via the separate finalise RPC', async () => {
+    // Barcode-backed fixture: canonical EAN matches the live GTIN, so the
+    // strict positive gate independentExactIdentity passes and the mapping is
+    // accepted (the AI concurs). This is a legitimate accept.
     const fx = fixtures();
     const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item())));
@@ -188,12 +228,13 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
       store_product_id: mid, product_id: 'p-eggs', store_sku: '254877356',
       store_url: 'https://www.tesco.ie/shop/en-IE/products/254877356', url_status: 'resolved',
       store_brand: 'Tesco', store_product_name: 'Tesco Free Range Eggs 12', is_own_brand: true,
-      gtin: '05000436926832', canonical_name: 'Free Range Eggs 12', canonical_brand: null,
-      canonical_ean: '05000436926832', same_sku_canonical_names: ['Free Range Eggs 12'],
+      gtin: null, canonical_name: 'Free Range Eggs 12', canonical_brand: null,
+      canonical_ean: null, same_sku_canonical_names: ['Free Range Eggs 12'],
     });
     const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, snapshotOverride: eggsSnap });
     // The live Apify item matches the EGGS snapshot identity (so the
-    // deterministic gate passes and the AI is actually invoked).
+    // deterministic gate passes and the AI is actually invoked). No barcode and
+    // no peers, so the AI path — not the peer/barcode route — is exercised.
     const eggsLive = item({ product_id: '254877356', name: 'Tesco Free Range Eggs 12', brand_name: 'TESCO',
       gtin: '05000436926832', pack_size: '12', pack_size_unit: 'each', net_contents: '12 eggs' });
     let seenCanonical: string | null = null;
@@ -206,9 +247,9 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
   });
 
   it('HOLDS when the AI rejects, even though the deterministic gate would pass (fail-closed)', async () => {
-    const fx = fixtures();
+    const fx = noBarcodeFixtures();
     const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
-    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), {
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(noBarcodeItem()), {
       assessOptions: { runModel: aiRunner('rejected', { flavour_formulation_matches: false }) as never },
     }));
     expect(res.accepted).toBe(0);
@@ -217,9 +258,9 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
   });
 
   it('HOLDS when the AI is uncertain', async () => {
-    const fx = fixtures();
+    const fx = noBarcodeFixtures();
     const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
-    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), {
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(noBarcodeItem()), {
       assessOptions: { runModel: aiRunner('uncertain') as never },
     }));
     expect(res.accepted).toBe(0);
@@ -227,11 +268,11 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
   });
 
   it('HOLDS (does not abort, never accepts) when the AI assessment THROWS (e.g. schema miss / model error)', async () => {
-    const fx = fixtures();
+    const fx = noBarcodeFixtures();
     const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
     const throwingRunner = async () => { throw new Error('No object generated: response did not match schema.'); };
     // The run must COMPLETE (not reject) and hold the item, writing no price.
-    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), {
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(noBarcodeItem()), {
       assessOptions: { runModel: throwingRunner as never },
     }));
     expect(res.accepted).toBe(0);
@@ -239,6 +280,114 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
     expect(res.stopped).not.toBe('fatal');
     expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
     expect(res.perProduct[0].reasons).toContain('ai_error');
+  });
+
+  // ---- Fresh-peer corroboration (no canonical EAN, no peer GTIN) ----
+  // A branded manufacturer product whose canonical has no EAN. Fresh
+  // Dunnes/SuperValu peers corroborate identity by brand + title + pack total.
+  function brandedFixture(overMapping: Row = {}) {
+    const id = '33333333-3333-3333-3333-333333333333';
+    return {
+      id,
+      mappings: [{
+        id, product_id: 'p3', store_sku: '305123456',
+        store_url: 'https://www.tesco.ie/shop/en-IE/products/305123456',
+        store_product_name: 'Nutella Hazelnut Chocolate Spread 350g', brand: 'Nutella', is_own_brand: false,
+        url_status: 'resolved', gtin: null,
+        products: { canonical_name: 'Nutella Hazelnut Chocolate Spread 350g', brand: 'Nutella', ean: null }, ...overMapping,
+      }],
+      latest: [{ store_product_id: id, observed_at: '2026-10-01T00:00:00Z', price: 3.5 }],
+      receipts: [{ store_product_id: id, outcome: 'success' }],
+      recent: [] as Row[],
+    };
+  }
+  const brandedItem = (over: Partial<ApifyItem> = {}) => item({
+    product_id: '305123456', name: 'Nutella Hazelnut Chocolate Spread 350G', brand_name: 'Nutella',
+    gtin: null as unknown as string, pack_size: '350', pack_size_unit: 'G', net_contents: '350g',
+    url: 'https://www.tesco.ie/groceries/en-IE/products/305123456', ...over,
+  });
+  // Two fresh peers (one per store) matching brand + pack total + title.
+  const freshNutellaPeers = (name = 'Nutella Hazelnut Chocolate Spread 350g'): Row[] => ([
+    { id: 'peer-d', product_id: 'p3', store: 'dunnes', store_sku: 'd1', store_product_name: name,
+      brand: 'Nutella', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 3.4 } },
+    { id: 'peer-s', product_id: 'p3', store: 'supervalu', store_sku: 's1', store_product_name: name,
+      brand: 'Nutella', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 3.6 } },
+  ]);
+
+  it('ACCEPTS via fresh peer corroboration when AI is uncertain, with NO canonical EAN and NO peer GTIN (brand+title+pack)', async () => {
+    const fx = brandedFixture();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: freshNutellaPeers() });
+    // AI is UNCERTAIN — only the peer-corroborated independentExactIdentity route
+    // can accept. Proves peers (not the AI) lift the hold.
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(brandedItem()), {
+      assessOptions: { runModel: aiRunner('uncertain') as never },
+    }));
+    expect(res.accepted).toBe(1);
+    expect(res.perProduct[0].freshness).toBe('deterministic_plus_independent_peer');
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(true);
+    expect(calls.some(c => c.fn === 'apify_record_identity_verification')).toBe(true);
+  });
+
+  it('HOLDS with peers supplied when there is a genuine BRAND conflict (peer cannot rescue a brand mismatch)', async () => {
+    // Canonical brand Nutella; the live product is a different brand.
+    const fx = brandedFixture();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: freshNutellaPeers() });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(
+      brandedItem({ name: 'Tesco Hazelnut Chocolate Spread 350G', brand_name: 'Tesco' })), {
+      assessOptions: { runModel: aiRunner('verified_exact') as never },
+    }));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('HOLDS with peers supplied when there is a genuine VARIANT conflict (added strong flavour)', async () => {
+    const fx = brandedFixture({ store_product_name: 'Nutella Hazelnut Chocolate Spread 350g',
+      products: { canonical_name: 'Nutella Hazelnut Chocolate Spread 350g', brand: 'Nutella', ean: null } });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: freshNutellaPeers() });
+    // Live adds an explicit variant ("Orange") absent from the canonical.
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(
+      brandedItem({ name: 'Nutella Orange Hazelnut Chocolate Spread 350G' })), {
+      assessOptions: { runModel: aiRunner('verified_exact') as never },
+    }));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('HOLDS with peers supplied when there is a genuine PACK/MEASURE conflict (different size)', async () => {
+    const fx = brandedFixture();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: freshNutellaPeers() });
+    // Live is 750g vs canonical 350g — a real size difference.
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(
+      brandedItem({ name: 'Nutella Hazelnut Chocolate Spread 750G', pack_size: '750', net_contents: '750g' })), {
+      assessOptions: { runModel: aiRunner('verified_exact') as never },
+    }));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('HOLDS when peers themselves CONFLICT on pack/variant (a peer that disagrees cannot corroborate)', async () => {
+    const fx = brandedFixture();
+    // Peer states a different pack size → peerIdentityConflict → no corroboration.
+    const conflictingPeers: Row[] = [
+      { id: 'peer-d', product_id: 'p3', store: 'dunnes', store_sku: 'd1',
+        store_product_name: 'Nutella Hazelnut Chocolate Spread 750g', brand: 'Nutella', gtin: null,
+        latest_prices: { observed_at: new Date().toISOString(), price: 5.0 } },
+    ];
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: conflictingPeers });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(brandedItem()), {
+      assessOptions: { runModel: aiRunner('uncertain') as never },
+    }));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
   });
 
   it('REJECTS a genuine barcode conflict via the deterministic gate (AI cannot override)', async () => {
