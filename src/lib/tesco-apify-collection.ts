@@ -613,13 +613,27 @@ export async function collectTescoApify(
       });
       if (rec?.finalised) {
         result.accepted += 1;
-        await rpc(sb, 'apify_record_identity_verification', {
-          p_store_product_id: s.ident.storeProductId, p_identity_fingerprint: s.fingerprint,
-          p_canonical: { name: s.ident.canonicalName, brand: s.ident.canonicalBrand, ean: s.ident.canonicalEan },
-          p_tesco: { sku: s.product.sku, name: s.product.name, brand: s.product.brand, gtin: s.product.gtin, quantity: s.product.quantity },
-          p_rationale: s.rationale, p_method: s.method, p_rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
-          p_model: s.model, p_source_page_id: null, p_source_body_sha256: s.adapterBody, p_reusable_hours: 720,
-        });
+        // The price is now written. Recording the reusable identity verification
+        // is a best-effort follow-up: a failure here (e.g. the DB method
+        // CHECK not yet extended for a new method label) must NOT abort the
+        // campaign or undo the accepted price. The method column accepts
+        // 'deterministic' | 'deterministic_plus_ai'; the peer-corroborated
+        // route is established WITHOUT the AI, so it records as 'deterministic'
+        // (the precise route is preserved in the rationale + run logs). When a
+        // migration extends the CHECK, this mapping can record the exact label.
+        const dbMethod = s.method === 'deterministic_plus_ai' ? 'deterministic_plus_ai' : 'deterministic';
+        try {
+          await rpc(sb, 'apify_record_identity_verification', {
+            p_store_product_id: s.ident.storeProductId, p_identity_fingerprint: s.fingerprint,
+            p_canonical: { name: s.ident.canonicalName, brand: s.ident.canonicalBrand, ean: s.ident.canonicalEan },
+            p_tesco: { sku: s.product.sku, name: s.product.name, brand: s.product.brand, gtin: s.product.gtin, quantity: s.product.quantity },
+            p_rationale: s.rationale, p_method: dbMethod, p_rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
+            p_model: s.model, p_source_page_id: null, p_source_body_sha256: s.adapterBody, p_reusable_hours: 720,
+          });
+        } catch (err) {
+          deps.log?.({ event: 'verification_record_failed', sku: s.ident.storeSku, method: s.method,
+            message: err instanceof Error ? err.message : 'record failed' });
+        }
         result.perProduct.push({ storeProductId: s.ident.storeProductId, sku: s.ident.storeSku, outcome: 'ok',
           accepted: true, reasons: [], price: s.product.price, freshness: s.method });
       } else {

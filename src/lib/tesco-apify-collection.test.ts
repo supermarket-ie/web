@@ -11,6 +11,7 @@ type Row = Record<string, unknown>;
 function makeFakeSb(opts: {
   mappings: Row[]; latest: Row[]; receipts: Row[]; recent: Row[]; verifications?: Row[];
   peers?: Row[]; // dunnes/supervalu rows with nested latest_prices, for attachFreshPeers
+  verificationError?: string; // force apify_record_identity_verification to error
   finaliseResult?: (args: Row) => { finalised: boolean };
   reserveResult?: (args: Row) => { data: unknown; error: { message: string } | null };
   initialCommittedUsd?: number;
@@ -104,7 +105,10 @@ function makeFakeSb(opts: {
         return { data: r, error: null };
       }
       if (fn === 'apify_link_reservation_run') return { data: null, error: null };
-      if (fn === 'apify_record_identity_verification') return { data: 'ver-1', error: null };
+      if (fn === 'apify_record_identity_verification') {
+        if (opts.verificationError) return { data: null, error: { message: opts.verificationError } };
+        return { data: 'ver-1', error: null };
+      }
       if (fn === 'apify_close_tesco_run') return { data: { leaseReleased: true }, error: null };
       return { data: null, error: null };
     },
@@ -326,7 +330,26 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
     expect(res.accepted).toBe(1);
     expect(res.perProduct[0].freshness).toBe('deterministic_plus_independent_peer');
     expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(true);
-    expect(calls.some(c => c.fn === 'apify_record_identity_verification')).toBe(true);
+    // The verification record maps the peer route to the DB-allowed 'deterministic'
+    // method (established WITHOUT the AI); the DB CHECK only permits
+    // 'deterministic' | 'deterministic_plus_ai'.
+    const ver = calls.find(c => c.fn === 'apify_record_identity_verification');
+    expect(ver).toBeTruthy();
+    expect(ver!.args.p_method).toBe('deterministic');
+  });
+
+  it('does NOT abort or un-accept when apify_record_identity_verification errors (price already finalised)', async () => {
+    const fx = brandedFixture();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: freshNutellaPeers(), verificationError: 'bad_method' });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(brandedItem()), {
+      assessOptions: { runModel: aiRunner('uncertain') as never },
+    }));
+    // The finalise succeeded and the accept stands; the verification-record
+    // failure is logged, not fatal.
+    expect(res.accepted).toBe(1);
+    expect(res.stopped).not.toBe('fatal');
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(true);
   });
 
   it('HOLDS with peers supplied when there is a genuine BRAND conflict (peer cannot rescue a brand mismatch)', async () => {
