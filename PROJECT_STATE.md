@@ -1,5 +1,55 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco Apify: cross-worker finalise VULN fixed (PR #367, main e1602b7); do not apply the old migration alone
+
+Independent review reproduced a cross-worker price write against the merged
+migration: a superseded worker finalised a DIFFERENT mapping on its old
+run/owner and cleared the successor's lease. FIXED in a new migration
+`20261109090000_tesco_apify_lease_fencing_and_page_binding.sql` that SUPERSEDES
+the RPCs in `20261108200000` (neither applied to prod). BOTH migrations must be
+applied IN ORDER (108200000 then 109090000).
+
+Fixes:
+- FENCING TOKEN on tesco_egress_pool (lease_token + lease_run_id). apify_begin
+  now returns {runId, leaseToken} and binds the token to exactly one run;
+  reserve/record/finalise/CLOSE all require caller token == gate's current
+  token for that run (apify_assert_lease). A superseded worker's token is stale
+  so all its calls fail, including close — it cannot write or clear a
+  successor's lease.
+- PAGE-MAPPING BINDING: reserve records store_product_id + immutable
+  mapping_snapshot (new columns on tesco_direct_collection_pages); finalise
+  looks the ok page up BY (run_id, store_product_id) — never a caller URL — and
+  rechecks the snapshot atomically before the write. URL/mapping mismatch
+  refused at reservation.
+- LEGACY WRITE PATH REMOVED: apify_record_tesco_page is evidence-only (no
+  p_accept); apify_finalise_tesco_page is the ONLY price-write path.
+- FRESHNESS: removed the unsupported per-batch 'advance' audit + its cost. The
+  provider documents no cache semantics/age, so scraped_at-after-submit is the
+  BEST-AVAILABLE PROVIDER-ASSERTED signal (NOT independent proof), surfaced via
+  APIFY_FRESHNESS_LIMITATION. Missing/stale/implausible gives hold.
+- BUDGET: reconcileCampaignSpendUsd sums ACTUAL usageTotalUsd across ALL actor
+  runs (succeeded/failed/timed-out/aborted/audit), re-reconciled before each
+  batch; provider-side per-run maxTotalChargeUsd set.
+
+Tested against the REAL finaliser + schema via PGlite (scripts/
+validate-apify-migration.mjs): 19 assertions incl. the EXACT reproduction
+(superseded worker cannot write/clear the successor lease) + mapping-changed-
+mid-collection (snapshot recheck refuses). 51 unit tests; lint + typecheck
+clean. validate CI passed; merged PR #367.
+
+PLATFORM GATES (owner-controlled):
+1. Apply BOTH migrations in order via the Supabase management connection for
+   project ytyzwiqnobxehdqrnzhx. Verify: apify_begin_tesco_run returns jsonb
+   {runId,leaseToken} and tesco_egress_pool has lease_token/lease_run_id.
+2. aws-prod image build — PRECISE MISMATCH (diagnosed, not bypassed): the
+   aws-prod GitHub environment uses custom branch policies allowing ONLY
+   `infra/aws-migration` and `ops/*`. A prod aws-ecr-deploy-image.yml dispatch
+   from `main` is rejected by that branch allow-list (NOT a reviewer gate).
+   Fix: dispatch the prod build from an `ops/*` branch, OR the owner adds `main`
+   to the aws-prod custom branch policy. No protection was changed.
+
+SuperValu/Dunnes unchanged; sandbox work (PR #362) still stopped.
+
 ## 8 November 2026 — Tesco Apify: five-defect correction merged (PR #365, main aa4fadb); ready for apply+deploy, blocked only by the two platform gates
 
 Independent review found the implementation not yet ready; completed a focused
