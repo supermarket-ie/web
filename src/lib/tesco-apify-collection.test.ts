@@ -226,6 +226,21 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
     expect(res.held).toBe(1);
   });
 
+  it('HOLDS (does not abort, never accepts) when the AI assessment THROWS (e.g. schema miss / model error)', async () => {
+    const fx = fixtures();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const throwingRunner = async () => { throw new Error('No object generated: response did not match schema.'); };
+    // The run must COMPLETE (not reject) and hold the item, writing no price.
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), {
+      assessOptions: { runModel: throwingRunner as never },
+    }));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(res.stopped).not.toBe('fatal');
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+    expect(res.perProduct[0].reasons).toContain('ai_error');
+  });
+
   it('REJECTS a genuine barcode conflict via the deterministic gate (AI cannot override)', async () => {
     const fx = fixtures();
     const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });

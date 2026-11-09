@@ -452,17 +452,28 @@ export async function collectTescoApify(
           // New, changed or uncertain → run the independent AI inference and
           // require BOTH it and the deterministic gate to agree (and its own
           // facts to be internally consistent, and bound to this identity).
+          // A model/transport failure (schema miss, timeout, Bedrock error)
+          // for ONE item must HOLD that item, never abort the campaign and
+          // never become an accept. Catch it, log it, and fall through to hold.
           const ev = assessmentEvidence(ident, runId, adapterBody, product);
-          const verdict = await assessAndCombine(ev, product, runId, deps.assessOptions);
-          model = verdict.assessment.model;
-          if (verdict.decision === 'verified_exact' && verdict.machineAssessment
-            && verdict.assessment.identity_fingerprint === liveFingerprint) {
-            decision = 'accept_pending_finalise';
-            method = 'deterministic_plus_ai';
-            rationale = verdict.machineAssessment.reason;
-          } else {
-            reasons.push(`ai_${verdict.decision}`);
-            if (verdict.holdReason) deps.log?.({ event: 'ai_hold', sku: ident.storeSku, holdReason: verdict.holdReason });
+          try {
+            const verdict = await assessAndCombine(ev, product, runId, deps.assessOptions);
+            model = verdict.assessment.model;
+            if (verdict.decision === 'verified_exact' && verdict.machineAssessment
+              && verdict.assessment.identity_fingerprint === liveFingerprint) {
+              decision = 'accept_pending_finalise';
+              method = 'deterministic_plus_ai';
+              rationale = verdict.machineAssessment.reason;
+            } else {
+              reasons.push(`ai_${verdict.decision}`);
+              if (verdict.holdReason) deps.log?.({ event: 'ai_hold', sku: ident.storeSku, holdReason: verdict.holdReason });
+            }
+          } catch (err) {
+            // Defensive hold: the independent assessment could not be produced,
+            // so we cannot establish an exact identity. Decision stays 'hold'.
+            reasons.push('ai_error');
+            deps.log?.({ event: 'ai_error', sku: ident.storeSku,
+              message: err instanceof Error ? err.message : 'assessment failed' });
           }
         }
       } else if (outcome === 'ok' && product && !perItemFreshOk) {
