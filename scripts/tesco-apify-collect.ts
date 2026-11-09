@@ -13,7 +13,7 @@
 //   APIFY_REQUIRE_FRESHNESS = '0' to RELAX freshness (default: enforced)
 import { createClient } from '@supabase/supabase-js';
 import { collectTescoApify, type ApifyCollectionResult } from '../src/lib/tesco-apify-collection';
-import { createApifyRunClient, createApifyFetchPage, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
+import { createApifyRunClient, createApifyFetchPage, reconcileCampaignSpendUsd, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
 
 function env(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -34,7 +34,14 @@ async function main() {
   // Freshness is ENFORCED by default (fail closed); only '0' relaxes it.
   const requireFreshness = process.env.APIFY_REQUIRE_FRESHNESS !== '0';
 
-  const client = createApifyRunClient({ maxItems: Math.max(1, limit) });
+  // Provider-side per-run monetary cap: a small fixed ceiling well under the
+  // campaign budget so a single run can never run away. Apify aborts a run that
+  // would exceed it.
+  const perRunMaxUsd = Number(process.env.APIFY_PER_RUN_MAX_USD ?? 0.5);
+  const client = createApifyRunClient({ maxItems: Math.max(1, limit), maxTotalChargeUsd: perRunMaxUsd });
+  // Campaign start marker for reconciliation (ISO). Defaults to the campaign's
+  // creation date so all its runs are counted.
+  const campaignSinceISO = process.env.APIFY_CAMPAIGN_SINCE ?? '2026-11-08T00:00:00Z';
 
   // One Apify run per URL so one request == one run (budget/ledger line up).
   const fetchApify = (u: string) => new Promise<{ response: Awaited<ReturnType<ReturnType<typeof createApifyFetchPage>>>; provider: ApifyProviderIdentity | null }>((resolve, reject) => {
@@ -47,24 +54,25 @@ async function main() {
     fetchPage(u).then((response) => resolve({ response, provider: captured })).catch(reject);
   });
 
-  // Durable campaign budget accounting (defect 5): seed spentUsd from the actual
-  // provider usage already recorded for this campaign's runs, so the cap holds
-  // across invocations/restarts — not just within one process.
-  async function reconciledSpendUsd(): Promise<number> {
-    // Sum recorded provider charges from prior Apify runs' evidence. Each
-    // provider-evidence row corresponds to one billed provider request.
-    const { count } = await sb.from('tesco_apify_provider_evidence')
-      .select('id', { count: 'exact', head: true });
-    return (count ?? 0) * perRequestUsd;
+  // Durable campaign budget accounting (defect 5): seed and RE-RECONCILE spend
+  // from ACTUAL provider charges across ALL this actor's runs (succeeded,
+  // failed, timed-out, aborted, and audit runs), not count × estimate. The cap
+  // therefore holds across invocations/restarts and counts every charge.
+  async function actualSpendUsd(): Promise<number> {
+    const r = await reconcileCampaignSpendUsd({ sinceISO: campaignSinceISO });
+    console.log(JSON.stringify({ event: 'budget_reconciled', totalUsd: r.totalUsd, runs: r.runs, byStatus: r.byStatus, cap: budgetUsd }));
+    return r.totalUsd;
   }
-  let spentUsd = await reconciledSpendUsd();
-  console.log(JSON.stringify({ event: 'budget_seed', reconciledSpentUsd: spentUsd, cap: budgetUsd }));
+  let spentUsd = await actualSpendUsd();
 
   const batches: ApifyCollectionResult[] = [];
   for (let b = 0; b < maxBatches; b += 1) {
+    // Reconcile actual charges before EACH batch so uncertain/timed-out runs
+    // from a prior batch are counted before we spend more.
+    if (b > 0) spentUsd = await actualSpendUsd();
     if (spentUsd + perRequestUsd > budgetUsd) { console.log(JSON.stringify({ event: 'budget_reached', spentUsd })); break; }
     const result = await collectTescoApify(mode, limit, {
-      sb, fetchApify, auditClient: client, budgetUsd, perRequestUsd, spentUsd,
+      sb, fetchApify, budgetUsd, perRequestUsd, spentUsd,
       log: (e) => console.log(JSON.stringify(e)),
     });
     spentUsd = result.spentUsd;

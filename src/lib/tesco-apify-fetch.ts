@@ -58,60 +58,58 @@ export type ApifyProviderIdentity = {
   freshness: ApifyFreshness;
 };
 
-// ESTABLISHED actor retrieval/cache behaviour (from the actor's public docs +
-// our own request logs; probed 2026-11-08, actor parsebird/tesco-scraper):
-//   • Docs describe a live scrape by product URL/search; there is NO documented
-//     or API-exposed cache-hit / cache-age field.
-//   • `scraped_at` is a provider-ASSERTED retrieval timestamp. In back-to-back
-//     runs of one product it advanced each run (20:38:51 → :57 → 20:39:21),
-//     consistent with (but NOT proof of) a per-run upstream fetch — the actor
-//     could stamp scraped_at at response-assembly time regardless of a short
-//     internal cache.
-//   • `product-scraped` BILLING is INCONSISTENT for identical work (0 then 1),
-//     so it is NOT a freshness signal.
+// FRESHNESS — DOCUMENTED LIMITATION (corrected per review).
 //
-// HONEST CONCLUSION (correcting the earlier over-claim): a single item's
-// `scraped_at > requestSubmittedAt` is a provider-asserted timestamp. On its
-// own it does NOT prove an upstream fetch. We therefore treat per-item
-// scraped_at as a NECESSARY precondition only, and establish freshness with an
-// independent, bounded corroboration PER BATCH (not per product): a freshness
-// AUDIT that re-runs the actor once for a single already-seen URL and checks
-// that `scraped_at` genuinely ADVANCES versus the first observation. A live
-// scraper advances it; a static/replayed dataset would return an identical or
-// older stamp. If the audit advances, the batch's provider behaviour is
-// corroborated as live for this window and items whose scraped_at is after
-// their own submit qualify. If the audit cannot be established (no advance,
-// missing/implausible stamp, or audit error), the WHOLE batch's freshness is
-// NOT established and every result in it is HELD. Cost: one extra request per
-// batch, not per product.
+// What we checked for independent freshness evidence:
+//   • The actor's public documentation (apify.com/parsebird/tesco-scraper): it
+//     describes a live scrape by URL/search but documents NO cache semantics,
+//     NO freshness/TTL guarantee and NO cache-age field.
+//   • The run + dataset API: exposes `scraped_at` (a provider-ASSERTED
+//     timestamp) and billing counts only. No cache-hit/age field.
+//   • Our request logs: `scraped_at` advances on repeated runs, and billing is
+//     inconsistent for identical work.
+//
+// Conclusion: we CANNOT independently establish that a returned price was
+// freshly retrieved upstream. Specifically:
+//   - `scraped_at > requestSubmittedAt` is only a provider-asserted timestamp;
+//     the actor could stamp it at response-assembly time over a short internal
+//     cache. It does NOT prove an upstream fetch.
+//   - A second run of the SAME actor advancing `scraped_at` ALSO does not prove
+//     it — the actor may simply re-stamp. So the earlier per-batch "advance"
+//     audit was removed: it added provider cost/latency without establishing
+//     anything. There is no documented bounded source-cache age to rely on.
+//
+// Policy given that limitation: treat `scraped_at present AND strictly after
+// our submit, and not implausibly future` as the BEST AVAILABLE (but NOT
+// independent) freshness signal — a necessary precondition. Missing/at-or-
+// before-submit/implausible timestamps are HELD. The limitation is surfaced in
+// the provider evidence (`freshnessLimitation`) and recorded on every accepted
+// verification so no downstream consumer treats Apify prices as independently
+// freshness-verified. This is reported, not hidden.
+export const APIFY_FRESHNESS_LIMITATION =
+  'provider-asserted scraped_at only; no documented cache semantics or cache-age — upstream freshness not independently verifiable';
+
 export type ApifyFreshnessLevel =
-  | 'after_submit_precondition_met'  // scraped_at present + strictly after submit (necessary, not yet sufficient)
-  | 'not_after_submit'               // at/<= submit (possible replay) → hold
-  | 'implausible_future'             // beyond skew margin ahead → hold
-  | 'no_timestamp';                  // provider gave no scraped_at → hold
+  | 'after_submit_asserted'  // scraped_at present + strictly after submit (best available, provider-asserted)
+  | 'not_after_submit'       // at/<= submit (possible replay) → hold
+  | 'implausible_future'     // beyond skew margin ahead → hold
+  | 'no_timestamp';          // provider gave no scraped_at → hold
 export type ApifyFreshness = {
   // scraped_at the provider reported for this item.
   scrapedAt: string | null;
   // The instant WE submitted this request (the freshness reference point).
   requestSubmittedAt: string;
-  // scraped_at strictly after requestSubmittedAt (NECESSARY precondition).
+  // scraped_at strictly after requestSubmittedAt.
   afterSubmit: boolean;
-  // Billed product-scraped events for the run (audit only; NOT a signal).
+  // Billed product-scraped events for the run (recorded for audit; NOT a signal).
   productScrapedEvents: number;
   level: ApifyFreshnessLevel;
-  // Per-item PRECONDITION only. Final qualification also needs the per-batch
-  // audit (batchFreshnessEstablished) — enforced by the collector.
-  perItemPreconditionMet: boolean;
-  reason: string;
-};
-
-// Result of the per-batch freshness audit (one re-run of an already-seen URL).
-export type ApifyBatchFreshnessAudit = {
-  auditedUrl: string | null;
-  firstScrapedAt: string | null;
-  secondScrapedAt: string | null;
-  advanced: boolean;        // secondScrapedAt strictly after firstScrapedAt
-  established: boolean;     // advanced AND both timestamps present/plausible
+  // Best-available precondition is met (NOT an independent freshness proof —
+  // see APIFY_FRESHNESS_LIMITATION). Final acceptance also requires the
+  // deterministic + AI identity gate.
+  preconditionMet: boolean;
+  // The standing limitation string, carried so consumers never over-trust it.
+  limitation: string;
   reason: string;
 };
 
@@ -157,6 +155,10 @@ export function createApifyRunClient(options: {
   fetchImpl?: typeof fetch;
   pollMs?: number;
   timeoutMs?: number;
+  // PROVIDER-SIDE monetary cap per run (USD). Passed to Apify as
+  // maxTotalChargeUsd so the provider itself aborts a run before it exceeds
+  // this, independent of our client-side accounting.
+  maxTotalChargeUsd?: number;
 } ): ApifyRunClient {
   const fetchImpl = options.fetchImpl ?? fetch;
   const pollMs = options.pollMs ?? 3000;
@@ -186,7 +188,11 @@ export function createApifyRunClient(options: {
         deduplicateProducts: true,
         proxyConfiguration: { useApifyProxy: false },
       };
-      const start = await (await authed(`/acts/${ACTOR}/runs?maxItems=${options.maxItems}`, {
+      // Provider-side monetary limit: Apify aborts the run if it would exceed
+      // maxTotalChargeUsd, independent of our own budget accounting.
+      const limitQs = options.maxTotalChargeUsd != null
+        ? `&maxTotalChargeUsd=${encodeURIComponent(String(options.maxTotalChargeUsd))}` : '';
+      const start = await (await authed(`/acts/${ACTOR}/runs?maxItems=${options.maxItems}${limitQs}`, {
         method: 'POST',
         body: JSON.stringify(input),
       })).json();
@@ -219,6 +225,45 @@ export function createApifyRunClient(options: {
       };
     },
   };
+}
+
+// Reconcile ACTUAL campaign spend from the provider: sum usageTotalUsd across
+// ALL of this actor's runs in the current billing window, regardless of status
+// (SUCCEEDED, FAILED, TIMED-OUT, ABORTED, and audit re-runs). Apify bills for
+// aborted/failed runs' compute too, so durable accounting must include them.
+// This is the source of truth for the campaign budget, not count × estimate.
+export async function reconcileCampaignSpendUsd(options: {
+  token?: string;
+  fetchImpl?: typeof fetch;
+  sinceISO?: string;    // only count runs started at/after this instant
+}): Promise<{ totalUsd: number; runs: number; byStatus: Record<string, number> }> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const token = options.token ?? requireToken();
+  const since = options.sinceISO ? Date.parse(options.sinceISO) : 0;
+  let offset = 0; let totalUsd = 0; let runs = 0;
+  const byStatus: Record<string, number> = {};
+  // Paginate the actor's run list (desc by startedAt).
+  for (;;) {
+    const res = await fetchImpl(`${API}/acts/${ACTOR}/runs?desc=1&limit=100&offset=${offset}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Apify runs list -> ${res.status}`);
+    const page = (await res.json())?.data;
+    const items: Array<Record<string, unknown>> = page?.items ?? [];
+    if (!items.length) break;
+    let reachedOlder = false;
+    for (const r of items) {
+      const started = Date.parse(String(r.startedAt ?? ''));
+      if (since && Number.isFinite(started) && started < since) { reachedOlder = true; continue; }
+      totalUsd += Number(r.usageTotalUsd ?? 0);
+      runs += 1;
+      const st = String(r.status ?? 'UNKNOWN');
+      byStatus[st] = (byStatus[st] ?? 0) + 1;
+    }
+    if (reachedOlder || items.length < 100) break;
+    offset += 100;
+  }
+  return { totalUsd, runs, byStatus };
 }
 
 // ---- Item -> Tesco apolloCache page rendering ---------------------------------
@@ -299,12 +344,12 @@ export function renderApifyProductPage(url: string, item: ApifyItem): string {
   ].join('');
 }
 
-// ---- Freshness verification ---------------------------------------------------
+// ---- Freshness (best-available, with the documented limitation) ----------------
 
-// Per-item freshness PRECONDITION (necessary, not sufficient). scraped_at must
-// be present and strictly after our request submit, and not implausibly future.
-// This is a provider-asserted timestamp — it does NOT by itself prove an
-// upstream fetch; final qualification also requires the per-batch audit.
+// Best-available precondition: scraped_at present, strictly after our submit,
+// not implausibly future. This is NOT an independent freshness proof (see
+// APIFY_FRESHNESS_LIMITATION). There is no per-batch audit — a second run
+// advancing scraped_at proves nothing and only costs money/latency.
 export function verifyApifyFreshness(args: {
   scrapedAt: string | null;
   requestSubmittedAt: string;
@@ -322,58 +367,20 @@ export function verifyApifyFreshness(args: {
   let level: ApifyFreshnessLevel;
   if (!hasTimestamp) level = 'no_timestamp';
   else if (implausibleFuture) level = 'implausible_future';
-  else if (afterSubmit) level = 'after_submit_precondition_met';
+  else if (afterSubmit) level = 'after_submit_asserted';
   else level = 'not_after_submit';
-  const perItemPreconditionMet = level === 'after_submit_precondition_met';
+  const preconditionMet = level === 'after_submit_asserted';
   const reason = !hasTimestamp
-    ? 'provider returned no scraped_at — freshness precondition fails; hold'
+    ? 'provider returned no scraped_at — held'
     : implausibleFuture
       ? 'scraped_at implausibly in the future vs local clock — held'
       : afterSubmit
-        ? 'scraped_at present and after submit (NECESSARY precondition; still needs the per-batch audit to establish live behaviour)'
+        ? 'scraped_at present and after submit (best available; provider-asserted, NOT independently verified)'
         : 'scraped_at at/before our submit — possible cached/replayed item; held';
   return {
     scrapedAt: args.scrapedAt, requestSubmittedAt: args.requestSubmittedAt,
-    afterSubmit, productScrapedEvents: args.productScrapedEvents, level, perItemPreconditionMet, reason,
-  };
-}
-
-// Per-batch freshness audit: re-run the actor ONCE for an already-seen URL and
-// confirm `scraped_at` strictly advances versus the first observation. This
-// corroborates that the actor is performing live retrievals for this batch
-// window (a static/replayed dataset would not advance). One extra request per
-// batch. If it cannot be established, the collector holds the WHOLE batch.
-export async function auditBatchFreshness(
-  client: { runProductUrls(urls: string[]): Promise<{ items: Array<Record<string, unknown>> }> },
-  auditedUrl: string | null,
-  firstScrapedAt: string | null,
-): Promise<ApifyBatchFreshnessAudit> {
-  const skew = 5 * 60_000;
-  if (!auditedUrl || !firstScrapedAt) {
-    return { auditedUrl, firstScrapedAt, secondScrapedAt: null, advanced: false, established: false,
-      reason: 'no audited URL/first timestamp available — batch freshness not established' };
-  }
-  let secondScrapedAt: string | null = null;
-  try {
-    const sku = skuFromUrl(auditedUrl);
-    const run = await client.runProductUrls([auditedUrl]);
-    const item = run.items.find((i) => String(i.product_id ?? '') === sku);
-    secondScrapedAt = item && typeof item.scraped_at === 'string' ? item.scraped_at : null;
-  } catch {
-    return { auditedUrl, firstScrapedAt, secondScrapedAt: null, advanced: false, established: false,
-      reason: 'audit re-run failed — batch freshness not established' };
-  }
-  const first = Date.parse(firstScrapedAt);
-  const second = secondScrapedAt ? Date.parse(secondScrapedAt) : NaN;
-  const bothValid = Number.isFinite(first) && Number.isFinite(second) && second <= Date.now() + skew;
-  const advanced = bothValid && second > first;
-  return {
-    auditedUrl, firstScrapedAt, secondScrapedAt, advanced,
-    established: advanced,
-    reason: advanced
-      ? 'audit re-run advanced scraped_at — actor retrieval is live for this batch window'
-      : !secondScrapedAt ? 'audit re-run returned no scraped_at — not established'
-        : 'audit re-run did not advance scraped_at — static/replayed; batch held',
+    afterSubmit, productScrapedEvents: args.productScrapedEvents, level, preconditionMet,
+    limitation: APIFY_FRESHNESS_LIMITATION, reason,
   };
 }
 
@@ -461,7 +468,7 @@ export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string) => Pro
     // per-request freshness proof is not met is returned as a transport error so
     // the collector HOLDS rather than finalising a possibly-stale price.
     const requireFreshness = deps.requireVerifiedFreshness !== false;
-    if (requireFreshness && !freshness.perItemPreconditionMet) {
+    if (requireFreshness && !freshness.preconditionMet) {
       return { outcome: 'network_error', status: null, finalUrl: url, html: '', retryAfter: null, elapsedMs: Date.now() - start };
     }
 

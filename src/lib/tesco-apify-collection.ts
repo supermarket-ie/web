@@ -30,7 +30,7 @@ import {
   type AssessOptions,
 } from './tesco-identity-assessment';
 import type { ReentryEvidence } from './tesco-hold-reentry';
-import { auditBatchFreshness, type ApifyProviderIdentity } from './tesco-apify-fetch';
+import type { ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
 
@@ -57,20 +57,14 @@ export type ApifyMapping = {
 
 export type ApifyFetchResult = { response: TescoPageResponse; provider: ApifyProviderIdentity | null };
 
-// Raw Apify run client, needed for the per-batch freshness audit (one re-run).
-export interface ApifyAuditClient { runProductUrls(urls: string[]): Promise<{ items: Array<Record<string, unknown>> }>; }
-
 export type ApifyCollectionDeps = {
   sb: SupabaseClient;
   // Runs the Apify fetch for one URL and returns the page response plus the
   // captured provider identity (original payload + hash + freshness).
   fetchApify: (url: string) => Promise<ApifyFetchResult>;
-  // Client used ONLY for the per-batch freshness audit re-run. Separate so the
-  // audit never writes a price and is clearly accounted in the budget.
-  auditClient: ApifyAuditClient;
-  // Budget guard in USD, enforced against DURABLE accounting (the provider
-  // charges reconciled from past runs) + this run's requests. The loop stops
-  // before the next request could exceed the cap.
+  // Budget guard in USD, enforced against DURABLE accounting (actual provider
+  // charges reconciled from the provider API) + this run's requests. The loop
+  // stops before the next request could exceed the cap.
   budgetUsd: number;
   perRequestUsd: number;
   // USD already spent by this campaign BEFORE this invocation (durable; read by
@@ -277,37 +271,36 @@ export async function collectTescoApify(
   };
   if (!mappings.length) { result.stopped = 'no_eligible_products'; return result; }
 
-  const runId = await rpc<string>(sb, 'apify_begin_tesco_run', {
+  const begin = await rpc<{ runId: string; leaseToken: string }>(sb, 'apify_begin_tesco_run', {
     p_egress_key: APIFY_GATE, p_mode: mode, p_target_count: mappings.length, p_owner: owner,
   });
+  const runId = begin.runId;
+  const leaseToken = begin.leaseToken;
   result.runId = runId;
   deps.log?.({ event: 'run_started', runId, mode, eligible: mappings.length });
 
-  // Per-batch freshness audit state (defect 1): the FIRST fetched item's
-  // scraped_at seeds the audit; a single re-run at batch end must advance it, or
-  // NO result in this batch may finalise. Because the audit runs at the end, we
-  // stage accepted-but-pending finalisations and only commit them once the
-  // audit establishes live behaviour.
-  let auditSeedUrl: string | null = null;
-  let auditSeedScrapedAt: string | null = null;
+  // Finalisation is a SEPARATE fencing-token-guarded RPC (apify_finalise), so we
+  // stage accepted items during the loop and finalise them after recording.
+  // There is no per-batch freshness audit (removed: a second actor run advancing
+  // scraped_at proves nothing). Freshness is the per-item best-available
+  // precondition only, carried with its documented limitation.
   const staged: Array<{ m: ApifyMapping; product: TescoCollectedProduct; adapterBody: string;
     method: 'deterministic' | 'deterministic_plus_ai'; rationale: string; model: string | null;
     fingerprint: string }> = [];
 
   try {
     for (const m of mappings) {
-      // Budget guard (defect 5): stop before the next request + the required
-      // end-of-batch audit request could exceed the cap. Durable spentUsd is
-      // seeded by the caller from reconciled provider charges.
-      const auditReserve = staged.length === 0 && auditSeedUrl === null ? 0 : deps.perRequestUsd;
-      if (spentUsd + deps.perRequestUsd + auditReserve > deps.budgetUsd) { result.stopped = 'budget_exhausted'; break; }
+      // Budget guard (defect 5): stop before the next request would exceed the
+      // cap. spentUsd is seeded by the caller from ACTUAL reconciled provider
+      // charges (all run statuses), so this holds across invocations.
+      if (spentUsd + deps.perRequestUsd > deps.budgetUsd) { result.stopped = 'budget_exhausted'; break; }
 
       if (result.requested > 0) await sleep(10_000);
 
       // Reserve (atomic guard: ownership, mode, due/observation, pending/recent, pacing).
       try {
         await rpc(sb, 'apify_reserve_tesco_request', {
-          p_run_id: runId, p_egress_key: APIFY_GATE, p_owner: owner,
+          p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
           p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
         });
       } catch (e) {
@@ -328,21 +321,16 @@ export async function collectTescoApify(
       const transportStop = outcome !== 'ok' && !unavailable;
       const adapterBody = createHash('sha256').update(response.html).digest('hex');
 
-      // Seed the freshness audit with the first ok item that met its per-item
-      // precondition (scraped_at present + after submit).
-      if (auditSeedUrl === null && outcome === 'ok' && provider?.freshness.perItemPreconditionMet && provider.scrapedAt) {
-        auditSeedUrl = m.store_url;
-        auditSeedScrapedAt = provider.scrapedAt;
-      }
-
       // --- Identity + inference acceptance path (defects 2 + 3) ---
       // Deterministic gate FIRST (authoritative; AI can never override a reject).
       const deterministicReasons = product
         ? validateTescoCollectedIdentity(mappingEvidence(m), product)
         : ['missing_exact_product'];
-      const perItemFreshOk = provider?.freshness.perItemPreconditionMet === true;
+      // Best-available freshness precondition (provider-asserted; see
+      // APIFY_FRESHNESS_LIMITATION — not independently verified).
+      const perItemFreshOk = provider?.freshness.preconditionMet === true;
 
-      let decision: 'accept_pending_audit' | 'hold' = 'hold';
+      let decision: 'accept_pending_finalise' | 'hold' = 'hold';
       let method: 'deterministic' | 'deterministic_plus_ai' = 'deterministic';
       let rationale = '';
       let model: string | null = null;
@@ -359,7 +347,7 @@ export async function collectTescoApify(
         const existing = await readActiveVerification(sb, m.id);
         const reuse = mode === 'renewal' && verificationReusable(existing, liveFingerprint);
         if (reuse) {
-          decision = 'accept_pending_audit';
+          decision = 'accept_pending_finalise';
           method = 'deterministic';
           rationale = 'Unchanged mapping: reused active identity verification; deterministic renewal check passed against fresh evidence.';
         } else {
@@ -371,7 +359,7 @@ export async function collectTescoApify(
           model = verdict.assessment.model;
           if (verdict.decision === 'verified_exact' && verdict.machineAssessment
             && verdict.assessment.identity_fingerprint === liveFingerprint) {
-            decision = 'accept_pending_audit';
+            decision = 'accept_pending_finalise';
             method = 'deterministic_plus_ai';
             rationale = verdict.machineAssessment.reason;
           } else {
@@ -395,28 +383,26 @@ export async function collectTescoApify(
         freshnessVerified: false, // set true only after the batch audit establishes it
       } : null;
 
-      // Record the page NOW (evidence), but DO NOT finalise yet — finalisation
-      // waits for the per-batch audit. p_accept=false here; staged items are
-      // finalised after the audit via a second record call.
+      // Record the page NOW (evidence ONLY — the record RPC can never write a
+      // price). Finalisation is a separate, fencing-token-guarded RPC that runs
+      // after the per-batch freshness audit.
       await rpc(sb, 'apify_record_tesco_page', {
-        p_run_id: runId, p_egress_key: APIFY_GATE, p_owner: owner,
+        p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
         p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
         p_outcome: outcome, p_http_status: response.status, p_retry_after: response.retryAfter,
         p_elapsed_ms: response.elapsedMs, p_adapter_body_sha256: adapterBody,
         p_parsed: parsed, p_identity_results: [{ storeProductId: m.id, sku: m.store_sku, reasons }],
         p_detail: {
           provider: 'apify',
-          disposition: decision === 'accept_pending_audit' ? 'accept_pending_audit' : outcome === 'ok' ? 'hold_continue' : undefined,
+          disposition: decision === 'accept_pending_finalise' ? 'accept_pending_finalise' : outcome === 'ok' ? 'hold_continue' : undefined,
           resourceUnavailable: unavailable || undefined, freshness: provider?.freshness.level ?? null,
           method, evidenceOrigin: 'synthetic-apify-adapter',
         },
-        p_accept: false, p_regular_price: null, p_previous_price: m.price,
-        p_store_sku: m.store_sku, p_store_product_name: product?.name ?? m.store_product_name,
         p_pause: !!pauseUntil, p_pause_until: pauseUntil, p_blocked: blocked,
         p_provider: providerJson,
       });
 
-      if (decision === 'accept_pending_audit' && product) {
+      if (decision === 'accept_pending_finalise' && product) {
         staged.push({ m, product, adapterBody, method, rationale, model, fingerprint: liveFingerprint });
       } else {
         result.perProduct.push({ storeProductId: m.id, sku: m.store_sku, outcome, accepted: false,
@@ -427,57 +413,37 @@ export async function collectTescoApify(
       if (pauseUntil) { result.stopped = outcome; break; }
     }
 
-    // --- Per-batch freshness audit + staged finalisation (defects 1 + 4) ---
-    if (staged.length) {
-      let auditEstablished = false; let auditReason = 'no staged acceptances';
-      if (spentUsd + deps.perRequestUsd <= deps.budgetUsd && auditSeedUrl) {
-        const audit = await auditBatchFreshness(deps.auditClient, auditSeedUrl, auditSeedScrapedAt);
-        spentUsd += deps.perRequestUsd; // the audit re-run is a real charge
-        auditEstablished = audit.established;
-        auditReason = audit.reason;
-        deps.log?.({ event: 'freshness_audit', ...audit });
-      } else {
-        auditReason = auditSeedUrl ? 'insufficient budget for freshness audit' : 'no audit seed available';
-      }
-
-      for (const s of staged) {
-        if (!auditEstablished) {
-          // Freshness could not be established for the batch → HOLD everything.
-          result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
-            accepted: false, reasons: ['batch_freshness_not_established'], price: null, freshness: 'held_batch_audit' });
-          result.held += 1;
-          continue;
-        }
-        // Finalise now, with an immediate pre-finalisation recheck inside the
-        // RPC (defect 4: due/observation/lease rechecked atomically).
-        const rec = await rpc<{ finalised: boolean }>(sb, 'apify_finalise_tesco_page', {
-          p_run_id: runId, p_egress_key: APIFY_GATE, p_owner: owner,
-          p_store_product_id: s.m.id, p_store_url: s.m.store_url, p_mode: mode,
-          p_regular_price: s.product.price, p_previous_price: s.m.price,
-          p_store_sku: s.m.store_sku, p_store_product_name: s.product.name,
+    // --- Staged finalisation (defect 4: fencing-token + atomic snapshot recheck) ---
+    // Each staged item is finalised through apify_finalise_tesco_page, which
+    // re-fences the lease, looks the ok page up BY MAPPING, rechecks the
+    // immutable mapping snapshot and due/observation atomically before writing.
+    for (const s of staged) {
+      const rec = await rpc<{ finalised: boolean }>(sb, 'apify_finalise_tesco_page', {
+        p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
+        p_store_product_id: s.m.id, p_mode: mode,
+        p_regular_price: s.product.price, p_previous_price: s.m.price,
+        p_store_product_name: s.product.name,
+      });
+      if (rec?.finalised) {
+        result.accepted += 1;
+        await rpc(sb, 'apify_record_identity_verification', {
+          p_store_product_id: s.m.id, p_identity_fingerprint: s.fingerprint,
+          p_canonical: { name: s.m.canonical_name, brand: s.m.canonical_brand, ean: s.m.canonical_ean },
+          p_tesco: { sku: s.product.sku, name: s.product.name, brand: s.product.brand, gtin: s.product.gtin, quantity: s.product.quantity },
+          p_rationale: s.rationale, p_method: s.method, p_rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
+          p_model: s.model, p_source_page_id: null, p_source_body_sha256: s.adapterBody, p_reusable_hours: 720,
         });
-        if (rec?.finalised) {
-          result.accepted += 1;
-          await rpc(sb, 'apify_record_identity_verification', {
-            p_store_product_id: s.m.id, p_identity_fingerprint: s.fingerprint,
-            p_canonical: { name: s.m.canonical_name, brand: s.m.canonical_brand, ean: s.m.canonical_ean },
-            p_tesco: { sku: s.product.sku, name: s.product.name, brand: s.product.brand, gtin: s.product.gtin, quantity: s.product.quantity },
-            p_rationale: s.rationale, p_method: s.method, p_rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
-            p_model: s.model, p_source_page_id: null, p_source_body_sha256: s.adapterBody, p_reusable_hours: 720,
-          });
-          result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
-            accepted: true, reasons: [], price: s.product.price, freshness: 'fresh_batch_audited' });
-        } else {
-          result.held += 1;
-          result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
-            accepted: false, reasons: ['finalise_recheck_failed'], price: null, freshness: 'fresh_batch_audited' });
-        }
+        result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
+          accepted: true, reasons: [], price: s.product.price, freshness: s.method });
+      } else {
+        result.held += 1;
+        result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
+          accepted: false, reasons: ['finalise_recheck_failed'], price: null, freshness: s.method });
       }
-      if (!auditEstablished) { result.stopped = result.stopped ?? 'freshness_not_established'; deps.log?.({ event: 'batch_held', reason: auditReason }); }
     }
   } finally {
     await rpc(sb, 'apify_close_tesco_run', {
-      p_run_id: runId, p_egress_key: APIFY_GATE, p_owner: owner,
+      p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
       p_stop_reason: result.stopped ?? 'complete',
     }).catch(() => undefined);
   }

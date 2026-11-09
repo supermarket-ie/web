@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { collectTescoApify, verificationReusable, type ApifyFetchResult, type ApifyAuditClient } from './tesco-apify-collection';
+import { collectTescoApify, verificationReusable, type ApifyFetchResult } from './tesco-apify-collection';
 import { renderApifyProductPage, type ApifyItem } from './tesco-apify-fetch';
 import { IDENTITY_ASSESSMENT_RULE_VERSION, assessmentSchema } from './tesco-identity-assessment';
 
@@ -31,15 +31,15 @@ function makeFakeSb(opts: {
     from: (name: string) => table(name),
     rpc: async (fn: string, args: Row) => {
       calls.push({ fn, args });
-      if (fn === 'apify_begin_tesco_run') return { data: 'run-1', error: null };
+      if (fn === 'apify_begin_tesco_run') return { data: { runId: 'run-1', leaseToken: 'tok-1' }, error: null };
       if (fn === 'apify_reserve_tesco_request') return { data: true, error: null };
-      if (fn === 'apify_record_tesco_page') return { data: { finalised: false }, error: null };
+      if (fn === 'apify_record_tesco_page') return { data: { recorded: true }, error: null };
       if (fn === 'apify_finalise_tesco_page') {
         const r = opts.finaliseResult ? opts.finaliseResult(args) : { finalised: true };
         return { data: r, error: null };
       }
       if (fn === 'apify_record_identity_verification') return { data: 'ver-1', error: null };
-      if (fn === 'apify_close_tesco_run') return { data: null, error: null };
+      if (fn === 'apify_close_tesco_run') return { data: { leaseReleased: true }, error: null };
       return { data: null, error: null };
     },
   } as unknown as SupabaseClient;
@@ -66,20 +66,11 @@ function okFetch(it: ApifyItem, preconditionMet = true): (url: string) => Promis
       rawItem: it, rawItemSha256: 'b'.repeat(64),
       freshness: { scrapedAt: it.scraped_at as string, requestSubmittedAt: new Date(Date.now() - 1000).toISOString(),
         afterSubmit: preconditionMet, productScrapedEvents: 1,
-        level: preconditionMet ? 'after_submit_precondition_met' : 'not_after_submit',
-        perItemPreconditionMet: preconditionMet, reason: 'test' },
+        level: preconditionMet ? 'after_submit_asserted' : 'not_after_submit',
+        preconditionMet, limitation: 'provider-asserted', reason: 'test' },
     },
   });
 }
-
-// Audit client whose re-run advances scraped_at (establishes live behaviour).
-const advancingAudit: ApifyAuditClient = {
-  runProductUrls: async () => ({ items: [{ product_id: '254877356', scraped_at: new Date(Date.now() + 60_000).toISOString() }] }),
-};
-// Audit client that does NOT advance (static/replay) → batch held.
-const staticAudit: ApifyAuditClient = {
-  runProductUrls: async () => ({ items: [{ product_id: '254877356', scraped_at: '2000-01-01T00:00:00Z' }] }),
-};
 
 // Fake AI runner producing a structured verdict (no Bedrock).
 const aiFacts = (over: Record<string, unknown> = {}) => ({
@@ -107,18 +98,21 @@ function fixtures(overMapping: Row = {}, overLatest: Row = {}) {
 }
 
 const baseDeps = (sb: SupabaseClient, fetchApify: (u: string) => Promise<ApifyFetchResult>, over: Record<string, unknown> = {}) => ({
-  sb, fetchApify, auditClient: advancingAudit, budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
+  sb, fetchApify, budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
   assessOptions: { runModel: aiRunner('verified_exact') as never }, ...over,
 });
 
 describe('collectTescoApify — identity + AI inference acceptance path', () => {
-  it('finalises a new/changed mapping only when AI + deterministic agree, after the batch freshness audit', async () => {
+  it('finalises a new/changed mapping only when AI + deterministic agree, via the separate finalise RPC', async () => {
     const fx = fixtures();
     const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item())));
     expect(res.accepted).toBe(1);
-    // record (p_accept false, staged) then a SEPARATE finalise after the audit.
-    expect(calls.some(c => c.fn === 'apify_record_tesco_page' && c.args.p_accept === false)).toBe(true);
+    // record (evidence only, never writes a price) then a SEPARATE finalise RPC.
+    expect(calls.some(c => c.fn === 'apify_record_tesco_page')).toBe(true);
+    // record RPC no longer carries any finalise/p_accept arg.
+    const recArgs = calls.find(c => c.fn === 'apify_record_tesco_page')!.args;
+    expect('p_accept' in recArgs).toBe(false);
     expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(true);
     expect(calls.some(c => c.fn === 'apify_record_identity_verification')).toBe(true);
   });
@@ -170,24 +164,14 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
   });
 });
 
-describe('collectTescoApify — freshness audit (defect 1)', () => {
-  it('HOLDS the whole batch when the per-batch freshness audit does not advance', async () => {
+describe('collectTescoApify — freshness precondition (defect 1)', () => {
+  it('HOLDS when the freshness precondition fails (scraped_at not after submit) — no finalise', async () => {
     const fx = fixtures();
     const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
-    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { auditClient: staticAudit }));
-    expect(res.accepted).toBe(0);
-    expect(res.held).toBe(1);
-    expect(res.stopped).toBe('freshness_not_established');
-    // Never finalised.
-    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
-  });
-
-  it('HOLDS when per-item freshness precondition fails (no finalise, no audit needed)', async () => {
-    const fx = fixtures();
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item(), /*preconditionMet*/ false)));
     expect(res.accepted).toBe(0);
     expect(res.held).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
   });
 });
 
@@ -209,7 +193,7 @@ describe('collectTescoApify — reusable verification (defect 3)', () => {
       verifications: [{ identity_fingerprint: fp, rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
         reusable_until: new Date(Date.now() + 86_400_000).toISOString(), invalidated_at: null }] });
     const res = await collectTescoApify('renewal', 10, {
-      sb: second.sb, fetchApify: okFetch(item()), auditClient: advancingAudit, budgetUsd: 10, perRequestUsd: 0.002,
+      sb: second.sb, fetchApify: okFetch(item()), budgetUsd: 10, perRequestUsd: 0.002,
       sleep: async () => {}, assessOptions: { runModel: countingRunner as never },
     });
     expect(res.accepted).toBe(1);
@@ -252,7 +236,7 @@ describe('collectTescoApify — budget + reservation (defects 4 + 5)', () => {
       from: makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent }).sb.from,
       rpc: async (fn: string, args: Row) => {
         calls.push({ fn, args });
-        if (fn === 'apify_begin_tesco_run') return { data: 'run-1', error: null };
+        if (fn === 'apify_begin_tesco_run') return { data: { runId: 'run-1', leaseToken: 'tok-1' }, error: null };
         if (fn === 'apify_reserve_tesco_request') return { data: null, error: { message: 'attempt_already_recorded' } };
         return { data: null, error: null };
       },
@@ -260,7 +244,7 @@ describe('collectTescoApify — budget + reservation (defects 4 + 5)', () => {
     let fetched = 0;
     const res = await collectTescoApify('renewal', 10, {
       sb: sb2, fetchApify: async (u) => { fetched++; return okFetch(item())(u); },
-      auditClient: advancingAudit, budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
+      budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
       assessOptions: { runModel: aiRunner('verified_exact') as never },
     });
     expect(fetched).toBe(0);
