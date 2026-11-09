@@ -13,7 +13,7 @@
 //   APIFY_REQUIRE_FRESHNESS = '0' to RELAX freshness (default: enforced)
 import { createClient } from '@supabase/supabase-js';
 import { collectTescoApify, type ApifyCollectionResult } from '../src/lib/tesco-apify-collection';
-import { createApifyRunClient, createApifyFetchPage, reconcileCampaignSpendUsd, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
+import { createApifyRunClient, createApifyFetchPage, reconcileCampaignSpendUsd, confirmedTerminalChargeUsd, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
 
 function env(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -85,9 +85,11 @@ async function main() {
         const res = await fetch(`https://api.apify.com/v2/actor-runs/${r.provider_run_id}`, { headers: { Authorization: `Bearer ${apifyToken}` } });
         if (!res.ok) continue;
         const run = (await res.json())?.data;
-        const terminal = ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(String(run?.status));
-        if (!terminal || run?.usageTotalUsd == null) continue; // not yet confirmed → keep reserved
-        const ok = await sb.rpc('apify_reconcile_reservation', { p_reservation_id: r.id, p_confirmed_usd: Number(run.usageTotalUsd) });
+        // Billing-finality: terminal + valid finishedAt ≥10s old + a real cost.
+        // Anything else stays reserved and is retried on a later pass.
+        const confirmed = confirmedTerminalChargeUsd(run);
+        if (confirmed == null) continue;
+        const ok = await sb.rpc('apify_reconcile_reservation', { p_reservation_id: r.id, p_confirmed_usd: confirmed });
         if (!ok.error) settled += 1;
       } catch { /* leave reserved; try again next batch */ }
     }
