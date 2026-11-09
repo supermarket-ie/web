@@ -4,6 +4,7 @@ import {
   renderApifyProductPage,
   verifyApifyFreshness,
   createApifyFetchPage,
+  createApifyRunClient,
   type ApifyItem,
   type ApifyRunClient,
   type ApifyRunResult,
@@ -209,5 +210,54 @@ describe('createApifyFetchPage — the transport', () => {
   it('rejects a non-product URL', async () => {
     const fetchPage = createApifyFetchPage({ client: fakeClient(fakeRun([])) });
     await expect(fetchPage('https://www.tesco.ie/shop/en-IE/search?query=milk')).rejects.toThrow();
+  });
+});
+
+describe('createApifyRunClient — outgoing provider monetary limit (maxTotalChargeUsd)', () => {
+  // Capture the actual POST URL the client sends so we can assert the cap.
+  function capturingFetch(postedUrls: string[]): typeof fetch {
+    const runId = 'RUN'; const dsId = 'DS';
+    return (async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (init?.method === 'POST' && u.includes('/runs')) {
+        postedUrls.push(u);
+        return { ok: true, json: async () => ({ data: { id: runId, defaultDatasetId: dsId, actId: 'A', status: 'SUCCEEDED', startedAt: '2026-11-09T00:00:00Z', finishedAt: '2026-11-09T00:00:01Z', usageTotalUsd: 0.0005, chargedEventCounts: { 'product-scraped': 1 } } }) } as Response;
+      }
+      if (u.includes(`/actor-runs/${runId}`)) {
+        return { ok: true, json: async () => ({ data: { id: runId, status: 'SUCCEEDED', defaultDatasetId: dsId, actId: 'A', startedAt: '2026-11-09T00:00:00Z', finishedAt: '2026-11-09T00:00:01Z', usageTotalUsd: 0.0005, chargedEventCounts: {} } }) } as Response;
+      }
+      if (u.includes(`/datasets/${dsId}/items`)) {
+        return { ok: true, json: async () => ([]) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    }) as unknown as typeof fetch;
+  }
+
+  it('sets maxTotalChargeUsd on the outgoing run request to the PER-CALL ceiling', async () => {
+    const posted: string[] = [];
+    const client = createApifyRunClient({ token: 'apify_api_x', maxItems: 1, fetchImpl: capturingFetch(posted), pollMs: 0 });
+    await client.runProductUrls([URL_322], 0.002);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toContain('maxTotalChargeUsd=0.002');
+  });
+
+  it('clamps the outgoing limit to the SMALLER of per-call and client default', async () => {
+    const posted: string[] = [];
+    // client default 0.5, per-call 0.002 → outgoing must be 0.002 (the smaller).
+    const client = createApifyRunClient({ token: 'apify_api_x', maxItems: 1, maxTotalChargeUsd: 0.5, fetchImpl: capturingFetch(posted), pollMs: 0 });
+    await client.runProductUrls([URL_322], 0.002);
+    expect(posted[0]).toContain('maxTotalChargeUsd=0.002');
+    expect(posted[0]).not.toContain('maxTotalChargeUsd=0.5');
+  });
+});
+
+describe('createApifyFetchPage — caught provider error returns network_error with NO provider identity', () => {
+  it('a thrown runProductUrls becomes network_error and emits no provider identity', async () => {
+    const throwing: ApifyRunClient = { runProductUrls: async () => { throw new Error('UND_ERR_HEADERS_TIMEOUT'); } };
+    let captured: unknown = null;
+    const fetchPage = createApifyFetchPage({ client: throwing, onProviderIdentity: (i) => { captured = i; } });
+    const res = await fetchPage(URL_322, 0.002);
+    expect(res.outcome).toBe('network_error');
+    expect(captured).toBeNull(); // no provider identity → collector must NOT settle an estimate
   });
 });

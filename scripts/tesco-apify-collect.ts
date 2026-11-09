@@ -34,24 +34,25 @@ async function main() {
   // Freshness is ENFORCED by default (fail closed); only '0' relaxes it.
   const requireFreshness = process.env.APIFY_REQUIRE_FRESHNESS !== '0';
 
-  // Provider-side per-run monetary cap: a small fixed ceiling well under the
-  // campaign budget so a single run can never run away. Apify aborts a run that
-  // would exceed it.
-  const perRunMaxUsd = Number(process.env.APIFY_PER_RUN_MAX_USD ?? 0.5);
-  const client = createApifyRunClient({ maxItems: Math.max(1, limit), maxTotalChargeUsd: perRunMaxUsd });
+  // The per-run provider ceiling is the PER-REQUEST RESERVATION amount, passed
+  // through on each call (fetchApify(url, maxChargeUsd)). We also set a client
+  // default equal to perRequestUsd as a backstop; the effective cap is the
+  // smaller of the two, so a run can never exceed what was reserved.
+  const client = createApifyRunClient({ maxItems: Math.max(1, limit), maxTotalChargeUsd: perRequestUsd });
   // Campaign start marker for reconciliation (ISO). Defaults to the campaign's
   // creation date so all its runs are counted.
   const campaignSinceISO = process.env.APIFY_CAMPAIGN_SINCE ?? '2026-11-08T00:00:00Z';
 
-  // One Apify run per URL so one request == one run (budget/ledger line up).
-  const fetchApify = (u: string) => new Promise<{ response: Awaited<ReturnType<ReturnType<typeof createApifyFetchPage>>>; provider: ApifyProviderIdentity | null }>((resolve, reject) => {
+  // One Apify run per URL so one request == one run (budget/ledger line up). The
+  // reservation's ceiling (maxChargeUsd) is passed through to the actor run.
+  const fetchApify = (u: string, maxChargeUsd: number) => new Promise<{ response: Awaited<ReturnType<ReturnType<typeof createApifyFetchPage>>>; provider: ApifyProviderIdentity | null }>((resolve, reject) => {
     let captured: ApifyProviderIdentity | null = null;
     const fetchPage = createApifyFetchPage({
       client,
       onProviderIdentity: (i) => { captured = i; },
       requireVerifiedFreshness: requireFreshness,
     });
-    fetchPage(u).then((response) => resolve({ response, provider: captured })).catch(reject);
+    fetchPage(u, maxChargeUsd).then((response) => resolve({ response, provider: captured })).catch(reject);
   });
 
   // The $cap is ENFORCED DURABLY by the DB reservation ledger inside
