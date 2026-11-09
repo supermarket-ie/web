@@ -3,6 +3,7 @@ import { parseTescoCollectedPage } from './tesco-direct-collection-core';
 import {
   renderApifyProductPage,
   verifyApifyFreshness,
+  confirmedTerminalChargeUsd,
   createApifyFetchPage,
   createApifyRunClient,
   type ApifyItem,
@@ -278,5 +279,41 @@ describe('createApifyFetchPage — caught provider error returns network_error w
     const res = await fetchPage(URL_322, 0.002);
     expect(res.outcome).toBe('network_error');
     expect(captured).toBeNull(); // no provider identity → collector must NOT settle an estimate
+  });
+});
+
+describe('confirmedTerminalChargeUsd — billing-finality guard for reconciliation', () => {
+  const now = Date.parse('2026-11-09T12:00:30Z');
+  const old = '2026-11-09T12:00:10Z';   // 20s before now → ≥10s old
+  const recent = '2026-11-09T12:00:25Z'; // 5s before now → NOT yet 10s old
+
+  it('settles only a terminal run with a valid finishedAt ≥10s old and a real cost', () => {
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: old, usageTotalUsd: 0.0018 }, now)).toBe(0.0018);
+    // A terminal run with a confirmed ZERO (≥10s old) is final at 0.
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: old, usageTotalUsd: 0 }, now)).toBe(0);
+  });
+
+  it('leaves a run UNRESOLVED when finishedAt is newer than 10s', () => {
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: recent, usageTotalUsd: 0.0018 }, now)).toBeNull();
+  });
+
+  it('leaves a run UNRESOLVED on missing/invalid finishedAt or missing/invalid cost', () => {
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: null, usageTotalUsd: 0.0018 }, now)).toBeNull();
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: 'not-a-date', usageTotalUsd: 0.0018 }, now)).toBeNull();
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: old, usageTotalUsd: null }, now)).toBeNull();
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: old, usageTotalUsd: -1 }, now)).toBeNull();
+  });
+
+  it('leaves a non-terminal (still RUNNING) run unresolved', () => {
+    expect(confirmedTerminalChargeUsd({ status: 'RUNNING', finishedAt: null, usageTotalUsd: 0 }, now)).toBeNull();
+  });
+
+  it('IMMEDIATE preliminary zero → unresolved; the SAME run later with a positive charge ≥10s old → settles to the positive', () => {
+    // Immediately after completion: finishedAt is 'now', cost preliminary 0.
+    const justFinished = '2026-11-09T12:00:30Z';
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: justFinished, usageTotalUsd: 0 }, now)).toBeNull();
+    // A later reconciliation pass (finishedAt now ≥10s old, cost settled to 0.0018).
+    const later = now + 60_000;
+    expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: justFinished, usageTotalUsd: 0.0018 }, later)).toBe(0.0018);
   });
 });

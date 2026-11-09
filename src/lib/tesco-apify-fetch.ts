@@ -257,6 +257,28 @@ export function createApifyRunClient(options: {
   };
 }
 
+// Billing-finality check for a provider run during between-batch reconciliation.
+// A reservation may be settled to run.usageTotalUsd ONLY when the run is both
+// terminal and its billing is SETTLED, defined conservatively as:
+//   • a terminal run status (SUCCEEDED/FAILED/ABORTED/TIMED-OUT), AND
+//   • a VALID finishedAt that is at least `minAgeMs` (default 10s) in the past
+//     (gives the provider time to settle the final charge), AND
+//   • a non-null, finite, non-negative usageTotalUsd.
+// Missing/invalid finishedAt, a finishedAt newer than the window, or a
+// missing/invalid cost → NOT final; leave the reservation reserved for a later
+// pass. Returns the confirmed charge when final, else null.
+export type ApifyRunBillingLike = { status?: unknown; finishedAt?: unknown; usageTotalUsd?: unknown };
+export function confirmedTerminalChargeUsd(run: ApifyRunBillingLike, now: number = Date.now(), minAgeMs = 10_000): number | null {
+  const terminal = ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(String(run?.status ?? ''));
+  if (!terminal) return null;
+  const finishedAt = typeof run?.finishedAt === 'string' ? Date.parse(run.finishedAt) : NaN;
+  if (!Number.isFinite(finishedAt)) return null;            // missing/invalid timestamp → unresolved
+  if (finishedAt > now - minAgeMs) return null;             // finishedAt not yet ≥10s old → wait
+  const cost = run?.usageTotalUsd == null ? NaN : Number(run.usageTotalUsd);
+  if (!Number.isFinite(cost) || cost < 0) return null;      // missing/invalid cost → unresolved
+  return cost;
+}
+
 // Reconcile ACTUAL campaign spend from the provider: sum usageTotalUsd across
 // ALL of this actor's runs in the current billing window, regardless of status
 // (SUCCEEDED, FAILED, TIMED-OUT, ABORTED, and audit re-runs). Apify bills for
