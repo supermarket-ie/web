@@ -1,5 +1,40 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco Apify: unknown-billing retained + latest-only price view (PR #373, main 301272c)
+
+Fourth review round: two remaining wiring issues closed.
+1. UNKNOWN/PROVISIONAL BILLING. createApifyRunClient no longer coerces a missing
+   usageTotalUsd to 0 — it is null (UNKNOWN); usageIsTerminal:false marks a
+   completion-time total PRELIMINARY. The collector settles the budget
+   reservation ONLY on a CONFIRMED TERMINAL charge (provider present + non-null
+   runUsageUsd + runUsageIsTerminal); otherwise the full reservation is RETAINED
+   and linked to its provider run (apify_link_reservation_run) for a
+   between-batch terminal reconciliation (apify_reconcile_reservation +
+   reconcileOutstandingReservations in the entry script, which reads the
+   finished run's confirmed usage — no per-fetch delay). Provider identity alone
+   never establishes billing. Tests: missing usageTotalUsd; preliminary-zero →
+   later positive; restart with the reservation outstanding — all assert no
+   premature release/zero-settle.
+2. LATEST-ONLY PRICE VIEW. The validator latest_prices fixture now exposes ONE
+   latest offer per mapping (distinct on store_product_id, newest first) within
+   the 7-day window — production semantics. Duplicate-finalise behaviour is
+   DEFINED + tested: the 2nd finalise is blocked (observation_changed from the
+   fresh write, or receipt idempotency) and writes NO second observation.
+   Freshness guards preserved; fixture not weakened.
+
+Live renewal eligibility is recomputed at collection time by selectApifyMappings
+(reads latest_prices + 4-day predicate each run); the stale "308 due" figure is
+NOT carried forward and MUST be recomputed live before each collection (needs a
+fresh AWS SSO session — the read-only recount could not run now as SSO had
+expired; this does not block the code).
+
+64 unit tests + 26 migration assertions (real finaliser, latest-only view) pass;
+lint+typecheck clean; validate CI passed; merged PR #373. Apply order unchanged:
+20261108200000 → 20261109090000 → 20261109140000. Freshness policy change stays
+EXPLICIT for release: WRITES PERMITTED WITHOUT INDEPENDENTLY ESTABLISHED
+FRESHNESS. aws-prod branch policy unchanged (ops/* or owner adds main).
+SuperValu/Dunnes untouched; sandbox (PR #362) still stopped.
+
 ## 9 November 2026 — Tesco Apify: snapshot + budget WIRING completed (PR #371, main 3d94daa)
 
 Third review round found the PR #369 fixes were not wired through. Both were
