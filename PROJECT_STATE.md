@@ -1,5 +1,41 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco Apify: snapshot + budget WIRING completed (PR #371, main 3d94daa)
+
+Third review round found the PR #369 fixes were not wired through. Both were
+genuine wiring gaps, now closed in the existing implementation.
+
+1. SNAPSHOT (mixed-version object eliminated): selectApifyMappings previously
+   left the collector using stale query fields (m.canonical_name/product_id/
+   gtin) for assessment while only m.snapshot held the authoritative value. Now
+   ALL assessment inputs are reconstructed from the ONE snapshot returned by
+   apify_reserve_tesco_request: snapshotIdentity() + snapshotMappingEvidence()
+   feed the deterministic gate, the identity fingerprint, assessmentEvidence()
+   (AI), and finalise. apify_mapping_snapshot carries the full material identity
+   (incl. is_own_brand + same-SKU canonical names); finalise passes NULL
+   url/sku/name to finalize_store_scrape_product so it never mutates a bound
+   snapshot field (that previously broke receipt-idempotency re-finalise).
+2. BUDGET ceiling now reaches the provider: fetchApify(url, maxChargeUsd) threads
+   the reserved amount; ApifyRunClient.runProductUrls(urls, maxTotalChargeUsd)
+   sends it on the run POST; effective cap = min(per-call, client default). Entry
+   client default = perRequestUsd (was a fixed $0.50). Uncertainty: the real
+   transport catches provider errors -> network_error with NO provider identity;
+   the collector settles ONLY when the actual charge is known, else RETAINS the
+   reservation (no estimate booked as settled).
+
+Tests use REAL selector/transport wiring: outgoing maxTotalChargeUsd asserted on
+the actual request (per-call + min-clamp); caught-timeout through
+createApifyFetchPage (not a direct-throw fake). Validator price view now uses
+production 7-day-window semantics with 5-day seeds (due AND visible). 60 unit
+tests + 25 migration assertions (real finaliser) pass; lint+typecheck clean;
+validate CI passed; merged PR #371.
+
+APPLY ORDER unchanged: 20261108200000 -> 20261109090000 -> 20261109140000.
+Freshness policy change stays EXPLICIT for the release decision: WRITES ARE
+PERMITTED WITHOUT INDEPENDENTLY ESTABLISHED FRESHNESS (provider gives no
+documented cache semantics/age). aws-prod branch policy unchanged (ops/* or
+owner adds main). SuperValu/Dunnes unchanged; sandbox (PR #362) still stopped.
+
 ## 9 November 2026 — Tesco Apify: snapshot-binding TOCTOU + durable budget fixed (PR #369, main 86b17fc)
 
 Second review round found a mapping TOCTOU (reservation captured the NEW
