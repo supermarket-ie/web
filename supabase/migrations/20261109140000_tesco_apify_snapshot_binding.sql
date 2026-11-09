@@ -259,3 +259,42 @@ end;
 $$;
 revoke all on function public.apify_settle_budget(uuid, numeric, text) from public, anon, authenticated;
 grant execute on function public.apify_settle_budget(uuid, numeric, text) to service_role;
+
+-- Link an OUTSTANDING reservation to the provider run it launched, WITHOUT
+-- settling it. Used when the per-fetch completion charge is unknown/preliminary
+-- so a later terminal reconciliation can settle THIS reservation to the
+-- confirmed charge. Keeps the reservation 'reserved' (still counts).
+create or replace function public.apify_link_reservation_run(
+  p_reservation_id uuid, p_provider_run_id text
+) returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  update public.tesco_apify_budget_reservations
+    set provider_run_id = p_provider_run_id
+    where id = p_reservation_id and state = 'reserved';
+end;
+$$;
+revoke all on function public.apify_link_reservation_run(uuid, text) from public, anon, authenticated;
+grant execute on function public.apify_link_reservation_run(uuid, text) to service_role;
+
+-- Terminal reconciliation (between batches, not per fetch): settle an
+-- OUTSTANDING reservation to its CONFIRMED terminal charge once known. The
+-- caller supplies the confirmed usageTotalUsd it read from the provider's
+-- finished run (reconcileCampaignSpendUsd / a terminal run GET). Only settles a
+-- 'reserved' row and only with a non-null confirmed charge — never a 0/estimate.
+create or replace function public.apify_reconcile_reservation(
+  p_reservation_id uuid, p_confirmed_usd numeric
+) returns boolean
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if p_confirmed_usd is null or p_confirmed_usd < 0 then raise exception 'confirmed_usd_required'; end if;
+  update public.tesco_apify_budget_reservations
+    set state = 'settled', actual_usd = p_confirmed_usd, settled_at = now()
+    where id = p_reservation_id and state = 'reserved';
+  return found;
+end;
+$$;
+revoke all on function public.apify_reconcile_reservation(uuid, numeric) from public, anon, authenticated;
+grant execute on function public.apify_reconcile_reservation(uuid, numeric) to service_role;

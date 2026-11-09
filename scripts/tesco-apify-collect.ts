@@ -68,11 +68,38 @@ async function main() {
       console.log(JSON.stringify({ event: 'provider_spend_crosscheck', label, totalUsd: r.totalUsd, runs: r.runs, byStatus: r.byStatus, cap: budgetUsd }));
     } catch (e) { console.log(JSON.stringify({ event: 'provider_spend_crosscheck_failed', message: e instanceof Error ? e.message : 'err' })); }
   }
+
+  // Terminal reconciliation (between batches, NOT per fetch): for each
+  // OUTSTANDING reservation linked to a provider run, read that run's CONFIRMED
+  // terminal usage and settle the reservation to it. A run that is not yet
+  // terminal, or still reports no usage, is left reserved (keeps counting).
+  async function reconcileOutstandingReservations(label) {
+    const { data: rows, error } = await sb.from('tesco_apify_budget_reservations')
+      .select('id,provider_run_id').eq('campaign', campaign).eq('state', 'reserved')
+      .not('provider_run_id', 'is', null);
+    if (error) { console.log(JSON.stringify({ event: 'reconcile_read_failed', label, message: error.message })); return; }
+    const apifyToken = env('APIFY_TOKEN');
+    let settled = 0;
+    for (const r of rows ?? []) {
+      try {
+        const res = await fetch(`https://api.apify.com/v2/actor-runs/${r.provider_run_id}`, { headers: { Authorization: `Bearer ${apifyToken}` } });
+        if (!res.ok) continue;
+        const run = (await res.json())?.data;
+        const terminal = ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(String(run?.status));
+        if (!terminal || run?.usageTotalUsd == null) continue; // not yet confirmed → keep reserved
+        const ok = await sb.rpc('apify_reconcile_reservation', { p_reservation_id: r.id, p_confirmed_usd: Number(run.usageTotalUsd) });
+        if (!ok.error) settled += 1;
+      } catch { /* leave reserved; try again next batch */ }
+    }
+    console.log(JSON.stringify({ event: 'reservations_reconciled', label, settled, outstanding: (rows ?? []).length }));
+  }
+
   await logProviderSpend('start');
+  await reconcileOutstandingReservations('start');
 
   const batches: ApifyCollectionResult[] = [];
   for (let b = 0; b < maxBatches; b += 1) {
-    if (b > 0) await logProviderSpend(`before_batch_${b}`);
+    if (b > 0) { await logProviderSpend(`before_batch_${b}`); await reconcileOutstandingReservations(`before_batch_${b}`); }
     const result = await collectTescoApify(mode, limit, {
       sb, fetchApify, campaign, budgetUsd, perRequestUsd,
       log: (e) => console.log(JSON.stringify(e)),
@@ -92,6 +119,7 @@ async function main() {
     held: a.held + r.held, unavailable: a.unavailable + r.unavailable,
   }), { requested: 0, accepted: 0, held: 0, unavailable: 0 });
   await logProviderSpend('end');
+  await reconcileOutstandingReservations('end');
   console.log(JSON.stringify({ event: 'campaign_summary', mode, batches: batches.length, ...totals }));
 }
 
