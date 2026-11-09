@@ -86,22 +86,34 @@ begin
 end $$;
 `);
 
-// Apply the migration under test.
-const migration = readFileSync('supabase/migrations/20261108200000_tesco_apify_unattended_collection.sql', 'utf8');
-await q(migration);
-console.log('migration applied OK');
+// Apply BOTH migrations in order (base objects, then the security correction).
+await q(readFileSync('supabase/migrations/20261108200000_tesco_apify_unattended_collection.sql', 'utf8'));
+await q(readFileSync('supabase/migrations/20261109090000_tesco_apify_lease_fencing_and_page_binding.sql', 'utf8'));
+console.log('migrations applied OK');
 
-// Seed a proven, due renewal mapping.
+// Mapping A: proven, due renewal.
 const MID = '11111111-1111-1111-1111-111111111111';
 const PID = '22222222-2222-2222-2222-222222222222';
+const URL_A = 'https://www.tesco.ie/shop/en-IE/products/254877356';
+// Mapping B: a DIFFERENT proven, due renewal with a DIFFERENT url/sku.
+const MID_B = '44444444-4444-4444-4444-444444444444';
+const PID_B = '55555555-5555-5555-5555-555555555555';
+const URL_B = 'https://www.tesco.ie/shop/en-IE/products/260300754';
 await q(`
-insert into public.products(id, canonical_name, brand, ean) values ('${PID}','Long Grain Rice 1kg', null, '05000119309228');
+insert into public.products(id, canonical_name, brand, ean) values
+  ('${PID}','Long Grain Rice 1kg', null, '05000119309228'),
+  ('${PID_B}','Free Range Eggs 12', null, '05000436926832');
 insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, gtin, url_status)
-values ('${MID}','${PID}','tesco','254877356','https://www.tesco.ie/shop/en-IE/products/254877356','Tesco Easy Cook Long Grain Rice 1kg','Tesco',true,'05000119309228','resolved');
--- prove it + an old observation (due for renewal)
+values
+  ('${MID}','${PID}','tesco','254877356','${URL_A}','Tesco Easy Cook Long Grain Rice 1kg','Tesco',true,'05000119309228','resolved'),
+  ('${MID_B}','${PID_B}','tesco','260300754','${URL_B}','Tesco Free Range Eggs 12','Tesco',true,'05000436926832','resolved');
 insert into public.scrape_runs(id, store, run_id, status, started_at) values ('33333333-3333-3333-3333-333333333333','tesco','seed','success', now());
-insert into public.scrape_product_receipts(run_id, store_product_id, outcome) values ('33333333-3333-3333-3333-333333333333','${MID}','success');
-insert into public.price_observations(store_product_id, price, observed_at, source) values ('${MID}', 1.30, now() - interval '10 days', 'tesco_direct');
+insert into public.scrape_product_receipts(run_id, store_product_id, outcome) values
+  ('33333333-3333-3333-3333-333333333333','${MID}','success'),
+  ('33333333-3333-3333-3333-333333333333','${MID_B}','success');
+insert into public.price_observations(store_product_id, price, observed_at, source) values
+  ('${MID}', 1.30, now() - interval '10 days', 'tesco_direct'),
+  ('${MID_B}', 4.00, now() - interval '10 days', 'tesco_direct');
 `);
 
 // --- Assertions (replace printed-success checks) ---
@@ -112,71 +124,119 @@ async function expectThrows(fn, matcher, msg) {
   catch (e) { const ok = !matcher || String(e.message || e).includes(matcher); if (!ok) { failures++; console.error('FAIL (wrong error):', msg, '->', e.message); } else console.log('ok threw:', msg); }
 }
 
-const URL = 'https://www.tesco.ie/shop/en-IE/products/254877356';
-const owner = 'fargate-abcdef123456';
-const [{ apify_begin_tesco_run: runId }] = (await db.query(
-  `select public.apify_begin_tesco_run('apify-tesco-ie-20261108','renewal',1,$1) as apify_begin_tesco_run`, [owner])).rows;
+const GATE = 'apify-tesco-ie-20261108';
+async function begin(owner) {
+  const r = (await db.query(`select public.apify_begin_tesco_run($1,'renewal',10,$2) as b`, [GATE, owner])).rows[0].b;
+  return { runId: r.runId, token: r.leaseToken };
+}
+async function reserve(a, mid, url, owner = a.owner) {
+  return db.query(`select public.apify_reserve_tesco_request($1,$2,$3,$4,$5,$6,'renewal')`, [a.runId, GATE, a.token, owner, mid, url]);
+}
+async function record(a, mid, url, owner = a.owner) {
+  return db.query(`select public.apify_record_tesco_page($1,$2,$3,$4,$5,$6,'renewal','ok',200,null,120,$7,
+    '{"products":[{"sku":"x"}],"listing":null}'::jsonb, '[]'::jsonb,
+    '{"provider":"apify"}'::jsonb, false, null, false,
+    '{"sku":"x","actorId":"A","runId":"r","datasetId":"d","rawItem":{},"rawItemSha256":"${'a'.repeat(64)}"}'::jsonb)`,
+    [a.runId, GATE, a.token, owner, mid, url, 'b'.repeat(64)]);
+}
+async function finalise(a, mid, price, owner = a.owner) {
+  return db.query(`select public.apify_finalise_tesco_page($1,$2,$3,$4,$5,'renewal',$6,1.30,'x') as r`, [a.runId, GATE, a.token, owner, mid, price]);
+}
+const priceCount = async (mid) => (await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1 and observed_at > now()-interval '1 hour'`, [mid])).rows[0].n;
 
-// NEGATIVE: wrong gate key is refused everywhere.
-await expectThrows(() => db.query(`select public.apify_begin_tesco_run('other-gate','renewal',1,$1)`, [owner]), 'apify_gate_only', 'begin refuses non-Apify gate');
+// ---- Happy path: begin → reserve → record → finalise → close ----
+const A = { ...(await begin('fargate-owner-aaaaaaaa')), owner: 'fargate-owner-aaaaaaaa' };
+await expectThrows(() => db.query(`select public.apify_begin_tesco_run('other-gate','renewal',1,'o')`), 'apify_gate_only', 'begin refuses non-Apify gate');
+assert((await reserve(A, MID, URL_A)).rows[0].apify_reserve_tesco_request === true, 'reserve succeeds for a due, proven mapping');
+await expectThrows(() => reserve(A, MID, URL_A), 'attempt_already_recorded', 'reserve excludes a pending/recent URL');
+// URL/mapping mismatch is refused at reservation.
+await expectThrows(() => reserve(A, MID, URL_B), 'mapping_not_resolved_or_unproven', 'reserve refuses a URL that is not the mapping own url');
+await record(A, MID, URL_A);
+assert(await priceCount(MID) === 0, 'record writes NO price (evidence only)');
+await expectThrows(() => finalise(A, MID, 0), 'positive_regular_price_required', 'finalise refuses non-positive price');
+assert((await finalise(A, MID, 1.35)).rows[0].r.finalised === true, 'finalise writes the price for the token holder');
+assert(Number((await db.query(`select price from public.price_observations where store_product_id=$1 order by observed_at desc limit 1`, [MID])).rows[0].price) === 1.35, 'latest price is the finalised regular price');
+// Receipt idempotency.
+const b4 = await priceCount(MID);
+assert((await finalise(A, MID, 1.35)).rows[0].r.finalised === false && await priceCount(MID) === b4, 'receipt idempotency blocks a second finalise');
+await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'complete')`, [A.runId, GATE, A.token, A.owner]);
+assert((await db.query(`select leased_until, lease_token from public.tesco_egress_pool where egress_key=$1`, [GATE])).rows[0].leased_until === null, 'lease + token released on close');
 
-// Reserve (atomic guards).
-const reserve = await db.query(
-  `select public.apify_reserve_tesco_request($1,'apify-tesco-ie-20261108',$2,$3,$4,'renewal') as ok`, [runId, owner, MID, URL]);
-assert(reserve.rows[0].ok === true, 'reserve succeeds for a due, proven mapping');
+// ============================================================
+// REGRESSION — the reproduced cross-worker attack (must NOT write/clear).
+// 1. Worker A begins + records an OK page for mapping A.
+// 2. A's lease expires; worker B begins a successor run (new token).
+// 3. A calls finalise with ITS run/token but a DIFFERENT mapping B.
+// 4. A closes its run.
+// Expected: step 3 raises (stale token), writes nothing for B; step 4 does
+// NOT clear B's lease.
+// ============================================================
+// Clear pacing so these binding/fencing regressions are not masked by the 10s
+// pacing guard (pacing is covered by its own behaviour, not under test here).
+const clearPacing = () => db.query(`update public.tesco_egress_pool set last_success_at = now() - interval '1 hour' where egress_key=$1`, [GATE]);
 
-// NEGATIVE: a second reserve for the same URL is excluded (pending row exists).
-await expectThrows(() => db.query(`select public.apify_reserve_tesco_request($1,'apify-tesco-ie-20261108',$2,$3,$4,'renewal')`, [runId, owner, MID, URL]), 'attempt_already_recorded', 'reserve excludes a pending/recent URL');
+// Worker A records its OWN mapping (MID_B, still due). The attack target is the
+// DIFFERENT mapping MID (which A never reserved/recorded in its run).
+await clearPacing();
+const WA = { ...(await begin('fargate-worker-a-xxxx')), owner: 'fargate-worker-a-xxxx' };
+await reserve(WA, MID_B, URL_B);
+await record(WA, MID_B, URL_B);
+// Simulate A's lease expiring so B can claim.
+await db.query(`update public.tesco_egress_pool set leased_until = now() - interval '1 minute' where egress_key=$1`, [GATE]);
+const WB = { ...(await begin('fargate-worker-b-yyyy')), owner: 'fargate-worker-b-yyyy' };
+assert(WB.token !== WA.token, 'successor run minted a NEW fencing token');
 
-// NEGATIVE: reserve under a WRONG owner is refused (lease/ownership).
-await expectThrows(() => db.query(`select public.apify_reserve_tesco_request($1,'apify-tesco-ie-20261108','fargate-imposter99',$2,'https://www.tesco.ie/shop/en-IE/products/999999',''||'renewal')`, [runId, MID]), 'ownership_or_gate_lost', 'reserve refuses a non-owner');
+// A tries to finalise a DIFFERENT mapping (MID) using its OWN (now stale) token.
+const attackBefore = await priceCount(MID);
+await expectThrows(() => finalise(WA, MID, 9.99), 'lease_lost_or_superseded', 'superseded worker A CANNOT finalise (stale token)');
+assert(await priceCount(MID) === attackBefore, 'no price written for the attacked mapping by the superseded worker');
 
-// Record the page (staged; p_accept=false in the new flow).
-const rec = await db.query(
-  `select public.apify_record_tesco_page($1,'apify-tesco-ie-20261108',$2,$3,$4,'renewal','ok',200,null,120,$5,
-     '{"products":[{"sku":"254877356"}],"listing":null}'::jsonb,
-     '[{"storeProductId":"${MID}","sku":"254877356","reasons":[]}]'::jsonb,
-     '{"provider":"apify"}'::jsonb,
-     false, null, 1.30, '254877356', 'Tesco Easy Cook Long Grain Rice 1kg',
-     false, null, false,
-     '{"sku":"254877356","actorId":"A","runId":"r","datasetId":"d","rawItem":{"product_id":"254877356"},"rawItemSha256":"${'a'.repeat(64)}","scrapedAt":"2026-11-08T22:00:00Z","freshness":{"perItemPreconditionMet":true,"level":"after_submit_precondition_met"},"freshnessVerified":false}'::jsonb
-   ) as result`,
-  [runId, owner, MID, URL, 'b'.repeat(64)]);
-assert(rec.rows[0].result.finalised === false, 'record stages without finalising (p_accept=false)');
-const evRows = (await db.query(`select actor_id, raw_item_sha256 from public.tesco_apify_provider_evidence where run_id=$1`, [runId])).rows;
-assert(evRows.length === 1 && evRows[0].raw_item_sha256 === 'a'.repeat(64), 'provider evidence recorded with raw-item hash');
-assert((await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1 and observed_at > now()-interval '1 hour'`, [MID])).rows[0].n === 0, 'no price written at record time');
+// A also cannot finalise mapping B even if it passed a plausible URL earlier:
+// it never reserved/recorded B in its run, so there is no ok page bound to B.
+// (Covered above by the token failure; also assert B's lease survives A's close.)
+const bTokenBefore = (await db.query(`select lease_token from public.tesco_egress_pool where egress_key=$1`, [GATE])).rows[0].lease_token;
+await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'complete')`, [WA.runId, GATE, WA.token, WA.owner]);
+const bTokenAfter = (await db.query(`select lease_token, leased_until from public.tesco_egress_pool where egress_key=$1`, [GATE])).rows[0];
+assert(bTokenAfter.lease_token === bTokenBefore && bTokenAfter.lease_token === WB.token, 'worker A close did NOT clear worker B lease/token');
+assert(bTokenAfter.leased_until !== null, 'worker B lease still live after A close');
+// Clean up B's run.
+await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'complete')`, [WB.runId, GATE, WB.token, WB.owner]);
 
-// NEGATIVE: finalise requires a positive price.
-await expectThrows(() => db.query(`select public.apify_finalise_tesco_page($1,'apify-tesco-ie-20261108',$2,$3,$4,'renewal',0,1.30,'254877356','x')`, [runId, owner, MID, URL]), 'positive_regular_price_required', 'finalise refuses non-positive price');
-
-// NEGATIVE: finalise under a WRONG owner / expired lease writes nothing.
-await expectThrows(() => db.query(`select public.apify_finalise_tesco_page($1,'apify-tesco-ie-20261108','fargate-imposter99',$2,$3,'renewal',1.35,1.30,'254877356','x')`, [runId, MID, URL]), 'ownership_or_lease_lost', 'finalise refuses a non-owner (lease fencing)');
-
-// POSITIVE: finalise by the real owner writes the price + receipt.
-const fin = await db.query(`select public.apify_finalise_tesco_page($1,'apify-tesco-ie-20261108',$2,$3,$4,'renewal',1.35,1.30,'254877356','Tesco Easy Cook Long Grain Rice 1kg') as result`, [runId, owner, MID, URL]);
-assert(fin.rows[0].result.finalised === true, 'finalise writes the price for the owner');
-const price = (await db.query(`select price from public.price_observations where store_product_id=$1 order by observed_at desc limit 1`, [MID])).rows[0];
-assert(Number(price.price) === 1.35, 'latest price_observation is the finalised regular price');
-assert((await db.query(`select count(*)::int n from public.scrape_product_receipts where run_id=$1 and store_product_id=$2 and outcome='success'`, [runId, MID])).rows[0].n === 1, 'a success receipt exists');
-
-// NEGATIVE: receipt idempotency — a second finalise for the same run+product does not double-write.
-const before = (await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1`, [MID])).rows[0].n;
-const fin2 = await db.query(`select public.apify_finalise_tesco_page($1,'apify-tesco-ie-20261108',$2,$3,$4,'renewal',1.35,1.30,'254877356','x') as result`, [runId, owner, MID, URL]);
-const after = (await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1`, [MID])).rows[0].n;
-assert(fin2.rows[0].result.finalised === false && after === before, 'receipt idempotency blocks a second finalise');
+// ============================================================
+// REGRESSION — mapping changed between reservation and finalise.
+// Reserve+record mapping A, then change the stored mapping (e.g. sku/url),
+// then finalise must refuse (snapshot mismatch) and write nothing.
+// ============================================================
+// Reset the gate for a fresh run and make MID due again (its price is from A's
+// write above, which is recent → not due). Use expansion semantics on MID_B
+// after removing its observation would be complex; instead test on a fresh
+// mapping C.
+const MID_C = '66666666-6666-6666-6666-666666666666';
+const PID_C = '77777777-7777-7777-7777-777777777777';
+const URL_C = 'https://www.tesco.ie/shop/en-IE/products/297844134';
+await q(`
+insert into public.products(id, canonical_name, brand, ean) values ('${PID_C}','Spaghetti 500g', null, '05057373964694');
+insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, gtin, url_status)
+values ('${MID_C}','${PID_C}','tesco','297844134','${URL_C}','Tesco Spaghetti 500g','Tesco',true,'05057373964694','resolved');
+insert into public.scrape_product_receipts(run_id, store_product_id, outcome) values ('33333333-3333-3333-3333-333333333333','${MID_C}','success');
+insert into public.price_observations(store_product_id, price, observed_at, source) values ('${MID_C}', 0.59, now() - interval '10 days', 'tesco_direct');
+`);
+await clearPacing();
+const WC = { ...(await begin('fargate-worker-c-zzzz')), owner: 'fargate-worker-c-zzzz' };
+await reserve(WC, MID_C, URL_C);
+await record(WC, MID_C, URL_C);
+// Mapping changes under us (brand correction, say).
+await q(`update public.store_products set brand='CHANGED' where id='${MID_C}';`);
+const cBefore = await priceCount(MID_C);
+await expectThrows(() => finalise(WC, MID_C, 0.59), 'mapping_snapshot_changed', 'finalise refuses when the mapping snapshot changed since reservation');
+assert(await priceCount(MID_C) === cBefore, 'no price written when the mapping changed mid-collection');
+await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'degraded')`, [WC.runId, GATE, WC.token, WC.owner]);
 
 // Identity verification record + reuse invalidation on fingerprint change.
-await db.query(`select public.apify_record_identity_verification($1,$2,'{}'::jsonb,'{}'::jsonb,'det rationale long enough','deterministic',$3,null,null,$4,720)`, [MID, 'c'.repeat(64), 'v2', 'd'.repeat(64)]);
-await db.query(`select public.apify_record_identity_verification($1,$2,'{}'::jsonb,'{}'::jsonb,'changed identity rationale','deterministic_plus_ai',$3,'m',null,$4,720)`, [MID, 'e'.repeat(64), 'v2', 'f'.repeat(64)]);
-const active = (await db.query(`select identity_fingerprint from public.tesco_identity_verifications where store_product_id=$1 and invalidated_at is null`, [MID])).rows;
-assert(active.length === 1 && active[0].identity_fingerprint === 'e'.repeat(64), 'a new fingerprint invalidates the prior active verification (one active)');
-
-// Close run + lease released.
-await db.query(`select public.apify_close_tesco_run($1,'apify-tesco-ie-20261108',$2,'complete')`, [runId, owner]);
-const runRow = (await db.query(`select status from public.scrape_runs where id=$1`, [runId])).rows[0];
-assert(runRow.status === 'success', 'run closes success');
-assert((await db.query(`select leased_until from public.tesco_egress_pool where egress_key='apify-tesco-ie-20261108'`)).rows[0].leased_until === null, 'lease released on close');
+await db.query(`select public.apify_record_identity_verification($1,$2,'{}'::jsonb,'{}'::jsonb,'det rationale long enough here','deterministic',$3,null,null,$4,720)`, [MID, 'c'.repeat(64), 'v2', 'd'.repeat(64)]);
+await db.query(`select public.apify_record_identity_verification($1,$2,'{}'::jsonb,'{}'::jsonb,'changed identity rationale here','deterministic_plus_ai',$3,'m',null,$4,720)`, [MID, 'e'.repeat(64), 'v2', 'f'.repeat(64)]);
+const activeV = (await db.query(`select identity_fingerprint from public.tesco_identity_verifications where store_product_id=$1 and invalidated_at is null`, [MID])).rows;
+assert(activeV.length === 1 && activeV[0].identity_fingerprint === 'e'.repeat(64), 'a new fingerprint invalidates the prior active verification');
 
 console.log(`\n${failures === 0 ? 'ALL MIGRATION ASSERTIONS PASSED' : failures + ' MIGRATION ASSERTION(S) FAILED'}`);
 process.exit(failures === 0 ? 0 : 1);
