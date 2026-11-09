@@ -1,5 +1,47 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco Apify: snapshot-binding TOCTOU + durable budget fixed (PR #369, main 86b17fc)
+
+Second review round found a mapping TOCTOU (reservation captured the NEW
+snapshot while TypeScript assessed the OLD one, so a rice→eggs product_id change
+before reservation still finalised) and a budget-enforcement gap. Fixed in
+migration `20261109140000_tesco_apify_snapshot_binding.sql` (supersedes
+reserve+finalise from 20261109090000). APPLY ORDER NOW: 20261108200000 →
+20261109090000 → 20261109140000.
+
+- SNAPSHOT BINDING: apify_reserve_tesco_request now takes p_expected_snapshot
+  (what the collector SELECTED+ASSESSED), locks the mapping+canonical rows, and
+  REJECTS expected_snapshot_changed; it RETURNS the authoritative snapshot which
+  the collector binds assessment+finalise to. apify_finalise_tesco_page locks
+  mapping+canonical FOR UPDATE and requires current == page == assessed snapshot
+  before the write. The collector reads apify_mapping_snapshot at selection and
+  threads the reserve-returned snapshot through to finalise.
+- BUDGET: durable reservation ledger tesco_apify_budget_reservations +
+  apify_reserve_budget / apify_settle_budget / apify_campaign_committed_usd.
+  Each provider launch reserves perRequestUsd first (advisory-locked, cap
+  checked against settled actuals + outstanding reservations); the reservation
+  is RETAINED while running/uncertain and reconciled to the ACTUAL usageTotalUsd
+  on settle; provider-side per-run maxTotalChargeUsd set. Collector settles with
+  the run's real usageTotalUsd (now on ApifyProviderIdentity.runUsageUsd); a
+  skipped request releases its reservation (settle 0).
+- TESTS: scripts/validate-apify-migration.mjs now loads the REAL
+  finalize_store_scrape_product + pause_tesco_collection_egress verbatim from
+  their migrations (no substitute finaliser). Base tables that predate the
+  migration history are shaped from the repo's authoritative fixtures (documented
+  limitation in the harness header). 25 assertions incl. the EXACT rice→eggs
+  pre-reservation reproduction, mapping-change-mid-collection, the fencing
+  regressions (kept), and budget ($9.99 committed / restart / delayed-billing /
+  settle-reconcile).
+- FRESHNESS (honest): APIFY_FRESHNESS_LIMITATION states EXPLICITLY that writes
+  are PERMITTED WITHOUT independently established freshness and this does NOT
+  meet the prior hold-unless-independently-fresh requirement (no documented
+  provider cache semantics/age exist).
+
+54 unit tests + 25 migration assertions pass; lint + typecheck clean; validate
+CI passed; merged PR #369. aws-prod branch-policy mismatch unchanged (allows
+only infra/aws-migration + ops/*; prod build must come from an ops/* branch or
+owner adds main). SuperValu/Dunnes unchanged; sandbox (PR #362) still stopped.
+
 ## 9 November 2026 — Tesco Apify: cross-worker finalise VULN fixed (PR #367, main e1602b7); do not apply the old migration alone
 
 Independent review reproduced a cross-worker price write against the merged
