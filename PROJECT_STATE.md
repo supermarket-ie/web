@@ -1,5 +1,85 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco Apify: PRODUCTION LAUNCH — renewals run, guarded prices written (main fd1d380, PR #379)
+
+The authorised bulk refresh ran in production on ECS Fargate. All three
+migrations were already applied + verified (receipt PR #378, main 8e5217c).
+
+LAUNCH MECHANICS (all owner-authorised; protections unchanged):
+- Prod image built via `aws-ecr-deploy-image.yml` from an `ops/*` branch
+  (`ops/tesco-apify-prod-launch-20261109`). The `aws-prod` environment has BOTH
+  a branch policy (ops/* allowed) AND a required-reviewer gate; the owner
+  explicitly authorised approving the aws-prod deployment with the supermarket-ie
+  reviewer account for this campaign. Images: `8e5217c-prod` then `fd1d380-prod`.
+- Collector runs as a one-off ECS task (task-def family
+  `smie-prod-tesco-apify-collect`) on cluster `smie-prod-cluster`, prod
+  VPC/subnets/SG, `scripts/tesco-apify-collect.ts`.
+- TWO run-config corrections were required and are IMPORTANT for any re-run:
+  1. BEDROCK ROLE. The identity-assessment AI (`resolveAgentModel` →
+     `eu.anthropic.claude-sonnet-4-6` on Bedrock, eu-west-1) needs
+     `bedrock:InvokeModel`. The default worker role `smie-prod-worker-task` has
+     ONLY SQS perms → `403 Forbidden`. The collector MUST run under task role
+     `smie-prod-task` (its inline `smie-prod-task-bedrock-invoke` grants the
+     model + inference profile). No IAM change was made; the correct existing
+     role was selected.
+  2. APIFY TOKEN. The exec role `smie-prod-exec` is NOT granted the
+     `smie-prod/apify` secret (its `smie-prod-secrets-read` allow-list omits it),
+     so an ECS `secrets` injection of APIFY_TOKEN fails at task init. For this
+     one-off campaign the token is passed as a plaintext container env var
+     (fetched via the authorised AWS session); supabase url/key stay as proper
+     secret refs. Clean long-term fix (Terraform): add the apify secret ARN to
+     `smie-prod-secrets-read` and switch APIFY_TOKEN back to a secret ref.
+
+RESILIENCE FIX (PR #379, main fd1d380): the first run wrote 5 guarded prices
+then ABORTED at batch 8 on `No object generated: response did not match schema.`
+— a Bedrock reply that failed the `generateObject` Zod parse threw out of
+`assessAndCombine` and killed the whole task. Fixed in
+`src/lib/tesco-apify-collection.ts`: the per-item `assessAndCombine` call is
+wrapped; on any throw the item gets reason `ai_error`, an `ai_error` event is
+logged, and the decision stays `hold`. A model/transport failure can NEVER
+become an accept and NEVER aborts the campaign. Test added; 26 migration
+assertions + 47 unit tests pass; validate CI green.
+
+PRODUCTION RESULTS (renewal, run fd1d380-prod, exit 0):
+- 13 batches, 142 requested, **7 accepted (prices written), 135 held**, 0
+  unavailable. Plus 1 price from the earlier aborted run = **8 fresh guarded
+  Tesco prices written this session** (verified in latest_prices, €0.89–€2.99).
+- Real provider spend **$0.45** of the $10 cap (239 actor runs, 1 FAILED). The
+  per-batch `spentUsd` shows ~$9.x because it reflects OUTSTANDING reservations
+  (perRequestUsd × in-flight), which are reconciled DOWN to actuals between
+  batches — this is why some batches selected 0 URLs until reconciliation freed
+  headroom. The durable ledger self-corrects; actual spend is tiny.
+- HOLD RATE is high by design: the deterministic identity gate rejects most
+  mappings the AI calls `verified_exact` — the SAME stale/re-pointed-SKU
+  data-quality problem the acceptance test exposed. No wrong price was written.
+  These held mappings are candidates for the guarded mapping-recovery path.
+- Freshness: accepted via the provider-asserted policy with provenance recorded
+  (APIFY_FRESHNESS_LIMITATION — writes permitted WITHOUT independently
+  established freshness).
+
+ELIGIBILITY (recomputed live with the FULL collector filters — resolved +
+canonical URL + proven success receipt + 1:1 SKU + 24h recent-exclusion):
+after the renewal run, **313 renewal-due, 760 expansion-eligible, 131
+fresh-not-due**. Universe 1,203 one-to-one eligible of 2,379 resolved (870 not
+yet proven; 305 shared-SKU deferred). Objective remains the full 2,052 DISTINCT
+SKUs; shared mapping rows are not distinct products and route through guarded
+verification + mapping recovery.
+
+EXPANSION RESULT (mode=expansion, exit 0): 20 batches, 213 requested, **1
+accepted, 212 held**. Expansion targets never-observed mappings, which are the
+most likely stale → near-total hold, correctly. Cumulative campaign provider
+spend after renewal + expansion = **$0.84** of $10 (452 actor runs, 1 FAILED).
+Session total guarded prices written = **9** (8 renewal + 1 expansion).
+
+REMAINING (live, full filters): 304 renewal-due, 768 expansion-eligible, 132
+fresh-not-due. The low accept rate across both modes is the stale/re-pointed-SKU
+data-quality problem; the bulk of the 2,052-SKU objective needs the guarded
+mapping-recovery path, not just renewal/expansion. No wrong price was written at
+any point. SuperValu/Dunnes UNCHANGED. Campaign gate `tesco-apify-20261108`,
+ledger campaign `tesco-apify-20261108`. Re-runs: use task-def
+`smie-prod-tesco-apify-collect` rev ≥4 (image fd1d380-prod, task role
+`smie-prod-task`), override APIFY_MODE as needed.
+
 ## 9 November 2026 — Tesco Apify: all three reviewed migrations applied and verified
 
 **The database migration blocker is cleared.** The Supabase connector
