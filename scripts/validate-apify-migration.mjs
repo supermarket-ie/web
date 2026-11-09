@@ -49,8 +49,12 @@ create table public.scrape_failures (
   store_url text, canonical_name text, is_retryable boolean, consecutive_failures int, raw_error text,
   primary key (run_id, store_product_id, failure_reason)
 );
+-- Production-semantics price view: the real latest_prices only surfaces
+-- observations within a 7-day window. Seeds below are 5 days old: due for
+-- renewal (>4 days) AND still visible in the view (<7 days).
 create view public.latest_prices as
-  select store_product_id, 'tesco'::text store, price, observed_at from public.price_observations;
+  select store_product_id, 'tesco'::text store, price, observed_at from public.price_observations
+  where observed_at > now() - interval '7 days';
 create table public.tesco_egress_pool (
   egress_key text primary key, label text, enabled boolean default true, priority int default 100,
   cooldown_until timestamptz, leased_until timestamptz, last_success_at timestamptz, last_block_at timestamptz,
@@ -111,8 +115,8 @@ insert into public.scrape_product_receipts(run_id, store_product_id, outcome) va
   ('33333333-3333-3333-3333-333333333333','${MID}','success'),
   ('33333333-3333-3333-3333-333333333333','${MID_B}','success');
 insert into public.price_observations(store_product_id, price, observed_at, source) values
-  ('${MID}', 1.30, now() - interval '10 days', 'tesco_direct'),
-  ('${MID_B}', 4.00, now() - interval '10 days', 'tesco_direct');
+  ('${MID}', 1.30, now() - interval '5 days', 'tesco_direct'),
+  ('${MID_B}', 4.00, now() - interval '5 days', 'tesco_direct');
 `);
 
 // --- Assertions (replace printed-success checks) ---
@@ -225,7 +229,7 @@ insert into public.products(id, canonical_name, brand, ean) values ('${PID_C}','
 insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, gtin, url_status)
 values ('${MID_C}','${PID_C}','tesco','297844134','${URL_C}','Tesco Spaghetti 500g','Tesco',true,'05057373964694','resolved');
 insert into public.scrape_product_receipts(run_id, store_product_id, outcome) values ('33333333-3333-3333-3333-333333333333','${MID_C}','success');
-insert into public.price_observations(store_product_id, price, observed_at, source) values ('${MID_C}', 0.59, now() - interval '10 days', 'tesco_direct');
+insert into public.price_observations(store_product_id, price, observed_at, source) values ('${MID_C}', 0.59, now() - interval '5 days', 'tesco_direct');
 `);
 await clearPacing();
 const WC = { ...(await begin('fargate-worker-c-zzzz')), owner: 'fargate-worker-c-zzzz' };
@@ -254,7 +258,7 @@ insert into public.products(id, canonical_name, brand, ean) values
 insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, gtin, url_status)
 values ('${MID_D}','${PID_RICE}','tesco','300000001','${URL_D}','Tesco Rice','Tesco',true,null,'resolved');
 insert into public.scrape_product_receipts(run_id, store_product_id, outcome) values ('33333333-3333-3333-3333-333333333333','${MID_D}','success');
-insert into public.price_observations(store_product_id, price, observed_at, source) values ('${MID_D}', 1.00, now() - interval '10 days', 'tesco_direct');
+insert into public.price_observations(store_product_id, price, observed_at, source) values ('${MID_D}', 1.00, now() - interval '5 days', 'tesco_direct');
 `);
 await clearPacing();
 const WD = { ...(await begin('fargate-worker-d-wwww')), owner: 'fargate-worker-d-wwww' };

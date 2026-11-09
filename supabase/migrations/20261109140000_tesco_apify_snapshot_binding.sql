@@ -145,11 +145,16 @@ begin
     then raise exception 'already_observed'; end if;
   else raise exception 'mode_must_be_renewal_or_expansion'; end if;
 
+  -- Pass NULL for store_url/sku/name so the finaliser's coalesce() preserves
+  -- the EXISTING store_products row verbatim — it must not mutate any field that
+  -- is part of the bound mapping_snapshot (url/sku/name), which would otherwise
+  -- make a subsequent snapshot comparison diverge. The renewal only writes a
+  -- price_observation; the mapping metadata is already bound+verified.
   v_finalised := public.finalize_store_scrape_product(
     p_run_uuid => p_run_id, p_store => 'tesco', p_store_product_id => p_store_product_id,
     p_success => true, p_price => p_regular_price, p_previous_price => p_previous_price,
-    p_store_url => v_page.requested_url, p_store_sku => v_now_snapshot->>'store_sku',
-    p_store_product_name => p_store_product_name, p_fetched => 1, p_extracted => 1);
+    p_store_url => null, p_store_sku => null, p_store_product_name => null,
+    p_fetched => 1, p_extracted => 1);
 
   update public.tesco_egress_pool set last_success_at = now(), updated_at = now()
     where egress_key = p_egress_key and lease_token = p_lease_token;

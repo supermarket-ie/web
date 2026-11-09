@@ -50,8 +50,15 @@ as $$
   select jsonb_build_object(
     'store_product_id', s.id, 'product_id', s.product_id, 'store_sku', s.store_sku,
     'store_url', s.store_url, 'url_status', s.url_status, 'store_brand', s.brand,
+    'store_product_name', s.store_product_name, 'is_own_brand', coalesce(s.is_own_brand, false),
     'gtin', s.gtin, 'canonical_name', p.canonical_name, 'canonical_brand', p.brand,
-    'canonical_ean', (to_jsonb(p)->>'ean'))
+    'canonical_ean', (to_jsonb(p)->>'ean'),
+    -- Same-SKU canonical group (material: duplicate-canonical conflicts). The
+    -- collector reconstructs duplicateSkuCount / peer canonical names from this,
+    -- so ALL assessment inputs come from this one authoritative snapshot.
+    'same_sku_canonical_names', coalesce((select jsonb_agg(p2.canonical_name order by s2.id)
+       from public.store_products s2 join public.products p2 on p2.id = s2.product_id
+       where s2.store = 'tesco' and s2.store_sku = s.store_sku), '[]'::jsonb))
   from public.store_products s join public.products p on p.id = s.product_id
   where s.id = p_store_product_id and s.store = 'tesco';
 $$;

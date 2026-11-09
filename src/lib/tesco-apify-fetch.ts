@@ -140,8 +140,10 @@ export type ApifyRunResult = {
 
 export interface ApifyRunClient {
   // Run the actor for a bounded set of product URLs and return the dataset
-  // items plus the run's billing/provenance. One run per batch.
-  runProductUrls(urls: string[]): Promise<ApifyRunResult>;
+  // items plus the run's billing/provenance. One run per batch. An optional
+  // per-call maxTotalChargeUsd caps THIS run's provider charge (used to pass
+  // the budget reservation's ceiling through to the outgoing request).
+  runProductUrls(urls: string[], maxTotalChargeUsd?: number): Promise<ApifyRunResult>;
 }
 
 const ACTOR = 'parsebird~tesco-scraper';
@@ -183,10 +185,16 @@ export function createApifyRunClient(options: {
   }
 
   return {
-    async runProductUrls(urls: string[]): Promise<ApifyRunResult> {
+    async runProductUrls(urls: string[], maxTotalChargeUsd?: number): Promise<ApifyRunResult> {
       if (!urls.length || urls.length > options.maxItems) {
         throw new Error('Apify run requires 1..maxItems product URLs');
       }
+      // Per-call ceiling (the reservation amount) takes precedence; otherwise
+      // the client default. The EFFECTIVE cap is the smaller of the two so a
+      // per-call ceiling can only tighten, never loosen, the client default.
+      const effectiveCap = maxTotalChargeUsd != null
+        ? (options.maxTotalChargeUsd != null ? Math.min(maxTotalChargeUsd, options.maxTotalChargeUsd) : maxTotalChargeUsd)
+        : options.maxTotalChargeUsd;
       const input = {
         startUrls: urls,
         region: 'IE',
@@ -198,8 +206,8 @@ export function createApifyRunClient(options: {
       };
       // Provider-side monetary limit: Apify aborts the run if it would exceed
       // maxTotalChargeUsd, independent of our own budget accounting.
-      const limitQs = options.maxTotalChargeUsd != null
-        ? `&maxTotalChargeUsd=${encodeURIComponent(String(options.maxTotalChargeUsd))}` : '';
+      const limitQs = effectiveCap != null
+        ? `&maxTotalChargeUsd=${encodeURIComponent(String(effectiveCap))}` : '';
       const start = await (await authed(`/acts/${ACTOR}/runs?maxItems=${options.maxItems}${limitQs}`, {
         method: 'POST',
         body: JSON.stringify(input),
@@ -411,8 +419,8 @@ export type ApifyFetchDeps = {
 // renders the single returned item as a Tesco page. One request == one run ==
 // one billed product-scraped event, so the existing per-request ledger and the
 // $-budget accounting line up one-to-one.
-export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string) => Promise<TescoPageResponse> {
-  return async function fetchPageViaApify(url: string): Promise<TescoPageResponse> {
+export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string, maxChargeUsd?: number) => Promise<TescoPageResponse> {
+  return async function fetchPageViaApify(url: string, maxChargeUsd?: number): Promise<TescoPageResponse> {
     if (!isTescoCollectionUrl(url)) throw new Error('Unsafe Tesco collection URL');
     const sku = skuFromUrl(url);
     if (!sku) throw new Error('Apify transport is product-URL only');
@@ -423,7 +431,7 @@ export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string) => Pro
 
     let run: ApifyRunResult;
     try {
-      run = await deps.client.runProductUrls([url]);
+      run = await deps.client.runProductUrls([url], maxChargeUsd);
     } catch {
       // Provider/transport failure. Never a silent success; the collector treats
       // this as a network error (holds, no finalisation), same as a direct fetch.

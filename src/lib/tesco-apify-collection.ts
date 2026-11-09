@@ -63,9 +63,10 @@ export type ApifyFetchResult = { response: TescoPageResponse; provider: ApifyPro
 
 export type ApifyCollectionDeps = {
   sb: SupabaseClient;
-  // Runs the Apify fetch for one URL and returns the page response plus the
-  // captured provider identity (original payload + hash + freshness).
-  fetchApify: (url: string) => Promise<ApifyFetchResult>;
+  // Runs the Apify fetch for one URL with an explicit provider-side monetary
+  // ceiling (maxChargeUsd) — the amount reserved for THIS request. The actor's
+  // maxTotalChargeUsd must not exceed it.
+  fetchApify: (url: string, maxChargeUsd: number) => Promise<ApifyFetchResult>;
   // Campaign identifier for the DURABLE budget reservation ledger.
   campaign: string;
   // Hard campaign cap in USD. Each provider launch RESERVES perRequestUsd first
@@ -197,31 +198,54 @@ export async function selectApifyMappings(
   return selected;
 }
 
-function mappingEvidence(m: ApifyMapping): TescoMappingEvidence {
+// Material identity derived SOLELY from the authoritative reserved snapshot
+// (apify_mapping_snapshot). Every assessment input is reconstructed from here,
+// so no stale selection-time field can leak into the decision.
+type SnapshotIdentity = {
+  storeProductId: string; productId: string; storeSku: string; storeUrl: string;
+  canonicalName: string; canonicalBrand: string | null; canonicalEan: string | null;
+  storeBrand: string | null; storeProductName: string; isOwnBrand: boolean; gtin: string | null;
+  sameSkuCanonicalNames: string[];
+};
+function snapshotIdentity(snap: Record<string, unknown>): SnapshotIdentity {
+  const names = Array.isArray(snap.same_sku_canonical_names)
+    ? (snap.same_sku_canonical_names as unknown[]).map(String) : [];
   return {
-    storeProductId: m.id, canonicalName: m.canonical_name, canonicalBrand: m.canonical_brand,
-    storeProductName: m.store_product_name, storeBrand: m.store_brand, isOwnBrand: m.is_own_brand,
-    storeSku: m.store_sku, storeUrl: m.store_url, duplicateSkuCount: m.sameSkuCount,
-    duplicateCanonicalNames: m.peerCanonicalNames, isFresh: !!m.observed_at,
+    storeProductId: String(snap.store_product_id), productId: String(snap.product_id),
+    storeSku: String(snap.store_sku), storeUrl: String(snap.store_url),
+    canonicalName: String(snap.canonical_name ?? ''), canonicalBrand: (snap.canonical_brand as string) ?? null,
+    canonicalEan: (snap.canonical_ean as string) ?? null, storeBrand: (snap.store_brand as string) ?? null,
+    storeProductName: String(snap.store_product_name ?? ''), isOwnBrand: snap.is_own_brand === true,
+    gtin: (snap.gtin as string) ?? null, sameSkuCanonicalNames: names,
   };
 }
+function snapshotMappingEvidence(s: SnapshotIdentity, isFresh: boolean): TescoMappingEvidence {
+  return {
+    storeProductId: s.storeProductId, canonicalName: s.canonicalName, canonicalBrand: s.canonicalBrand,
+    storeProductName: s.storeProductName, storeBrand: s.storeBrand, isOwnBrand: s.isOwnBrand,
+    storeSku: s.storeSku, storeUrl: s.storeUrl, duplicateSkuCount: Math.max(s.sameSkuCanonicalNames.length, 1),
+    duplicateCanonicalNames: s.sameSkuCanonicalNames, isFresh,
+  };
+}
+
+
 
 // A ReentryEvidence envelope wrapping the mapping + the fresh live product, for
 // the independent AI assessment (assessAndCombine). Peers are empty: this path
 // verifies Tesco identity only (never a cross-retailer price comparison), and
 // the AI never overrides a deterministic rejection.
-function assessmentEvidence(m: ApifyMapping, pageId: string, bodySha256: string, live: TescoCollectedProduct): ReentryEvidence {
+function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: string, live: TescoCollectedProduct): ReentryEvidence {
   return {
     mapping: {
-      id: m.id, product_id: m.product_id, canonical_name: m.canonical_name,
-      canonical_brand: m.canonical_brand, canonical_ean: m.canonical_ean,
-      store_product_name: m.store_product_name, store_brand: m.store_brand,
-      is_own_brand: m.is_own_brand, store_sku: m.store_sku, store_url: m.store_url,
-      url_status: m.url_status, gtin: m.gtin,
+      id: s.storeProductId, product_id: s.productId, canonical_name: s.canonicalName,
+      canonical_brand: s.canonicalBrand, canonical_ean: s.canonicalEan,
+      store_product_name: s.storeProductName, store_brand: s.storeBrand,
+      is_own_brand: s.isOwnBrand, store_sku: s.storeSku, store_url: s.storeUrl,
+      url_status: 'resolved', gtin: s.gtin,
     },
-    sameSkuCount: m.sameSkuCount, proven: true, freshTesco: false, pending: false, recentAttempt: false,
+    sameSkuCount: Math.max(s.sameSkuCanonicalNames.length, 1), proven: true, freshTesco: false, pending: false, recentAttempt: false,
     page: {
-      id: pageId, requested_url: m.store_url, final_url: m.store_url, outcome: 'ok', http_status: 200,
+      id: pageId, requested_url: s.storeUrl, final_url: s.storeUrl, outcome: 'ok', http_status: 200,
       body_sha256: bodySha256, mode: 'products', parsed: { products: [live], listing: null },
     },
     sourceRun: { status: 'success', finished_at: new Date().toISOString() },
@@ -300,7 +324,7 @@ export async function collectTescoApify(
   // There is no per-batch freshness audit (removed: a second actor run advancing
   // scraped_at proves nothing). Freshness is the per-item best-available
   // precondition only, carried with its documented limitation.
-  const staged: Array<{ m: ApifyMapping; product: TescoCollectedProduct; adapterBody: string;
+  const staged: Array<{ ident: SnapshotIdentity; product: TescoCollectedProduct; previousPrice: number | null; adapterBody: string;
     method: 'deterministic' | 'deterministic_plus_ai'; rationale: string; model: string | null;
     fingerprint: string; snapshot: Record<string, unknown> | null }> = [];
 
@@ -344,33 +368,48 @@ export async function collectTescoApify(
         continue;
       }
 
-      const { response, provider } = await deps.fetchApify(m.store_url);
+      // ALL assessment inputs are reconstructed from the single authoritative
+      // reserved snapshot — never the stale selection-time fields on `m`.
+      const ident = boundSnapshot ? snapshotIdentity(boundSnapshot) : null;
+      if (!ident) {
+        if (reservationId) await rpc(sb, 'apify_settle_budget', { p_reservation_id: reservationId, p_actual_usd: 0, p_provider_run_id: null }).catch(() => undefined);
+        continue;
+      }
+
+      // Pass the RESERVED amount as the provider-side ceiling for this request.
+      const { response, provider } = await deps.fetchApify(ident.storeUrl, deps.perRequestUsd);
       result.requested += 1;
-      // Settle the reservation to the ACTUAL provider charge for this run. If
-      // the fetch threw before returning (uncertain), the reservation stays
-      // 'reserved' and keeps counting — intentional (delayed/unknown billing).
-      spentUsd = remainingUsd; // best-effort local view; cap is enforced in the ledger
-      if (reservationId) {
+      // Settle ONLY when the ACTUAL provider charge is known (provider identity
+      // present with runUsageUsd). On a caught provider error the transport
+      // returns network_error with NO provider identity and NO cost — we do NOT
+      // settle an estimate; the reservation stays 'reserved' and keeps counting
+      // until the real charge is reconciled (delayed/uncertain billing).
+      spentUsd = remainingUsd; // local view; the cap is enforced durably in the ledger
+      if (reservationId && provider) {
         await rpc(sb, 'apify_settle_budget', {
           p_reservation_id: reservationId,
-          p_actual_usd: provider ? provider.runUsageUsd : deps.perRequestUsd,
-          p_provider_run_id: provider?.runId ?? null,
+          p_actual_usd: provider.runUsageUsd,
+          p_provider_run_id: provider.runId,
         }).catch(() => undefined);
+      } else if (reservationId) {
+        deps.log?.({ event: 'budget_reservation_retained', sku: ident.storeSku, reason: 'actual charge unknown (provider error); reservation kept' });
       }
 
       let parsed: TescoCollectedPage | null = null;
       let outcome: string = response.outcome;
       try { if (outcome === 'ok') parsed = parseTescoCollectedPage(response.html, response.finalUrl); }
       catch { outcome = 'parse_error'; }
-      const product: TescoCollectedProduct | undefined = parsed?.products.find(p => p.sku === m.store_sku);
+      const product: TescoCollectedProduct | undefined = parsed?.products.find(p => p.sku === ident.storeSku);
       const unavailable = tescoResourceUnavailable(response);
       const transportStop = outcome !== 'ok' && !unavailable;
       const adapterBody = createHash('sha256').update(response.html).digest('hex');
 
       // --- Identity + inference acceptance path (defects 2 + 3) ---
       // Deterministic gate FIRST (authoritative; AI can never override a reject).
+      // Evidence is built from the reserved snapshot identity (ident), NOT `m`.
+      const evidenceForGate = snapshotMappingEvidence(ident, !!m.observed_at);
       const deterministicReasons = product
-        ? validateTescoCollectedIdentity(mappingEvidence(m), product)
+        ? validateTescoCollectedIdentity(evidenceForGate, product)
         : ['missing_exact_product'];
       // Best-available freshness precondition (provider-asserted; see
       // APIFY_FRESHNESS_LIMITATION — not independently verified).
@@ -385,12 +424,12 @@ export async function collectTescoApify(
 
       if (outcome === 'ok' && product && perItemFreshOk && deterministicReasons.length === 0) {
         liveFingerprint = identityFingerprint({
-          canonical: { name: m.canonical_name, brand: m.canonical_brand, ean: m.canonical_ean },
+          canonical: { name: ident.canonicalName, brand: ident.canonicalBrand, ean: ident.canonicalEan },
           tesco: { sku: product.sku, name: product.name, brand: product.brand, gtin: product.gtin, quantity: product.quantity },
         });
         // Reuse path (defect 3): an UNCHANGED, previously-verified mapping in
         // RENEWAL may use the cheap deterministic check alone.
-        const existing = await readActiveVerification(sb, m.id);
+        const existing = await readActiveVerification(sb, ident.storeProductId);
         const reuse = mode === 'renewal' && verificationReusable(existing, liveFingerprint);
         if (reuse) {
           decision = 'accept_pending_finalise';
@@ -400,7 +439,7 @@ export async function collectTescoApify(
           // New, changed or uncertain → run the independent AI inference and
           // require BOTH it and the deterministic gate to agree (and its own
           // facts to be internally consistent, and bound to this identity).
-          const ev = assessmentEvidence(m, runId, adapterBody, product);
+          const ev = assessmentEvidence(ident, runId, adapterBody, product);
           const verdict = await assessAndCombine(ev, product, runId, deps.assessOptions);
           model = verdict.assessment.model;
           if (verdict.decision === 'verified_exact' && verdict.machineAssessment
@@ -410,7 +449,7 @@ export async function collectTescoApify(
             rationale = verdict.machineAssessment.reason;
           } else {
             reasons.push(`ai_${verdict.decision}`);
-            if (verdict.holdReason) deps.log?.({ event: 'ai_hold', sku: m.store_sku, holdReason: verdict.holdReason });
+            if (verdict.holdReason) deps.log?.({ event: 'ai_hold', sku: ident.storeSku, holdReason: verdict.holdReason });
           }
         }
       } else if (outcome === 'ok' && product && !perItemFreshOk) {
@@ -434,10 +473,10 @@ export async function collectTescoApify(
       // after the per-batch freshness audit.
       await rpc(sb, 'apify_record_tesco_page', {
         p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
-        p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
+        p_store_product_id: ident.storeProductId, p_store_url: ident.storeUrl, p_mode: mode,
         p_outcome: outcome, p_http_status: response.status, p_retry_after: response.retryAfter,
         p_elapsed_ms: response.elapsedMs, p_adapter_body_sha256: adapterBody,
-        p_parsed: parsed, p_identity_results: [{ storeProductId: m.id, sku: m.store_sku, reasons }],
+        p_parsed: parsed, p_identity_results: [{ storeProductId: ident.storeProductId, sku: ident.storeSku, reasons }],
         p_detail: {
           provider: 'apify',
           disposition: decision === 'accept_pending_finalise' ? 'accept_pending_finalise' : outcome === 'ok' ? 'hold_continue' : undefined,
@@ -449,13 +488,13 @@ export async function collectTescoApify(
       });
 
       if (decision === 'accept_pending_finalise' && product) {
-        staged.push({ m, product, adapterBody, method, rationale, model, fingerprint: liveFingerprint, snapshot: boundSnapshot });
+        staged.push({ ident, product, previousPrice: m.price, adapterBody, method, rationale, model, fingerprint: liveFingerprint, snapshot: boundSnapshot });
       } else {
-        result.perProduct.push({ storeProductId: m.id, sku: m.store_sku, outcome, accepted: false,
+        result.perProduct.push({ storeProductId: ident.storeProductId, sku: ident.storeSku, outcome, accepted: false,
           reasons, price: null, freshness: provider?.freshness.level ?? null });
         if (unavailable) result.unavailable += 1; else if (outcome === 'ok') result.held += 1;
       }
-      deps.log?.({ event: 'product', sku: m.store_sku, outcome, decision, method, reasons });
+      deps.log?.({ event: 'product', sku: ident.storeSku, outcome, decision, method, reasons });
       if (pauseUntil) { result.stopped = outcome; break; }
     }
 
@@ -466,24 +505,24 @@ export async function collectTescoApify(
     for (const s of staged) {
       const rec = await rpc<{ finalised: boolean }>(sb, 'apify_finalise_tesco_page', {
         p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
-        p_store_product_id: s.m.id, p_mode: mode,
-        p_regular_price: s.product.price, p_previous_price: s.m.price,
+        p_store_product_id: s.ident.storeProductId, p_mode: mode,
+        p_regular_price: s.product.price, p_previous_price: s.previousPrice,
         p_store_product_name: s.product.name, p_assessed_snapshot: s.snapshot,
       });
       if (rec?.finalised) {
         result.accepted += 1;
         await rpc(sb, 'apify_record_identity_verification', {
-          p_store_product_id: s.m.id, p_identity_fingerprint: s.fingerprint,
-          p_canonical: { name: s.m.canonical_name, brand: s.m.canonical_brand, ean: s.m.canonical_ean },
+          p_store_product_id: s.ident.storeProductId, p_identity_fingerprint: s.fingerprint,
+          p_canonical: { name: s.ident.canonicalName, brand: s.ident.canonicalBrand, ean: s.ident.canonicalEan },
           p_tesco: { sku: s.product.sku, name: s.product.name, brand: s.product.brand, gtin: s.product.gtin, quantity: s.product.quantity },
           p_rationale: s.rationale, p_method: s.method, p_rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
           p_model: s.model, p_source_page_id: null, p_source_body_sha256: s.adapterBody, p_reusable_hours: 720,
         });
-        result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
+        result.perProduct.push({ storeProductId: s.ident.storeProductId, sku: s.ident.storeSku, outcome: 'ok',
           accepted: true, reasons: [], price: s.product.price, freshness: s.method });
       } else {
         result.held += 1;
-        result.perProduct.push({ storeProductId: s.m.id, sku: s.m.store_sku, outcome: 'ok',
+        result.perProduct.push({ storeProductId: s.ident.storeProductId, sku: s.ident.storeSku, outcome: 'ok',
           accepted: false, reasons: ['finalise_recheck_failed'], price: null, freshness: s.method });
       }
     }
