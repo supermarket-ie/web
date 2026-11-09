@@ -1,5 +1,82 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco mapping-recovery DIAGNOSIS: the coverage ceiling is a data-completeness problem, not a gate-tuning or collection-capacity problem
+
+Took ownership of mapping recovery. Before writing any recovery code or touching
+a mapping, ran a READ-ONLY diagnosis of every held payload this session produced,
+driving the EXISTING `discover()` engine (src/lib/tesco-discovery.ts, v3) with
+the real retained evidence (parsed product + identity reasons from
+tesco_direct_collection_pages, raw provider item, canonical mappings, and
+Dunnes/SuperValu peers). New read-only scripts: scripts/tesco-recovery-diagnose.ts,
+scripts/tesco-recovery-barcode.ts, scripts/tesco-coverage-report.ts,
+scripts/tesco-peer-leverage.ts. All counts reconciled against
+scrape_product_receipts + latest_prices, NOT rolling time windows.
+
+HELD-PAYLOAD CLASSIFICATION (219 held mappings with evidence this session):
+- 74 `mismatch`, 139 `needs_evidence`, 6 `held` (operational). The dominant
+  single reason across holds is `no_candidate_passes_all_identity_checks` (139)
+  and `stored_mapping_conflict_not_proof_no_exact_product_exists` (74). 0
+  classified `ready` or `repair_required` — i.e. NOTHING is recoverable from
+  stored evidence alone, because discovery can only score evidence we already
+  collected and we only ever fetched each mapping's OWN current SKU (no
+  alternative-SKU candidate evidence exists to re-point to).
+
+THE DECISIVE BARCODE SIGNAL (separates "same product, incomplete canonical"
+from "genuinely different product at this SKU"):
+- 193/219 holds (88%) have NO independent barcode: canonical products.ean is
+  NULL AND there is no Dunnes/SuperValu peer GTIN for that canonical. The
+  safeguards have nothing independent to verify against.
+- 17 holds barcode-CONFLICT the canonical EAN → genuinely the wrong product at
+  that SKU (or a stale canonical EAN). Correct holds.
+- 8 holds barcode-MATCH the canonical EAN → same product, held only because the
+  canonical name is a bare generic ("Soy Sauce Dark", "Lamb Mince", "Tomatoes
+  Vine", "Celery", "Oregano Dried", "Chickpeas 400g") with no brand/measure,
+  while the live Tesco title carries full identity. These do NOT qualify for the
+  existing `reviewedCanonicalEvidenceGap` recovery: that path requires EVERY
+  remaining reason to be in {`candidate does not establish full exact canonical
+  identity`, `measureExactnessFailed`} (+ inferred `packExactnessFailed`), but
+  these carry `explicit_brand_not_established`, `canonical_pack_or_measure_missing`,
+  `peer_identity_requires_review`, `unexplained_identity_terms`. The gate
+  correctly refuses: accepting would attach a specific product's price to a
+  generic/underspecified canonical.
+
+WHY CROSS-RETAILER EVIDENCE CANNOT LIFT THE GATE RIGHT NOW: across the 1,072
+eligible (renewal-due + expansion) mappings, 1,071 HAVE a Dunnes/SuperValu peer
+sharing the canonical product, and 923 even have a FRESH peer price — but
+peerRowsWithValidGtin = 0. The Dunnes and SuperValu feeds structurally DO NOT
+populate GTINs (4,106 peer rows checked, zero valid barcodes). So refreshing
+Dunnes/SuperValu supplies fresh PRICES but no BARCODES; it cannot corroborate
+Tesco identity. Only 99/1,072 eligible canonicals even have a canonical EAN.
+
+CONCLUSION (honest, measured): the coverage ceiling is NOT a collection-capacity
+or gate-tuning problem. ~91% of the eligible universe (973/1,072) has no
+independent barcode evidence (no canonical EAN, no valid peer GTIN), so the
+identity safeguards (barcode/brand/variant/quantity/multipack) cannot be
+satisfied without weakening them — which is forbidden. Re-running Apify
+collection or refreshing Dunnes/SuperValu would deterministically hold the same
+mappings again and spend budget for no coverage gain. NO Apify budget was spent
+on this diagnosis (all read-only REST/DB queries).
+
+THE REAL BACKLOG (data work, not collection):
+1. CANONICAL EAN BACKFILL — populate products.ean. Only 99/1,072 eligible
+   canonicals have one. This is the single highest-leverage fix: a canonical EAN
+   turns a barcode-match into a clean recovery.
+2. RETAILER FEED BARCODES — neither Dunnes nor SuperValu ingestion captures
+   GTIN. Capturing it would let fresh peers corroborate Tesco identity cross-
+   retailer (the intended lever), lifting a large share of the 923
+   fresh-peer-but-no-barcode canonicals.
+3. CANONICAL NAME QUALITY — generic canonicals ("Celery", "Lamb Mince") cannot
+   be matched to a specific branded live product without a barcode; enriching
+   them (brand/measure) is a catalogue task.
+
+RECEIPT-RECONCILED COVERAGE (now): 2,379 resolved Tesco mappings / 2,043
+distinct SKUs; 1,509 proven (success receipt); 436 carry a trusted price (all
+fresh within 7d); one-to-one eligible universe 1,204; 600 shared-SKU deferred;
+304 renewal-due; 768 expansion-eligible; 132 fresh-not-due-within-4d. This
+session finalised 13 distinct store_products (success receipts); net fresh
+coverage is ~flat because observations also age out of the window. SuperValu/
+Dunnes schedules UNCHANGED.
+
 ## 9 November 2026 — Tesco Apify: PRODUCTION LAUNCH — renewals run, guarded prices written (main fd1d380, PR #379)
 
 The authorised bulk refresh ran in production on ECS Fargate. All three
