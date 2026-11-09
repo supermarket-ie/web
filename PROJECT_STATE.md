@@ -1,8 +1,58 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco Apify: all three reviewed migrations applied and verified
+
+**The database migration blocker is cleared.** The Supabase connector
+confirmations for the fencing and snapshot upgrades were approved, and both
+remaining migrations applied successfully. The three source files are the
+checksum-verified versions from reviewed commit
+`966e86ca4c850579f5d69ea7b817b4a43127a095`.
+
+| Source migration | Applied database version | Applied name |
+| --- | --- | --- |
+| `20261108200000_tesco_apify_unattended_collection.sql` | `20261109131423` | `tesco_apify_unattended_collection` |
+| `20261109090000_tesco_apify_lease_fencing_and_page_binding.sql` | `20261109140036` | `tesco_apify_lease_fencing_and_page_binding` |
+| `20261109140000_tesco_apify_snapshot_binding.sql` | `20261109140054` | `tesco_apify_snapshot_binding` |
+
+These source files are applied under the database receipts above. Do not
+reapply them merely because the apply-time version numbers differ from their
+source filenames.
+
+Post-apply production verification:
+- All 13 final `apify_*` functions exist with the expected signatures.
+  `apify_begin_tesco_run` returns JSONB; reserve takes the expected snapshot;
+  finalise takes the assessed snapshot; reserve/record/finalise/close use the
+  lease token. The legacy unfenced record/finalise signatures are absent.
+- Service-role execution is granted; anon/authenticated execution is denied
+  for all 13 functions. RLS is enabled on all three new tables, and
+  anon/authenticated SELECT is denied.
+- A rollback-only transaction exercised successor-token fencing, an expired
+  worker's refused finalisation and inability to release a successor lease,
+  outstanding budget accounting, provider-run linking without releasing a
+  reservation, reconciliation and over-budget refusal. It passed and rolled
+  back completely; it made no provider request and wrote no product price.
+- The 14:04:02 UTC post-rollback check showed no gate lease/token/cooldown,
+  zero Apify collection runs, zero provider-evidence rows and zero residual
+  verification budget reservations. The gate's disabled-by-default flag was
+  preserved; the reviewed service-role RPC claim path is unchanged.
+
+This is a database release receipt, not a claim of collection or image rollout.
+Kiro can now verify the final REST RPC schema, build the reviewed production
+code through the existing permitted `ops/*` release process, register/run the
+ECS collector and execute due renewals then expansion within the authorised
+$10 Apify campaign cap. Recompute eligibility at launch, retain unresolved
+billing reservations and apply all identity/inference checks.
+
+The recovery objective remains the full 2,052 distinct mapped Tesco SKUs. The
+first ordinary renewal/expansion queue is a milestone; the remaining inventory
+still requires guarded initial identity verification, mapping repair or
+shared-SKU resolution. Provider-reported freshness and its limitation remain
+explicit. SuperValu/Dunnes schedules, other retailer credentials and environment
+protections were not changed by this apply.
+
 ## 9 November 2026 — Tesco Apify migration apply checkpoint: base installed, fencing upgrade awaiting connector confirmation
 
-**Do not launch the Apify collector yet.** The reviewed release is commit
+**Historical checkpoint — superseded by the completed apply above.** The reviewed release is commit
 `966e86ca4c850579f5d69ea7b817b4a43127a095` (billing-finality guard from PR #375).
 All three supplied SHA-256 checksums matched the pinned files; an independent
 local execution passed the 26 migration assertions and five billing-finality
