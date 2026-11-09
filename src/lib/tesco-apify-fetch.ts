@@ -54,6 +54,9 @@ export type ApifyProviderIdentity = {
   // distinct from the synthetic adapter HTML (bodySha256).
   rawItem: ApifyItem;
   rawItemSha256: string;
+  // ACTUAL provider charge (usageTotalUsd) for the run that produced this item,
+  // used to settle the durable budget reservation to the real cost.
+  runUsageUsd: number;
   // Freshness evidence (see verifyApifyFreshness).
   freshness: ApifyFreshness;
 };
@@ -86,8 +89,13 @@ export type ApifyProviderIdentity = {
 // the provider evidence (`freshnessLimitation`) and recorded on every accepted
 // verification so no downstream consumer treats Apify prices as independently
 // freshness-verified. This is reported, not hidden.
+// EXPLICIT: the current policy PERMITS price writes WITHOUT independently
+// established freshness. `scraped_at`-after-submit is provider-asserted only; we
+// could not establish independent freshness (no documented cache semantics or
+// cache-age), so this does NOT satisfy the earlier "hold unless freshness is
+// independently established" requirement — it is a weaker, documented stance.
 export const APIFY_FRESHNESS_LIMITATION =
-  'provider-asserted scraped_at only; no documented cache semantics or cache-age — upstream freshness not independently verifiable';
+  'WRITES PERMITTED WITHOUT INDEPENDENTLY ESTABLISHED FRESHNESS: scraped_at is provider-asserted only; no documented cache semantics or cache-age; upstream freshness is NOT independently verified and this does NOT meet the prior hold-unless-independently-fresh requirement';
 
 export type ApifyFreshnessLevel =
   | 'after_submit_asserted'  // scraped_at present + strictly after submit (best available, provider-asserted)
@@ -461,6 +469,7 @@ export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string) => Pro
       scrapedAt: freshness.scrapedAt,
       rawItem: item,
       rawItemSha256,
+      runUsageUsd: run.usageTotalUsd,
       freshness,
     });
 

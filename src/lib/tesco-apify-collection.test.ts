@@ -11,8 +11,11 @@ type Row = Record<string, unknown>;
 function makeFakeSb(opts: {
   mappings: Row[]; latest: Row[]; receipts: Row[]; recent: Row[]; verifications?: Row[];
   finaliseResult?: (args: Row) => { finalised: boolean };
-}): { sb: SupabaseClient; calls: Array<{ fn: string; args: Row }> } {
+  reserveResult?: (args: Row) => { data: unknown; error: { message: string } | null };
+  initialCommittedUsd?: number;
+}): { sb: SupabaseClient; calls: Array<{ fn: string; args: Row }>; budgetState: { committed: number; n: number; byId: Record<string, number> } } {
   const calls: Array<{ fn: string; args: Row }> = [];
+  const budgetState = { committed: opts.initialCommittedUsd ?? 0, n: 0, byId: {} as Record<string, number> };
   const table = (name: string) => {
     const dataFor = (): Row[] => name === 'store_products' ? opts.mappings
       : name === 'latest_prices' ? opts.latest
@@ -32,7 +35,41 @@ function makeFakeSb(opts: {
     rpc: async (fn: string, args: Row) => {
       calls.push({ fn, args });
       if (fn === 'apify_begin_tesco_run') return { data: { runId: 'run-1', leaseToken: 'tok-1' }, error: null };
-      if (fn === 'apify_reserve_tesco_request') return { data: true, error: null };
+      if (fn === 'apify_mapping_snapshot') {
+        // Serve the snapshot for the requested mapping from the seeded rows.
+        const row = opts.mappings.find(m => m.id === args.p_store_product_id);
+        const c = row ? (Array.isArray(row.products) ? row.products[0] : row.products) as Row : null;
+        return { data: row ? { store_product_id: row.id, product_id: row.product_id, store_sku: row.store_sku,
+          store_url: row.store_url, url_status: row.url_status, store_brand: row.brand, gtin: row.gtin,
+          canonical_name: c?.canonical_name, canonical_brand: c?.brand, canonical_ean: c?.ean } : null, error: null };
+      }
+      if (fn === 'apify_reserve_budget') {
+        // Track committed spend in the closure; enforce the cap.
+        budgetState.committed += Number(args.p_amount);
+        if (budgetState.committed > Number(args.p_cap)) {
+          budgetState.committed -= Number(args.p_amount);
+          return { data: null, error: { message: 'budget_exhausted: over cap' } };
+        }
+        const id = `resv-${++budgetState.n}`;
+        budgetState.byId[id] = Number(args.p_amount);
+        return { data: { reservationId: id, committedUsd: budgetState.committed, remainingUsd: Number(args.p_cap) - budgetState.committed }, error: null };
+      }
+      if (fn === 'apify_settle_budget') {
+        const id = String(args.p_reservation_id);
+        const reserved = budgetState.byId[id] ?? 0;
+        budgetState.committed += Number(args.p_actual_usd) - reserved; // reconcile to actual
+        delete budgetState.byId[id];
+        return { data: null, error: null };
+      }
+      if (fn === 'apify_reserve_tesco_request') {
+        if (opts.reserveResult) return opts.reserveResult(args);
+        const row = opts.mappings.find(m => m.id === args.p_store_product_id);
+        const c = row ? (Array.isArray(row.products) ? row.products[0] : row.products) as Row : null;
+        const snap = row ? { store_product_id: row.id, product_id: row.product_id, store_sku: row.store_sku,
+          store_url: row.store_url, url_status: row.url_status, store_brand: row.brand, gtin: row.gtin,
+          canonical_name: c?.canonical_name, canonical_brand: c?.brand, canonical_ean: c?.ean } : null;
+        return { data: { reserved: true, snapshot: snap }, error: null };
+      }
       if (fn === 'apify_record_tesco_page') return { data: { recorded: true }, error: null };
       if (fn === 'apify_finalise_tesco_page') {
         const r = opts.finaliseResult ? opts.finaliseResult(args) : { finalised: true };
@@ -43,7 +80,7 @@ function makeFakeSb(opts: {
       return { data: null, error: null };
     },
   } as unknown as SupabaseClient;
-  return { sb, calls };
+  return { sb, calls, budgetState };
 }
 
 function item(over: Partial<ApifyItem> = {}): ApifyItem {
@@ -63,7 +100,7 @@ function okFetch(it: ApifyItem, preconditionMet = true): (url: string) => Promis
     provider: {
       provider: 'apify', actorId: 'A', actorBuildId: 'B', actorBuildNumber: '1', runId: 'r', datasetId: 'd',
       requestedUrl: url, sku: String(it.product_id), bodySha256: 'a'.repeat(64), scrapedAt: it.scraped_at as string,
-      rawItem: it, rawItemSha256: 'b'.repeat(64),
+      rawItem: it, rawItemSha256: 'b'.repeat(64), runUsageUsd: 0.0005,
       freshness: { scrapedAt: it.scraped_at as string, requestSubmittedAt: new Date(Date.now() - 1000).toISOString(),
         afterSubmit: preconditionMet, productScrapedEvents: 1,
         level: preconditionMet ? 'after_submit_asserted' : 'not_after_submit',
@@ -98,7 +135,7 @@ function fixtures(overMapping: Row = {}, overLatest: Row = {}) {
 }
 
 const baseDeps = (sb: SupabaseClient, fetchApify: (u: string) => Promise<ApifyFetchResult>, over: Record<string, unknown> = {}) => ({
-  sb, fetchApify, budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
+  sb, fetchApify, campaign: 'tesco-apify-test', budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
   assessOptions: { runModel: aiRunner('verified_exact') as never }, ...over,
 });
 
@@ -149,6 +186,19 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
     expect(res.held).toBe(1);
   });
 
+  it('mapping changed before reservation (rice→eggs): reserve rejects the expected snapshot → no fetch, no write', async () => {
+    const fx = fixtures();
+    // The server reserve RPC rejects because the current mapping no longer
+    // matches the snapshot the collector selected/assessed (expected_snapshot_changed).
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent,
+      reserveResult: () => ({ data: null, error: { message: 'expected_snapshot_changed' } }) });
+    let fetched = 0;
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, async (u) => { fetched++; return okFetch(item())(u); }));
+    expect(fetched).toBe(0);                 // never collected on stale evidence
+    expect(res.accepted).toBe(0);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);  // nothing written
+  });
+
   it('REJECTS an equal-weight multipack with a different pack layout', async () => {
     // canonical "4 Pack 580g" vs live "2x290g": same total, different count.
     const fx = fixtures(
@@ -193,7 +243,7 @@ describe('collectTescoApify — reusable verification (defect 3)', () => {
       verifications: [{ identity_fingerprint: fp, rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
         reusable_until: new Date(Date.now() + 86_400_000).toISOString(), invalidated_at: null }] });
     const res = await collectTescoApify('renewal', 10, {
-      sb: second.sb, fetchApify: okFetch(item()), budgetUsd: 10, perRequestUsd: 0.002,
+      sb: second.sb, fetchApify: okFetch(item()), campaign: 'tesco-apify-test', budgetUsd: 10, perRequestUsd: 0.002,
       sleep: async () => {}, assessOptions: { runModel: countingRunner as never },
     });
     expect(res.accepted).toBe(1);
@@ -212,42 +262,57 @@ describe('collectTescoApify — reusable verification (defect 3)', () => {
   });
 });
 
-describe('collectTescoApify — budget + reservation (defects 4 + 5)', () => {
-  it('stops before the next request + required audit could exceed the budget', async () => {
+describe('collectTescoApify — durable budget reservations (defect 5)', () => {
+  it('RESERVES before each provider launch and stops when a reservation would exceed the cap', async () => {
     const fx = fixtures();
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { budgetUsd: 0.001, perRequestUsd: 0.002 }));
     expect(res.requested).toBe(0);
     expect(res.stopped).toBe('budget_exhausted');
+    // A reservation was ATTEMPTED before any fetch.
+    expect(calls.some(c => c.fn === 'apify_reserve_budget')).toBe(true);
+    expect(calls.some(c => c.fn === 'apify_reserve_tesco_request')).toBe(false);
   });
 
-  it('honours durable prior spend (spentUsd) when enforcing the cap', async () => {
+  it('$9.99 already committed: a 0.002 reservation against a $10 cap is refused (restart safety)', async () => {
     const fx = fixtures();
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
-    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { budgetUsd: 10, perRequestUsd: 0.002, spentUsd: 9.999 }));
+    // initialCommittedUsd models durable prior spend surviving a restart.
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, initialCommittedUsd: 9.999 });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { budgetUsd: 10, perRequestUsd: 0.002 }));
     expect(res.requested).toBe(0);
     expect(res.stopped).toBe('budget_exhausted');
   });
 
-  it('skips a product the reservation RPC refuses (recently attempted) without fetching', async () => {
+  it('settles the reservation to the ACTUAL provider charge after a successful fetch', async () => {
     const fx = fixtures();
-    const { calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
-    const sb2 = {
-      from: makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent }).sb.from,
-      rpc: async (fn: string, args: Row) => {
-        calls.push({ fn, args });
-        if (fn === 'apify_begin_tesco_run') return { data: { runId: 'run-1', leaseToken: 'tok-1' }, error: null };
-        if (fn === 'apify_reserve_tesco_request') return { data: null, error: { message: 'attempt_already_recorded' } };
-        return { data: null, error: null };
-      },
-    } as unknown as SupabaseClient;
+    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item())));
+    const settle = calls.find(c => c.fn === 'apify_settle_budget')!;
+    expect(settle.args.p_actual_usd).toBe(0.0005); // the run's actual usageTotalUsd
+    // committed reconciled to the actual (0.0005), not the 0.002 reservation.
+    expect(budgetState.committed).toBeCloseTo(0.0005, 6);
+  });
+
+  it('delayed/uncertain billing: a reservation that is never settled KEEPS counting against the cap', async () => {
+    const fx = fixtures();
+    const { sb, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    // fetch throws AFTER the reservation (uncertain outcome) → no settle.
+    await expect(collectTescoApify('renewal', 10, baseDeps(sb, async () => { throw new Error('provider timeout'); },
+      { budgetUsd: 10, perRequestUsd: 0.002 }))).rejects.toThrow();
+    // The reservation remains committed (0.002) because it was never settled.
+    expect(budgetState.committed).toBeCloseTo(0.002, 6);
+  });
+
+  it('releases the reservation (settle 0) when the per-request reservation RPC refuses — no fetch', async () => {
+    const fx = fixtures();
+    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent,
+      reserveResult: () => ({ data: null, error: { message: 'attempt_already_recorded' } }) });
     let fetched = 0;
-    const res = await collectTescoApify('renewal', 10, {
-      sb: sb2, fetchApify: async (u) => { fetched++; return okFetch(item())(u); },
-      budgetUsd: 10, perRequestUsd: 0.002, sleep: async () => {},
-      assessOptions: { runModel: aiRunner('verified_exact') as never },
-    });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, async (u) => { fetched++; return okFetch(item())(u); }));
     expect(fetched).toBe(0);
     expect(res.requested).toBe(0);
+    // Budget reservation was released (settled to 0) so it does not leak.
+    expect(calls.some(c => c.fn === 'apify_settle_budget' && c.args.p_actual_usd === 0)).toBe(true);
+    expect(budgetState.committed).toBeCloseTo(0, 6);
   });
 });

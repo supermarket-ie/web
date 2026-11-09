@@ -53,6 +53,10 @@ export type ApifyMapping = {
   price: number | null;
   peerCanonicalNames: string[];
   sameSkuCount: number;
+  // The authoritative server-computed mapping snapshot at SELECTION time
+  // (apify_mapping_snapshot). Passed to reserve as the expected snapshot so a
+  // change between selection/assessment and reservation is rejected.
+  snapshot: Record<string, unknown> | null;
 };
 
 export type ApifyFetchResult = { response: TescoPageResponse; provider: ApifyProviderIdentity | null };
@@ -62,9 +66,12 @@ export type ApifyCollectionDeps = {
   // Runs the Apify fetch for one URL and returns the page response plus the
   // captured provider identity (original payload + hash + freshness).
   fetchApify: (url: string) => Promise<ApifyFetchResult>;
-  // Budget guard in USD, enforced against DURABLE accounting (actual provider
-  // charges reconciled from the provider API) + this run's requests. The loop
-  // stops before the next request could exceed the cap.
+  // Campaign identifier for the DURABLE budget reservation ledger.
+  campaign: string;
+  // Hard campaign cap in USD. Each provider launch RESERVES perRequestUsd first
+  // (apify_reserve_budget); the reservation is retained while the request is
+  // running/uncertain and reconciled to the actual charge on settle. The loop
+  // stops when a reservation would exceed the cap.
   budgetUsd: number;
   perRequestUsd: number;
   // USD already spent by this campaign BEFORE this invocation (durable; read by
@@ -172,13 +179,22 @@ export async function selectApifyMappings(
       observed_at: observedAt, price: priceByMapping.get(id) ?? null,
       peerCanonicalNames: group.map(g => String((canonical(g))?.canonical_name ?? '')),
       sameSkuCount: group.length,
+      snapshot: null, // filled below from the authoritative server snapshot
     });
   }
   // Renewal: oldest first (closest to expiry). Expansion: stable by id.
   rows.sort((a, b) => mode === 'renewal'
     ? (a.observed_at ?? '').localeCompare(b.observed_at ?? '') || a.id.localeCompare(b.id)
     : a.id.localeCompare(b.id));
-  return rows.slice(0, limit);
+  const selected = rows.slice(0, limit);
+  // Capture the authoritative server snapshot at SELECTION time for each chosen
+  // mapping, so selection/assessment/reservation all reference the SAME value.
+  for (const m of selected) {
+    const { data, error } = await sb.rpc('apify_mapping_snapshot', { p_store_product_id: m.id });
+    if (error) throw new Error(`Reading mapping snapshot: ${error.message}`);
+    m.snapshot = (data as Record<string, unknown>) ?? null;
+  }
+  return selected;
 }
 
 function mappingEvidence(m: ApifyMapping): TescoMappingEvidence {
@@ -286,31 +302,61 @@ export async function collectTescoApify(
   // precondition only, carried with its documented limitation.
   const staged: Array<{ m: ApifyMapping; product: TescoCollectedProduct; adapterBody: string;
     method: 'deterministic' | 'deterministic_plus_ai'; rationale: string; model: string | null;
-    fingerprint: string }> = [];
+    fingerprint: string; snapshot: Record<string, unknown> | null }> = [];
 
   try {
     for (const m of mappings) {
-      // Budget guard (defect 5): stop before the next request would exceed the
-      // cap. spentUsd is seeded by the caller from ACTUAL reconciled provider
-      // charges (all run statuses), so this holds across invocations.
-      if (spentUsd + deps.perRequestUsd > deps.budgetUsd) { result.stopped = 'budget_exhausted'; break; }
+      // Durable budget RESERVATION before the provider launch (defect: enforce
+      // $cap). Reserve perRequestUsd; if it would exceed the cap the ledger
+      // raises and we stop. The reservation is retained until settled, so a
+      // crash/uncertain request keeps counting against the cap.
+      let reservationId: string | null = null;
+      let remainingUsd = deps.budgetUsd;
+      try {
+        const r = await rpc<{ reservationId: string; remainingUsd: number }>(sb, 'apify_reserve_budget', {
+          p_campaign: deps.campaign, p_run_id: runId, p_amount: deps.perRequestUsd, p_cap: deps.budgetUsd,
+        });
+        reservationId = r.reservationId;
+        remainingUsd = r.remainingUsd;
+      } catch (e) {
+        if (String((e as Error).message).includes('budget_exhausted')) { result.stopped = 'budget_exhausted'; break; }
+        throw e;
+      }
 
       if (result.requested > 0) await sleep(10_000);
 
-      // Reserve (atomic guard: ownership, mode, due/observation, pending/recent, pacing).
+      // Reserve (atomic guard: ownership, mode, due/observation, pending/recent,
+      // pacing) AND snapshot binding: pass the snapshot we SELECTED/assessed
+      // against; reserve rejects if the mapping changed since. The authoritative
+      // snapshot it returns is what we bind assessment + finalise to.
+      let boundSnapshot: Record<string, unknown> | null = null;
       try {
-        await rpc(sb, 'apify_reserve_tesco_request', {
+        const reserved = await rpc<{ reserved: boolean; snapshot: Record<string, unknown> }>(sb, 'apify_reserve_tesco_request', {
           p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
           p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
+          p_expected_snapshot: m.snapshot,
         });
+        boundSnapshot = reserved?.snapshot ?? null;
       } catch (e) {
+        // No provider launch happened — release the budget reservation.
+        if (reservationId) await rpc(sb, 'apify_settle_budget', { p_reservation_id: reservationId, p_actual_usd: 0, p_provider_run_id: null }).catch(() => undefined);
         deps.log?.({ event: 'reserve_skipped', sku: m.store_sku, reason: (e as Error).message });
         continue;
       }
 
       const { response, provider } = await deps.fetchApify(m.store_url);
-      spentUsd += deps.perRequestUsd;
       result.requested += 1;
+      // Settle the reservation to the ACTUAL provider charge for this run. If
+      // the fetch threw before returning (uncertain), the reservation stays
+      // 'reserved' and keeps counting — intentional (delayed/unknown billing).
+      spentUsd = remainingUsd; // best-effort local view; cap is enforced in the ledger
+      if (reservationId) {
+        await rpc(sb, 'apify_settle_budget', {
+          p_reservation_id: reservationId,
+          p_actual_usd: provider ? provider.runUsageUsd : deps.perRequestUsd,
+          p_provider_run_id: provider?.runId ?? null,
+        }).catch(() => undefined);
+      }
 
       let parsed: TescoCollectedPage | null = null;
       let outcome: string = response.outcome;
@@ -403,7 +449,7 @@ export async function collectTescoApify(
       });
 
       if (decision === 'accept_pending_finalise' && product) {
-        staged.push({ m, product, adapterBody, method, rationale, model, fingerprint: liveFingerprint });
+        staged.push({ m, product, adapterBody, method, rationale, model, fingerprint: liveFingerprint, snapshot: boundSnapshot });
       } else {
         result.perProduct.push({ storeProductId: m.id, sku: m.store_sku, outcome, accepted: false,
           reasons, price: null, freshness: provider?.freshness.level ?? null });
@@ -422,7 +468,7 @@ export async function collectTescoApify(
         p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
         p_store_product_id: s.m.id, p_mode: mode,
         p_regular_price: s.product.price, p_previous_price: s.m.price,
-        p_store_product_name: s.product.name,
+        p_store_product_name: s.product.name, p_assessed_snapshot: s.snapshot,
       });
       if (rec?.finalised) {
         result.accepted += 1;

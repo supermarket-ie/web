@@ -54,32 +54,32 @@ async function main() {
     fetchPage(u).then((response) => resolve({ response, provider: captured })).catch(reject);
   });
 
-  // Durable campaign budget accounting (defect 5): seed and RE-RECONCILE spend
-  // from ACTUAL provider charges across ALL this actor's runs (succeeded,
-  // failed, timed-out, aborted, and audit runs), not count × estimate. The cap
-  // therefore holds across invocations/restarts and counts every charge.
-  async function actualSpendUsd(): Promise<number> {
-    const r = await reconcileCampaignSpendUsd({ sinceISO: campaignSinceISO });
-    console.log(JSON.stringify({ event: 'budget_reconciled', totalUsd: r.totalUsd, runs: r.runs, byStatus: r.byStatus, cap: budgetUsd }));
-    return r.totalUsd;
+  // The $cap is ENFORCED DURABLY by the DB reservation ledger inside
+  // collectTescoApify (apify_reserve_budget): every provider launch reserves
+  // first, the reservation is retained while running/uncertain, and is
+  // reconciled to the ACTUAL charge on settle — so the cap holds across
+  // restarts. Here we additionally log an INDEPENDENT provider-side cross-check
+  // of total actual spend across all run statuses, for observability.
+  const campaign = process.env.APIFY_CAMPAIGN ?? 'tesco-apify-20261108';
+  async function logProviderSpend(label) {
+    try {
+      const r = await reconcileCampaignSpendUsd({ sinceISO: campaignSinceISO });
+      console.log(JSON.stringify({ event: 'provider_spend_crosscheck', label, totalUsd: r.totalUsd, runs: r.runs, byStatus: r.byStatus, cap: budgetUsd }));
+    } catch (e) { console.log(JSON.stringify({ event: 'provider_spend_crosscheck_failed', message: e instanceof Error ? e.message : 'err' })); }
   }
-  let spentUsd = await actualSpendUsd();
+  await logProviderSpend('start');
 
   const batches: ApifyCollectionResult[] = [];
   for (let b = 0; b < maxBatches; b += 1) {
-    // Reconcile actual charges before EACH batch so uncertain/timed-out runs
-    // from a prior batch are counted before we spend more.
-    if (b > 0) spentUsd = await actualSpendUsd();
-    if (spentUsd + perRequestUsd > budgetUsd) { console.log(JSON.stringify({ event: 'budget_reached', spentUsd })); break; }
+    if (b > 0) await logProviderSpend(`before_batch_${b}`);
     const result = await collectTescoApify(mode, limit, {
-      sb, fetchApify, budgetUsd, perRequestUsd, spentUsd,
+      sb, fetchApify, campaign, budgetUsd, perRequestUsd,
       log: (e) => console.log(JSON.stringify(e)),
     });
-    spentUsd = result.spentUsd;
     batches.push(result);
     console.log(JSON.stringify({ event: 'batch_done', batch: b, runId: result.runId,
       requested: result.requested, accepted: result.accepted, held: result.held,
-      unavailable: result.unavailable, stopped: result.stopped, spentUsd }));
+      unavailable: result.unavailable, stopped: result.stopped, spentUsd: result.spentUsd }));
     if (result.stopped === 'no_eligible_products') break;
     if (result.stopped === 'budget_exhausted') break;
     // A transport stop paused the gate; do not start another batch this run.
@@ -90,7 +90,8 @@ async function main() {
     requested: a.requested + r.requested, accepted: a.accepted + r.accepted,
     held: a.held + r.held, unavailable: a.unavailable + r.unavailable,
   }), { requested: 0, accepted: 0, held: 0, unavailable: 0 });
-  console.log(JSON.stringify({ event: 'campaign_summary', mode, batches: batches.length, ...totals, spentUsd }));
+  await logProviderSpend('end');
+  console.log(JSON.stringify({ event: 'campaign_summary', mode, batches: batches.length, ...totals }));
 }
 
 main().catch((e) => { console.error(JSON.stringify({ event: 'fatal', message: e instanceof Error ? e.message : 'error' })); process.exitCode = 1; });
