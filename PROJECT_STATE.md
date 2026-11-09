@@ -1,5 +1,43 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco Apify migration apply checkpoint: base installed, fencing upgrade awaiting connector confirmation
+
+**Do not launch the Apify collector yet.** The reviewed release is commit
+`966e86ca4c850579f5d69ea7b817b4a43127a095` (billing-finality guard from PR #375).
+All three supplied SHA-256 checksums matched the pinned files; an independent
+local execution passed the 26 migration assertions and five billing-finality
+checks before production apply.
+
+Applied through the existing management connection for Supermarket project
+`ytyzwiqnobxehdqrnzhx`:
+
+| Source migration | Database receipt | Status |
+| --- | --- | --- |
+| `20261108200000_tesco_apify_unattended_collection.sql` | `20261109131423` / `tesco_apify_unattended_collection` | Applied |
+| `20261109090000_tesco_apify_lease_fencing_and_page_binding.sql` | None | Not applied: connector confirmation expired twice |
+| `20261109140000_tesco_apify_snapshot_binding.sql` | None | Not attempted; depends on fencing migration |
+
+The Supabase connector returned `status=expired` / `INVALID_ARGUMENT` for the
+fencing migration's required confirmation. This is a connector confirmation
+boundary, not a SQL validation failure. Do not route the DDL through a different
+endpoint to evade confirmation. Reissue the same checksum-verified migration
+when the operator can complete the connector confirmation, then apply the third
+file and verify the final signatures, RLS, grants and fencing/budget guards.
+Do not reapply the base migration.
+
+Production checkpoint at 13:27:30 UTC: only the base migration is in history;
+`apify_begin_tesco_run` still returns UUID (the final release requires JSONB);
+no lease-token columns are present yet; the dedicated gate is disabled with no
+lease/cooldown; there are zero Apify collection runs and zero provider-evidence
+rows. No Tesco prices were collected or written by this apply. SuperValu/Dunnes
+operations were not changed.
+
+Full inventory remains the campaign objective: 2,052 distinct mapped Tesco SKUs,
+not just the initial ordinary candidate queue. The 12:42 UTC reference was
+486 fresh prices, 322 due renewal candidates and 696 expansion-selector
+candidates; all live eligibility and identity checks must run again before
+collection. The first queue is a milestone, not completion of the full recovery.
+
 ## 9 November 2026 — Tesco Apify: billing-finality guard before settling reservations (PR #375, main 80661aa)
 
 Fifth review round closed the last billing gap: a reservation must not be
