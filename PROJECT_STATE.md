@@ -1,5 +1,41 @@
 # Supermarket.ie — Canonical Project State
 
+## 9 November 2026 — Tesco Apify: billing-finality guard before settling reservations (PR #375, main 80661aa)
+
+Fifth review round closed the last billing gap: a reservation must not be
+reconciled off a PRELIMINARY charge. Extracted a pure, testable guard
+`confirmedTerminalChargeUsd(run, now=Date.now(), minAgeMs=10_000)` in
+`src/lib/tesco-apify-fetch.ts`. It returns a settleable number ONLY when the run
+is terminal (SUCCEEDED/FAILED/ABORTED/TIMED-OUT) AND has a valid `finishedAt`
+that is at least 10 seconds old AND a non-null, finite, ≥0 `usageTotalUsd`;
+otherwise it returns null and the reservation STAYS reserved. This prevents
+settling on an immediate completion-time total that is later superseded by a
+positive charge.
+
+Wiring: `reconcileOutstandingReservations` in `scripts/tesco-apify-collect.ts`
+runs BETWEEN batches (not per-fetch, so it never delays a product fetch), reads
+each outstanding reservation's linked run, and only calls
+`apify_reconcile_reservation` when `confirmedTerminalChargeUsd` yields a
+confirmed figure. Missing/invalid timestamps or costs remain unresolved and are
+retried on a later pass. Tests include the required immediate-preliminary-zero →
+later-positive sequence (zero at completion is NOT settled; the later positive
+charge settles once finishedAt is ≥10s old), plus newer-than-10s, missing/
+invalid finishedAt, missing/negative cost, and still-RUNNING cases.
+
+Live eligibility recomputed via REST at this point: 486 fresh trusted Tesco
+prices; 323 due for renewal (owner reference figures: 322 renewal / 696
+expansion-selector candidates — reference only, not guaranteed successful
+prices). Migration still NOT applied in prod (`apify_begin_tesco_run` → 404;
+gate `apify-tesco-ie-20261108` absent). AWS SSO session restored (account
+611622961299).
+
+64 unit tests + 26 migration assertions pass; tsc + eslint + vitest clean;
+validate CI passed; merged PR #375. Apply order unchanged: 20261108200000 →
+20261109090000 → 20261109140000. Freshness policy change stays EXPLICIT for
+release: WRITES PERMITTED WITHOUT INDEPENDENTLY ESTABLISHED FRESHNESS. aws-prod
+branch policy unchanged (ops/* or owner adds main). SuperValu/Dunnes untouched;
+sandbox (PR #362) still stopped.
+
 ## 9 November 2026 — Tesco Apify: unknown-billing retained + latest-only price view (PR #373, main 301272c)
 
 Fourth review round: two remaining wiring issues closed.
