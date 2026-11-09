@@ -29,7 +29,7 @@ import {
   IDENTITY_ASSESSMENT_RULE_VERSION,
   type AssessOptions,
 } from './tesco-identity-assessment';
-import type { ReentryEvidence } from './tesco-hold-reentry';
+import { independentExactIdentity, type ReentryEvidence } from './tesco-hold-reentry';
 import type { ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
@@ -57,6 +57,16 @@ export type ApifyMapping = {
   // (apify_mapping_snapshot). Passed to reserve as the expected snapshot so a
   // change between selection/assessment and reservation is rejected.
   snapshot: Record<string, unknown> | null;
+  // FRESH Dunnes/SuperValu peers sharing this canonical product_id (<=2, one
+  // per store, priced within the freshness window), shaped for
+  // independentExactIdentity. Used ONLY to corroborate the Tesco item's
+  // identity (brand/title/quantity/pack) — never a cross-retailer price claim.
+  peers: ApifyPeer[];
+};
+
+export type ApifyPeer = {
+  id: string; store: string; store_product_name: string; brand: string | null;
+  gtin: string | null; store_sku: string; observed_at: string; price: number;
 };
 
 export type ApifyFetchResult = { response: TescoPageResponse; provider: ApifyProviderIdentity | null };
@@ -181,6 +191,7 @@ export async function selectApifyMappings(
       peerCanonicalNames: group.map(g => String((canonical(g))?.canonical_name ?? '')),
       sameSkuCount: group.length,
       snapshot: null, // filled below from the authoritative server snapshot
+      peers: [],      // filled below from fresh Dunnes/SuperValu peers
     });
   }
   // Renewal: oldest first (closest to expiry). Expansion: stable by id.
@@ -195,7 +206,54 @@ export async function selectApifyMappings(
     if (error) throw new Error(`Reading mapping snapshot: ${error.message}`);
     m.snapshot = (data as Record<string, unknown>) ?? null;
   }
+  // Load FRESH Dunnes/SuperValu peers for the selected mappings' canonical
+  // products. These corroborate the Tesco item's identity (brand/title/
+  // quantity/pack) through independentExactIdentity — the cross-retailer
+  // evidence the identity rules are designed to use. Only priced peers inside
+  // the freshness window qualify; capped to one per store (freshest).
+  await attachFreshPeers(sb, selected);
   return selected;
+}
+
+// Freshness window for peer corroboration — matches the 7-day latest_prices
+// window used elsewhere; a stale peer is not independent evidence.
+const PEER_FRESH_DAYS = 7;
+
+export async function attachFreshPeers(sb: SupabaseClient, mappings: ApifyMapping[]): Promise<void> {
+  if (!mappings.length) return;
+  const productIds = [...new Set(mappings.map(m => m.product_id))];
+  const now = Date.now();
+  const byProduct = new Map<string, ApifyPeer[]>();
+  for (let i = 0; i < productIds.length; i += 50) {
+    const chunk = productIds.slice(i, i + 50);
+    const { data, error } = await sb.from('store_products')
+      .select('id,product_id,store,store_sku,store_product_name,brand,gtin,latest_prices(observed_at,price)')
+      .in('product_id', chunk).in('store', ['dunnes', 'supervalu']);
+    if (error) throw new Error(`Loading peers: ${error.message}`);
+    for (const r of data ?? []) {
+      const lp = Array.isArray(r.latest_prices) ? r.latest_prices[0] : (r.latest_prices as Record<string, unknown> | null);
+      const observedAt = lp ? String((lp as Record<string, unknown>).observed_at) : null;
+      const price = lp ? Number((lp as Record<string, unknown>).price) : 0;
+      if (!observedAt || Date.parse(observedAt) <= now - PEER_FRESH_DAYS * 86400_000 || !(price > 0)) continue;
+      const pid = String(r.product_id);
+      if (!byProduct.has(pid)) byProduct.set(pid, []);
+      byProduct.get(pid)!.push({
+        id: String(r.id), store: String(r.store), store_product_name: String(r.store_product_name ?? ''),
+        brand: (r.brand as string) ?? null, gtin: (r.gtin as string) ?? null,
+        store_sku: String(r.store_sku ?? ''), observed_at: observedAt, price,
+      });
+    }
+  }
+  for (const m of mappings) {
+    const all = byProduct.get(m.product_id) ?? [];
+    // One peer per store (freshest first), <=2 total — independentExactIdentity
+    // requires distinct stores and at most two peers.
+    const byStore = new Map<string, ApifyPeer>();
+    for (const p of all.sort((a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at))) {
+      if (!byStore.has(p.store)) byStore.set(p.store, p);
+    }
+    m.peers = [...byStore.values()];
+  }
 }
 
 // Material identity derived SOLELY from the authoritative reserved snapshot
@@ -234,7 +292,8 @@ function snapshotMappingEvidence(s: SnapshotIdentity, isFresh: boolean): TescoMa
 // the independent AI assessment (assessAndCombine). Peers are empty: this path
 // verifies Tesco identity only (never a cross-retailer price comparison), and
 // the AI never overrides a deterministic rejection.
-function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: string, live: TescoCollectedProduct): ReentryEvidence {
+function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: string, live: TescoCollectedProduct,
+  peers: ApifyPeer[] = []): ReentryEvidence {
   return {
     mapping: {
       id: s.storeProductId, product_id: s.productId, canonical_name: s.canonicalName,
@@ -249,7 +308,9 @@ function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: str
       body_sha256: bodySha256, mode: 'products', parsed: { products: [live], listing: null },
     },
     sourceRun: { status: 'success', finished_at: new Date().toISOString() },
-    peers: [],
+    // Fresh Dunnes/SuperValu peers corroborate the Tesco IDENTITY only
+    // (brand/title/quantity/pack). They never assert a cross-retailer price.
+    peers,
   };
 }
 
@@ -325,7 +386,7 @@ export async function collectTescoApify(
   // scraped_at proves nothing). Freshness is the per-item best-available
   // precondition only, carried with its documented limitation.
   const staged: Array<{ ident: SnapshotIdentity; product: TescoCollectedProduct; previousPrice: number | null; adapterBody: string;
-    method: 'deterministic' | 'deterministic_plus_ai'; rationale: string; model: string | null;
+    method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_independent_peer'; rationale: string; model: string | null;
     fingerprint: string; snapshot: Record<string, unknown> | null }> = [];
 
   try {
@@ -429,7 +490,7 @@ export async function collectTescoApify(
       const perItemFreshOk = provider?.freshness.preconditionMet === true;
 
       let decision: 'accept_pending_finalise' | 'hold' = 'hold';
-      let method: 'deterministic' | 'deterministic_plus_ai' = 'deterministic';
+      let method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_independent_peer' = 'deterministic';
       let rationale = '';
       let model: string | null = null;
       let liveFingerprint = '';
@@ -440,6 +501,11 @@ export async function collectTescoApify(
           canonical: { name: ident.canonicalName, brand: ident.canonicalBrand, ean: ident.canonicalEan },
           tesco: { sku: product.sku, name: product.name, brand: product.brand, gtin: product.gtin, quantity: product.quantity },
         });
+        // Build evidence WITH the fresh Dunnes/SuperValu peers (from `m`, keyed
+        // by canonical product_id). These feed both the strict positive gate
+        // and the AI assessment. snapshotIdentity carries material identity;
+        // peers are product-level cross-retailer corroboration.
+        const ev = assessmentEvidence(ident, runId, adapterBody, product, m.peers);
         // Reuse path (defect 3): an UNCHANGED, previously-verified mapping in
         // RENEWAL may use the cheap deterministic check alone.
         const existing = await readActiveVerification(sb, ident.storeProductId);
@@ -448,6 +514,19 @@ export async function collectTescoApify(
           decision = 'accept_pending_finalise';
           method = 'deterministic';
           rationale = 'Unchanged mapping: reused active identity verification; deterministic renewal check passed against fresh evidence.';
+        } else if (independentExactIdentity(ev, product)) {
+          // PEER-CORROBORATED route: the deterministic gate passed AND the
+          // strict positive gate independentExactIdentity passes with the fresh
+          // Dunnes/SuperValu peers supplied. independentExactIdentity itself
+          // enforces barcode/brand/variant/quantity/multipack (sameBarcode,
+          // canonicalVariantConflict, independentPackConflict, peerIdentity-
+          // Conflict), so a genuine conflict can NEVER reach here. This is the
+          // same positive gate the reviewed hold-reentry path trusts; it does
+          // not require the AI to also confirm (the AI was the sole blocker on
+          // these — ai_uncertain — while real peers were never supplied before).
+          decision = 'accept_pending_finalise';
+          method = 'deterministic_plus_independent_peer';
+          rationale = `Deterministic identity gate passed and independentExactIdentity confirmed exact identity using ${m.peers.length} fresh cross-retailer peer(s) (brand/title/quantity/pack corroboration; no barcode required). Peers corroborate identity only, never a price claim.`;
         } else {
           // New, changed or uncertain → run the independent AI inference and
           // require BOTH it and the deterministic gate to agree (and its own
@@ -455,7 +534,6 @@ export async function collectTescoApify(
           // A model/transport failure (schema miss, timeout, Bedrock error)
           // for ONE item must HOLD that item, never abort the campaign and
           // never become an accept. Catch it, log it, and fall through to hold.
-          const ev = assessmentEvidence(ident, runId, adapterBody, product);
           try {
             const verdict = await assessAndCombine(ev, product, runId, deps.assessOptions);
             model = verdict.assessment.model;
