@@ -116,7 +116,7 @@ describe('verifyApifyFreshness — best-available precondition + documented limi
     const f = verifyApifyFreshness({ ...base, scrapedAt: '2026-11-08T18:51:21Z', productScrapedEvents: 1 });
     expect(f.preconditionMet).toBe(true);
     expect(f.level).toBe('after_submit_asserted');
-    expect(f.limitation).toMatch(/not independently verifiable/);
+    expect(f.limitation).toMatch(/WRITES PERMITTED WITHOUT INDEPENDENTLY ESTABLISHED FRESHNESS/);
     expect(f.reason).toMatch(/provider-asserted, NOT independently verified/);
   });
 

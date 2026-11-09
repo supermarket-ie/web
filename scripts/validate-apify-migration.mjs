@@ -12,7 +12,16 @@ const q = (sql) => db.exec(sql);
 // Supabase roles referenced by revoke/grant.
 await q(`create role anon; create role authenticated; create role service_role;`);
 
-// Minimal stubs for tables the migration FK-references or reads.
+// Base tables (store_products/products/price_observations/scrape_runs/
+// receipts/failures/latest_prices) PREDATE the migration history — there is no
+// CREATE TABLE for them in supabase/migrations. Their shapes here are taken
+// from the repo's AUTHORITATIVE in-repo fixtures (src/lib/*.test.ts) extended
+// with the exact columns the REAL finaliser writes (was_price, on_promotion,
+// source, the scrape_runs counters). This is a documented limitation: these
+// specific tables cannot be loaded from a migration file; everything the
+// migration itself defines (the apify_* RPCs, gate, evidence/verification/
+// budget tables) IS the real migration SQL, and the finaliser + pause function
+// are loaded verbatim from their migrations below.
 await q(`
 create table public.scrape_runs (
   id uuid primary key, store text, run_id text, target_count int, retrieval_method text,
@@ -56,39 +65,29 @@ create table public.tesco_direct_collection_pages (
 );
 `);
 
-// Minimal finalize_store_scrape_product + pause_tesco_collection_egress stubs
-// matching the real signatures the migration calls.
-await q(`
-create function public.finalize_store_scrape_product(
-  p_run_uuid uuid, p_store text, p_store_product_id uuid, p_success boolean,
-  p_price numeric default null, p_previous_price numeric default null, p_was_price numeric default null,
-  p_on_promotion boolean default false, p_store_url text default null, p_store_sku text default null,
-  p_store_product_name text default null, p_fetched int default 0, p_extracted int default 0,
-  p_failure_stage text default null, p_failure_reason text default null, p_canonical_name text default null,
-  p_raw_error text default null, p_is_retryable boolean default false
-) returns boolean language plpgsql as $$
-begin
-  insert into public.scrape_product_receipts(run_id, store_product_id, outcome)
-  values (p_run_uuid, p_store_product_id, case when p_success then 'success' else 'failure' end)
-  on conflict (run_id, store_product_id) do nothing;
-  if not found then return false; end if;
-  if p_success then
-    insert into public.price_observations(store_product_id, price, observed_at, source)
-    values (p_store_product_id, p_price, now(), lower(p_store)||'_direct');
-  end if;
-  return true;
-end $$;
-create function public.pause_tesco_collection_egress(p_egress_key text, p_until timestamptz, p_blocked boolean default false)
-returns void language plpgsql as $$
-begin
-  update public.tesco_egress_pool set cooldown_until = greatest(coalesce(cooldown_until, now()), p_until),
-    leased_until = null, updated_at = now() where egress_key = p_egress_key;
-end $$;
-`);
+// Load the REAL finalize_store_scrape_product (NOT a stub) by extracting its
+// exact definition from migration 20260822100000, and the REAL
+// pause_tesco_collection_egress from 20260929093608. The price-write path is
+// therefore exercised against the actual production finaliser.
+function extractFunction(migrationPath, funcName) {
+  const sql = readFileSync(migrationPath, 'utf8');
+  const start = sql.indexOf(`create or replace function public.${funcName}(`);
+  if (start < 0) throw new Error(`could not find ${funcName} in ${migrationPath}`);
+  // The function body is dollar-quoted ($$ ... $$;). Find the closing $$; after start.
+  const end = sql.indexOf('$$;', start);
+  if (end < 0) throw new Error(`could not find end of ${funcName}`);
+  return sql.slice(start, end + 3);
+}
+const REAL_FINALISER = extractFunction('supabase/migrations/20260822100000_add_price_observation_source.sql', 'finalize_store_scrape_product');
+const REAL_PAUSE = extractFunction('supabase/migrations/20260929093608_tesco_direct_collection_evidence.sql', 'pause_tesco_collection_egress');
+await q(REAL_FINALISER);
+await q(REAL_PAUSE);
+console.log('loaded REAL finalize_store_scrape_product + pause_tesco_collection_egress from their migrations');
 
 // Apply BOTH migrations in order (base objects, then the security correction).
 await q(readFileSync('supabase/migrations/20261108200000_tesco_apify_unattended_collection.sql', 'utf8'));
 await q(readFileSync('supabase/migrations/20261109090000_tesco_apify_lease_fencing_and_page_binding.sql', 'utf8'));
+await q(readFileSync('supabase/migrations/20261109140000_tesco_apify_snapshot_binding.sql', 'utf8'));
 console.log('migrations applied OK');
 
 // Mapping A: proven, due renewal.
@@ -129,8 +128,12 @@ async function begin(owner) {
   const r = (await db.query(`select public.apify_begin_tesco_run($1,'renewal',10,$2) as b`, [GATE, owner])).rows[0].b;
   return { runId: r.runId, token: r.leaseToken };
 }
-async function reserve(a, mid, url, owner = a.owner) {
-  return db.query(`select public.apify_reserve_tesco_request($1,$2,$3,$4,$5,$6,'renewal')`, [a.runId, GATE, a.token, owner, mid, url]);
+const snapshotOf = async (mid) => (await db.query(`select public.apify_mapping_snapshot($1) as s`, [mid])).rows[0].s;
+// reserve with an explicit expected snapshot (defaults to the CURRENT snapshot).
+async function reserve(a, mid, url, owner = a.owner, expected) {
+  const exp = expected === undefined ? await snapshotOf(mid) : expected;
+  return db.query(`select public.apify_reserve_tesco_request($1,$2,$3,$4,$5,$6,'renewal',$7::jsonb) as r`,
+    [a.runId, GATE, a.token, owner, mid, url, JSON.stringify(exp)]);
 }
 async function record(a, mid, url, owner = a.owner) {
   return db.query(`select public.apify_record_tesco_page($1,$2,$3,$4,$5,$6,'renewal','ok',200,null,120,$7,
@@ -139,15 +142,18 @@ async function record(a, mid, url, owner = a.owner) {
     '{"sku":"x","actorId":"A","runId":"r","datasetId":"d","rawItem":{},"rawItemSha256":"${'a'.repeat(64)}"}'::jsonb)`,
     [a.runId, GATE, a.token, owner, mid, url, 'b'.repeat(64)]);
 }
-async function finalise(a, mid, price, owner = a.owner) {
-  return db.query(`select public.apify_finalise_tesco_page($1,$2,$3,$4,$5,'renewal',$6,1.30,'x') as r`, [a.runId, GATE, a.token, owner, mid, price]);
+// finalise binds the assessed snapshot (defaults to the CURRENT snapshot).
+async function finalise(a, mid, price, owner = a.owner, assessed) {
+  const asn = assessed === undefined ? await snapshotOf(mid) : assessed;
+  return db.query(`select public.apify_finalise_tesco_page($1,$2,$3,$4,$5,'renewal',$6,1.30,'x',$7::jsonb) as r`,
+    [a.runId, GATE, a.token, owner, mid, price, JSON.stringify(asn)]);
 }
 const priceCount = async (mid) => (await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1 and observed_at > now()-interval '1 hour'`, [mid])).rows[0].n;
 
 // ---- Happy path: begin → reserve → record → finalise → close ----
 const A = { ...(await begin('fargate-owner-aaaaaaaa')), owner: 'fargate-owner-aaaaaaaa' };
 await expectThrows(() => db.query(`select public.apify_begin_tesco_run('other-gate','renewal',1,'o')`), 'apify_gate_only', 'begin refuses non-Apify gate');
-assert((await reserve(A, MID, URL_A)).rows[0].apify_reserve_tesco_request === true, 'reserve succeeds for a due, proven mapping');
+assert((await reserve(A, MID, URL_A)).rows[0].r.reserved === true, 'reserve succeeds for a due, proven mapping');
 await expectThrows(() => reserve(A, MID, URL_A), 'attempt_already_recorded', 'reserve excludes a pending/recent URL');
 // URL/mapping mismatch is refused at reservation.
 await expectThrows(() => reserve(A, MID, URL_B), 'mapping_not_resolved_or_unproven', 'reserve refuses a URL that is not the mapping own url');
@@ -231,6 +237,56 @@ const cBefore = await priceCount(MID_C);
 await expectThrows(() => finalise(WC, MID_C, 0.59), 'mapping_snapshot_changed', 'finalise refuses when the mapping snapshot changed since reservation');
 assert(await priceCount(MID_C) === cBefore, 'no price written when the mapping changed mid-collection');
 await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'degraded')`, [WC.runId, GATE, WC.token, WC.owner]);
+
+// ============================================================
+// REGRESSION — the EXACT reported mapping reproduction: the canonical product
+// changes (rice→eggs) BEFORE reservation. The collector reserves with the OLD
+// (rice) expected snapshot; reservation must REJECT (expected_snapshot_changed)
+// so collection never proceeds on stale evidence, and no price is written.
+// ============================================================
+const MID_D = '88888888-8888-8888-8888-888888888888';
+const PID_RICE = '99999999-9999-9999-9999-999999999999';
+const PID_EGGS = 'aaaaaaaa-0000-0000-0000-000000000000';
+const URL_D = 'https://www.tesco.ie/shop/en-IE/products/300000001';
+await q(`
+insert into public.products(id, canonical_name, brand, ean) values
+  ('${PID_RICE}','Rice Canonical', null, null), ('${PID_EGGS}','Eggs Canonical', null, null);
+insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, gtin, url_status)
+values ('${MID_D}','${PID_RICE}','tesco','300000001','${URL_D}','Tesco Rice','Tesco',true,null,'resolved');
+insert into public.scrape_product_receipts(run_id, store_product_id, outcome) values ('33333333-3333-3333-3333-333333333333','${MID_D}','success');
+insert into public.price_observations(store_product_id, price, observed_at, source) values ('${MID_D}', 1.00, now() - interval '10 days', 'tesco_direct');
+`);
+await clearPacing();
+const WD = { ...(await begin('fargate-worker-d-wwww')), owner: 'fargate-worker-d-wwww' };
+// Collector selected/assessed the RICE snapshot...
+const riceSnap = await snapshotOf(MID_D);
+// ...but product_id is changed to the EGGS canonical BEFORE reservation.
+await q(`update public.store_products set product_id='${PID_EGGS}' where id='${MID_D}';`);
+const dBefore = await priceCount(MID_D);
+await expectThrows(() => reserve(WD, MID_D, URL_D, WD.owner, riceSnap), 'expected_snapshot_changed',
+  'reservation REJECTS when the canonical product changed (rice->eggs) before reserve');
+assert(await priceCount(MID_D) === dBefore, 'no price written for the rice->eggs reproduction');
+await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'degraded')`, [WD.runId, GATE, WD.token, WD.owner]);
+
+// ============================================================
+// REGRESSION — durable budget reservations enforce the cap.
+// ============================================================
+// Reserve amounts up to a tiny cap; the next reservation must be refused, and
+// outstanding (unsettled) reservations keep counting (restart/uncertain).
+const r1 = (await db.query(`select public.apify_reserve_budget('budget-test', null, 0.6, 1.0) as r`)).rows[0].r;
+assert(Number(r1.remainingUsd) === 0.4, 'first reservation leaves the expected remaining balance');
+const r2 = (await db.query(`select public.apify_reserve_budget('budget-test', null, 0.3, 1.0) as r`)).rows[0].r;
+assert(Number(r2.remainingUsd) === 0.1, 'second reservation further reduces the balance');
+// $0.2 more would exceed the $1.0 cap (0.9 committed) -> refused.
+await expectThrows(() => db.query(`select public.apify_reserve_budget('budget-test', null, 0.2, 1.0)`), 'budget_exhausted',
+  'reservation refused when it would exceed the cap (outstanding reservations counted)');
+// Settling r1 to a SMALLER actual frees balance; reconciled committed = 0.1+0.3.
+await db.query(`select public.apify_settle_budget($1, 0.1, 'provrun1')`, [r1.reservationId]);
+assert(Number((await db.query(`select public.apify_campaign_committed_usd('budget-test') as c`)).rows[0].c) === 0.4,
+  'settling to the actual charge reconciles committed spend (0.1 actual + 0.3 outstanding)');
+// An unsettled reservation (r2) STILL counts (delayed/uncertain billing).
+await expectThrows(() => db.query(`select public.apify_reserve_budget('budget-test', null, 0.7, 1.0)`), 'budget_exhausted',
+  'an unsettled reservation keeps counting against the cap (delayed billing safe)');
 
 // Identity verification record + reuse invalidation on fingerprint change.
 await db.query(`select public.apify_record_identity_verification($1,$2,'{}'::jsonb,'{}'::jsonb,'det rationale long enough here','deterministic',$3,null,null,$4,720)`, [MID, 'c'.repeat(64), 'v2', 'd'.repeat(64)]);
