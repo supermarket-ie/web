@@ -50,11 +50,15 @@ create table public.scrape_failures (
   primary key (run_id, store_product_id, failure_reason)
 );
 -- Production-semantics price view: the real latest_prices only surfaces
--- observations within a 7-day window. Seeds below are 5 days old: due for
--- renewal (>4 days) AND still visible in the view (<7 days).
+-- observations within a 7-day window AND exposes exactly ONE (the LATEST) offer
+-- per mapping — matching production. Seeds below are 5 days old: due for
+-- renewal (>4 days) AND still visible in the window (<7 days).
 create view public.latest_prices as
-  select store_product_id, 'tesco'::text store, price, observed_at from public.price_observations
-  where observed_at > now() - interval '7 days';
+  select distinct on (store_product_id)
+    store_product_id, 'tesco'::text store, price, observed_at
+  from public.price_observations
+  where observed_at > now() - interval '7 days'
+  order by store_product_id, observed_at desc;
 create table public.tesco_egress_pool (
   egress_key text primary key, label text, enabled boolean default true, priority int default 100,
   cooldown_until timestamptz, leased_until timestamptz, last_success_at timestamptz, last_block_at timestamptz,
@@ -166,9 +170,19 @@ assert(await priceCount(MID) === 0, 'record writes NO price (evidence only)');
 await expectThrows(() => finalise(A, MID, 0), 'positive_regular_price_required', 'finalise refuses non-positive price');
 assert((await finalise(A, MID, 1.35)).rows[0].r.finalised === true, 'finalise writes the price for the token holder');
 assert(Number((await db.query(`select price from public.price_observations where store_product_id=$1 order by observed_at desc limit 1`, [MID])).rows[0].price) === 1.35, 'latest price is the finalised regular price');
-// Receipt idempotency.
-const b4 = await priceCount(MID);
-assert((await finalise(A, MID, 1.35)).rows[0].r.finalised === false && await priceCount(MID) === b4, 'receipt idempotency blocks a second finalise');
+
+// DUPLICATE FINALISE behaviour with a production latest-only price view.
+// After the first write the mapping's LATEST observation is now(), so it is no
+// longer due; the second finalise is BLOCKED (observation_changed fires before
+// the finaliser, OR receipt idempotency returns finalised=false). Either way,
+// the intended invariant is: NO second observation is written.
+const obsBefore = (await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1`, [MID])).rows[0].n;
+let dupBlocked = false; let dupFinalised = null;
+try { dupFinalised = (await finalise(A, MID, 1.35)).rows[0].r.finalised; }
+catch (e) { dupBlocked = String(e.message || e).includes('observation_changed'); }
+const obsAfter = (await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1`, [MID])).rows[0].n;
+assert((dupBlocked || dupFinalised === false), 'duplicate finalise is BLOCKED (observation_changed or receipt idempotency)');
+assert(obsAfter === obsBefore, 'duplicate finalise writes NO second observation');
 await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'complete')`, [A.runId, GATE, A.token, A.owner]);
 assert((await db.query(`select leased_until, lease_token from public.tesco_egress_pool where egress_key=$1`, [GATE])).rows[0].leased_until === null, 'lease + token released on close');
 

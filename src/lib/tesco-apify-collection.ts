@@ -379,20 +379,33 @@ export async function collectTescoApify(
       // Pass the RESERVED amount as the provider-side ceiling for this request.
       const { response, provider } = await deps.fetchApify(ident.storeUrl, deps.perRequestUsd);
       result.requested += 1;
-      // Settle ONLY when the ACTUAL provider charge is known (provider identity
-      // present with runUsageUsd). On a caught provider error the transport
-      // returns network_error with NO provider identity and NO cost — we do NOT
-      // settle an estimate; the reservation stays 'reserved' and keeps counting
-      // until the real charge is reconciled (delayed/uncertain billing).
+      // Settle ONLY when a CONFIRMED TERMINAL charge is known: provider identity
+      // present, a non-null runUsageUsd, AND runUsageIsTerminal. Provider
+      // identity ALONE does not establish billing — a missing cost is UNKNOWN
+      // (null) and a completion-time total is PRELIMINARY. In every other case
+      // (provider error → no identity; unknown cost; preliminary total) the
+      // reservation is RETAINED at its reserved amount until the between-batch
+      // terminal reconciliation (reconcileRun) confirms the charge. We never
+      // settle a 0/estimate as an actual.
       spentUsd = remainingUsd; // local view; the cap is enforced durably in the ledger
-      if (reservationId && provider) {
+      const terminalCharge = provider && provider.runUsageIsTerminal && provider.runUsageUsd != null
+        ? provider.runUsageUsd : null;
+      if (reservationId && terminalCharge != null) {
         await rpc(sb, 'apify_settle_budget', {
           p_reservation_id: reservationId,
-          p_actual_usd: provider.runUsageUsd,
-          p_provider_run_id: provider.runId,
+          p_actual_usd: terminalCharge,
+          p_provider_run_id: provider!.runId,
         }).catch(() => undefined);
       } else if (reservationId) {
-        deps.log?.({ event: 'budget_reservation_retained', sku: ident.storeSku, reason: 'actual charge unknown (provider error); reservation kept' });
+        // Record the provider run id so the terminal reconciliation can later
+        // settle THIS reservation to the confirmed charge; keep it 'reserved'.
+        if (provider?.runId) {
+          await rpc(sb, 'apify_link_reservation_run', {
+            p_reservation_id: reservationId, p_provider_run_id: provider.runId,
+          }).catch(() => undefined);
+        }
+        deps.log?.({ event: 'budget_reservation_retained', sku: ident.storeSku,
+          reason: provider ? 'charge not yet terminal/known; reservation kept for reconciliation' : 'provider error; reservation kept' });
       }
 
       let parsed: TescoCollectedPage | null = null;

@@ -52,6 +52,7 @@ function fakeRun(items: ApifyItem[], overrides: Partial<ApifyRunResult> = {}): A
     productScrapedEvents: items.length,
     actorStartEvents: 1,
     usageTotalUsd: 0.0018 * items.length,
+    usageIsTerminal: false,
     ...overrides,
   };
 }
@@ -239,6 +240,24 @@ describe('createApifyRunClient — outgoing provider monetary limit (maxTotalCha
     await client.runProductUrls([URL_322], 0.002);
     expect(posted).toHaveLength(1);
     expect(posted[0]).toContain('maxTotalChargeUsd=0.002');
+  });
+
+  it('a MISSING usageTotalUsd becomes null (explicitly unknown), never 0, and is not terminal', async () => {
+    const runId = 'RUN'; const dsId = 'DS';
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      // Note: the run objects deliberately omit usageTotalUsd.
+      if (init?.method === 'POST' && u.includes('/runs')) {
+        return { ok: true, json: async () => ({ data: { id: runId, defaultDatasetId: dsId, actId: 'A', status: 'SUCCEEDED', startedAt: '2026-11-09T00:00:00Z', finishedAt: '2026-11-09T00:00:01Z', chargedEventCounts: {} } }) } as Response;
+      }
+      if (u.includes(`/actor-runs/${runId}`)) return { ok: true, json: async () => ({ data: { id: runId, status: 'SUCCEEDED', defaultDatasetId: dsId, actId: 'A', startedAt: '2026-11-09T00:00:00Z', finishedAt: '2026-11-09T00:00:01Z', chargedEventCounts: {} } }) } as Response;
+      if (u.includes(`/datasets/${dsId}/items`)) return { ok: true, json: async () => ([]) } as Response;
+      return { ok: true, json: async () => ({}) } as Response;
+    }) as unknown as typeof fetch;
+    const client = createApifyRunClient({ token: 'apify_api_x', maxItems: 1, fetchImpl, pollMs: 0 });
+    const run = await client.runProductUrls([URL_322]);
+    expect(run.usageTotalUsd).toBeNull();
+    expect(run.usageIsTerminal).toBe(false);
   });
 
   it('clamps the outgoing limit to the SMALLER of per-call and client default', async () => {

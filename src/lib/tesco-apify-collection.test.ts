@@ -93,6 +93,7 @@ function makeFakeSb(opts: {
         const r = opts.finaliseResult ? opts.finaliseResult(args) : { finalised: true };
         return { data: r, error: null };
       }
+      if (fn === 'apify_link_reservation_run') return { data: null, error: null };
       if (fn === 'apify_record_identity_verification') return { data: 'ver-1', error: null };
       if (fn === 'apify_close_tesco_run') return { data: { leaseReleased: true }, error: null };
       return { data: null, error: null };
@@ -123,7 +124,7 @@ function okFetch(it: ApifyItem, preconditionMet = true): (url: string, maxCharge
       provider: {
         provider: 'apify' as const, actorId: 'A', actorBuildId: 'B', actorBuildNumber: '1', runId: 'r', datasetId: 'd',
         requestedUrl: url, sku: String(it.product_id), bodySha256: 'a'.repeat(64), scrapedAt: it.scraped_at as string,
-        rawItem: it, rawItemSha256: 'b'.repeat(64), runUsageUsd: 0.0005,
+        rawItem: it, rawItemSha256: 'b'.repeat(64), runUsageUsd: 0.0005, runUsageIsTerminal: true,
         freshness: { scrapedAt: it.scraped_at as string, requestSubmittedAt: new Date(Date.now() - 1000).toISOString(),
           afterSubmit: preconditionMet, productScrapedEvents: 1,
           level: (preconditionMet ? 'after_submit_asserted' : 'not_after_submit') as never,
@@ -380,6 +381,47 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
     expect(res.accepted).toBe(0);
     // The reservation was NOT settled (no actual cost known): no settle call for it.
     expect(calls.some(c => c.fn === 'apify_settle_budget')).toBe(false);
+  });
+
+  it('successful retrieval with MISSING usageTotalUsd: reservation RETAINED, not settled as zero', async () => {
+    const fx = fixtures();
+    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    // Provider returns a product but NO cost (runUsageUsd null, not terminal).
+    const noCost = async (url: string, max?: number) => {
+      const r = await okFetch(item())(url, max);
+      return { response: r.response, provider: { ...r.provider!, runUsageUsd: null, runUsageIsTerminal: false } };
+    };
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, noCost, { perRequestUsd: 0.002 }));
+    expect(res.accepted).toBe(1); // the price write still happens (identity ok)
+    // No settle occurred; the reservation stays committed at the reserved amount.
+    expect(calls.some(c => c.fn === 'apify_settle_budget')).toBe(false);
+    expect(budgetState.committed).toBeCloseTo(0.002, 6);
+  });
+
+  it('PRELIMINARY total (present but not terminal): reservation RETAINED until a confirmed terminal charge', async () => {
+    const fx = fixtures();
+    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    // A completion-time total of 0 that is NOT terminal must not be booked.
+    const prelim = async (url: string, max?: number) => {
+      const r = await okFetch(item())(url, max);
+      return { response: r.response, provider: { ...r.provider!, runUsageUsd: 0, runUsageIsTerminal: false } };
+    };
+    await collectTescoApify('renewal', 10, baseDeps(sb, prelim, { perRequestUsd: 0.002 }));
+    expect(calls.some(c => c.fn === 'apify_settle_budget')).toBe(false);
+    // The reserved amount is retained; the preliminary 0 was NOT settled.
+    expect(budgetState.committed).toBeCloseTo(0.002, 6);
+    // It was linked to the provider run for later terminal reconciliation.
+    expect(calls.some(c => c.fn === 'apify_link_reservation_run')).toBe(true);
+  });
+
+  it('RESTART with an outstanding (unsettled) reservation: it still counts against the cap', async () => {
+    const fx = fixtures();
+    // Model a prior process that reserved 0.002 but never settled it (crash
+    // before terminal reconciliation): initialCommittedUsd carries it over.
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, initialCommittedUsd: 9.999 });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { budgetUsd: 10, perRequestUsd: 0.002 }));
+    expect(res.requested).toBe(0);
+    expect(res.stopped).toBe('budget_exhausted');
   });
 
   it('releases the reservation (settle 0) when the per-request reservation RPC refuses — no fetch', async () => {

@@ -54,9 +54,12 @@ export type ApifyProviderIdentity = {
   // distinct from the synthetic adapter HTML (bodySha256).
   rawItem: ApifyItem;
   rawItemSha256: string;
-  // ACTUAL provider charge (usageTotalUsd) for the run that produced this item,
-  // used to settle the durable budget reservation to the real cost.
-  runUsageUsd: number;
+  // ACTUAL provider charge for the run, or NULL when UNKNOWN (provider reported
+  // no usage total). Never 0-for-missing. Used to settle the budget reservation
+  // ONLY when a confirmed terminal charge is known.
+  runUsageUsd: number | null;
+  // Whether runUsageUsd is a CONFIRMED terminal figure (vs preliminary/unknown).
+  runUsageIsTerminal: boolean;
   // Freshness evidence (see verifyApifyFreshness).
   freshness: ApifyFreshness;
 };
@@ -135,7 +138,13 @@ export type ApifyRunResult = {
   // Billed product-scraped events for this run (proves an upstream fetch).
   productScrapedEvents: number;
   actorStartEvents: number;
-  usageTotalUsd: number;
+  // ACTUAL provider charge for the run. NULL when the provider did not report a
+  // usage total — a MISSING cost is explicitly UNKNOWN, never coerced to 0.
+  usageTotalUsd: number | null;
+  // Whether usageTotalUsd is a CONFIRMED terminal-run figure. A completion-time
+  // total can be PRELIMINARY (provider still aggregating), so it must not be
+  // treated as the final settled charge even if present.
+  usageIsTerminal: boolean;
 };
 
 export interface ApifyRunClient {
@@ -237,7 +246,12 @@ export function createApifyRunClient(options: {
         items,
         productScrapedEvents: Number(charged['product-scraped'] ?? 0),
         actorStartEvents: Number(charged['apify-actor-start'] ?? 0),
-        usageTotalUsd: Number(run.usageTotalUsd ?? 0),
+        // MISSING cost stays explicitly UNKNOWN (null), never 0. And even a
+        // present completion-time total is treated as PRELIMINARY — the
+        // confirmed terminal charge comes from reconcileCampaignSpendUsd between
+        // batches, not from this per-fetch completion read.
+        usageTotalUsd: run.usageTotalUsd == null ? null : Number(run.usageTotalUsd),
+        usageIsTerminal: false,
       };
     },
   };
@@ -478,6 +492,7 @@ export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string, maxCha
       rawItem: item,
       rawItemSha256,
       runUsageUsd: run.usageTotalUsd,
+      runUsageIsTerminal: run.usageIsTerminal,
       freshness,
     });
 
