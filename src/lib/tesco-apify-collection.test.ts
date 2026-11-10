@@ -318,32 +318,88 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
       brand: 'Nutella', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 3.6 } },
   ]);
 
-  it('ACCEPTS via fresh peer corroboration when AI is uncertain, with NO canonical EAN and NO peer GTIN (brand+title+pack)', async () => {
+  it('ACCEPTS a peer-corroborated identity ONLY via AI verified_exact; peers are passed INTO the AI, which is actually invoked', async () => {
     const fx = brandedFixture();
     const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
       recent: fx.recent, peers: freshNutellaPeers() });
-    // AI is UNCERTAIN — only the peer-corroborated independentExactIdentity route
-    // can accept. Proves peers (not the AI) lift the hold.
+    // Spy proves the AI is invoked AND the fresh peers are in its prompt.
+    let seenPrompt: string | null = null;
+    const spyRunner = async (a: { system: string; prompt: string }) => { seenPrompt = a.prompt; return aiRunner('verified_exact')(); };
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(brandedItem()), {
-      assessOptions: { runModel: aiRunner('uncertain') as never },
+      assessOptions: { runModel: spyRunner as never },
     }));
+    expect(seenPrompt).not.toBeNull();
+    // Peers appear in the AI evidence (identity corroboration only).
+    expect(seenPrompt).toContain('dunnes');
+    expect(seenPrompt).toContain('supervalu');
     expect(res.accepted).toBe(1);
-    expect(res.perProduct[0].freshness).toBe('deterministic_plus_independent_peer');
+    // Method records the AI route with peer corroboration; the ACCEPT authority
+    // is the AI verdict, never the peers alone.
+    expect(res.perProduct[0].freshness).toBe('deterministic_plus_ai_peer');
     expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(true);
-    // The verification record maps the peer route to the DB-allowed 'deterministic'
-    // method (established WITHOUT the AI); the DB CHECK only permits
-    // 'deterministic' | 'deterministic_plus_ai'.
+    // The verification record carries the DB-allowed AI method AND a model.
     const ver = calls.find(c => c.fn === 'apify_record_identity_verification');
     expect(ver).toBeTruthy();
-    expect(ver!.args.p_method).toBe('deterministic');
+    expect(ver!.args.p_method).toBe('deterministic_plus_ai');
+    expect(typeof ver!.args.p_model).toBe('string');
+    expect(String(ver!.args.p_model).length).toBeGreaterThan(2);
+  });
+
+  it('HOLDS when the AI is UNCERTAIN even though fresh peers corroborate identity (peers never bypass the AI)', async () => {
+    const fx = brandedFixture();
+    let invoked = false;
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: freshNutellaPeers() });
+    const spyRunner = async () => { invoked = true; return aiRunner('uncertain')(); };
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(brandedItem()), {
+      assessOptions: { runModel: spyRunner as never },
+    }));
+    expect(invoked).toBe(true);           // AI was actually invoked
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('HOLDS when the AI REJECTS even though a MATCHING BARCODE and fresh peers exist (barcode does not bypass the AI)', async () => {
+    // Canonical EAN matches the live GTIN AND fresh peers corroborate — yet an
+    // AI rejection must still hold. Proves no barcode/peer bypass remains.
+    const fx = brandedFixture({ gtin: null,
+      products: { canonical_name: 'Nutella Hazelnut Chocolate Spread 350g', brand: 'Nutella', ean: '7622300441074' } });
+    let invoked = false;
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: freshNutellaPeers() });
+    const spyRunner = async () => { invoked = true; return aiRunner('rejected', { flavour_formulation_matches: false })(); };
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(brandedItem({ gtin: '7622300441074' })), {
+      assessOptions: { runModel: spyRunner as never },
+    }));
+    expect(invoked).toBe(true);
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('HOLDS (never accepts) when the AI THROWS even with matching barcode and fresh peers', async () => {
+    const fx = brandedFixture({ gtin: null,
+      products: { canonical_name: 'Nutella Hazelnut Chocolate Spread 350g', brand: 'Nutella', ean: '7622300441074' } });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: freshNutellaPeers() });
+    const throwing = async () => { throw new Error('No object generated: response did not match schema.'); };
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(brandedItem({ gtin: '7622300441074' })), {
+      assessOptions: { runModel: throwing as never },
+    }));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(res.stopped).not.toBe('fatal');
+    expect(res.perProduct[0].reasons).toContain('ai_error');
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
   });
 
   it('does NOT abort or un-accept when apify_record_identity_verification errors (price already finalised)', async () => {
     const fx = brandedFixture();
     const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
-      recent: fx.recent, peers: freshNutellaPeers(), verificationError: 'bad_method' });
+      recent: fx.recent, peers: freshNutellaPeers(), verificationError: 'db down' });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(brandedItem()), {
-      assessOptions: { runModel: aiRunner('uncertain') as never },
+      assessOptions: { runModel: aiRunner('verified_exact') as never },
     }));
     // The finalise succeeded and the accept stands; the verification-record
     // failure is logged, not fatal.
