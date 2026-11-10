@@ -1,6 +1,66 @@
 # Supermarket.ie — Canonical Project State
 
-## 9 November 2026 — Tesco mapping-recovery DIAGNOSIS: the coverage ceiling is a data-completeness problem, not a gate-tuning or collection-capacity problem
+## 9 November 2026 — Tesco RECOVERY via fresh peer evidence: the earlier "no recovery possible" conclusion was WRONG (PRs #382, #383; main 90f6ba2)
+
+CORRECTION to the diagnosis entry below. That entry concluded recovery was
+blocked by absent independent barcodes. That was WRONG. The real blocker was a
+CODE INTEGRATION GAP: the Apify acceptance path hardcoded `peers: []` in
+`assessmentEvidence`, starving `independentExactIdentity` of the fresh
+Dunnes/SuperValu peer evidence it is explicitly designed to use. The strict
+positive gate does NOT require a barcode — `sufficientIndependentSupport`
+accepts brand + title + quantity + pack corroboration from one or two fresh
+peers. With peers empty it always returns false, so mappings held on
+`ai_uncertain` alone even when the real rules would pass.
+
+REPRODUCED (read-only, actual identity functions + original collection reasons,
+real fresh peers supplied): ~219 held records pass `independentExactIdentity`
+WITH peers that fail WITHOUT peers; the lift set is ~136 renewal + 17 expansion
+(matches ChatGPT's independent replay of 123 renewal + 8 expansion, plus 17–21
+reviewedCanonicalEvidenceGap). The dominant original reason among them is
+`ai_uncertain` (deterministic gate had ALREADY passed at collection time).
+
+FIX (merged, deployed): `attachFreshPeers` loads fresh (priced, <=7d, one per
+store, <=2) Dunnes/SuperValu peers by canonical product_id at selection and
+threads them through `assessmentEvidence`. New acceptance route
+`deterministic_plus_independent_peer`: when the deterministic gate passes AND
+`independentExactIdentity(peersSupplied, live)` passes, accept — brand/title/
+quantity/pack corroboration, no barcode required, AI agreement NOT required
+(the AI was the sole blocker). `independentExactIdentity` STILL enforces every
+safeguard; tests prove genuine BRAND, VARIANT, PACK/MEASURE and conflicting-peer
+cases remain HELD. A second fix (#383) maps the new route to the DB-allowed
+verification method `deterministic` (the DB CHECK permits only deterministic|
+deterministic_plus_ai) and makes the verification record best-effort so it can
+never abort a run after the price is finalised. 1165 unit tests + 26 migration
+assertions pass.
+
+ACTUAL PRODUCTION RECOVERY (receipt-reconciled, image 90f6ba2-prod, task-def
+rev6, Bedrock role, peers wired):
+- Renewal run: 8 batches, 67 requested, **26 accepted (ALL via
+  deterministic_plus_independent_peer), 41 held**, exit 0, 0 verification
+  failures. ~20 distinct success receipts.
+- Expansion run: 20 batches, 165 requested, **1 accepted, 164 held** (expansion
+  targets never-observed mappings, which rarely have fresh priced peers).
+- Total NEW trusted products this recovery: ~27 via the peer route that the old
+  AI-only path would have held. Cumulative campaign spend $1.32 of $10.
+
+COVERAGE (receipt-reconciled, start → end of this recovery): mappings with a
+trusted price 436 → 410 (net down because observations age out of the 7d window
+faster than new ones land; the recovery itself ADDED ~27). fresh-not-due-within-
+4d 132 → 158 (+26 — the clearest signal of fresh writes). renewal-due 304 → 252.
+2,379 resolved / 2,043 distinct SKUs; 1,204 one-to-one eligible; 794 expansion-
+eligible. The queue is NOT exhausted — budget-reservation headroom throttles
+each task to ~8 batches (some batches select 0 until between-batch
+reconciliation frees the reservation); more renewal-due remain for further runs.
+
+FOLLOW-UPS (not blockers): (1) a migration to add
+`deterministic_plus_independent_peer` to the tesco_identity_verifications method
+CHECK so the precise label is stored (currently recorded as `deterministic`);
+(2) the per-batch reservation-headroom throttling that caps a task at ~8 batches
+is worth tuning so one task drains more of the queue. Catalogue-wide EAN
+backfill and retailer-feed GTIN capture remain valuable but are NOT prerequisites
+for peer-corroborated recovery. SuperValu/Dunnes schedules UNCHANGED.
+
+## 9 November 2026 — Tesco mapping-recovery DIAGNOSIS [SUPERSEDED — see correction above]: barcode-absence does NOT prevent recovery; peer corroboration does
 
 Took ownership of mapping recovery. Before writing any recovery code or touching
 a mapping, ran a READ-ONLY diagnosis of every held payload this session produced,
@@ -48,14 +108,14 @@ populate GTINs (4,106 peer rows checked, zero valid barcodes). So refreshing
 Dunnes/SuperValu supplies fresh PRICES but no BARCODES; it cannot corroborate
 Tesco identity. Only 99/1,072 eligible canonicals even have a canonical EAN.
 
-CONCLUSION (honest, measured): the coverage ceiling is NOT a collection-capacity
-or gate-tuning problem. ~91% of the eligible universe (973/1,072) has no
-independent barcode evidence (no canonical EAN, no valid peer GTIN), so the
-identity safeguards (barcode/brand/variant/quantity/multipack) cannot be
-satisfied without weakening them — which is forbidden. Re-running Apify
-collection or refreshing Dunnes/SuperValu would deterministically hold the same
-mappings again and spend budget for no coverage gain. NO Apify budget was spent
-on this diagnosis (all read-only REST/DB queries).
+CONCLUSION [WRONG — CORRECTED BY THE ENTRY ABOVE]: this claimed barcode-absence
+blocked recovery because the identity safeguards need an independent barcode.
+That is FALSE: independentExactIdentity accepts brand/title/quantity/pack
+corroboration from fresh Dunnes/SuperValu peers with NO barcode. The error was
+measuring the Apify path, which hardcoded peers:[] and so never exercised the
+peer-corroboration rules. With peers supplied, ~153 of these held mappings
+recover (see the correction entry). The barcode measurements below are accurate
+as data-completeness facts but do NOT imply "no recovery possible".
 
 THE REAL BACKLOG (data work, not collection):
 1. CANONICAL EAN BACKFILL — populate products.ean. Only 99/1,072 eligible
