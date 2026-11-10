@@ -1,5 +1,47 @@
 # Supermarket.ie — Canonical Project State
 
+## 10 November 2026 (PM) — Tesco expansion production run under the AI-required policy; remediation accounting completed (28th write)
+
+Continued production expansion under the restored AI-required policy (image
+5621de5-prod, task-def rev7). No code change; operational run + accounting.
+
+REMEDIATION ACCOUNTING COMPLETED (the 28 vs 27 discrepancy resolved): the 28th
+affected product is Ballymaloe Red Onion Relish 185g (Tesco SKU 315397543,
+mapping d6e52f32-5076-4cff-b756-ab6bb6c94ce3). It was the FIRST bypass-route
+finalise; its price (€3.40) was written, then apify_record_identity_verification
+threw bad_method and aborted the run BEFORE its verification row was created — so
+it has NO verification record (nothing to invalidate; it cannot grant reuse).
+Independent re-assessment (real Bedrock assessAndCombine + 2 fresh peers:
+SuperValu + Dunnes "Ballymaloe Red Onion Relish 185g") → verified_exact. So:
+28 affected = 27 (verification records re-assessed verified_exact, then
+invalidated) + 1 (Ballymaloe, no record, price written, now re-assessed
+verified_exact). All 28 confirmed; prices retained; no active reuse records.
+
+EXPANSION PRODUCTION (three runs, AI-required policy, continuous, no batch
+approvals): requested 136 / 63 / 10; **accepted 1 / 1 / 0 — every accept via
+deterministic_plus_ai_peer (AI verified_exact + fresh-peer corroboration)**;
+held 134 / 62 / 10. Expansion accept rate is intrinsically low: never-observed
+mappings rarely have both the fresh priced peer AND an AI-confirmable identity.
+Receipt-backed today: **3 expansion writes (net-new trusted products), 0
+renewal writes** (renewal was 24h-excluded all day; earliest retry ~17:20 GMT).
+Cumulative campaign spend $1.96 of $10 (1,060 actor runs).
+
+QUEUE STATE — VERIFIED, NOT ASSUMED (per the standing instruction): the
+expansion selector still returns ~22 "eligible", but the reserve-skip reasons
+were INSPECTED in the logs: 440 apify_reserve_tesco_request:
+attempt_already_recorded + 7 pacing_not_elapsed in the last run. i.e. every
+remaining selected mapping was ALREADY ATTEMPTED this cycle and is held; they
+re-select (observed_at still null) but reserve rejects them as already-recorded.
+The genuine expansion work for this 24h cycle is done (231→136→63→10 requested
+across runs). This is NOT budget headroom. Renewal: 0 eligible, 252 excluded by
+the 24h recent-attempt window (retry after ~17:20 GMT) — recheck then.
+
+COVERAGE (receipt-reconciled): 2,379 resolved Tesco mappings; **413 carry a
+trusted price** (all fresh within 7d), up from 411 at the start of this session
+(+3 expansion writes, minus aging). RENEWALS preserve coverage; EXPANSION
+increases it — today's net coverage gain is the 3 expansion writes. SuperValu/
+Dunnes schedules UNCHANGED.
+
 ## 10 November 2026 — Tesco peer evidence: restored the REQUIRED AI verdict (PR #385, main 5621de5); peers feed the AI, never bypass it
 
 CORRECTION to PR #382 below. That PR added an `independentExactIdentity`
