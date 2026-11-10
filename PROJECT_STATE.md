@@ -1,6 +1,71 @@
 # Supermarket.ie — Canonical Project State
 
-## 9 November 2026 — Tesco RECOVERY via fresh peer evidence: the earlier "no recovery possible" conclusion was WRONG (PRs #382, #383; main 90f6ba2)
+## 10 November 2026 — Tesco peer evidence: restored the REQUIRED AI verdict (PR #385, main 5621de5); peers feed the AI, never bypass it
+
+CORRECTION to PR #382 below. That PR added an `independentExactIdentity`
+acceptance branch that accepted new/changed/uncertain identities WITHOUT
+`assessAndCombine`, dropping the agreed policy that every new/changed/uncertain
+identity needs an evidence-bound AI `verified_exact` verdict. ChatGPT's replay
+identified RECOVERY CANDIDATES; it explicitly kept the AI requirement. The
+bypass was a policy regression, now reverted.
+
+RESTORED POLICY (src/lib/tesco-apify-collection.ts): acceptance requires either
+(a) REUSE — an unchanged mapping with a still-valid prior verification
+(verificationReusable), or (b) the deterministic gate passes AND
+`assessAndCombine` returns `verified_exact` bound to the live identity
+fingerprint. The fresh Dunnes/SuperValu peers are passed INTO `assessAndCombine`
+(via assessmentEvidence) to IMPROVE the AI's evidence; they are no longer a
+separate accept path and can never bypass or override the AI. Method label
+`deterministic_plus_ai_peer` records that peers corroborated an AI-confirmed
+identity (recorded in the DB as the allowed `deterministic_plus_ai`, WITH the
+model). Tests: the AI is actually invoked; AI reject / uncertain / throw HOLDS
+even when a MATCHING BARCODE and fresh peers are present; brand/variant/pack
+conflicts remain held. 30 collection + 26 fetch + 26 migration assertions pass.
+
+REMEDIATION OF THE BYPASS WRITES (no blanket rollback; evidence preserved):
+- The 28 prices written by the bypass route (27 renewal + 1 expansion) were
+  INDEPENDENTLY re-assessed by running the REAL assessAndCombine (Bedrock,
+  eu.anthropic.claude-sonnet-4-6) against each one's retained evidence + fresh
+  peers: ALL 27 store_products returned `verified_exact` (0 held, 0 errored).
+  So the prices are correct and were RETAINED (no rollback).
+- The 27 active reusable verification records the bypass created (method
+  `deterministic`, NO model) would have granted automatic cheap reuse and
+  permanently skipped the AI. All 27 were INVALIDATED (invalidated_at set;
+  rows + evidence preserved, NOT deleted), so each mapping goes back through the
+  full deterministic + AI path on its next renewal (which the re-assessment
+  shows it will pass).
+
+PRODUCTION CONTINUATION (image 5621de5-prod, task-def rev7, AI-required policy):
+- Renewal run: selected 0 — `stopped: no_eligible_products`. LOGGED EVIDENCE,
+  NOT budget headroom (correcting the prior entry's unsupported claim): a
+  live eligibility recount shows 252 renewal-due and 383 expansion-eligible
+  mappings EXCLUDED by the 24h recent-attempt guard (704 attempt URLs in the
+  last 24h from today's runs). The queue is NOT exhausted; it is on the 24h
+  cooldown. The earlier "~8 batches then stops / budget-reservation headroom"
+  explanation was WRONG — the real cause is the 24h pending/recent exclusion.
+- Expansion run: 20 batches, 152 requested, **1 accepted via
+  deterministic_plus_ai_peer (AI verified_exact + peer corroboration), 151
+  held**, exit 0. Cumulative campaign spend $1.60 of $10.
+
+ACCOUNTING (receipt-reconciled, split by effect on coverage):
+- RENEWALS preserve coverage (refresh an existing/expiring price): 20
+  receipt-backed renewal writes across the earlier corrected runs.
+- EXPANSION increases coverage (first price for a never-observed mapping): 1
+  receipt-backed expansion write earlier + 1 in this run.
+- Current receipt-reconciled coverage: 2,379 resolved Tesco mappings; 411
+  carry a trusted price (all fresh within 7d); 4,234 success receipts (proven).
+  Fresh coverage is roughly flat because renewals dominate (preservation) and
+  observations age out of the window at a similar rate to new expansion writes.
+
+FOLLOW-UPS (not blockers): a migration adding `deterministic_plus_ai_peer` to
+the tesco_identity_verifications method CHECK would let the precise label be
+stored (currently mapped to `deterministic_plus_ai`). Further renewal/expansion
+recovery resumes once today's 24h recent-attempt window elapses (then 252
+renewal + 383 expansion become eligible again). Catalogue EAN backfill and
+retailer-feed GTIN capture remain useful, not prerequisites. SuperValu/Dunnes
+schedules UNCHANGED.
+
+## 9 November 2026 — Tesco RECOVERY via fresh peer evidence: the earlier "no recovery possible" conclusion was WRONG (PRs #382, #383; main 90f6ba2) [peer route later REPLACED — see 10 Nov entry above: the independentExactIdentity bypass was removed; peers now feed the required AI verdict]
 
 CORRECTION to the diagnosis entry below. That entry concluded recovery was
 blocked by absent independent barcodes. That was WRONG. The real blocker was a
