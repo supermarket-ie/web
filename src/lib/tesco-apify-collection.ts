@@ -29,7 +29,7 @@ import {
   IDENTITY_ASSESSMENT_RULE_VERSION,
   type AssessOptions,
 } from './tesco-identity-assessment';
-import { independentExactIdentity, type ReentryEvidence } from './tesco-hold-reentry';
+import type { ReentryEvidence } from './tesco-hold-reentry';
 import type { ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
@@ -386,7 +386,7 @@ export async function collectTescoApify(
   // scraped_at proves nothing). Freshness is the per-item best-available
   // precondition only, carried with its documented limitation.
   const staged: Array<{ ident: SnapshotIdentity; product: TescoCollectedProduct; previousPrice: number | null; adapterBody: string;
-    method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_independent_peer'; rationale: string; model: string | null;
+    method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer'; rationale: string; model: string | null;
     fingerprint: string; snapshot: Record<string, unknown> | null }> = [];
 
   try {
@@ -490,7 +490,7 @@ export async function collectTescoApify(
       const perItemFreshOk = provider?.freshness.preconditionMet === true;
 
       let decision: 'accept_pending_finalise' | 'hold' = 'hold';
-      let method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_independent_peer' = 'deterministic';
+      let method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' = 'deterministic';
       let rationale = '';
       let model: string | null = null;
       let liveFingerprint = '';
@@ -514,33 +514,26 @@ export async function collectTescoApify(
           decision = 'accept_pending_finalise';
           method = 'deterministic';
           rationale = 'Unchanged mapping: reused active identity verification; deterministic renewal check passed against fresh evidence.';
-        } else if (independentExactIdentity(ev, product)) {
-          // PEER-CORROBORATED route: the deterministic gate passed AND the
-          // strict positive gate independentExactIdentity passes with the fresh
-          // Dunnes/SuperValu peers supplied. independentExactIdentity itself
-          // enforces barcode/brand/variant/quantity/multipack (sameBarcode,
-          // canonicalVariantConflict, independentPackConflict, peerIdentity-
-          // Conflict), so a genuine conflict can NEVER reach here. This is the
-          // same positive gate the reviewed hold-reentry path trusts; it does
-          // not require the AI to also confirm (the AI was the sole blocker on
-          // these — ai_uncertain — while real peers were never supplied before).
-          decision = 'accept_pending_finalise';
-          method = 'deterministic_plus_independent_peer';
-          rationale = `Deterministic identity gate passed and independentExactIdentity confirmed exact identity using ${m.peers.length} fresh cross-retailer peer(s) (brand/title/quantity/pack corroboration; no barcode required). Peers corroborate identity only, never a price claim.`;
         } else {
           // New, changed or uncertain → run the independent AI inference and
-          // require BOTH it and the deterministic gate to agree (and its own
-          // facts to be internally consistent, and bound to this identity).
-          // A model/transport failure (schema miss, timeout, Bedrock error)
-          // for ONE item must HOLD that item, never abort the campaign and
-          // never become an accept. Catch it, log it, and fall through to hold.
+          // require BOTH the deterministic gate AND an evidence-bound AI
+          // verified_exact verdict (bound to this identity fingerprint). The
+          // fresh Dunnes/SuperValu peers are passed INTO the assessment via
+          // `ev` (assessmentEvidence carries m.peers) to IMPROVE the AI's
+          // evidence — they do NOT create a separate accept path. The AI can
+          // never be skipped and can never be overridden. A model/transport
+          // failure (schema miss, timeout, Bedrock error) for ONE item HOLDS
+          // that item, never aborts the campaign and never becomes an accept.
           try {
             const verdict = await assessAndCombine(ev, product, runId, deps.assessOptions);
             model = verdict.assessment.model;
             if (verdict.decision === 'verified_exact' && verdict.machineAssessment
               && verdict.assessment.identity_fingerprint === liveFingerprint) {
               decision = 'accept_pending_finalise';
-              method = 'deterministic_plus_ai';
+              // Record whether peers corroborated the AI-confirmed identity, for
+              // auditability — but the ACCEPT authority is the AI verdict +
+              // deterministic gate, never the peers alone.
+              method = m.peers.length > 0 ? 'deterministic_plus_ai_peer' : 'deterministic_plus_ai';
               rationale = verdict.machineAssessment.reason;
             } else {
               reasons.push(`ai_${verdict.decision}`);
@@ -614,14 +607,15 @@ export async function collectTescoApify(
       if (rec?.finalised) {
         result.accepted += 1;
         // The price is now written. Recording the reusable identity verification
-        // is a best-effort follow-up: a failure here (e.g. the DB method
-        // CHECK not yet extended for a new method label) must NOT abort the
-        // campaign or undo the accepted price. The method column accepts
-        // 'deterministic' | 'deterministic_plus_ai'; the peer-corroborated
-        // route is established WITHOUT the AI, so it records as 'deterministic'
-        // (the precise route is preserved in the rationale + run logs). When a
-        // migration extends the CHECK, this mapping can record the exact label.
-        const dbMethod = s.method === 'deterministic_plus_ai' ? 'deterministic_plus_ai' : 'deterministic';
+        // is a best-effort follow-up: a failure here must NOT abort the campaign
+        // or undo the accepted price. The DB method column CHECK accepts
+        // 'deterministic' | 'deterministic_plus_ai'. Both AI-backed routes
+        // (with or without corroborating peers) record as 'deterministic_plus_ai'
+        // (an AI verified_exact verdict authorised them); only the cheap
+        // unchanged-reuse route records as 'deterministic'. A verification
+        // written WITHOUT an AI model would be mis-trusted by the reuse policy,
+        // so an AI-backed accept must carry its model (asserted below).
+        const dbMethod = s.method === 'deterministic' ? 'deterministic' : 'deterministic_plus_ai';
         try {
           await rpc(sb, 'apify_record_identity_verification', {
             p_store_product_id: s.ident.storeProductId, p_identity_fingerprint: s.fingerprint,
