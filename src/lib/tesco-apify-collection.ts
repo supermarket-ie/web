@@ -29,7 +29,7 @@ import {
   IDENTITY_ASSESSMENT_RULE_VERSION,
   type AssessOptions,
 } from './tesco-identity-assessment';
-import type { ReentryEvidence } from './tesco-hold-reentry';
+import { reviewedCanonicalEvidenceGap, type ReentryEvidence } from './tesco-hold-reentry';
 import type { ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
@@ -144,8 +144,13 @@ export async function selectApifyMappings(
     for (const r of data ?? []) proven.add(String(r.store_product_id));
     if ((data ?? []).length < 1000) break;
   }
-  // Recently attempted / pending URLs (24h) to exclude up front (the RPC also
-  // re-checks this, but we avoid wasting Apify runs on them).
+  // Excluded URLs — must mirror apify_reserve_tesco_request EXACTLY, which
+  // rejects a URL that has EITHER a pending page (ANY age) OR any page in the
+  // last 24h. The selector previously only loaded the last 24h, so a pending
+  // page OLDER than 24h was invisible here but still rejected by the RPC — the
+  // selector kept re-offering that mapping and every batch churned on
+  // attempt_already_recorded. Load BOTH sets. Pending records are only READ
+  // here; they are preserved untouched.
   const recentUrls = new Set<string>();
   const since = new Date(Date.now() - 24 * 3600_000).toISOString();
   for (let offset = 0; ; offset += 1000) {
@@ -153,6 +158,18 @@ export async function selectApifyMappings(
       .select('requested_url,created_at,outcome').gte('created_at', since)
       .order('created_at', { ascending: false }).range(offset, offset + 999);
     if (error) throw new Error(`Loading recent attempts: ${error.message}`);
+    for (const r of data ?? []) recentUrls.add(String(r.requested_url));
+    if ((data ?? []).length < 1000) break;
+  }
+  // Pending requests of ANY age (unresolved attempts). A URL stuck pending —
+  // e.g. a run that recorded the pending page but never finalised/closed —
+  // must stay excluded until that pending record is resolved, exactly as the
+  // reserve RPC enforces. Without this, pending-older-than-24h mappings churn.
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await sb.from('tesco_direct_collection_pages')
+      .select('requested_url,outcome').eq('outcome', 'pending')
+      .order('requested_url').range(offset, offset + 999);
+    if (error) throw new Error(`Loading pending attempts: ${error.message}`);
     for (const r of data ?? []) recentUrls.add(String(r.requested_url));
     if ((data ?? []).length < 1000) break;
   }
@@ -386,7 +403,7 @@ export async function collectTescoApify(
   // scraped_at proves nothing). Freshness is the per-item best-available
   // precondition only, carried with its documented limitation.
   const staged: Array<{ ident: SnapshotIdentity; product: TescoCollectedProduct; previousPrice: number | null; adapterBody: string;
-    method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer'; rationale: string; model: string | null;
+    method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' | 'canonical_gap_plus_ai_peer'; rationale: string; model: string | null;
     fingerprint: string; snapshot: Record<string, unknown> | null }> = [];
 
   try {
@@ -490,26 +507,45 @@ export async function collectTescoApify(
       const perItemFreshOk = provider?.freshness.preconditionMet === true;
 
       let decision: 'accept_pending_finalise' | 'hold' = 'hold';
-      let method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' = 'deterministic';
+      let method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' | 'canonical_gap_plus_ai_peer' = 'deterministic';
       let rationale = '';
       let model: string | null = null;
       let liveFingerprint = '';
       const reasons = [...deterministicReasons];
 
-      if (outcome === 'ok' && product && perItemFreshOk && deterministicReasons.length === 0) {
+      // Evidence WITH the fresh Dunnes/SuperValu peers (from `m`, keyed by
+      // canonical product_id). Peers corroborate IDENTITY only, never a price.
+      const ev = product ? assessmentEvidence(ident, runId, adapterBody, product, m.peers) : null;
+
+      // HELD-MAPPING RECOVERY (canonical-evidence gap): the ordinary gate
+      // rejects a mapping when the ONLY problem is an incomplete/generic
+      // canonical description (measureExactnessFailed, "candidate does not
+      // establish full exact canonical identity", inferred pack count). Those
+      // records never reached the AI before. reviewedCanonicalEvidenceGap
+      // unblocks the deterministic reject ONLY when every remaining reason is
+      // in that narrow allowed set AND the STRONGER positive gate
+      // independentExactIdentity passes with the fresh peers supplied — so a
+      // genuine brand/variant/quantity/pack/barcode conflict can NEVER qualify.
+      // It merely admits the item to the SAME AI assessment every other
+      // new/changed identity must pass; the AI verified_exact verdict is still
+      // required (preserved below).
+      const canonicalGapEligible = !!(product && ev && perItemFreshOk
+        && deterministicReasons.length > 0
+        && reviewedCanonicalEvidenceGap(ev, product, deterministicReasons));
+      if (canonicalGapEligible) {
+        deps.log?.({ event: 'canonical_gap_recovery_candidate', sku: ident.storeSku, reasons: deterministicReasons });
+      }
+
+      if (outcome === 'ok' && product && ev && perItemFreshOk && (deterministicReasons.length === 0 || canonicalGapEligible)) {
         liveFingerprint = identityFingerprint({
           canonical: { name: ident.canonicalName, brand: ident.canonicalBrand, ean: ident.canonicalEan },
           tesco: { sku: product.sku, name: product.name, brand: product.brand, gtin: product.gtin, quantity: product.quantity },
         });
-        // Build evidence WITH the fresh Dunnes/SuperValu peers (from `m`, keyed
-        // by canonical product_id). These feed both the strict positive gate
-        // and the AI assessment. snapshotIdentity carries material identity;
-        // peers are product-level cross-retailer corroboration.
-        const ev = assessmentEvidence(ident, runId, adapterBody, product, m.peers);
         // Reuse path (defect 3): an UNCHANGED, previously-verified mapping in
-        // RENEWAL may use the cheap deterministic check alone.
-        const existing = await readActiveVerification(sb, ident.storeProductId);
-        const reuse = mode === 'renewal' && verificationReusable(existing, liveFingerprint);
+        // RENEWAL may use the cheap deterministic check alone. A canonical-gap
+        // RECOVERY item can NEVER use reuse — it always needs a fresh AI verdict.
+        const existing = canonicalGapEligible ? null : await readActiveVerification(sb, ident.storeProductId);
+        const reuse = !canonicalGapEligible && mode === 'renewal' && verificationReusable(existing, liveFingerprint);
         if (reuse) {
           decision = 'accept_pending_finalise';
           method = 'deterministic';
@@ -532,9 +568,16 @@ export async function collectTescoApify(
               decision = 'accept_pending_finalise';
               // Record whether peers corroborated the AI-confirmed identity, for
               // auditability — but the ACCEPT authority is the AI verdict +
-              // deterministic gate, never the peers alone.
-              method = m.peers.length > 0 ? 'deterministic_plus_ai_peer' : 'deterministic_plus_ai';
-              rationale = verdict.machineAssessment.reason;
+              // (deterministic gate OR the reviewed canonical-evidence gap with
+              // the stronger independentExactIdentity), never the peers alone.
+              method = canonicalGapEligible ? 'canonical_gap_plus_ai_peer'
+                : m.peers.length > 0 ? 'deterministic_plus_ai_peer' : 'deterministic_plus_ai';
+              rationale = canonicalGapEligible
+                ? `Held-mapping recovery: canonical description was incomplete (${deterministicReasons.join(', ')}); independentExactIdentity confirmed exact identity with fresh cross-retailer peer(s), and the independent AI returned verified_exact. ${verdict.machineAssessment.reason}`
+                : verdict.machineAssessment.reason;
+              // On a recovery accept, the canonical-gap reasons are resolved by
+              // the stronger gate + AI; don't surface them as hold reasons.
+              if (canonicalGapEligible) reasons.length = 0;
             } else {
               reasons.push(`ai_${verdict.decision}`);
               if (verdict.holdReason) deps.log?.({ event: 'ai_hold', sku: ident.storeSku, holdReason: verdict.holdReason });
@@ -615,6 +658,9 @@ export async function collectTescoApify(
         // unchanged-reuse route records as 'deterministic'. A verification
         // written WITHOUT an AI model would be mis-trusted by the reuse policy,
         // so an AI-backed accept must carry its model (asserted below).
+        // Every AI-backed route (deterministic/canonical-gap + AI, with or
+        // without peers) records as the DB-allowed 'deterministic_plus_ai' WITH
+        // the model; only the cheap unchanged-reuse route records 'deterministic'.
         const dbMethod = s.method === 'deterministic' ? 'deterministic' : 'deterministic_plus_ai';
         try {
           await rpc(sb, 'apify_record_identity_verification', {

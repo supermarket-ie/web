@@ -680,3 +680,102 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
     expect(budgetState.committed).toBeCloseTo(0, 6);
   });
 });
+
+describe('collectTescoApify — held-mapping recovery (canonical-evidence gap + required AI)', () => {
+  // A mapping whose canonical name OMITS the measure (generic), so the ordinary
+  // deterministic gate rejects it (measureExactnessFailed / "candidate does not
+  // establish full exact canonical identity"). The live product + 2 fresh peers
+  // establish the full identity. reviewedCanonicalEvidenceGap admits it to the
+  // AI; the AI verified_exact verdict is still REQUIRED.
+  const recoveryId = '44444444-4444-4444-4444-444444444444';
+  const genericSnap = (mid: string) => ({
+    store_product_id: mid, product_id: 'p-rec', store_sku: '305999001',
+    store_url: 'https://www.tesco.ie/shop/en-IE/products/305999001', url_status: 'resolved',
+    store_brand: 'Avonmore', store_product_name: 'Avonmore Super Milk', is_own_brand: false,
+    gtin: null, canonical_name: 'Avonmore Super Milk', canonical_brand: 'Avonmore',
+    canonical_ean: null, same_sku_canonical_names: ['Avonmore Super Milk'],
+  });
+  const recoveryFixture = () => ({
+    mappings: [{ id: recoveryId, product_id: 'p-rec', store_sku: '305999001',
+      store_url: 'https://www.tesco.ie/shop/en-IE/products/305999001',
+      store_product_name: 'Avonmore Super Milk', brand: 'Avonmore', is_own_brand: false,
+      url_status: 'resolved', gtin: null,
+      products: { canonical_name: 'Avonmore Super Milk', brand: 'Avonmore', ean: null } }],
+    latest: [] as Row[], // expansion: never observed
+    receipts: [{ store_product_id: recoveryId, outcome: 'success' }],
+    recent: [] as Row[],
+  });
+  const recoveryItem = (over: Partial<ApifyItem> = {}) => item({
+    product_id: '305999001', name: 'Avonmore Super Milk 1 Litre', brand_name: 'Avonmore',
+    gtin: null as unknown as string, pack_size: '1000', pack_size_unit: 'ML', net_contents: '1 litre',
+    url: 'https://www.tesco.ie/groceries/en-IE/products/305999001', ...over,
+  });
+  const recoveryPeers = (): Row[] => ([
+    { id: 'rp-d', product_id: 'p-rec', store: 'dunnes', store_sku: 'rd1', store_product_name: 'Avonmore Super Milk 1L',
+      brand: 'Avonmore', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 1.65 } },
+    { id: 'rp-s', product_id: 'p-rec', store: 'supervalu', store_sku: 'rs1', store_product_name: 'Avonmore Super Milk 1L',
+      brand: 'Avonmore', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 1.7 } },
+  ]);
+
+  it('RECOVERS a canonical-gap held mapping ONLY with the required AI verified_exact (method canonical_gap_plus_ai_peer)', async () => {
+    const fx = recoveryFixture();
+    let invoked = false;
+    const spy = async () => { invoked = true; return aiRunner('verified_exact')(); };
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: recoveryPeers(), snapshotOverride: genericSnap });
+    const res = await collectTescoApify('expansion', 10, baseDeps(sb, okFetch(recoveryItem()), {
+      assessOptions: { runModel: spy as never } }));
+    expect(invoked).toBe(true);                 // AI is still required and invoked
+    expect(res.accepted).toBe(1);
+    expect(res.perProduct[0].freshness).toBe('canonical_gap_plus_ai_peer');
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(true);
+    const ver = calls.find(c => c.fn === 'apify_record_identity_verification');
+    expect(ver!.args.p_method).toBe('deterministic_plus_ai');  // DB-allowed label
+    expect(typeof ver!.args.p_model).toBe('string');
+  });
+
+  it('HOLDS a canonical-gap candidate when the AI is UNCERTAIN (gap unblocks deterministic reject, not the AI)', async () => {
+    const fx = recoveryFixture();
+    let invoked = false;
+    const spy = async () => { invoked = true; return aiRunner('uncertain')(); };
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: recoveryPeers(), snapshotOverride: genericSnap });
+    const res = await collectTescoApify('expansion', 10, baseDeps(sb, okFetch(recoveryItem()), {
+      assessOptions: { runModel: spy as never } }));
+    expect(invoked).toBe(true);
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('does NOT recover (stays held pre-AI) when a GENUINE conflict exists beyond the canonical gap', async () => {
+    // Live is a different SIZE (2 litre) than the peers/identity (1L) → a real
+    // pack/measure conflict that reviewedCanonicalEvidenceGap must NOT admit.
+    const fx = recoveryFixture();
+    let invoked = false;
+    const spy = async () => { invoked = true; return aiRunner('verified_exact')(); };
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: recoveryPeers(), snapshotOverride: genericSnap });
+    const res = await collectTescoApify('expansion', 10, baseDeps(sb, okFetch(
+      recoveryItem({ name: 'Avonmore Super Milk 2 Litre', pack_size: '2000', net_contents: '2 litre' })), {
+      assessOptions: { runModel: spy as never } }));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(invoked).toBe(false);                // never reached the AI
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('does NOT recover when there are no fresh peers (independentExactIdentity cannot confirm the gap)', async () => {
+    const fx = recoveryFixture();
+    let invoked = false;
+    const spy = async () => { invoked = true; return aiRunner('verified_exact')(); };
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts,
+      recent: fx.recent, peers: [], snapshotOverride: genericSnap });
+    const res = await collectTescoApify('expansion', 10, baseDeps(sb, okFetch(recoveryItem()), {
+      assessOptions: { runModel: spy as never } }));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(invoked).toBe(false);                // gap not satisfied → never reached the AI
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+});
