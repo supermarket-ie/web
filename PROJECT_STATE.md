@@ -1,5 +1,71 @@
 # Supermarket.ie — Canonical Project State
 
+## 10 November 2026 (evening) — Held-mapping RECOVERY cohort shipped: 52 canonical-gap recoveries + 108 renewals + 27 expansion (PR #388, main 0ca2991)
+
+Two concrete fixes (PR #388), both merged and run in production (image
+0ca2991-prod, task-def rev8):
+
+1. SELECTOR/RESERVE AGREEMENT (fixes batch churn): the selector only loaded
+   attempts <24h, so a pending page OLDER than 24h was invisible to it but still
+   rejected by apify_reserve_tesco_request → every batch churned on
+   attempt_already_recorded. The selector now also excludes URLs with ANY
+   pending page regardless of age, mirroring the RPC (pending rows preserved,
+   read-only). VALIDATED: an expansion run went from the prior ~1-accept pattern
+   to 24 accepted / 34 requested with ZERO attempt_already_recorded skips (only
+   normal 10s pacing). This fix alone lifted trusted coverage 413 → 437 earlier.
+
+2. HELD-MAPPING RECOVERY wired to the guarded workflow: when the deterministic
+   gate rejects ONLY on canonical-evidence-gap reasons (measureExactnessFailed /
+   "candidate does not establish full exact canonical identity" / inferred
+   packExactnessFailed) AND reviewedCanonicalEvidenceGap passes (which requires
+   the STRONGER independentExactIdentity with fresh Dunnes/SuperValu peers), the
+   item is admitted to the SAME required AI assessment. The AI verified_exact
+   verdict is STILL REQUIRED; reuse is never allowed for a recovery item. Method
+   canonical_gap_plus_ai_peer (DB-recorded as deterministic_plus_ai WITH model).
+   Tests: AI-uncertain holds; a genuine size conflict never reaches the AI;
+   no-fresh-peers never reaches the AI. The AI + every genuine identity-conflict
+   safeguard (barcode/brand/variant/quantity/multipack) are preserved.
+
+COHORT REPRODUCED + INDEPENDENTLY ASSESSED (read-only, real functions): 58
+retained held-EXPANSION records satisfy reviewedCanonicalEvidenceGap (ChatGPT
+found 43; difference is the rolling 7-day peer-freshness window). The real
+Bedrock assessAndCombine confirmed 35 of 58 as verified_exact offline.
+
+PRODUCTION RECOVERY (renewal run, AI-required, 13 batches, 251 requested): 160
+accepted / 90 held / 1 unavailable, exit 0. Accepts by method: **52
+canonical_gap_plus_ai_peer (HELD-MAPPING RECOVERIES — coverage GAIN) + 108
+deterministic_plus_ai_peer (ordinary renewals — coverage PRESERVATION)**. Every
+accept required the AI verdict + peer corroboration. The 52 live recoveries
+exceed the 35 offline estimate because more fresh peers were available at run
+time. Cumulative campaign spend $2.51 of $10 (1,355 actor runs).
+
+RECEIPT-BACKED ACCOUNTING (reported separately per the standing instruction):
+- RENEWALS today: 160 receipt-backed success writes = 108 ordinary (PRESERVE
+  coverage: refresh an already-trusted/expiring mapping) + 52 canonical-gap
+  RECOVERIES (INCREASE coverage: a previously-HELD mapping gains its first
+  trusted price).
+- EXPANSION today: 27 receipt-backed writes (INCREASE coverage: never-observed
+  mappings gaining a first price).
+- NET-NEW trusted products today ≈ 52 recoveries + 27 expansion = ~79.
+
+NET FRESH COVERAGE — HONEST NOTE: the headline "mappings with a fresh (<=7d)
+trusted price" reads 387 at this checkpoint, DOWN from 437 earlier today, NOT
+because recovery failed but because the 7-day window is ROLLING: a large batch
+of prices written ~7 days ago (the 9 Nov acceptance test + early runs) aged OUT
+of the window during this run, faster than the ~79 net-new writes replaced
+them. Renewals PRESERVE (they refresh mappings already counted, so they don't
+raise the headline — they stop it falling further); recoveries + expansion are
+the true coverage GAINS. Over the coming days as the renewal writes stay inside
+the 7-day window and the old prices stay refreshed, the headline should climb.
+
+QUEUE / NEXT: renewals became eligible after the ~17:20 GMT 24h window elapsed
+(210 due → 160 written this run). Remaining: canonical-gap cohort members still
+inside today's 24h window recover on subsequent passes; the 23 cohort records
+the AI held stay held (correct). STILL TO DO (item 5): verified replacement
+URLs for genuinely INCORRECT mappings (barcode/brand/variant conflicts that are
+not canonical gaps) — a separate guarded repair step. SuperValu/Dunnes
+schedules UNCHANGED.
+
 ## 10 November 2026 (PM) — Tesco expansion production run under the AI-required policy; remediation accounting completed (28th write)
 
 Continued production expansion under the restored AI-required policy (image
