@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { collectTescoApify, verificationReusable, type ApifyFetchResult } from './tesco-apify-collection';
+import { collectTescoApify, selectApifyMappings, verificationReusable, type ApifyFetchResult } from './tesco-apify-collection';
 import { renderApifyProductPage, createApifyFetchPage, type ApifyItem } from './tesco-apify-fetch';
 import { IDENTITY_ASSESSMENT_RULE_VERSION, assessmentSchema } from './tesco-identity-assessment';
 
@@ -777,5 +777,84 @@ describe('collectTescoApify — held-mapping recovery (canonical-evidence gap + 
     expect(res.held).toBe(1);
     expect(invoked).toBe(false);                // gap not satisfied → never reached the AI
     expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+});
+
+describe('collectTescoApify — transient AI retry (same evidence, open run)', () => {
+  // A branded fixture with fresh peers so a verified_exact verdict can accept.
+  const id = '55555555-5555-5555-5555-555555555555';
+  const brandedNoBarcode = () => ({
+    mappings: [{ id, product_id: 'p-rt', store_sku: '306111222',
+      store_url: 'https://www.tesco.ie/shop/en-IE/products/306111222',
+      store_product_name: 'Avonmore Fresh Milk 1L', brand: 'Avonmore', is_own_brand: false,
+      url_status: 'resolved', gtin: null,
+      products: { canonical_name: 'Avonmore Fresh Milk 1L', brand: 'Avonmore', ean: null } }],
+    latest: [{ store_product_id: id, observed_at: '2026-10-01T00:00:00Z', price: 1.5 }],
+    receipts: [{ store_product_id: id, outcome: 'success' }], recent: [] as Row[],
+  });
+  const rtItem = () => item({ product_id: '306111222', name: 'Avonmore Fresh Milk 1L', brand_name: 'Avonmore',
+    gtin: null as unknown as string, pack_size: '1000', pack_size_unit: 'ML', net_contents: '1 litre',
+    url: 'https://www.tesco.ie/groceries/en-IE/products/306111222' });
+  const rtPeers = (): Row[] => ([
+    { id: 'rtp-d', product_id: 'p-rt', store: 'dunnes', store_sku: 'd', store_product_name: 'Avonmore Fresh Milk 1L', brand: 'Avonmore', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 1.45 } },
+    { id: 'rtp-s', product_id: 'p-rt', store: 'supervalu', store_sku: 's', store_product_name: 'Avonmore Fresh Milk 1L', brand: 'Avonmore', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 1.55 } },
+  ]);
+
+  it('RETRIES a transient throw against the same evidence and ACCEPTS when a later attempt succeeds', async () => {
+    const fx = brandedNoBarcode();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, peers: rtPeers() });
+    let attempts = 0;
+    const flaky = async () => { attempts++; if (attempts < 3) throw new Error('No object generated: response did not match schema.'); return aiRunner('verified_exact')(); };
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(rtItem()), { assessOptions: { runModel: flaky as never } }));
+    expect(attempts).toBe(3);                 // 2 transient throws + 1 success
+    expect(res.accepted).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(true);
+  });
+
+  it('HOLDS (ai_error) after exhausting retries on a persistent transient failure', async () => {
+    const fx = brandedNoBarcode();
+    let attempts = 0;
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, peers: rtPeers() });
+    const alwaysThrows = async () => { attempts++; throw new Error('Bedrock throttled'); };
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(rtItem()), { assessOptions: { runModel: alwaysThrows as never }, aiRetries: 2 }));
+    expect(attempts).toBe(3);                 // 1 + 2 retries
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(res.perProduct[0].reasons).toContain('ai_error');
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('does NOT retry a clean uncertain VERDICT (only transient throws are retried)', async () => {
+    const fx = brandedNoBarcode();
+    let attempts = 0;
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, peers: rtPeers() });
+    const cleanUncertain = async () => { attempts++; return aiRunner('uncertain')(); };
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(rtItem()), { assessOptions: { runModel: cleanUncertain as never }, aiRetries: 2 }));
+    expect(attempts).toBe(1);                 // a clean verdict is NOT retried
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+  });
+});
+
+describe('selectApifyMappings — expansion ranks both-peer candidates first', () => {
+  it('orders expansion by fresh-peer-store count desc (both peers before one before none)', async () => {
+    const A = 'aaaaaaaa-0000-0000-0000-000000000001'; // both peers (2)
+    const B = 'bbbbbbbb-0000-0000-0000-000000000002'; // one peer  (1)
+    const C = 'cccccccc-0000-0000-0000-000000000003'; // no peers  (0)
+    const mk = (id: string, sku: string, pid: string) => ({ id, product_id: pid, store_sku: sku,
+      store_url: `https://www.tesco.ie/shop/en-IE/products/${sku}`, store_product_name: `P ${sku}`,
+      brand: 'Brand', is_own_brand: false, url_status: 'resolved', gtin: null,
+      products: { canonical_name: `P ${sku} 100g`, brand: 'Brand', ean: null } });
+    const now = new Date().toISOString();
+    const peerRow = (pid: string, store: string) => ({ product_id: pid, store, latest_prices: { observed_at: now, price: 1 } });
+    const { sb } = makeFakeSb({
+      mappings: [mk(C, '300000003', 'pc'), mk(A, '300000001', 'pa'), mk(B, '300000002', 'pb')], // deliberately unsorted
+      latest: [], receipts: [{ store_product_id: A, outcome: 'success' }, { store_product_id: B, outcome: 'success' }, { store_product_id: C, outcome: 'success' }],
+      recent: [],
+      peers: [peerRow('pa', 'dunnes'), peerRow('pa', 'supervalu'), peerRow('pb', 'dunnes')],
+    });
+    const selected = await selectApifyMappings(sb, 'expansion', 10);
+    // A (2 peers) first, then B (1), then C (0).
+    expect(selected.map(m => m.id)).toEqual([A, B, C]);
   });
 });
