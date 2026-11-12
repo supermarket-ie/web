@@ -28,18 +28,27 @@ resource "aws_iam_role_policy_attachment" "execution_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Allow the execution role to read ONLY the mapped secret ARNs.
+# Allow the execution role to read ONLY the mapped secret ARNs, plus any extra
+# ARNs in var.extra_execution_secret_arns. The latter are granted to the exec
+# role (so one-off ECS tasks can inject them via a Secrets Manager reference)
+# WITHOUT adding them to the always-on service container_secrets — e.g. the
+# Tesco Apify collector's APIFY_TOKEN, which the website/consumer containers
+# must not receive.
+locals {
+  execution_secret_arns = distinct(concat(values(var.secret_arns), var.extra_execution_secret_arns))
+}
+
 data "aws_iam_policy_document" "secrets_read" {
-  count = local.create && length(var.secret_arns) > 0 ? 1 : 0
+  count = local.create && length(local.execution_secret_arns) > 0 ? 1 : 0
   statement {
     sid       = "ReadMappedSecrets"
     actions   = ["secretsmanager:GetSecretValue", "ssm:GetParameters", "ssm:GetParameter"]
-    resources = values(var.secret_arns)
+    resources = local.execution_secret_arns
   }
 }
 
 resource "aws_iam_role_policy" "secrets_read" {
-  count  = local.create && length(var.secret_arns) > 0 ? 1 : 0
+  count  = local.create && length(local.execution_secret_arns) > 0 ? 1 : 0
   name   = "${var.name_prefix}-secrets-read"
   role   = aws_iam_role.execution[0].id
   policy = data.aws_iam_policy_document.secrets_read[0].json
