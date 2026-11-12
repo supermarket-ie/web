@@ -332,6 +332,19 @@ variable "secret_arns" {
   default     = {}
 }
 
+variable "extra_execution_secret_arns" {
+  description = <<-EOT
+    Extra Secrets Manager / SSM ARNs the EXECUTION role may read, in addition to
+    values(var.secret_arns), but which are NOT injected into the always-on
+    service containers. Used for secrets that only one-off ECS tasks need via a
+    Secrets Manager reference — e.g. the Tesco Apify collector's APIFY_TOKEN
+    (smie-prod/apify), which the website/consumer containers must not receive.
+    Least privilege: grant only the exact ARNs required.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "create_resources" {
   description = <<-EOT
     Master guard. When false (default), Terraform plans no real infrastructure,
