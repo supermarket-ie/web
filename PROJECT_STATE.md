@@ -1,5 +1,50 @@
 # Supermarket.ie — Canonical Project State
 
+## 12 November 2026 (late) — Apify token rotated; collector moved to a Secrets Manager reference; renewals resumed (93 writes) + expansion running (PR #392, main 9fc5659)
+
+TOKEN BLOCKER RESOLVED. Verified the 401 was the credential, not extraction:
+the secret had ONE version (AWSCURRENT), JSON `{"smie-prod/apify":"<46-char
+apify_a… token>"}`, extracted cleanly — and that exact current value still
+returned 401 with Apify body `user-or-token-not-found`. Owner created a
+replacement token under the same Apify account and updated the secret.
+
+INFRA (PR #392, main 9fc5659, applied to prod via tofu — 0 add / 1 change / 0
+destroy): added `var.extra_execution_secret_arns` (iam.tf/variables.tf) listing
+the smie-prod/apify ARN, granting smie-prod-exec secretsmanager:GetSecretValue
+on exactly that ARN WITHOUT injecting it into the always-on service containers.
+tfvars holds the ARN value (gitignored, applied out-of-band, as for all prod
+secret ARNs).
+
+TASK-DEF rev10: APIFY_TOKEN now comes from an ECS SECRETS MANAGER REFERENCE to
+the JSON key (arn:…smie-prod/apify-KVkC5Z:smie-prod/apify::), NOT a baked-in
+plaintext env. So future token rotations need NO new task-def revision — the
+task reads the live secret at launch. (rev9 and earlier embedded the token as
+plaintext env and would carry the stale 401 value; superseded.)
+
+AUTH VERIFIED FROM THE ECS TASK (status only, no token logged): a one-off rev10
+probe hitting /v2/users/me with the secret-injected APIFY_TOKEN returned
+status 200, ok:true, exit 0 — the exact credential the collector task uses.
+
+LIVE ELIGIBILITY at resume: 117 renewal-eligible, 807 expansion-eligible, 0
+expiring within 24h, baseline fresh total 372.
+
+RENEWAL RUN (rev10, expiry order, 6 batches): 117 requested, **93 accepted
+(all deterministic_plus_ai_peer), 24 held**, exit clean. Receipt-reconciled: 93
+renewal success receipts (all finalised). 12 transient AI failures were RETRIED
+against the same evidence and recovered (the new retry path working — these
+would previously have been one-shot holds). Renewals PRESERVE coverage.
+
+EXPANSION RUN (rev10, both-peer cohort first): in progress at time of writing —
+early batches show a mix of canonical_gap_plus_ai_peer recoveries +
+deterministic_plus_ai_peer, most candidates holding (expected: the strongest
+both-peer cohort was largely consumed by the 10–12 Nov runs; remaining
+candidates are lower-evidence). Final numbers to be reconciled when it stops.
+
+COVERAGE (receipt-reconciled): mappings with a trusted price 372 → 376 and
+climbing as the expansion run finalises; the 93 renewals refreshed existing
+coverage (preservation). Campaign spend well under the $10 cap. No damage at any
+point; Apify gate lease released; SuperValu/Dunnes UNCHANGED.
+
 ## 12 November 2026 — Expansion peer-ranking + AI transient-retry shipped (PR #390, main a31a8a7); collection BLOCKED by an expired Apify token
 
 CODE (PR #390, merged, image a31a8a7-prod built, task-def rev9 registered):
