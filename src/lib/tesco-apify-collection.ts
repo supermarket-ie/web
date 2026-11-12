@@ -91,6 +91,9 @@ export type ApifyCollectionDeps = {
   // AI inference options (model/runner). When omitted, the real Bedrock model
   // is used by assessAndCombine. Injectable for tests.
   assessOptions?: AssessOptions;
+  // Extra retries for a TRANSIENT AI failure (same evidence, same open run).
+  // Default 2. A clean rejected/uncertain verdict is never retried.
+  aiRetries?: number;
   sleep?: (ms: number) => Promise<void>;
   log?: (event: Record<string, unknown>) => void;
 };
@@ -175,6 +178,35 @@ export async function selectApifyMappings(
   }
 
   const canonical = (r: Record<string, unknown>) => (Array.isArray(r.products) ? r.products[0] : r.products) as Record<string, unknown> | undefined;
+  // Fresh-peer-store count per canonical product_id (distinct of dunnes/
+  // supervalu with a priced observation inside the freshness window). Used to
+  // RANK expansion so candidates with the strongest cross-retailer evidence
+  // (both peers = 2) are attempted FIRST — they are the most likely to pass
+  // identity + AI. Loaded here (across ALL eligible products, before the limit
+  // slice) so the ranking is correct, not just within the sliced batch.
+  const freshPeerStores = new Map<string, Set<string>>();
+  {
+    const allProductIds = [...new Set(mappings.map(r => String(r.product_id)))];
+    const nowMs = Date.now();
+    for (let i = 0; i < allProductIds.length; i += 50) {
+      const chunk = allProductIds.slice(i, i + 50);
+      const { data, error } = await sb.from('store_products')
+        .select('product_id,store,latest_prices(observed_at,price)')
+        .in('product_id', chunk).in('store', ['dunnes', 'supervalu']);
+      if (error) throw new Error(`Loading peer freshness: ${error.message}`);
+      for (const r of data ?? []) {
+        const lp = Array.isArray(r.latest_prices) ? r.latest_prices[0] : (r.latest_prices as Record<string, unknown> | null);
+        const observedAt = lp ? String((lp as Record<string, unknown>).observed_at) : null;
+        const price = lp ? Number((lp as Record<string, unknown>).price) : 0;
+        if (!observedAt || Date.parse(observedAt) <= nowMs - PEER_FRESH_DAYS * 86400_000 || !(price > 0)) continue;
+        const pid = String(r.product_id);
+        if (!freshPeerStores.has(pid)) freshPeerStores.set(pid, new Set());
+        freshPeerStores.get(pid)!.add(String(r.store));
+      }
+    }
+  }
+  const peerStoreCount = (productId: string) => (freshPeerStores.get(productId)?.size ?? 0);
+
   // Same-SKU group sizes (defer shared-SKU, one-to-one guard).
   const skuGroups = new Map<string, Record<string, unknown>[]>();
   for (const r of mappings) {
@@ -211,10 +243,14 @@ export async function selectApifyMappings(
       peers: [],      // filled below from fresh Dunnes/SuperValu peers
     });
   }
-  // Renewal: oldest first (closest to expiry). Expansion: stable by id.
+  // Renewal: oldest observation first (closest to expiry) — expiry order.
+  // Expansion: strongest cross-retailer evidence first — most fresh peer stores
+  // (both dunnes+supervalu = 2) before one, before none; then stable by id. The
+  // both-peer cohort is the most likely to pass identity + AI, so collect it
+  // first within the batch budget.
   rows.sort((a, b) => mode === 'renewal'
     ? (a.observed_at ?? '').localeCompare(b.observed_at ?? '') || a.id.localeCompare(b.id)
-    : a.id.localeCompare(b.id));
+    : peerStoreCount(b.product_id) - peerStoreCount(a.product_id) || a.id.localeCompare(b.id));
   const selected = rows.slice(0, limit);
   // Capture the authoritative server snapshot at SELECTION time for each chosen
   // mapping, so selection/assessment/reservation all reference the SAME value.
@@ -560,8 +596,25 @@ export async function collectTescoApify(
           // never be skipped and can never be overridden. A model/transport
           // failure (schema miss, timeout, Bedrock error) for ONE item HOLDS
           // that item, never aborts the campaign and never becomes an accept.
-          try {
-            const verdict = await assessAndCombine(ev, product, runId, deps.assessOptions);
+          // A TRANSIENT model/transport failure (schema miss, timeout, throttle,
+          // Bedrock 5xx) is retried against the SAME evidence while this guarded
+          // run is open — up to `aiRetries` extra attempts with a short backoff.
+          // A clean rejected/uncertain VERDICT is NOT transient and is never
+          // retried (that is a genuine hold). After exhausting retries the item
+          // HOLDS (ai_error) — it never aborts the campaign and never accepts.
+          const aiRetries = deps.aiRetries ?? 2;
+          let verdict: Awaited<ReturnType<typeof assessAndCombine>> | null = null;
+          let lastErr: unknown = null;
+          for (let attempt = 0; attempt <= aiRetries; attempt += 1) {
+            try { verdict = await assessAndCombine(ev, product, runId, deps.assessOptions); lastErr = null; break; }
+            catch (err) {
+              lastErr = err;
+              deps.log?.({ event: 'ai_transient_failure', sku: ident.storeSku, attempt: attempt + 1,
+                message: err instanceof Error ? err.message : 'assessment failed' });
+              if (attempt < aiRetries) await sleep(1_000 * (attempt + 1));
+            }
+          }
+          if (verdict) {
             model = verdict.assessment.model;
             if (verdict.decision === 'verified_exact' && verdict.machineAssessment
               && verdict.assessment.identity_fingerprint === liveFingerprint) {
@@ -582,12 +635,12 @@ export async function collectTescoApify(
               reasons.push(`ai_${verdict.decision}`);
               if (verdict.holdReason) deps.log?.({ event: 'ai_hold', sku: ident.storeSku, holdReason: verdict.holdReason });
             }
-          } catch (err) {
-            // Defensive hold: the independent assessment could not be produced,
-            // so we cannot establish an exact identity. Decision stays 'hold'.
+          } else {
+            // Defensive hold: the independent assessment could not be produced
+            // after retries, so we cannot establish an exact identity.
             reasons.push('ai_error');
-            deps.log?.({ event: 'ai_error', sku: ident.storeSku,
-              message: err instanceof Error ? err.message : 'assessment failed' });
+            deps.log?.({ event: 'ai_error', sku: ident.storeSku, attempts: aiRetries + 1,
+              message: lastErr instanceof Error ? lastErr.message : 'assessment failed' });
           }
         }
       } else if (outcome === 'ok' && product && !perItemFreshOk) {
