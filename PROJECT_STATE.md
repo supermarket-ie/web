@@ -1,5 +1,47 @@
 # Supermarket.ie — Canonical Project State
 
+## 12 November 2026 — Expansion peer-ranking + AI transient-retry shipped (PR #390, main a31a8a7); collection BLOCKED by an expired Apify token
+
+CODE (PR #390, merged, image a31a8a7-prod built, task-def rev9 registered):
+1. EXPANSION RANKING — selectApifyMappings loads a fresh-peer-store count per
+   canonical product (distinct dunnes/supervalu with a priced observation inside
+   the 7-day window) across ALL eligible candidates before the limit slice, and
+   orders expansion by that count desc (both peers=2 before one before none)
+   then id. The both-peer cohort (the owner's 217, incl. the 24 recently-expired
+   with both peers) is collected first. Renewal still orders by observed_at asc
+   (expiry order), so the 5 prices expiring within 24h are at the front.
+2. TRANSIENT AI RETRY — a model/transport THROW (schema miss, timeout, throttle,
+   Bedrock 5xx) is retried against the SAME evidence while the run is open (2
+   retries, backoff). A clean rejected/uncertain VERDICT is NEVER retried; after
+   exhaustion the item HOLDS (ai_error). AI verified_exact requirement + every
+   identity safeguard unchanged. 1177 unit tests + 26 migration assertions pass.
+
+LIVE ELIGIBILITY verified against the owner's DB check (exact match): 122
+renewal-eligible, 803 expansion-eligible, 5 fresh prices expiring within 24h,
+377 current fresh total.
+
+BLOCKER (owner-controlled): the first renewal run on rev9 STOPPED on the first
+request with `network_error`; the cause is logged as `Apify runs list -> 401`.
+The Apify token in Secrets Manager `smie-prod/apify` is INVALID/EXPIRED/REVOKED
+— confirmed directly: GET /v2/users/me and the runs list both return HTTP 401.
+No collection (renewal, expansion or recovery) can run until the token is
+refreshed. Everything else is READY: PR #390 merged, image a31a8a7-prod built,
+task-def smie-prod-tesco-apify-collect rev9 registered (Bedrock role, peers
+wired, AI-retry + peer-ranking).
+
+NO DAMAGE from the failed run: 0 prices written; the one mapping held on
+network_error; its budget reservation was RETAINED (provider error → charge
+unknown; reconciles when the token works); the Apify gate lease was RELEASED
+(leased_until null) with a short self-clearing cooldown. Campaign spend still
+~$2.5 of $10.
+
+TO RESUME (owner action): refresh the Apify API token and update Secrets Manager
+secret `smie-prod/apify` (JSON key `smie-prod/apify`). Then re-run task-def
+smie-prod-tesco-apify-collect:9 — renewal first (122, expiry order), then
+expansion (both-peer cohort first). Per-batch report: products that gained fresh
+coverage (expansion + canonical-gap recoveries), prices renewed (ordinary
+renewals), ending fresh total. SuperValu/Dunnes UNCHANGED.
+
 ## 10 November 2026 (evening) — Held-mapping RECOVERY cohort shipped: 52 canonical-gap recoveries + 108 renewals + 27 expansion (PR #388, main 0ca2991)
 
 Two concrete fixes (PR #388), both merged and run in production (image
