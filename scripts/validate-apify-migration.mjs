@@ -96,6 +96,7 @@ console.log('loaded REAL finalize_store_scrape_product + pause_tesco_collection_
 await q(readFileSync('supabase/migrations/20261108200000_tesco_apify_unattended_collection.sql', 'utf8'));
 await q(readFileSync('supabase/migrations/20261109090000_tesco_apify_lease_fencing_and_page_binding.sql', 'utf8'));
 await q(readFileSync('supabase/migrations/20261109140000_tesco_apify_snapshot_binding.sql', 'utf8'));
+await q(readFileSync('supabase/migrations/20261113090000_tesco_apify_first_price_expansion.sql', 'utf8'));
 console.log('migrations applied OK');
 
 // Mapping A: proven, due renewal.
@@ -142,6 +143,12 @@ async function reserve(a, mid, url, owner = a.owner, expected) {
   const exp = expected === undefined ? await snapshotOf(mid) : expected;
   return db.query(`select public.apify_reserve_tesco_request($1,$2,$3,$4,$5,$6,'renewal',$7::jsonb) as r`,
     [a.runId, GATE, a.token, owner, mid, url, JSON.stringify(exp)]);
+}
+// Expansion reserve with the explicit first-price flag (defaults false).
+async function reserveExpansion(a, mid, url, allowFirst, owner = a.owner) {
+  const exp = await snapshotOf(mid);
+  return db.query(`select public.apify_reserve_tesco_request($1,$2,$3,$4,$5,$6,'expansion',$7::jsonb,$8) as r`,
+    [a.runId, GATE, a.token, owner, mid, url, JSON.stringify(exp), allowFirst]);
 }
 async function record(a, mid, url, owner = a.owner) {
   return db.query(`select public.apify_record_tesco_page($1,$2,$3,$4,$5,$6,'renewal','ok',200,null,120,$7,
@@ -311,6 +318,40 @@ await db.query(`select public.apify_record_identity_verification($1,$2,'{}'::jso
 await db.query(`select public.apify_record_identity_verification($1,$2,'{}'::jsonb,'{}'::jsonb,'changed identity rationale here','deterministic_plus_ai',$3,'m',null,$4,720)`, [MID, 'e'.repeat(64), 'v2', 'f'.repeat(64)]);
 const activeV = (await db.query(`select identity_fingerprint from public.tesco_identity_verifications where store_product_id=$1 and invalidated_at is null`, [MID])).rows;
 assert(activeV.length === 1 && activeV[0].identity_fingerprint === 'e'.repeat(64), 'a new fingerprint invalidates the prior active verification');
+
+// ---- FIRST-PRICE expansion path (20261113090000) ----
+// Mapping C: resolved, canonical URL, NEVER observed, NO success receipt.
+const MID_FP = 'a1a1a1a1-0000-0000-0000-000000000001';
+const PID_FP = 'a2a2a2a2-0000-0000-0000-000000000002';
+const URL_FP = 'https://www.tesco.ie/shop/en-IE/products/279000001';
+await q(`
+insert into public.products(id, canonical_name, brand, ean) values ('${PID_FP}','Nutella Hazelnut Spread 400g','Nutella','7622300441074');
+insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, gtin, url_status)
+values ('${MID_FP}','${PID_FP}','tesco','279000001','${URL_FP}','Nutella Hazelnut Spread 400g','Nutella',false,null,'resolved');
+`);
+const FPC = { ...(await begin('fargate-owner-cccccccc')), owner: 'fargate-owner-cccccccc' };
+// Without the flag: an unproven mapping is refused (receipt requirement intact).
+await expectThrows(() => reserveExpansion(FPC, MID_FP, URL_FP, false), 'mapping_not_resolved_or_unproven',
+  'expansion reserve WITHOUT first-price flag refuses an unproven mapping');
+// With the flag in expansion: the unproven, never-observed mapping reserves.
+const fp = (await reserveExpansion(FPC, MID_FP, URL_FP, true)).rows[0].r;
+assert(fp && fp.reserved === true && fp.firstPrice === true,
+  'expansion reserve WITH first-price flag admits an unproven, never-observed mapping (firstPrice=true)');
+await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'complete')`, [FPC.runId, GATE, FPC.token, FPC.owner]);
+// Renewal can NEVER waive proven, even with the flag (unproven + renewal).
+const MID_FR = 'b1b1b1b1-0000-0000-0000-000000000001';
+const PID_FR = 'b2b2b2b2-0000-0000-0000-000000000002';
+const URL_FR = 'https://www.tesco.ie/shop/en-IE/products/279000002';
+await q(`
+insert into public.products(id, canonical_name, brand, ean) values ('${PID_FR}','Example Soup 400g','Example',null);
+insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, gtin, url_status)
+values ('${MID_FR}','${PID_FR}','tesco','279000002','${URL_FR}','Example Soup 400g','Example',false,null,'resolved');
+`);
+const FRD = { ...(await begin('fargate-owner-dddddddd')), owner: 'fargate-owner-dddddddd' };
+const snapD = JSON.stringify(await snapshotOf(MID_FR));
+await expectThrows(() => db.query(`select public.apify_reserve_tesco_request($1,$2,$3,$4,$5,$6,'renewal',$7::jsonb,true) as r`,
+  [FRD.runId, GATE, FRD.token, FRD.owner, MID_FR, URL_FR, snapD]),
+  'mapping_not_resolved_or_unproven', 'RENEWAL never waives proven even with the first-price flag');
 
 console.log(`\n${failures === 0 ? 'ALL MIGRATION ASSERTIONS PASSED' : failures + ' MIGRATION ASSERTION(S) FAILED'}`);
 process.exit(failures === 0 ? 0 : 1);

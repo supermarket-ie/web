@@ -104,6 +104,10 @@ async function main() {
     if (b > 0) { await logProviderSpend(`before_batch_${b}`); await reconcileOutstandingReservations(`before_batch_${b}`); }
     const result = await collectTescoApify(mode, limit, {
       sb, fetchApify, campaign, budgetUsd, perRequestUsd,
+      // APIFY_ALLOW_FIRST_PRICE='1' admits unproven expansion mappings with both
+      // fresh peers to the first-price path (needs the 20261113090000 migration
+      // + its reserve-RPC param, else reserve raises mapping_not_resolved_or_unproven).
+      allowFirstPrice: process.env.APIFY_ALLOW_FIRST_PRICE === '1',
       log: (e) => console.log(JSON.stringify(e)),
     });
     batches.push(result);

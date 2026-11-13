@@ -62,6 +62,11 @@ export type ApifyMapping = {
   // independentExactIdentity. Used ONLY to corroborate the Tesco item's
   // identity (brand/title/quantity/pack) — never a cross-retailer price claim.
   peers: ApifyPeer[];
+  // True when this is an unproven EXPANSION first-price candidate (no prior
+  // success receipt) admitted only because it has both fresh peers. The reserve
+  // RPC is called with p_allow_first_price for these; the identity bar below is
+  // unchanged (deterministic + AI verified_exact + independentExactIdentity).
+  firstPrice: boolean;
 };
 
 export type ApifyPeer = {
@@ -94,6 +99,11 @@ export type ApifyCollectionDeps = {
   // Extra retries for a TRANSIENT AI failure (same evidence, same open run).
   // Default 2. A clean rejected/uncertain verdict is never retried.
   aiRetries?: number;
+  // Enable the narrow EXPANSION FIRST-PRICE path: admit resolved, never-observed
+  // mappings with NO prior success receipt but BOTH fresh peers, reserving them
+  // with p_allow_first_price. The identity bar (deterministic + AI verified_exact
+  // + independentExactIdentity) is unchanged. Default false.
+  allowFirstPrice?: boolean;
   sleep?: (ms: number) => Promise<void>;
   log?: (event: Record<string, unknown>) => void;
 };
@@ -111,6 +121,7 @@ export async function selectApifyMappings(
   sb: SupabaseClient,
   mode: ApifyCollectionMode,
   limit: number,
+  allowFirstPrice = false,
 ): Promise<ApifyMapping[]> {
   // Pull resolved tesco mappings with canonical identity.
   const mappings: Record<string, unknown>[] = [];
@@ -220,11 +231,19 @@ export async function selectApifyMappings(
     const sku = String(r.store_sku);
     const url = `https://www.tesco.ie/shop/en-IE/products/${sku}`;
     if (String(r.store_url) !== url) continue;
-    if (!proven.has(id)) continue;                        // only proven mappings
+    // Proven (prior success receipt) is required EXCEPT a FIRST-PRICE expansion
+    // candidate with strong independent evidence: never observed AND both fresh
+    // Dunnes+SuperValu peers. Those feed the same deterministic + AI +
+    // independentExactIdentity bar below; the reserve RPC waives proven only for
+    // this narrow expansion-first-price case (p_allow_first_price). Renewal
+    // always requires proven.
+    const observedAt = fresh.get(id) ?? null;
+    const firstPriceEligible = allowFirstPrice && mode === 'expansion'
+      && !observedAt && peerStoreCount(String(r.product_id)) >= 2;
+    if (!proven.has(id) && !firstPriceEligible) continue; // only proven mappings (or a first-price candidate)
     if (recentUrls.has(url)) continue;                    // pending/recent exclusion
     const group = skuGroups.get(sku) ?? [];
     if (group.length > 1) continue;                       // defer shared-SKU
-    const observedAt = fresh.get(id) ?? null;
     if (mode === 'renewal') {
       if (!observedAt || Date.parse(observedAt) > Date.now() - 4 * 24 * 3600_000) continue;
     } else if (observedAt) continue;                      // expansion needs no prior observation
@@ -241,6 +260,7 @@ export async function selectApifyMappings(
       sameSkuCount: group.length,
       snapshot: null, // filled below from the authoritative server snapshot
       peers: [],      // filled below from fresh Dunnes/SuperValu peers
+      firstPrice: firstPriceEligible,  // an unproven expansion first-price candidate
     });
   }
   // Renewal: oldest observation first (closest to expiry) — expiry order.
@@ -419,7 +439,7 @@ export async function collectTescoApify(
   const owner = `fargate-${createHash('sha256').update(String(Date.now()) + Math.random()).digest('hex').slice(0, 24)}`;
   let spentUsd = deps.spentUsd ?? 0;
 
-  const mappings = await selectApifyMappings(sb, mode, limit);
+  const mappings = await selectApifyMappings(sb, mode, limit, deps.allowFirstPrice === true);
   const result: ApifyCollectionResult = {
     runId: '', mode, requested: 0, accepted: 0, held: 0, unavailable: 0, stopped: null, spentUsd, perProduct: [],
   };
@@ -473,6 +493,9 @@ export async function collectTescoApify(
           p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
           p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
           p_expected_snapshot: m.snapshot,
+          // Only an unproven expansion first-price candidate opts in; the RPC
+          // waives the prior-receipt requirement ONLY for this narrow case.
+          p_allow_first_price: m.firstPrice === true,
         });
         boundSnapshot = reserved?.snapshot ?? null;
       } catch (e) {
