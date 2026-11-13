@@ -858,3 +858,43 @@ describe('selectApifyMappings — expansion ranks both-peer candidates first', (
     expect(selected.map(m => m.id)).toEqual([A, B, C]);
   });
 });
+
+describe('selectApifyMappings — expansion first-price (unproven) admission', () => {
+  const U = 'cccccccc-0000-0000-0000-00000000000f';
+  const mk = () => ({ id: U, product_id: 'p-fp', store_sku: '279111222',
+    store_url: 'https://www.tesco.ie/shop/en-IE/products/279111222', store_product_name: 'Nutella 400g',
+    brand: 'Nutella', is_own_brand: false, url_status: 'resolved', gtin: null,
+    products: { canonical_name: 'Nutella 400g', brand: 'Nutella', ean: null } });
+  const now = new Date().toISOString();
+  const bothPeers = [
+    { product_id: 'p-fp', store: 'dunnes', latest_prices: { observed_at: now, price: 3.4 } },
+    { product_id: 'p-fp', store: 'supervalu', latest_prices: { observed_at: now, price: 3.5 } },
+  ];
+
+  it('EXCLUDES an unproven expansion mapping by default (no prior receipt)', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [] /* unproven */, recent: [], peers: bothPeers });
+    const sel = await selectApifyMappings(sb, 'expansion', 10, /*allowFirstPrice*/ false);
+    expect(sel.find(m => m.id === U)).toBeUndefined();
+  });
+
+  it('ADMITS an unproven expansion mapping with BOTH fresh peers when allowFirstPrice=true (firstPrice flagged)', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [], peers: bothPeers });
+    const sel = await selectApifyMappings(sb, 'expansion', 10, /*allowFirstPrice*/ true);
+    const row = sel.find(m => m.id === U);
+    expect(row).toBeTruthy();
+    expect(row!.firstPrice).toBe(true);
+  });
+
+  it('does NOT admit an unproven mapping with only ONE peer even when allowFirstPrice=true', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [],
+      peers: [{ product_id: 'p-fp', store: 'dunnes', latest_prices: { observed_at: now, price: 3.4 } }] });
+    const sel = await selectApifyMappings(sb, 'expansion', 10, true);
+    expect(sel.find(m => m.id === U)).toBeUndefined();
+  });
+
+  it('RENEWAL never admits an unproven mapping even with allowFirstPrice=true', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [], peers: bothPeers });
+    const sel = await selectApifyMappings(sb, 'renewal', 10, true);
+    expect(sel.find(m => m.id === U)).toBeUndefined();
+  });
+});
