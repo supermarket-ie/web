@@ -1,5 +1,56 @@
 # Supermarket.ie — Canonical Project State
 
+## 13 November 2026 — Target 600 fresh Tesco prices: first-price expansion path built (PR #394, main 731d16e); the growth lever is BLOCKED on a DB migration
+
+GOAL: reach 600 fresh trusted Tesco prices (live total after expiries). Current
+fresh total: 390 → gap 210.
+
+FEASIBILITY ASSESSMENT (measured against live DB):
+- Renewal-due one-to-one now: 24 (coverage-PRESERVING, not growth).
+- Missing-price one-to-one mappings: 1,389. Of these 935 have BOTH peers fresh —
+  532 WITH a prior success receipt, 403 WITHOUT. 211 have any barcode.
+- The single biggest growth lever is the 403 both-peer mappings with NO prior
+  receipt: the collector selector AND apify_reserve_tesco_request both
+  hard-require a success receipt (mapping_not_resolved_or_unproven), so these
+  403 cannot even reserve today.
+
+BUILT (PR #394, merged, main 731d16e): a narrow, evidence-bound FIRST-PRICE path.
+- Migration supabase/migrations/20261113090000_tesco_apify_first_price_expansion.sql
+  supersedes apify_reserve_tesco_request with a trailing p_allow_first_price
+  boolean (default false). It waives ONLY the prior-receipt requirement, and
+  ONLY for expansion; renewal NEVER waives proven; all other guards unchanged
+  (resolved, canonical URL, snapshot match, not-already-observed, 24h
+  pending/recent, pacing, lease/owner); the exception name is preserved.
+- Selector admits an unproven mapping ONLY when expansion + never observed +
+  BOTH fresh peers; flags firstPrice; reserve passes p_allow_first_price only
+  for those. The accept bar is UNCHANGED: deterministic gate + independent AI
+  verified_exact + independentExactIdentity with peers before the guarded
+  finalise writes the first price + its first receipt (single-use, evidence-bound).
+- Opt-in via APIFY_ALLOW_FIRST_PRICE=1 on the collector. 42 collection tests +
+  29 migration assertions (incl. refused-without-flag / admitted-with-flag /
+  renewal-never-waives) + lint + typecheck pass.
+
+BLOCKER (owner-controlled): the migration is NOT applied in prod — the 9-arg
+apify_reserve_tesco_request returns 404. Until it is applied via the ChatGPT DB
+connection (service_role cannot run DDL), the first-price path cannot reserve,
+so the 403 cohort stays unreachable and 600 is NOT achievable (item 1 alone —
+the 532 proven both-peer cohort minus AI/conflict holds, net of expiry — does
+not close a 210 gap).
+
+OTHER BLOCKERS still open (reported, not closed):
+- Item 2 (keyword/category discovery for NEW SKUs): NOT supported by current
+  code (fetch-by-known-URL only; no live tesco.ie identity search). Would need
+  new transport + a new identity-matching surface. Mainly needed for the
+  genuine-conflict/repair set.
+- Mapping repair for the ~188 genuine conflicts: requires the postgres
+  supervised SQL bridge (service_role cannot run the current_user=postgres
+  re-point) AND a stored correct-SKU candidate we do not have.
+
+NEXT (once the migration is applied): run expansion with APIFY_ALLOW_FIRST_PRICE=1
+(both-peer-first ranking already prioritises the strongest), continue renewals
+as they fall due, report fresh total + prices restored. SuperValu/Dunnes
+UNCHANGED.
+
 ## 12 November 2026 (late) — Apify token rotated; collector moved to a Secrets Manager reference; renewals resumed (93 writes) + expansion running (PR #392, main 9fc5659)
 
 TOKEN BLOCKER RESOLVED. Verified the 401 was the credential, not extraction:
