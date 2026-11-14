@@ -987,6 +987,40 @@ describe('collectTescoApify — first-price approval wiring', () => {
     expect(calls.some(c => c.fn === 'apify_close_tesco_run')).toBe(true);
   });
 
+  it('a PROVEN write omits every approval param (matches the RPC signatures deployed today)', async () => {
+    const { sb, calls } = makeFakeSb({ mappings: [mapping()], latest: [{ store_product_id: U, observed_at: '2026-10-01T00:00:00Z', price: 3.5 }],
+      receipts: [{ store_product_id: U, outcome: 'success' }], recent: [], peers: peers() });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(nutella()), { assessOptions: { runModel: aiRunner('verified_exact') as never } }));
+    expect(res.accepted).toBe(1);
+    const reserve = calls.find(c => c.fn === 'apify_reserve_tesco_request')!.args;
+    const fin = calls.find(c => c.fn === 'apify_finalise_tesco_page')!.args;
+    expect(Object.keys(reserve)).toHaveLength(8);
+    expect(Object.keys(fin)).toHaveLength(10);
+    expect(fin).not.toHaveProperty('p_approval_id');
+    expect(fin).not.toHaveProperty('p_live_identity_fingerprint');
+  });
+
+  it('EVIDENCE mode records the page and never stages, assesses or finalises', async () => {
+    let asked = false;
+    const { sb, calls } = unproven({});
+    const res = await collectTescoApify('evidence', 10, baseDeps(sb, okFetch(nutella()), {
+      assessOptions: { runModel: (async () => { asked = true; return aiRunner('verified_exact')(); }) as never } }));
+    expect(res.evidenceRecorded).toBe(1);
+    expect(res.accepted).toBe(0);
+    expect(asked).toBe(false);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+    expect(calls.find(c => c.fn === 'apify_reserve_tesco_request')!.args.p_mode).toBe('evidence');
+    const detail = calls.find(c => c.fn === 'apify_record_tesco_page')!.args.p_detail as Record<string, unknown>;
+    expect(detail).toMatchObject({ acquisitionOnly: true, pricesInserted: 0, evidenceOnly: true, purpose: 'first_price' });
+  });
+
+  it('EVIDENCE mode skips PROVEN mappings and mappings with a live approval', async () => {
+    const proven = makeFakeSb({ mappings: [mapping()], latest: [], receipts: [{ store_product_id: U, outcome: 'success' }], recent: [], peers: peers() });
+    expect((await collectTescoApify('evidence', 10, deps(proven.sb))).stopped).toBe('no_eligible_products');
+    const approved = unproven({ approvals: [{ id: 'a', store_product_id: U, identity_fingerprint: 'd'.repeat(64), mapping_snapshot: 'auto' }] });
+    expect((await collectTescoApify('evidence', 10, deps(approved.sb))).stopped).toBe('no_eligible_products');
+  });
+
   it('does nothing for an unproven mapping when no live approval exists', async () => {
     const { sb, calls } = unproven({ approvals: [] });
     const res = await collectTescoApify('expansion', 10, deps(sb));

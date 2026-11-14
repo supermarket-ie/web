@@ -16,10 +16,9 @@ import {
   type TescoCollectedProduct,
 } from './tesco-direct-collection-core';
 import { assessAndCombine, type AssessOptions } from './tesco-identity-assessment';
-import { reviewedCanonicalEvidenceGap } from './tesco-hold-reentry';
 import {
   assessmentEvidence, selectApifyMappings, snapshotIdentity, snapshotMappingEvidence,
-  type ApifyPeer,
+  type ApifyPeer, type SelectionOptions,
 } from './tesco-apify-collection';
 
 export const EVIDENCE_MAX_AGE_DAYS = 14;
@@ -43,7 +42,7 @@ export type FirstPriceApprovalArgs = {
 };
 
 export type ApprovalAssessment =
-  | { ok: true; args: FirstPriceApprovalArgs; route: 'deterministic_plus_ai' | 'canonical_gap_plus_ai' }
+  | { ok: true; args: FirstPriceApprovalArgs; route: 'deterministic_plus_ai' }
   | { ok: false; reason: string };
 
 // Pure (apart from the injected model): decide whether a retained page supports
@@ -74,12 +73,13 @@ export async function assessFirstPriceCandidate(input: {
   const product = matches[0];
   if (new Set(peers.map(p => p.store)).size < 2) return { ok: false, reason: 'both_fresh_peers_required' };
 
-  const ev = assessmentEvidence(ident, page.id, page.body_sha256, product, peers);
+  // proven=false: the mapping has NO success receipt and the evidence says so
+  // (firstPriceOnboarding), which requires BOTH fresh peers in the stronger gate.
+  const ev = assessmentEvidence(ident, page.id, page.body_sha256, product, peers, false);
+  // The ordinary deterministic gate must pass outright. The canonical-gap
+  // recovery route is NOT available to a first price.
   const reasons = validateTescoCollectedIdentity(snapshotMappingEvidence(ident, false), product);
-  const gapRoute = reasons.length > 0;
-  if (gapRoute && !reviewedCanonicalEvidenceGap(ev, product, reasons)) {
-    return { ok: false, reason: `deterministic_hold:${reasons.join(',')}` };
-  }
+  if (reasons.length > 0) return { ok: false, reason: `deterministic_hold:${reasons.join(',')}` };
 
   const retries = input.aiRetries ?? 2;
   const sleep = input.sleep ?? ((ms: number) => new Promise<void>(r => setTimeout(r, ms)));
@@ -95,7 +95,7 @@ export async function assessFirstPriceCandidate(input: {
   const m = verdict.machineAssessment;
   return {
     ok: true,
-    route: gapRoute ? 'canonical_gap_plus_ai' : 'deterministic_plus_ai',
+    route: 'deterministic_plus_ai',
     args: {
       p_store_product_id: ident.storeProductId,
       p_evidence_page_id: page.id,
@@ -107,7 +107,7 @@ export async function assessFirstPriceCandidate(input: {
         mapping_id: m.mapping_id, source_page_id: m.source_page_id, source_body_sha256: m.source_body_sha256,
         identity_fingerprint: fingerprint,
         source: m.source, assessed_at: verdict.assessment.assessed_at,
-        route: gapRoute ? 'canonical_gap_plus_ai' : 'deterministic_plus_ai',
+        route: 'deterministic_plus_ai', first_price_onboarding: true,
       },
       p_expected_snapshot: snapshot,
     },
@@ -125,22 +125,35 @@ export type ApprovalRunSummary = {
 export async function prepareFirstPriceApprovals(
   sb: SupabaseClient,
   opts: { limit: number; apply: boolean; assessOptions?: AssessOptions; ttlHours?: number;
-    log?: (e: Record<string, unknown>) => void; scan?: number },
+    log?: (e: Record<string, unknown>) => void; scan?: number; priorityIds?: SelectionOptions['priorityIds'] },
 ): Promise<ApprovalRunSummary> {
   const summary: ApprovalRunSummary = { considered: 0, noEvidence: 0, assessed: 0, approved: 0, recorded: 0, rejected: {} };
   const reject = (reason: string) => { const k = reason.split(':')[0]; summary.rejected[k] = (summary.rejected[k] ?? 0) + 1; };
   const cutoff = new Date(Date.now() - EVIDENCE_MAX_AGE_DAYS * 86400_000).toISOString();
-  const candidates = await selectApifyMappings(sb, 'expansion', opts.scan ?? opts.limit * 4, false, { approvalCandidates: true });
+  // Candidates already HAVE recent Apify evidence (the selector requires it) and
+  // are not excluded by the 24h request window: evidence minutes old is fine.
+  const candidates = await selectApifyMappings(sb, 'expansion', opts.scan ?? 1000, false,
+    { approvalCandidates: true, priorityIds: opts.priorityIds });
 
   for (const m of candidates) {
     if (summary.approved >= opts.limit) break;
     summary.considered += 1;
-    const { data, error } = await sb.from('tesco_direct_collection_pages')
-      .select('id,requested_url,outcome,body_sha256,parsed,created_at')
-      .eq('store_product_id', m.id).eq('outcome', 'ok').gte('created_at', cutoff)
-      .order('created_at', { ascending: false }).limit(1);
-    if (error) throw new Error(`Loading retained evidence: ${error.message}`);
-    const page = (data?.[0] ?? null) as RetainedEvidencePage | null;
+    // Newest IMMUTABLE provider-evidence row for this mapping's own URL, then its
+    // page. Legacy pages without provider evidence are never used.
+    const { data: prov, error: provError } = await sb.from('tesco_apify_provider_evidence')
+      .select('page_id,adapter_body_sha256,captured_at')
+      .eq('store_product_id', m.id).eq('requested_url', m.store_url).gte('captured_at', cutoff)
+      .order('captured_at', { ascending: false }).limit(1);
+    if (provError) throw new Error(`Loading provider evidence: ${provError.message}`);
+    const pe = prov?.[0];
+    let page: RetainedEvidencePage | null = null;
+    if (pe) {
+      const { data, error } = await sb.from('tesco_direct_collection_pages')
+        .select('id,requested_url,outcome,body_sha256,parsed,created_at').eq('id', pe.page_id).limit(1);
+      if (error) throw new Error(`Loading retained evidence: ${error.message}`);
+      const p = (data?.[0] ?? null) as RetainedEvidencePage | null;
+      page = p && p.body_sha256 === pe.adapter_body_sha256 ? p : null;
+    }
     if (!page || !m.snapshot) { summary.noEvidence += 1; continue; }
     summary.assessed += 1;
     const r = await assessFirstPriceCandidate({ snapshot: m.snapshot, page, peers: m.peers, assessOptions: opts.assessOptions });
@@ -149,7 +162,7 @@ export async function prepareFirstPriceApprovals(
     if (!opts.apply) { opts.log?.({ event: 'approval_dry_run', sku: m.store_sku, route: r.route }); continue; }
     try {
       const { data: id, error: rpcError } = await sb.rpc('apify_record_first_price_approval', {
-        ...r.args, p_ttl_hours: opts.ttlHours ?? 48,
+        ...r.args, p_ttl_hours: opts.ttlHours ?? 72,
       });
       if (rpcError) throw new Error(rpcError.message);
       summary.recorded += 1;

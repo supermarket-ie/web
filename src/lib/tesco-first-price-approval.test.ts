@@ -100,3 +100,41 @@ describe('assessFirstPriceCandidate', () => {
     expect(asked).toBe(false);
   });
 });
+
+import { readFileSync } from 'node:fs';
+import { planRecoveryQueue } from './tesco-recovery-queue';
+import { independentExactIdentity } from './tesco-hold-reentry';
+import { assessmentEvidence, snapshotIdentity } from './tesco-apify-collection';
+
+describe('first-price onboarding in independentExactIdentity', () => {
+  const page = pageFor(apifyItem());
+  const live = page.parsed!.products![0];
+  const ev = (peerList: ApifyPeer[], proven: boolean) =>
+    assessmentEvidence(snapshotIdentity(snapshot()), page.id, SHA, live, peerList, proven);
+  it('accepts an unproven mapping ONLY with both distinct fresh peers', () => {
+    expect(independentExactIdentity(ev(peers(), false), live)).toBe(true);
+    expect(independentExactIdentity(ev(peers().slice(0, 1), false), live)).toBe(false);
+    expect(independentExactIdentity(ev([], false), live)).toBe(false);
+  });
+  it('without the onboarding flag an unproven mapping never passes (unchanged legacy behaviour)', () => {
+    expect(independentExactIdentity({ ...ev(peers(), false), firstPriceOnboarding: false }, live)).toBe(false);
+  });
+  it('the proven path is unchanged (one peer still suffices)', () => {
+    expect(independentExactIdentity(ev(peers().slice(0, 1), true), live)).toBe(true);
+  });
+});
+
+describe('planRecoveryQueue (13 Nov 2026 owner queue)', () => {
+  const plan = planRecoveryQueue(JSON.parse(readFileSync('scripts/data/tesco-recovery-queue-20261113.json', 'utf8')));
+  it('splits the 122 entries into the agreed workflows', () => {
+    expect(plan.expansionPriority).toHaveLength(19);     // A, same SKU: ordinary expansion first
+    expect(plan.evidencePriority).toHaveLength(71);      // B, same SKU: evidence -> approval -> first price
+    expect(plan.repairStageRows).toHaveLength(9);        // A, differing SKU with a retained page
+    expect(plan.repairEvidenceTargets).toHaveLength(2);  // C, public catalogue leads (no page)
+    expect(plan.repairUnsupported).toHaveLength(21);     // B, differing SKU: repair guard needs a receipt
+    expect(plan.repairEvidenceTargets).toEqual([
+      { mappingId: 'bb2d1dcd-6429-421f-a938-b56baf6c06e8', targetSku: '305429764' },
+      { mappingId: 'ace2d397-308c-4125-b157-cf222760f2b9', targetSku: '309762431' },
+    ]);
+  });
+});
