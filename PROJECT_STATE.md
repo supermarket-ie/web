@@ -1,5 +1,17 @@
 # Supermarket.ie — Canonical Project State
 
+## 14 November 2026 — Scope the pending Apify receipt trigger to Apify runs
+
+The unapplied first-price migration's receipt trigger cast every collector's
+error summary to JSON before checking its run ID. A partially published Dunnes
+or SuperValu queue can set a plain-text summary while published jobs are still
+eligible to finalise. The cast then failed with PostgreSQL 22P02.
+
+The trigger now returns for non-Apify runs before parsing the summary. The
+Apify-only evidence and finalisation guards still apply. The local migration
+validator reproduces the queued Dunnes case and passes with the correction.
+Migration 20261113090000 remains unapplied.
+
 ## 14 November 2026 (rev 2) — Two review gaps closed before the migration is applied
 
 1. TWO INDEPENDENT PEERS (owner-approved policy). The general identity helper
