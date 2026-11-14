@@ -1,5 +1,57 @@
 # Supermarket.ie — Canonical Project State
 
+## 13 November 2026 (rev) — First-price path REDESIGNED: single-use, evidence-bound approvals (supersedes the p_allow_first_price boolean; migration still NOT applied)
+
+The boolean flag described in the section below was too weak (any service_role
+caller could set it), so migration 20261113090000 was EDITED IN PLACE before it
+was ever applied (a new superseding migration would have left a window where the
+weak version could be applied). Prod still returns 404 for the new RPCs.
+
+DESIGN. An unproven (no success receipt) expansion mapping can reserve and
+finalise ONLY with a row in tesco_first_price_approvals that is:
+- bound to the exact mapping (store_product_id + apify_mapping_snapshot),
+- bound to retained Tesco evidence (tesco_direct_collection_pages id + body
+  sha256; ok page for the canonical URL, exactly one product with the mapped
+  SKU, <= 14 days old),
+- bound to an independent AI verified_exact assessment (model, reason >= 30
+  chars, rule_version, same mapping_id / page id / sha256 / identity fingerprint),
+- single-use: consumed INSIDE apify_finalise_tesco_page in the same transaction
+  as finalize_store_scrape_product (price + first receipt), only when the write
+  happened; any failure raises and rolls everything back.
+RPCs: apify_record_first_price_approval (validates every binding before the row
+exists), apify_reserve_tesco_request(..., p_approval_id) (requires a live
+approval whose snapshot equals the current snapshot; does not consume),
+apify_finalise_tesco_page(..., p_approval_id, p_live_identity_fingerprint)
+(rechecks snapshot, live fingerprint == approved fingerprint, evidence still
+matches; consumes). Renewal never accepts an approval. Exception name
+mapping_not_resolved_or_unproven preserved for no-approval / renewal.
+
+TRUST BOUNDARY: the DB checks the supplied live fingerprint equals the approved
+one but cannot recompute it from the page (collector is service_role only, as
+for every Apify RPC). The collector additionally holds client-side on any drift
+and still runs the deterministic gate + a fresh AI verdict on the LIVE page.
+
+RISK TO FLAG: evidence_page_id uses ON DELETE RESTRICT so retained evidence
+cannot be deleted while an approval references it. Any run-retention job that
+deletes tesco_direct_collection_pages must skip referenced pages.
+
+TESTS (scripts/validate-apify-migration.mjs, PGlite, real finaliser): missing
+approval (reserve + finalise), changed mapping (reserve + finalise), mismatched
+evidence (sha, wrong mapping's page, stale page, tampered retained page), live
+identity mismatch (approval stays unconsumed, nothing written), invalid AI
+assessments (not verified_exact, thin reason, binding mismatch), cross-mapping
+reuse, renewal refusal, success (one price + one receipt + consumed_at/run id),
+and attempted reuse of a consumed approval at reserve and finalise.
+Collector: 48 tests (approval id passed to reserve + finalise, live fingerprint
+drift holds, DB refusal holds only that item, no approval = nothing selected).
+Approval preparation: src/lib/tesco-first-price-approval.ts (+5 tests) and
+scripts/tesco-record-first-price-approvals.ts (dry run unless APPROVAL_APPLY=1).
+
+OWNER STEPS after applying the migration: verify the new 9-arg reserve and
+12-arg finalise RPCs no longer return 404; then run the approval script
+(APPROVAL_APPLY=1), then expansion with APIFY_ALLOW_FIRST_PRICE=1. Needs a new
+image (rev11) because the collector code changed.
+
 ## 13 November 2026 — Target 600 fresh Tesco prices: first-price expansion path built (PR #394, main 731d16e); the growth lever is BLOCKED on a DB migration
 
 GOAL: reach 600 fresh trusted Tesco prices (live total after expiries). Current

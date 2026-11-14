@@ -63,11 +63,17 @@ export type ApifyMapping = {
   // identity (brand/title/quantity/pack) — never a cross-retailer price claim.
   peers: ApifyPeer[];
   // True when this is an unproven EXPANSION first-price candidate (no prior
-  // success receipt) admitted only because it has both fresh peers. The reserve
-  // RPC is called with p_allow_first_price for these; the identity bar below is
-  // unchanged (deterministic + AI verified_exact + independentExactIdentity).
+  // success receipt). Such a mapping is admitted ONLY with a live, single-use,
+  // evidence-bound approval (`approval`); the identity bar below is unchanged
+  // (deterministic gate + fresh AI verified_exact on the live page).
   firstPrice: boolean;
+  // The live approval for a first-price candidate (null otherwise). Its id is
+  // passed to reserve + finalise; its fingerprint is rechecked against the LIVE
+  // page identity before anything is staged.
+  approval: FirstPriceApproval | null;
 };
+
+export type FirstPriceApproval = { id: string; identityFingerprint: string };
 
 export type ApifyPeer = {
   id: string; store: string; store_product_name: string; brand: string | null;
@@ -100,9 +106,9 @@ export type ApifyCollectionDeps = {
   // Default 2. A clean rejected/uncertain verdict is never retried.
   aiRetries?: number;
   // Enable the narrow EXPANSION FIRST-PRICE path: admit resolved, never-observed
-  // mappings with NO prior success receipt but BOTH fresh peers, reserving them
-  // with p_allow_first_price. The identity bar (deterministic + AI verified_exact
-  // + independentExactIdentity) is unchanged. Default false.
+  // mappings with NO prior success receipt, BOTH fresh peers AND a live
+  // single-use approval row (tesco_first_price_approvals) bound to the exact
+  // mapping snapshot. Without an approval nothing is admitted. Default false.
   allowFirstPrice?: boolean;
   sleep?: (ms: number) => Promise<void>;
   log?: (event: Record<string, unknown>) => void;
@@ -122,7 +128,12 @@ export async function selectApifyMappings(
   mode: ApifyCollectionMode,
   limit: number,
   allowFirstPrice = false,
+  // approvalCandidates: return the unproven, never-observed, both-peer mappings
+  // that have NO live approval yet (the cohort an approval can be recorded for).
+  // Used by the approval-recording script only; never by the collector.
+  opts: { approvalCandidates?: boolean } = {},
 ): Promise<ApifyMapping[]> {
+  const candidateMode = opts.approvalCandidates === true && mode === 'expansion';
   // Pull resolved tesco mappings with canonical identity.
   const mappings: Record<string, unknown>[] = [];
   for (let offset = 0; ; offset += 1000) {
@@ -225,6 +236,26 @@ export async function selectApifyMappings(
     skuGroups.set(sku, [...(skuGroups.get(sku) ?? []), r]);
   }
 
+  // Live first-price approvals (unconsumed, unrevoked, unexpired). Only loaded
+  // for expansion with the path enabled. The DB re-validates everything at
+  // reserve and finalise; this is the selector-side mirror.
+  const approvals = new Map<string, { id: string; identityFingerprint: string; snapshot: unknown }>();
+  if ((allowFirstPrice || candidateMode) && mode === 'expansion') {
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await sb.from('tesco_first_price_approvals')
+        .select('id,store_product_id,identity_fingerprint,mapping_snapshot,expires_at')
+        .is('consumed_at', null).is('revoked_at', null).gt('expires_at', new Date().toISOString())
+        .order('id').range(offset, offset + 999);
+      if (error) throw new Error(`Loading first-price approvals: ${error.message}`);
+      for (const a of data ?? []) {
+        approvals.set(String(a.store_product_id), {
+          id: String(a.id), identityFingerprint: String(a.identity_fingerprint), snapshot: a.mapping_snapshot,
+        });
+      }
+      if ((data ?? []).length < 1000) break;
+    }
+  }
+
   const rows: ApifyMapping[] = [];
   for (const r of mappings) {
     const id = String(r.id);
@@ -235,11 +266,13 @@ export async function selectApifyMappings(
     // candidate with strong independent evidence: never observed AND both fresh
     // Dunnes+SuperValu peers. Those feed the same deterministic + AI +
     // independentExactIdentity bar below; the reserve RPC waives proven only for
-    // this narrow expansion-first-price case (p_allow_first_price). Renewal
-    // always requires proven.
+    // this narrow case and ONLY with a live single-use approval. Renewal always
+    // requires proven.
     const observedAt = fresh.get(id) ?? null;
-    const firstPriceEligible = allowFirstPrice && mode === 'expansion'
-      && !observedAt && peerStoreCount(String(r.product_id)) >= 2;
+    const approval = !candidateMode && allowFirstPrice && mode === 'expansion' ? approvals.get(id) ?? null : null;
+    const firstPriceEligible = candidateMode
+      ? !approvals.has(id) && !observedAt && peerStoreCount(String(r.product_id)) >= 2
+      : !!approval && !observedAt && peerStoreCount(String(r.product_id)) >= 2;
     if (!proven.has(id) && !firstPriceEligible) continue; // only proven mappings (or a first-price candidate)
     if (recentUrls.has(url)) continue;                    // pending/recent exclusion
     const group = skuGroups.get(sku) ?? [];
@@ -261,6 +294,7 @@ export async function selectApifyMappings(
       snapshot: null, // filled below from the authoritative server snapshot
       peers: [],      // filled below from fresh Dunnes/SuperValu peers
       firstPrice: firstPriceEligible,  // an unproven expansion first-price candidate
+      approval: firstPriceEligible ? { id: approval!.id, identityFingerprint: approval!.identityFingerprint } : null,
     });
   }
   // Renewal: oldest observation first (closest to expiry) — expiry order.
@@ -279,6 +313,12 @@ export async function selectApifyMappings(
     if (error) throw new Error(`Reading mapping snapshot: ${error.message}`);
     m.snapshot = (data as Record<string, unknown>) ?? null;
   }
+  // A first-price candidate whose mapping changed since its approval was bound
+  // is dropped here (the DB would refuse it at reserve anyway).
+  const bound = selected.filter(m => !m.firstPrice || candidateMode
+    || stableStringify(m.snapshot) === stableStringify(approvals.get(m.id)?.snapshot));
+  selected.length = 0;
+  selected.push(...bound);
   // Load FRESH Dunnes/SuperValu peers for the selected mappings' canonical
   // products. These corroborate the Tesco item's identity (brand/title/
   // quantity/pack) through independentExactIdentity — the cross-retailer
@@ -286,6 +326,15 @@ export async function selectApifyMappings(
   // the freshness window qualify; capped to one per store (freshest).
   await attachFreshPeers(sb, selected);
   return selected;
+}
+
+function stableStringify(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).sort().map(k => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v ?? null);
 }
 
 // Freshness window for peer corroboration — matches the 7-day latest_prices
@@ -332,13 +381,13 @@ export async function attachFreshPeers(sb: SupabaseClient, mappings: ApifyMappin
 // Material identity derived SOLELY from the authoritative reserved snapshot
 // (apify_mapping_snapshot). Every assessment input is reconstructed from here,
 // so no stale selection-time field can leak into the decision.
-type SnapshotIdentity = {
+export type SnapshotIdentity = {
   storeProductId: string; productId: string; storeSku: string; storeUrl: string;
   canonicalName: string; canonicalBrand: string | null; canonicalEan: string | null;
   storeBrand: string | null; storeProductName: string; isOwnBrand: boolean; gtin: string | null;
   sameSkuCanonicalNames: string[];
 };
-function snapshotIdentity(snap: Record<string, unknown>): SnapshotIdentity {
+export function snapshotIdentity(snap: Record<string, unknown>): SnapshotIdentity {
   const names = Array.isArray(snap.same_sku_canonical_names)
     ? (snap.same_sku_canonical_names as unknown[]).map(String) : [];
   return {
@@ -350,7 +399,7 @@ function snapshotIdentity(snap: Record<string, unknown>): SnapshotIdentity {
     gtin: (snap.gtin as string) ?? null, sameSkuCanonicalNames: names,
   };
 }
-function snapshotMappingEvidence(s: SnapshotIdentity, isFresh: boolean): TescoMappingEvidence {
+export function snapshotMappingEvidence(s: SnapshotIdentity, isFresh: boolean): TescoMappingEvidence {
   return {
     storeProductId: s.storeProductId, canonicalName: s.canonicalName, canonicalBrand: s.canonicalBrand,
     storeProductName: s.storeProductName, storeBrand: s.storeBrand, isOwnBrand: s.isOwnBrand,
@@ -365,7 +414,7 @@ function snapshotMappingEvidence(s: SnapshotIdentity, isFresh: boolean): TescoMa
 // the independent AI assessment (assessAndCombine). Peers are empty: this path
 // verifies Tesco identity only (never a cross-retailer price comparison), and
 // the AI never overrides a deterministic rejection.
-function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: string, live: TescoCollectedProduct,
+export function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: string, live: TescoCollectedProduct,
   peers: ApifyPeer[] = []): ReentryEvidence {
   return {
     mapping: {
@@ -460,7 +509,7 @@ export async function collectTescoApify(
   // precondition only, carried with its documented limitation.
   const staged: Array<{ ident: SnapshotIdentity; product: TescoCollectedProduct; previousPrice: number | null; adapterBody: string;
     method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' | 'canonical_gap_plus_ai_peer'; rationale: string; model: string | null;
-    fingerprint: string; snapshot: Record<string, unknown> | null }> = [];
+    fingerprint: string; snapshot: Record<string, unknown> | null; approval: FirstPriceApproval | null }> = [];
 
   try {
     for (const m of mappings) {
@@ -493,9 +542,8 @@ export async function collectTescoApify(
           p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
           p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
           p_expected_snapshot: m.snapshot,
-          // Only an unproven expansion first-price candidate opts in; the RPC
-          // waives the prior-receipt requirement ONLY for this narrow case.
-          p_allow_first_price: m.firstPrice === true,
+          // An unproven expansion mapping reserves ONLY with its live approval.
+          p_approval_id: m.approval?.id ?? null,
         });
         boundSnapshot = reserved?.snapshot ?? null;
       } catch (e) {
@@ -654,6 +702,13 @@ export async function collectTescoApify(
               // On a recovery accept, the canonical-gap reasons are resolved by
               // the stronger gate + AI; don't surface them as hold reasons.
               if (canonicalGapEligible) reasons.length = 0;
+              // FIRST PRICE: the live page must carry exactly the identity the
+              // approval was bound to. Any drift holds the item; the approval
+              // stays unconsumed.
+              if (m.approval && m.approval.identityFingerprint !== liveFingerprint) {
+                decision = 'hold';
+                reasons.push('first_price_live_identity_changed');
+              }
             } else {
               reasons.push(`ai_${verdict.decision}`);
               if (verdict.holdReason) deps.log?.({ event: 'ai_hold', sku: ident.storeSku, holdReason: verdict.holdReason });
@@ -702,7 +757,7 @@ export async function collectTescoApify(
       });
 
       if (decision === 'accept_pending_finalise' && product) {
-        staged.push({ ident, product, previousPrice: m.price, adapterBody, method, rationale, model, fingerprint: liveFingerprint, snapshot: boundSnapshot });
+        staged.push({ ident, product, previousPrice: m.price, adapterBody, method, rationale, model, fingerprint: liveFingerprint, snapshot: boundSnapshot, approval: m.approval });
       } else {
         result.perProduct.push({ storeProductId: ident.storeProductId, sku: ident.storeSku, outcome, accepted: false,
           reasons, price: null, freshness: provider?.freshness.level ?? null });
@@ -717,12 +772,26 @@ export async function collectTescoApify(
     // re-fences the lease, looks the ok page up BY MAPPING, rechecks the
     // immutable mapping snapshot and due/observation atomically before writing.
     for (const s of staged) {
-      const rec = await rpc<{ finalised: boolean }>(sb, 'apify_finalise_tesco_page', {
+      let rec: { finalised: boolean } | null;
+      try {
+      rec = await rpc<{ finalised: boolean }>(sb, 'apify_finalise_tesco_page', {
         p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
         p_store_product_id: s.ident.storeProductId, p_mode: mode,
         p_regular_price: s.product.price, p_previous_price: s.previousPrice,
         p_store_product_name: s.product.name, p_assessed_snapshot: s.snapshot,
+        p_approval_id: s.approval?.id ?? null,
+        p_live_identity_fingerprint: s.approval ? s.fingerprint : null,
       });
+      } catch (err) {
+        // A first-price finalise refusal (approval invalid/consumed/changed,
+        // identity or evidence mismatch) holds THIS item only: the RPC rolled
+        // back, so nothing was written and the approval is unconsumed. Any other
+        // failure keeps its previous behaviour (abort + close the run).
+        if (!s.approval) throw err;
+        deps.log?.({ event: 'first_price_finalise_refused', sku: s.ident.storeSku,
+          message: err instanceof Error ? err.message : 'finalise refused' });
+        rec = null;
+      }
       if (rec?.finalised) {
         result.accepted += 1;
         // The price is now written. Recording the reusable identity verification
