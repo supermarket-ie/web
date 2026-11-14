@@ -1,5 +1,28 @@
 # Supermarket.ie — Canonical Project State
 
+## 14 November 2026 (rev 2) — Two review gaps closed before the migration is applied
+
+1. TWO INDEPENDENT PEERS (owner-approved policy). The general identity helper
+   could accept a first price on ONE matching peer even with two fresh peer
+   records. New firstPricePeerReasons / firstPriceCorroboration: exactly one
+   Dunnes and one SuperValu peer, EACH must positively match brand (structured
+   or title), variant, stated pack total and count, title, and any stated
+   barcode. Enforced in independentExactIdentity for unproven mappings, in
+   approval preparation (holds before the AI is called) and in the collector.
+   The AI verified_exact verdict is still required on top. Proven path unchanged.
+   Tests: each of 7 conflicts on each store's peer holds (14 cases); same-store
+   duplicates are not two peers; removing the new check fails all 14.
+2. SHARED PRICE WRITER. service_role could call finalize_store_scrape_product /
+   finalize_tesco_scrape_product_pepesto with an Apify run id, bypassing the
+   evidence-only and approval guards. Migration adds a BEFORE INSERT trigger on
+   scrape_product_receipts (the shared writers insert the receipt first, in the
+   same transaction as the price): an Apify evidence run can never record a
+   receipt; any other Apify run only from inside apify_finalise_tesco_page for
+   the mapping being finalised (transaction-local marker). Non-Apify collector
+   runs are untouched. Validator: 100 assertions; removing the trigger fails 7.
+   E2E test covers the shared writer against the real migrations.
+Full suite 1225 pass. Migration still NOT applied; the owner review comes next.
+
 ## 14 November 2026 — First-price path made workable + evidence-only acquisition + recovery queue (migration 20261113090000 still NOT applied)
 
 FINDINGS (verified):

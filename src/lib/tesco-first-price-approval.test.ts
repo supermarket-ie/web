@@ -138,3 +138,60 @@ describe('planRecoveryQueue (13 Nov 2026 owner queue)', () => {
     ]);
   });
 });
+
+import { firstPriceCorroboration } from './tesco-hold-reentry';
+
+describe('first price: EACH of the two fresh peers must independently match', () => {
+  const page = pageFor(apifyItem());
+  const live = page.parsed!.products![0];
+  const ai = { runModel: runner('verified_exact') as never };
+  const conflicts: Array<[string, Partial<ApifyPeer>, string]> = [
+    ['brand', { brand: 'Ferrero Rocher' }, 'peer_brand_conflict'],
+    ['brand (title only, no structured brand)', { brand: null, store_product_name: 'Hazelnut Chocolate Spread 350g' }, 'peer_brand_conflict'],
+    ['variant', { store_product_name: 'Nutella Hazelnut Chocolate Spread Sugar Free 350g' }, 'peer_variant_conflict'],
+    ['pack size', { store_product_name: 'Nutella Hazelnut Chocolate Spread 750g' }, 'peer_pack_conflict'],
+    ['pack count', { store_product_name: 'Nutella Hazelnut Chocolate Spread 2 x 175g' }, 'peer_pack_count_conflict'],
+    ['missing pack', { store_product_name: 'Nutella Hazelnut Chocolate Spread' }, 'peer_pack_missing'],
+    ['barcode', { gtin: '05000000000001' }, 'peer_barcode_conflict'],
+  ];
+  for (const store of ['dunnes', 'supervalu'] as const) {
+    for (const [label, change, reason] of conflicts) {
+      it(`HOLDS when the ${store} peer conflicts on ${label}, although the other peer matches`, async () => {
+        const list = peers().map(p => (p.store === store ? { ...p, ...change } : p));
+        const ev = assessmentEvidence(snapshotIdentity(snapshot()), page.id, SHA, live, list, false);
+        const c = firstPriceCorroboration(ev, live);
+        expect(c.ok).toBe(false);
+        expect(c.perPeer.find(p => p.store === store)!.reasons).toContain(reason);
+        expect(c.perPeer.find(p => p.store !== store)!.reasons).toEqual([]);
+        // The stronger identity gate refuses it on its own (no AI involved)...
+        expect(independentExactIdentity(ev, live)).toBe(false);
+        // ...and approval preparation holds BEFORE asking the model.
+        let asked = false;
+        const spy = async () => { asked = true; return runner('verified_exact')(); };
+        const r = await assessFirstPriceCandidate({ ...base, snapshot: snapshot(), page, peers: list, assessOptions: { runModel: spy as never } });
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.reason).toMatch(new RegExp(`^first_price_peer_hold:.*${store}=.*${reason}`));
+        expect(asked).toBe(false);
+      });
+    }
+  }
+  it('two records from the SAME store are not two independent peers', () => {
+    const list = [peers()[0], { ...peers()[0], id: 'peer-d2' }];
+    const ev = assessmentEvidence(snapshotIdentity(snapshot()), page.id, SHA, live, list, false);
+    expect(firstPriceCorroboration(ev, live).ok).toBe(false);
+    expect(independentExactIdentity(ev, live)).toBe(false);
+  });
+  it('both peers matching passes the peer check (the AI is still required separately)', async () => {
+    const ev = assessmentEvidence(snapshotIdentity(snapshot()), page.id, SHA, live, peers(), false);
+    expect(firstPriceCorroboration(ev, live).ok).toBe(true);
+    const r = await assessFirstPriceCandidate({ ...base, snapshot: snapshot(), page, peers: peers(), assessOptions: ai });
+    expect(r.ok).toBe(true);
+    const held = await assessFirstPriceCandidate({ ...base, snapshot: snapshot(), page, peers: peers(), assessOptions: { runModel: runner('uncertain') as never } });
+    expect(held).toEqual({ ok: false, reason: 'ai_uncertain' });
+  });
+  it('the PROVEN path is unchanged: one conflicting peer does not by itself block it', () => {
+    const list = peers().map(p => (p.store === 'dunnes' ? { ...p, brand: 'Ferrero Rocher' } : p));
+    const ev = assessmentEvidence(snapshotIdentity(snapshot()), page.id, SHA, live, list.slice(1), true);
+    expect(independentExactIdentity(ev, live)).toBe(true);
+  });
+});

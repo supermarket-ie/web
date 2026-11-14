@@ -96,9 +96,11 @@ function extractFunction(migrationPath, funcName) {
   return sql.slice(start, end + 3);
 }
 const REAL_FINALISER = extractFunction('supabase/migrations/20260822100000_add_price_observation_source.sql', 'finalize_store_scrape_product');
+const REAL_PEPESTO = extractFunction('supabase/migrations/20260822100000_add_price_observation_source.sql', 'finalize_tesco_scrape_product_pepesto');
 const REAL_PAUSE = extractFunction('supabase/migrations/20260929093608_tesco_direct_collection_evidence.sql', 'pause_tesco_collection_egress');
 await q(REAL_FINALISER);
 await q(REAL_PAUSE);
+await q(REAL_PEPESTO);
 console.log('loaded REAL finalize_store_scrape_product + pause_tesco_collection_egress from their migrations');
 
 // Apply BOTH migrations in order (base objects, then the security correction).
@@ -528,6 +530,41 @@ await db.query(`insert into public.tesco_direct_collection_pages(run_id, egress_
 await expectThrows(() => finaliseExp(FPB, MID_FP, 3.5, APPROVAL, FPR), 'first_price_approval_already_consumed', 'REUSE: finalise refuses a consumed approval and writes nothing');
 assert(await priceN(MID_FP) === 0 && await receiptCount(MID_FP) === 0, 'the replay attempt wrote NO price and NO receipt');
 await close(FPB);
+
+// ---- F. SHARED PRICE WRITERS cannot bypass the Apify guards ----
+// service_role calling the shared finalisers directly, with an Apify run id.
+const shared = (runId, mid, price = 3.5) => asServiceRole(`select public.finalize_store_scrape_product(p_run_uuid => $1, p_store => 'tesco',
+  p_store_product_id => $2, p_success => true, p_price => $3, p_fetched => 1, p_extracted => 1) as ok`, [runId, mid, price]);
+const pepesto = (runId, mid) => asServiceRole(`select public.finalize_tesco_scrape_product_pepesto(p_run_uuid => $1, p_store_product_id => $2, p_price => 3.5) as ok`, [runId, mid]);
+const writes = async (mid) => ({ prices: await priceN(mid), receipts: (await db.query(`select count(*)::int n from public.scrape_product_receipts where store_product_id=$1`, [mid])).rows[0].n });
+await q(`grant execute on function public.finalize_tesco_scrape_product_pepesto(uuid,uuid,numeric,numeric,text,text,text,boolean,numeric,text) to service_role`);
+const before = await writes(MID_FP);
+const EVS = await beginMode('evidence', 'fargate-owner-evshared');
+await expectThrows(() => shared(EVS.runId, MID_FP), 'evidence_run_never_writes_price', 'SHARED finaliser refuses a price write in an EVIDENCE run');
+await expectThrows(() => pepesto(EVS.runId, MID_FP), 'evidence_run_never_writes_price', 'PEPESTO finaliser refuses a price write in an EVIDENCE run');
+await expectThrows(() => asServiceRole(`insert into public.scrape_product_receipts(run_id, store_product_id, outcome) values ($1,$2,'success')`, [EVS.runId, MID_FP]),
+  'evidence_run_never_writes_price', 'a direct receipt insert into an EVIDENCE run is refused');
+await close(EVS);
+const XS = await beginMode('expansion', 'fargate-owner-xsshared');
+await expectThrows(() => shared(XS.runId, MID_FP), 'apify_run_writes_only_via_apify_finalise', 'SHARED finaliser cannot write an UNPROVEN first price in an Apify run (no approval bypass)');
+await expectThrows(() => shared(XS.runId, MID_B), 'apify_run_writes_only_via_apify_finalise', 'SHARED finaliser cannot write a PROVEN mapping in an Apify run either');
+await close(XS);
+const after = await writes(MID_FP);
+assert(after.prices === before.prices && after.receipts === before.receipts, 'every refused shared-writer call left NO price and NO receipt');
+// The guarded path still writes, and its marker does not leak to the next call.
+await agePages(URL_B, '25 hours');
+await q(`update public.price_observations set observed_at = now() - interval '5 days' where store_product_id = '${MID_B}'`);
+const RN = await beginMode('renewal', 'fargate-owner-rnshared');
+await reserveMode(RN, MID_B, URL_B, 'renewal');
+await recordPage(RN, MID_B, URL_B, '260300754', '6'.repeat(64), 'renewal');
+const okRn = (await db.query(`select public.apify_finalise_tesco_page($1,$2,$3,$4,$5,'renewal',4.1,4.0,'x',$6::jsonb) as r`,
+  [RN.runId, GATE, RN.token, RN.owner, MID_B, JSON.stringify(await snapshotOf(MID_B))])).rows[0].r;
+assert(okRn.finalised === true, 'the guarded Apify finalise still writes a receipt-backed price');
+await expectThrows(() => shared(RN.runId, MID_B), 'apify_run_writes_only_via_apify_finalise', 'the finalise marker does not persist beyond its own transaction (same mapping, same run)');
+await close(RN);
+// Other collectors are untouched: a non-Apify run still uses the shared writer.
+await q(`insert into public.scrape_runs(id, store, run_id, status, started_at) values ('5e5e5e5e-0000-0000-0000-000000000001','dunnes','dunnes_queue_test','running', now())`);
+assert((await shared('5e5e5e5e-0000-0000-0000-000000000001', MID_FR, 2.2)).rows[0].ok === true, 'a NON-Apify collector run still writes through the shared finaliser');
 
 console.log(`\n${failures === 0 ? 'ALL MIGRATION ASSERTIONS PASSED' : failures + ' MIGRATION ASSERTION(S) FAILED'}`);
 process.exit(failures === 0 ? 0 : 1);
