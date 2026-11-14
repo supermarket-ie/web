@@ -76,9 +76,27 @@ RECOVERY QUEUE (13 Nov, 122 entries) live status:
   Mayonnaise and Laundry Capsules had their current URL fetched within 24h, so
   staging them waits for the guard's 24h window.
 
-REV10 COLLECTION (in parallel): renewal 65 requested / 43 accepted; expansion
-(still running at writing) 375 requested / 1 accepted. Provider spend $5.49 of
-$10. Re-requesting the identity-held proven cohort daily yields ~0.3%.
+REV10 COLLECTION (in parallel, final): renewal 65 requested / 43 accepted, then
+a later renewal pass 1 eligible / 1 accepted; expansion 20 batches, 500
+requested / 1 accepted. Live fresh Tesco total 380 (was 390 on 13 Nov, 386
+before the expansion run): expiries are outpacing additions. Provider spend
+$5.72 of the $10 cap. Re-requesting the identity-held proven cohort yields
+~0.2%; no further ordinary expansion pass was started.
+
+IMAGE: 4bb1792-prod (main after PR #397) registered as task-def
+smie-prod-tesco-apify-collect:12 (rev11 = superseded 6a101f9 image). Not yet
+run. rev12 is compatible with today's RPCs for renewal/expansion; 'evidence'
+and 'approve' modes need the migration.
+
+OWNER SEQUENCE once the migration is applied (verify first: approvals table and
+apify_record_first_price_approval no longer 404):
+1. rev12 APIFY_MODE=evidence (queue B both-peer first + the 2 catalogue leads).
+2. rev12 APIFY_MODE=approve (dry run), then APPROVAL_APPLY=1.
+3. >= 24h after step 1: rev12 APIFY_MODE=expansion APIFY_ALLOW_FIRST_PRICE=1.
+4. Supervised bridge: scripts/tesco-repair-mapping.ts --stage
+   scripts/data/tesco-repair-stage-manifest-20261113.jsonl --dry-run, then
+   --confirm-repair; activation needs an evidence-only source fetched AFTER
+   staging (step 1 again, purpose repair_activation).
 
 ## 13 November 2026 (rev) — First-price path REDESIGNED: single-use, evidence-bound approvals (supersedes the p_allow_first_price boolean; migration still NOT applied)
 
