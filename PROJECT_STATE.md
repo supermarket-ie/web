@@ -1,5 +1,60 @@
 # Supermarket.ie — Canonical Project State
 
+## 14 November 2026 (evening) — Migration live; daily renewal scheduled; first-price cohort in flight; catalogue costed
+
+MIGRATION 20261113090000 is APPLIED (verified by safe probes: approvals table
+200 with evidence_provider_id; apify_record_first_price_approval validates;
+service_role DELETE on provider evidence / approvals / pages now 403). NOT
+verifiable with service_role: which revision of the receipt trigger was applied.
+PR #400 (owner) fixed a real defect in mine (it parsed every run's error_summary
+as JSON, which would 22P02 Dunnes/SuperValu finalisation with plain-text
+summaries). OWNER TO CONFIRM the applied file is the post-#400 version; the
+05:10/05:20 Dunnes/SuperValu runs on 15 Nov are the first live check.
+
+1. COVERAGE PROTECTION
+- Renewals 14 Nov 22:0x: 26 requested / 26 accepted (rev13).
+- Daily schedule smie-prod-tesco-renewal-daily ENABLED, cron(40 3 * * ? *) UTC,
+  pinned smie-prod-tesco-apify-collect:14 (image 859c76e-prod), 2 scheduler
+  retries. Due after 4 days, expires after 7: retried on days 5, 6, 7.
+- 7-day tracking: collector logs coverage_snapshot (freshTotal, expiring24h,
+  expiring48h) at start/end -> CloudWatch Supermarket/Tesco TescoFreshTotal,
+  TescoExpiring24h, TescoRenewalsAccepted; alarm smie-prod-tesco-renewal-missed.
+- BUDGET WARNING: at ~$0.0018/product, renewing ~370 every 4 days costs
+  ~$0.17/day (more as coverage grows). The $10 campaign cap ($4.15 left) runs
+  out in weeks; then reserve_budget raises budget_exhausted and renewals stop.
+
+2. GROWTH POOLS
+- Evidence-only run (rev13, 22:20Z): queue B priority, then all unproven,
+  never-observed, both-peer mappings. Writes no prices.
+- One-off schedules (auto-delete): approve (AI, APPROVAL_APPLY=1, limit 300)
+  at 2026-11-15T00:15Z; first-price expansion (APIFY_ALLOW_FIRST_PRICE=1) at
+  2026-11-16T00:30Z (>= 24h after the last evidence fetch; clear of 03:40).
+- Bulk retained review (scripts/tesco-retained-review.ts, read-only): 1,410
+  one-to-one mappings without a fresh price; 1,170 with a usable retained page.
+  proven: 41 exact_match, 63 catalogue_gap, 182 genuine_mismatch, 547
+  needs_evidence. no receipt: 5 catalogue_gap, 121 genuine_mismatch, 211
+  needs_evidence. Dominant blocker: GENERIC canonical records ("Conditioner
+  400ml", "Strawberries", "Lemonade 2L") whose Dunnes/SuperValu "peers" are
+  different products — the gates are right to hold them. Real matches fail on
+  brand spelling or a pack-less canonical (Muller Rice 180g, Marmite 250g).
+  Median no-receipt page age 45 days.
+- Policy (PR #403): a first price may use the reviewed canonical-gap route
+  ONLY with both peers independently matching + AI verified_exact. Canonical
+  records are not modified.
+
+3. REUSABLE CATALOGUE (costed, NOT started)
+- parsebird/tesco-scraper lists tesco.ie departments/aisles/shelves with
+  gtin, tpnb, brand, pack, price, department/aisle/shelf (20-product probe:
+  20/20 with GTIN; confirmed charge $0.0359 incl. actor start; reserved and
+  settled in the campaign ledger, correcting my early settle of $0.00005).
+- Price $1.39-1.99 per 1,000 products: a full Irish grocery catalogue
+  (~20k+) ~ $30-45 one-off, plus refreshes. Exceeds the $10 cap.
+- Of 1,415 canonical products priced at Dunnes/SuperValu with no fresh Tesco
+  price, only 241 carry any barcode. A barcode index verifies <= ~241 links;
+  the rest need brand/variant/pack matching under the two-peer rule + AI.
+- Needs: a catalogue budget decision, a catalogue table + verified-link
+  table (migration), and bridge-guarded mapping updates for wrong-SKU fixes.
+
 ## 14 November 2026 — Scope the pending Apify receipt trigger to Apify runs
 
 The unapplied first-price migration's receipt trigger cast every collector's
