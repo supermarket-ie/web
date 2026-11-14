@@ -195,3 +195,42 @@ describe('first price: EACH of the two fresh peers must independently match', ()
     expect(independentExactIdentity(ev, live)).toBe(true);
   });
 });
+
+import { reviewRetained } from './tesco-retained-review';
+
+describe('first price via the reviewed canonical-gap route (two-peer rule)', () => {
+  // The canonical record omits the pack; Tesco and BOTH peers state 350g.
+  const gapSnap = () => snapshot({ canonical_name: 'Nutella Hazelnut Chocolate Spread', store_product_name: 'Nutella Hazelnut Chocolate Spread',
+    same_sku_canonical_names: ['Nutella Hazelnut Chocolate Spread'] });
+  const page = pageFor(apifyItem());
+  const ai = { runModel: runner('verified_exact') as never };
+  it('the gate rejects only on the incomplete canonical description', () => {
+    const r = reviewRetained({ snapshot: gapSnap(), page: page as never, peers: peers(), proven: false });
+    expect(r.klass).toBe('catalogue_gap');
+    expect(r.next).toBe('evidence_then_approval');
+    expect(r.reasons.length).toBeGreaterThan(0);
+  });
+  it('approves ONLY with both peers matching and the AI agreeing', async () => {
+    const ok = await assessFirstPriceCandidate({ ...base, snapshot: gapSnap(), page, peers: peers(), assessOptions: ai });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) { expect(ok.route).toBe('canonical_gap_plus_ai'); expect((ok.args.p_assessment.canonical_gap_reasons as string[]).length).toBeGreaterThan(0); }
+    const noAi = await assessFirstPriceCandidate({ ...base, snapshot: gapSnap(), page, peers: peers(), assessOptions: { runModel: runner('uncertain') as never } });
+    expect(noAi).toEqual({ ok: false, reason: 'ai_uncertain' });
+  });
+  for (const store of ['dunnes', 'supervalu'] as const) {
+    it(`holds when the ${store} peer is a different product (brand), with no AI call`, async () => {
+      let asked = false;
+      const list = peers().map(p => (p.store === store ? { ...p, brand: 'Bed Head', store_product_name: 'Bed Head Hazelnut Spread 350g' } : p));
+      const r = await assessFirstPriceCandidate({ ...base, snapshot: gapSnap(), page, peers: list,
+        assessOptions: { runModel: (async () => { asked = true; return runner('verified_exact')(); }) as never } });
+      expect(r.ok).toBe(false);
+      expect(asked).toBe(false);
+      expect(reviewRetained({ snapshot: gapSnap(), page: page as never, peers: list, proven: false }).klass).not.toBe('catalogue_gap');
+    });
+  }
+  it('a genuine pack conflict is a mismatch for replacement-SKU discovery, never a gap', () => {
+    const r = reviewRetained({ snapshot: snapshot({ canonical_name: 'Nutella Hazelnut Chocolate Spread 750g' }), page: page as never, peers: peers(), proven: false });
+    expect(r.klass).toBe('genuine_mismatch');
+    expect(r.next).toBe('replacement_sku_discovery');
+  });
+});

@@ -16,7 +16,7 @@ import {
   type TescoCollectedProduct,
 } from './tesco-direct-collection-core';
 import { assessAndCombine, type AssessOptions } from './tesco-identity-assessment';
-import { firstPriceCorroboration } from './tesco-hold-reentry';
+import { firstPriceCorroboration, reviewedCanonicalEvidenceGap } from './tesco-hold-reentry';
 import {
   assessmentEvidence, selectApifyMappings, snapshotIdentity, snapshotMappingEvidence,
   type ApifyPeer, type SelectionOptions,
@@ -43,7 +43,7 @@ export type FirstPriceApprovalArgs = {
 };
 
 export type ApprovalAssessment =
-  | { ok: true; args: FirstPriceApprovalArgs; route: 'deterministic_plus_ai' }
+  | { ok: true; args: FirstPriceApprovalArgs; route: 'deterministic_plus_ai' | 'canonical_gap_plus_ai' }
   | { ok: false; reason: string };
 
 // Pure (apart from the injected model): decide whether a retained page supports
@@ -77,10 +77,12 @@ export async function assessFirstPriceCandidate(input: {
   // proven=false: the mapping has NO success receipt and the evidence says so
   // (firstPriceOnboarding), which requires BOTH fresh peers in the stronger gate.
   const ev = assessmentEvidence(ident, page.id, page.body_sha256, product, peers, false);
-  // The ordinary deterministic gate must pass outright. The canonical-gap
-  // recovery route is NOT available to a first price.
+  // The deterministic gate must pass, or reject ONLY on an incomplete canonical
+  // description that the reviewed gap route resolves (which for a first price
+  // requires BOTH peers to match independently). The AI is still required.
   const reasons = validateTescoCollectedIdentity(snapshotMappingEvidence(ident, false), product);
-  if (reasons.length > 0) return { ok: false, reason: `deterministic_hold:${reasons.join(',')}` };
+  const gapRoute = reasons.length > 0 && reviewedCanonicalEvidenceGap(ev, product, reasons);
+  if (reasons.length > 0 && !gapRoute) return { ok: false, reason: `deterministic_hold:${reasons.join(',')}` };
   // BOTH peers must independently match; one matching peer is never enough.
   const corroboration = firstPriceCorroboration(ev, product);
   if (!corroboration.ok) {
@@ -102,7 +104,7 @@ export async function assessFirstPriceCandidate(input: {
   const m = verdict.machineAssessment;
   return {
     ok: true,
-    route: 'deterministic_plus_ai',
+    route: gapRoute ? 'canonical_gap_plus_ai' : 'deterministic_plus_ai',
     args: {
       p_store_product_id: ident.storeProductId,
       p_evidence_page_id: page.id,
@@ -114,7 +116,8 @@ export async function assessFirstPriceCandidate(input: {
         mapping_id: m.mapping_id, source_page_id: m.source_page_id, source_body_sha256: m.source_body_sha256,
         identity_fingerprint: fingerprint,
         source: m.source, assessed_at: verdict.assessment.assessed_at,
-        route: 'deterministic_plus_ai', first_price_onboarding: true,
+        route: gapRoute ? 'canonical_gap_plus_ai' : 'deterministic_plus_ai', first_price_onboarding: true,
+        canonical_gap_reasons: gapRoute ? reasons : [],
       },
       p_expected_snapshot: snapshot,
     },

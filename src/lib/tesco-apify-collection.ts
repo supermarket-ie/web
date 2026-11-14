@@ -797,7 +797,9 @@ export async function collectTescoApify(
       // It merely admits the item to the SAME AI assessment every other
       // new/changed identity must pass; the AI verified_exact verdict is still
       // required (preserved below).
-      const canonicalGapEligible = !!(product && ev && perItemFreshOk && !m.firstPrice
+      // First prices may use the reviewed gap route too: for an unproven mapping
+      // independentExactIdentity (inside it) requires BOTH peers to match.
+      const canonicalGapEligible = !!(product && ev && perItemFreshOk
         && deterministicReasons.length > 0
         && reviewedCanonicalEvidenceGap(ev, product, deterministicReasons));
       if (canonicalGapEligible) {
@@ -806,7 +808,7 @@ export async function collectTescoApify(
 
       // FIRST PRICE: both peers must independently match before the AI is asked.
       let firstPricePeerHold = false;
-      if (m.firstPrice && product && ev && deterministicReasons.length === 0) {
+      if (m.firstPrice && product && ev) {
         const corroboration = firstPriceCorroboration(ev, product);
         if (!corroboration.ok) {
           firstPricePeerHold = true;
