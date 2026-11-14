@@ -12,6 +12,10 @@ function makeFakeSb(opts: {
   mappings: Row[]; latest: Row[]; receipts: Row[]; recent: Row[]; verifications?: Row[];
   peers?: Row[]; // dunnes/supervalu rows with nested latest_prices, for attachFreshPeers
   verificationError?: string; // force apify_record_identity_verification to error
+  // Live first-price approval rows. mapping_snapshot: 'auto' resolves to the
+  // mapping's CURRENT authoritative snapshot (i.e. an approval bound to it).
+  approvals?: Row[];
+  finaliseError?: string; // force apify_finalise_tesco_page to return an RPC error
   finaliseResult?: (args: Row) => { finalised: boolean };
   reserveResult?: (args: Row) => { data: unknown; error: { message: string } | null };
   initialCommittedUsd?: number;
@@ -48,11 +52,13 @@ function makeFakeSb(opts: {
       : name === 'latest_prices' ? opts.latest
       : name === 'scrape_product_receipts' ? opts.receipts
       : name === 'tesco_identity_verifications' ? (opts.verifications ?? [])
+      : name === 'tesco_first_price_approvals' ? (opts.approvals ?? []).map(a => ({
+        ...a, mapping_snapshot: a.mapping_snapshot === 'auto' ? snapshotFor(String(a.store_product_id)) : a.mapping_snapshot }))
       : name === 'tesco_direct_collection_pages' ? opts.recent : [];
     const builder: Record<string, unknown> = {};
     const chain = () => builder;
     builder.select = chain; builder.eq = chain; builder.not = chain; builder.gte = chain;
-    builder.is = chain; builder.order = chain;
+    builder.is = chain; builder.order = chain; builder.gt = chain;
     builder.in = (col: string) => { if (col === 'store') state.peerQuery = true; return builder; };
     // attachFreshPeers awaits the builder directly (no .range/.limit); support
     // that by making the builder thenable, resolving to the peer rows.
@@ -101,6 +107,7 @@ function makeFakeSb(opts: {
       }
       if (fn === 'apify_record_tesco_page') return { data: { recorded: true }, error: null };
       if (fn === 'apify_finalise_tesco_page') {
+        if (opts.finaliseError) return { data: null, error: { message: opts.finaliseError } };
         const r = opts.finaliseResult ? opts.finaliseResult(args) : { finalised: true };
         return { data: r, error: null };
       }
@@ -859,7 +866,7 @@ describe('selectApifyMappings — expansion ranks both-peer candidates first', (
   });
 });
 
-describe('selectApifyMappings — expansion first-price (unproven) admission', () => {
+describe('selectApifyMappings — expansion first-price (unproven) admission requires a live approval', () => {
   const U = 'cccccccc-0000-0000-0000-00000000000f';
   const mk = () => ({ id: U, product_id: 'p-fp', store_sku: '279111222',
     store_url: 'https://www.tesco.ie/shop/en-IE/products/279111222', store_product_name: 'Nutella 400g',
@@ -870,31 +877,120 @@ describe('selectApifyMappings — expansion first-price (unproven) admission', (
     { product_id: 'p-fp', store: 'dunnes', latest_prices: { observed_at: now, price: 3.4 } },
     { product_id: 'p-fp', store: 'supervalu', latest_prices: { observed_at: now, price: 3.5 } },
   ];
+  const approval = (over: Row = {}) => ({ id: 'appr-1', store_product_id: U, identity_fingerprint: 'd'.repeat(64),
+    mapping_snapshot: 'auto', ...over });
 
   it('EXCLUDES an unproven expansion mapping by default (no prior receipt)', async () => {
-    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [] /* unproven */, recent: [], peers: bothPeers });
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [] /* unproven */, recent: [], peers: bothPeers, approvals: [approval()] });
     const sel = await selectApifyMappings(sb, 'expansion', 10, /*allowFirstPrice*/ false);
     expect(sel.find(m => m.id === U)).toBeUndefined();
   });
 
-  it('ADMITS an unproven expansion mapping with BOTH fresh peers when allowFirstPrice=true (firstPrice flagged)', async () => {
-    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [], peers: bothPeers });
-    const sel = await selectApifyMappings(sb, 'expansion', 10, /*allowFirstPrice*/ true);
-    const row = sel.find(m => m.id === U);
-    expect(row).toBeTruthy();
-    expect(row!.firstPrice).toBe(true);
-  });
-
-  it('does NOT admit an unproven mapping with only ONE peer even when allowFirstPrice=true', async () => {
-    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [],
-      peers: [{ product_id: 'p-fp', store: 'dunnes', latest_prices: { observed_at: now, price: 3.4 } }] });
+  it('EXCLUDES an unproven mapping with both peers but NO approval, even with allowFirstPrice=true', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [], peers: bothPeers, approvals: [] });
     const sel = await selectApifyMappings(sb, 'expansion', 10, true);
     expect(sel.find(m => m.id === U)).toBeUndefined();
   });
 
-  it('RENEWAL never admits an unproven mapping even with allowFirstPrice=true', async () => {
-    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [], peers: bothPeers });
+  it('ADMITS an unproven mapping with BOTH fresh peers AND a live approval, carrying the approval', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [], peers: bothPeers, approvals: [approval()] });
+    const sel = await selectApifyMappings(sb, 'expansion', 10, true);
+    const row = sel.find(m => m.id === U);
+    expect(row).toBeTruthy();
+    expect(row!.firstPrice).toBe(true);
+    expect(row!.approval).toEqual({ id: 'appr-1', identityFingerprint: 'd'.repeat(64) });
+  });
+
+  it('DROPS a candidate whose mapping changed since the approval was bound', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [], peers: bothPeers,
+      approvals: [approval({ mapping_snapshot: { store_product_id: U, canonical_name: 'Something else' } })] });
+    const sel = await selectApifyMappings(sb, 'expansion', 10, true);
+    expect(sel.find(m => m.id === U)).toBeUndefined();
+  });
+
+  it('does NOT admit an unproven mapping with only ONE peer even with an approval', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [],
+      peers: [{ product_id: 'p-fp', store: 'dunnes', latest_prices: { observed_at: now, price: 3.4 } }], approvals: [approval()] });
+    const sel = await selectApifyMappings(sb, 'expansion', 10, true);
+    expect(sel.find(m => m.id === U)).toBeUndefined();
+  });
+
+  it('RENEWAL never admits an unproven mapping even with an approval', async () => {
+    const { sb } = makeFakeSb({ mappings: [mk()], latest: [], receipts: [], recent: [], peers: bothPeers, approvals: [approval()] });
     const sel = await selectApifyMappings(sb, 'renewal', 10, true);
     expect(sel.find(m => m.id === U)).toBeUndefined();
+  });
+});
+
+describe('collectTescoApify — first-price approval wiring', () => {
+  const U = 'dddddddd-0000-0000-0000-00000000000f';
+  const mapping = () => ({
+    id: U, product_id: 'p3', store_sku: '305123456',
+    store_url: 'https://www.tesco.ie/shop/en-IE/products/305123456',
+    store_product_name: 'Nutella Hazelnut Chocolate Spread 350g', brand: 'Nutella', is_own_brand: false,
+    url_status: 'resolved', gtin: null,
+    products: { canonical_name: 'Nutella Hazelnut Chocolate Spread 350g', brand: 'Nutella', ean: null },
+  });
+  const nutella = () => item({
+    product_id: '305123456', name: 'Nutella Hazelnut Chocolate Spread 350G', brand_name: 'Nutella',
+    gtin: null as unknown as string, pack_size: '350', pack_size_unit: 'G', net_contents: '350g',
+    url: 'https://www.tesco.ie/groceries/en-IE/products/305123456',
+  });
+  const name = 'Nutella Hazelnut Chocolate Spread 350g';
+  const peers = (): Row[] => ([
+    { id: 'peer-d', product_id: 'p3', store: 'dunnes', store_sku: 'd1', store_product_name: name,
+      brand: 'Nutella', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 3.4 } },
+    { id: 'peer-s', product_id: 'p3', store: 'supervalu', store_sku: 's1', store_product_name: name,
+      brand: 'Nutella', gtin: null, latest_prices: { observed_at: new Date().toISOString(), price: 3.6 } },
+  ]);
+  // The live identity fingerprint, learned from a proven RENEWAL run of the same page.
+  async function liveFingerprint(): Promise<string> {
+    const { sb, calls } = makeFakeSb({ mappings: [mapping()], latest: [{ store_product_id: U, observed_at: '2026-10-01T00:00:00Z', price: 3.5 }],
+      receipts: [{ store_product_id: U, outcome: 'success' }], recent: [], peers: peers() });
+    await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(nutella()), { assessOptions: { runModel: aiRunner('verified_exact') as never } }));
+    return String(calls.find(c => c.fn === 'apify_record_identity_verification')!.args.p_identity_fingerprint);
+  }
+  const unproven = (extra: Parameters<typeof makeFakeSb>[0] extends infer O ? Partial<O> : never) => makeFakeSb({
+    mappings: [mapping()], latest: [], receipts: [], recent: [], peers: peers(), ...(extra as object) } as never);
+  const deps = (sb: SupabaseClient) => baseDeps(sb, okFetch(nutella()), {
+    assessOptions: { runModel: aiRunner('verified_exact') as never }, allowFirstPrice: true });
+
+  it('passes the approval id to reserve AND finalise, with the LIVE fingerprint, and writes the first price', async () => {
+    const fp = await liveFingerprint();
+    const { sb, calls } = unproven({ approvals: [{ id: 'appr-9', store_product_id: U, identity_fingerprint: fp, mapping_snapshot: 'auto' }] });
+    const res = await collectTescoApify('expansion', 10, deps(sb));
+    expect(res.accepted).toBe(1);
+    expect(calls.find(c => c.fn === 'apify_reserve_tesco_request')!.args.p_approval_id).toBe('appr-9');
+    expect(calls.find(c => c.fn === 'apify_reserve_tesco_request')!.args).not.toHaveProperty('p_allow_first_price');
+    const fin = calls.find(c => c.fn === 'apify_finalise_tesco_page')!;
+    expect(fin.args.p_approval_id).toBe('appr-9');
+    expect(fin.args.p_live_identity_fingerprint).toBe(fp);
+  });
+
+  it('HOLDS (no finalise, approval untouched) when the live page identity differs from the approved fingerprint', async () => {
+    const { sb, calls } = unproven({ approvals: [{ id: 'appr-9', store_product_id: U, identity_fingerprint: 'a'.repeat(64), mapping_snapshot: 'auto' }] });
+    const res = await collectTescoApify('expansion', 10, deps(sb));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(res.perProduct[0].reasons).toContain('first_price_live_identity_changed');
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('holds ONLY that item when the database refuses the first-price finalise; the run still closes', async () => {
+    const fp = await liveFingerprint();
+    const { sb, calls } = unproven({ approvals: [{ id: 'appr-9', store_product_id: U, identity_fingerprint: fp, mapping_snapshot: 'auto' }],
+      finaliseError: 'first_price_approval_already_consumed' });
+    const res = await collectTescoApify('expansion', 10, deps(sb));
+    expect(res.accepted).toBe(0);
+    expect(res.held).toBe(1);
+    expect(res.perProduct[0].reasons).toEqual(['finalise_recheck_failed']);
+    expect(calls.some(c => c.fn === 'apify_close_tesco_run')).toBe(true);
+  });
+
+  it('does nothing for an unproven mapping when no live approval exists', async () => {
+    const { sb, calls } = unproven({ approvals: [] });
+    const res = await collectTescoApify('expansion', 10, deps(sb));
+    expect(res.stopped).toBe('no_eligible_products');
+    expect(calls.some(c => c.fn === 'apify_begin_tesco_run')).toBe(false);
   });
 });
