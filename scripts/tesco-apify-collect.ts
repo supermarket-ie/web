@@ -53,7 +53,13 @@ async function main() {
     return;
   }
   const limit = Number(process.env.APIFY_BATCH_LIMIT ?? 25);
-  const budgetUsd = Number(process.env.APIFY_BUDGET_USD ?? 10);
+  // Owner-approved, SEPARATELY tracked ceilings (15 Nov 2026):
+  //   renewal  -> monthly campaign tesco-renewal-YYYY-MM, $20 per calendar month (UTC)
+  //   growth (expansion / evidence / first price) -> tesco-apify-20261108, $10
+  //   catalogue -> tesco-catalogue-20261115, $50 one-off (scripts/tesco-catalogue-acquire.ts)
+  // Each is enforced durably by the reservation ledger; env overrides are explicit.
+  const renewalCampaign = `tesco-renewal-${new Date().toISOString().slice(0, 7)}`;
+  const budgetUsd = Number(process.env.APIFY_BUDGET_USD ?? (mode === 'renewal' ? 20 : 10));
   const perRequestUsd = Number(process.env.APIFY_PER_REQUEST_USD ?? 0.002);
   const maxBatches = Number(process.env.APIFY_MAX_BATCHES ?? 1);
   // Freshness is ENFORCED by default (fail closed); only '0' relaxes it.
@@ -86,7 +92,8 @@ async function main() {
   // reconciled to the ACTUAL charge on settle — so the cap holds across
   // restarts. Here we additionally log an INDEPENDENT provider-side cross-check
   // of total actual spend across all run statuses, for observability.
-  const campaign = process.env.APIFY_CAMPAIGN ?? 'tesco-apify-20261108';
+  const campaign = process.env.APIFY_CAMPAIGN ?? (mode === 'renewal' ? renewalCampaign : 'tesco-apify-20261108');
+  console.log(JSON.stringify({ event: 'budget_campaign', mode, campaign, capUsd: budgetUsd }));
   async function logProviderSpend(label: string) {
     try {
       const r = await reconcileCampaignSpendUsd({ sinceISO: campaignSinceISO });

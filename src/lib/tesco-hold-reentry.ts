@@ -77,7 +77,7 @@ function reentryEvidenceSqlWithRefs(storeIdSql: string, sourcePageSql: string, o
     join scrape_runs r on r.id=d.run_id)`;
 }
 
-function normalized(input: string | null | undefined) {
+export function normalized(input: string | null | undefined) {
   return (input ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 function sameBrand(a: string, b: string) {
