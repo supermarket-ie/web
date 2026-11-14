@@ -1,5 +1,25 @@
 # Supermarket.ie — Canonical Project State
 
+## 14 November 2026 (21:40 GMT) — First-price and evidence-mode migration applied and verified
+
+Applied the owner-authorised migration `20261113090000_tesco_apify_first_price_expansion.sql`
+from main `bbb0628cc939baa476f4cffdf76714f8f0693658` (PR #400) to the production
+database. Supabase receipt version `20261114214015`. Verified the enabled
+receipt trigger, new reserve/finalise signatures, approval RLS, service-role
+read-only approvals and provider evidence, and no anonymous approval access.
+The migration created no approvals or Tesco prices. The Apify lease was free.
+
+Production snapshot at 21:41 GMT: 369 fresh Tesco mappings, 26 eligible renewals,
+136 eligible unproven same-SKU evidence candidates with two fresh peer records
+(including the saved queue subset), and $5.71 committed of the existing $10
+campaign cap. The two peer identities still have to match independently.
+There were also 524 proven mappings without a fresh price that have recent Apify
+evidence and at least one fresh peer record. These counts are candidate pools.
+
+AWS execution is the remaining operational step: resume renewals, collect
+evidence for the eligible first-price cohort, assess it, and run guarded price
+collection when the existing retry windows permit.
+
 ## 14 November 2026 — Scope the pending Apify receipt trigger to Apify runs
 
 The unapplied first-price migration's receipt trigger cast every collector's
