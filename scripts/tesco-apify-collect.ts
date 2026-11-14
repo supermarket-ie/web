@@ -121,6 +121,24 @@ async function main() {
     console.log(JSON.stringify({ event: 'reservations_reconciled', label, settled, outstanding: (rows ?? []).length }));
   }
 
+  // Coverage snapshot (CloudWatch metric filter -> 7-day fresh-total tracking):
+  // the live fresh total and how many prices fall out of the 7-day window in
+  // the next 24h / 48h, so losses are visible even when a run adds prices.
+  async function logCoverage(label: string) {
+    const count = async (olderThanDays?: number) => {
+      let q = sb.from('latest_prices').select('store_product_id', { count: 'exact', head: true }).eq('store', 'tesco');
+      if (olderThanDays != null) q = q.lt('observed_at', new Date(Date.now() - olderThanDays * 86400_000).toISOString());
+      const { count: n, error } = await q;
+      if (error) throw new Error(error.message);
+      return n ?? 0;
+    };
+    try {
+      console.log(JSON.stringify({ event: 'coverage_snapshot', label, mode, freshTotal: await count(),
+        expiring24h: await count(6), expiring48h: await count(5) }));
+    } catch (e) { console.log(JSON.stringify({ event: 'coverage_snapshot_failed', label, message: e instanceof Error ? e.message : 'err' })); }
+  }
+
+  await logCoverage('start');
   await logProviderSpend('start');
   await reconcileOutstandingReservations('start');
 
@@ -155,6 +173,7 @@ async function main() {
   }), { requested: 0, accepted: 0, held: 0, unavailable: 0, evidenceRecorded: 0 });
   await logProviderSpend('end');
   await reconcileOutstandingReservations('end');
+  await logCoverage('end');
   console.log(JSON.stringify({ event: 'campaign_summary', mode, batches: batches.length, ...totals }));
 }
 
