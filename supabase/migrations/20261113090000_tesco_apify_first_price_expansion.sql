@@ -523,12 +523,14 @@ create or replace function tesco_internal.guard_apify_run_receipt()
 returns trigger language plpgsql security definer set search_path = '' as $fn$
 declare
   v_run_id text;
+  v_summary_text text;
   v_summary jsonb;
 begin
-  select r.run_id, nullif(r.error_summary, '')::jsonb into v_run_id, v_summary
+  select r.run_id, r.error_summary into v_run_id, v_summary_text
     from public.scrape_runs r where r.id = new.run_id;
-  if coalesce(v_run_id, '') not like 'tesco_apify_%' then return new; end if;
-  if v_run_id like 'tesco_apify_evidence_%'
+  if not starts_with(coalesce(v_run_id, ''), 'tesco_apify_') then return new; end if;
+  v_summary := nullif(v_summary_text, '')::jsonb;
+  if starts_with(v_run_id, 'tesco_apify_evidence_')
     or coalesce(v_summary->>'mode', '') = 'evidence'
     or coalesce((v_summary->>'evidenceOnly')::boolean, false)
   then raise exception 'evidence_run_never_writes_price'; end if;

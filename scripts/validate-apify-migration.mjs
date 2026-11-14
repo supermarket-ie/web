@@ -566,5 +566,15 @@ await close(RN);
 await q(`insert into public.scrape_runs(id, store, run_id, status, started_at) values ('5e5e5e5e-0000-0000-0000-000000000001','dunnes','dunnes_queue_test','running', now())`);
 assert((await shared('5e5e5e5e-0000-0000-0000-000000000001', MID_FR, 2.2)).rows[0].ok === true, 'a NON-Apify collector run still writes through the shared finaliser');
 
+// A partial queue publication stores its error as plain text while already queued jobs can still finish.
+const DUNNES_PARTIAL_RUN = '5e5e5e5e-0000-0000-0000-000000000002';
+await db.query(`insert into public.scrape_runs(id, store, run_id, status, started_at, error_summary)
+  values ($1, 'dunnes', 'dunnes_queue_partial_publish', 'failed', now(), 'Queue publish failed after 1/2 products')`,
+  [DUNNES_PARTIAL_RUN]);
+const dunnesPartial = await asServiceRole(`select public.finalize_store_scrape_product(
+  p_run_uuid => $1, p_store => 'dunnes', p_store_product_id => $2,
+  p_success => true, p_price => 2.2, p_fetched => 1, p_extracted => 1) as ok`, [DUNNES_PARTIAL_RUN, MID_FR]);
+assert(dunnesPartial.rows[0].ok === true, 'non-Apify queued receipt works with a plain-text error summary');
+
 console.log(`\n${failures === 0 ? 'ALL MIGRATION ASSERTIONS PASSED' : failures + ' MIGRATION ASSERTION(S) FAILED'}`);
 process.exit(failures === 0 ? 0 : 1);
