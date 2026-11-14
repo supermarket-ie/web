@@ -14,6 +14,19 @@ async function execute(sql:string){return (await db.exec(sql)).at(-1)!.rows as R
 async function context(){return (await db.query<{context:RepairContext}>(`select ${repairContextSql(mapping,hint,newSku)} context`)).rows[0].context;}
 async function activation(audit:string){return (await db.query<{context:ActivationContext}>(`select ${activationContextSql(audit,source)} context`)).rows[0].context;}
 async function stage(){const c=await context();return String((await execute(stageRepairSql(c,reason)))[0].audit_id);}
+// A completed Apify EVIDENCE-ONLY run page with its immutable provider row.
+async function currentApifySource(over:{runId?:string;detail?:Record<string,unknown>;provider?:boolean}={}){
+  const run=randomUUID();source=randomUUID();
+  await db.query(`insert into scrape_runs(id,store,run_id,status,started_at,finished_at,error_summary)
+    values($1,'tesco',$2,'running',now()-interval '2 minutes',null,$3)`,
+  [run,over.runId??`tesco_apify_evidence_${run.replaceAll('-','')}`,JSON.stringify({mode:'evidence',evidenceOnly:true,activeOwner:null})]);
+  await db.query(`insert into tesco_direct_collection_pages(id,run_id,requested_url,final_url,mode,outcome,http_status,
+    body_sha256,parsed,detail,created_at) values($1,$2,$3,$3,'products','ok',200,$4,$5,$6,now())`,
+  [source,run,url(newSku),'c'.repeat(64),JSON.stringify({listing:null,products:[product()]}),
+    JSON.stringify(over.detail??{provider:'apify',acquisitionOnly:true,pricesInserted:0,evidenceOnly:true})]);
+  if(over.provider!==false)await db.query('insert into tesco_apify_provider_evidence(page_id,sku,adapter_body_sha256) values($1,$2,$3)',[source,newSku,'c'.repeat(64)]);
+  await db.query("update scrape_runs set status='success',finished_at=now() where id=$1",[run]);
+}
 async function currentSource(changes:Record<string,unknown>={}){
   const run=randomUUID();source=randomUUID();
   await db.query(`insert into scrape_runs(id,store,run_id,status,started_at,finished_at,error_summary)
@@ -39,7 +52,12 @@ beforeEach(async()=>{
     create table tesco_egress_pool(egress_key text,enabled boolean,leased_until timestamptz,cooldown_until timestamptz);
     insert into tesco_egress_pool values('workspace-supervised-20260929',false,null,null);
     create table tesco_direct_collection_pages(id uuid primary key,run_id uuid,requested_url text,final_url text,
-      mode text,outcome text,http_status int,body_sha256 text,parsed jsonb,detail text,created_at timestamptz default now());`);
+      mode text,outcome text,http_status int,body_sha256 text,parsed jsonb,detail text,created_at timestamptz default now());
+    create table tesco_apify_provider_evidence(id uuid primary key default gen_random_uuid(),page_id uuid,sku text,adapter_body_sha256 text);`);
+  // The Apify evidence-only activation source, loaded verbatim from its migration.
+  const apifySql=readFileSync('supabase/migrations/20261113090000_tesco_apify_first_price_expansion.sql','utf8');
+  const start=apifySql.indexOf('create or replace function tesco_internal.completed_apify_evidence_source');
+  await db.exec(apifySql.slice(start,apifySql.indexOf('$body$;',start)+7));
   const ddl=readFileSync('supabase/migrations/20260920152656_audit_and_invalidate_tesco_mappings.sql','utf8').split('with targets')[0];
   await db.exec(ddl);
   await db.exec(readFileSync('supabase/migrations/20261104134000_tesco_evidence_pack_totals.sql','utf8'));
@@ -152,6 +170,22 @@ describe('evidence-first Tesco mapping repair transactions',()=>{
       [run,`tesco_supervised_expansion_${run}`,JSON.stringify({selected:[{id:mapping,store_url:url(oldSku)}]})]);
     await db.query("insert into tesco_direct_collection_pages(id,run_id,requested_url,outcome,created_at) values($1,$2,$3,'pending',now()-interval '2 days')",[randomUUID(),run,url(oldSku)]);
     expect((await context()).pending).toBe(true);expect(supportedRepairHint(await context())).toBe(false);
+  });
+  it('activates from a completed Apify EVIDENCE-ONLY source, with zero price writes',async()=>{
+    const before=await db.query('select * from price_observations order by id');
+    const audit=await stage();await currentApifySource();const c=await activation(audit);
+    expect(c.completed_source).toBe(true);expect(supportedRepairActivation(c)).toBe(true);
+    await execute(activateRepairSql(c,reason));
+    expect((await db.query<{url_status:string}>('select url_status from store_products where id=$1',[mapping])).rows[0].url_status).toBe('resolved');
+    expect((await db.query('select * from price_observations order by id')).rows).toEqual(before.rows);
+  });
+  it.each([
+    ['no immutable provider evidence',{provider:false}],
+    ['a price-writing (expansion) run',{runId:'tesco_apify_expansion_x'}],
+    ['a page not marked acquisition-only',{detail:{provider:'apify',pricesInserted:0}}],
+  ] as const)('does not accept an Apify source with %s',async(_label,over)=>{
+    const audit=await stage();await currentApifySource(over as never);const c=await activation(audit);
+    expect(c.completed_source).toBe(false);expect(supportedRepairActivation(c)).toBe(false);
   });
   it('retains the actual staged snapshot when an update trigger changes timestamps',async()=>{
     await db.exec(`alter table store_products add updated_at timestamptz default now();

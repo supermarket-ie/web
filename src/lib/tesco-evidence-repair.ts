@@ -56,14 +56,14 @@ export function repairContextSql(mappingId:string,hintId:string,targetSku:string
       or ${pendingMapping('s.id')}),
     'recent',exists(select 1 from tesco_direct_collection_pages x where x.requested_url in(s.store_url,${q(targetUrl)})
       and x.created_at>now()-interval '24 hours'
-      ${sourceId?`and not(x.id=${id(sourceId)} and tesco_internal.completed_evidence_source(x.id))`:''}))
+      ${sourceId?`and not(x.id=${id(sourceId)} and (tesco_internal.completed_evidence_source(x.id) or tesco_internal.completed_apify_evidence_source(x.id)))`:''}))
     from store_products s join products p on p.id=s.product_id
     join tesco_direct_collection_pages d on d.id=${id(hintId)} where s.id=${id(mappingId)} and s.store='tesco')`;
 }
 export function activationContextSql(auditId:string,sourceId:string) {
   return `(select ${repairContextSqlFromAudit(auditId,sourceId)} || jsonb_build_object('audit',to_jsonb(a),
     'source',${page('d',"a.prior_mapping->>'target_sku'")},
-    'completed_source',tesco_internal.completed_evidence_source(d.id))
+    'completed_source',(tesco_internal.completed_evidence_source(d.id) or tesco_internal.completed_apify_evidence_source(d.id)))
     from retailer_mapping_audit_decisions a join tesco_direct_collection_pages d on d.id=${id(sourceId)}
     where a.id=${id(auditId)} and a.store='tesco' and a.applied_action='stage_unverified_repair_target')`;
 }
@@ -85,7 +85,7 @@ function repairContextSqlFromAudit(auditId:string,sourceId:string) {
       or ${pendingMapping('s.id')}),
     'recent',exists(select 1 from tesco_direct_collection_pages x where x.requested_url in(s.store_url,a.prior_mapping #>> '{original,offer,store_url}')
       and x.created_at>now()-interval '24 hours'
-      and not(x.id=${id(sourceId)} and tesco_internal.completed_evidence_source(x.id))))
+      and not(x.id=${id(sourceId)} and (tesco_internal.completed_evidence_source(x.id) or tesco_internal.completed_apify_evidence_source(x.id)))))
     from store_products s join products p on p.id=s.product_id where s.id=a.store_product_id and a.id=${id(auditId)})`;
 }
 function positiveIdentity(c:Canonical,product:TescoCollectedProduct,peers:Peer[],structured:boolean) {

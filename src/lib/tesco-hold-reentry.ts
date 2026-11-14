@@ -18,6 +18,12 @@ export type ReentryEvidence = {
   peers: { id: string; store: string; store_product_name: string; brand: string | null;
     gtin: string | null; store_sku: string; observed_at: string; price: number }[];
   proven: boolean; freshTesco: boolean; pending: boolean; recentAttempt: boolean;
+  // FIRST-PRICE onboarding (migration 20261113090000): a mapping with NO prior
+  // success receipt, assessed for a single-use, evidence-bound approval. It may
+  // stand in for `proven` in independentExactIdentity ONLY with BOTH distinct
+  // fresh peers (stricter than the proven path's <=2). Every other check is
+  // unchanged, and the AI verified_exact verdict is still required on top.
+  firstPriceOnboarding?: boolean;
 };
 export type Reentry = { reviewId: string; sourcePageId: string; evidence: ReentryEvidence };
 export type ReviewRecord = {
@@ -314,7 +320,9 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
   const m = e.mapping, rawSource = e.page?.parsed?.products?.[0];
   const source=rawSource?normaliseNetPackQuantity(rawSource):rawSource;
   if (!m || !source || e.page.parsed.products.length !== 1 || e.page.parsed.listing != null
-    || Number(e.sameSkuCount) !== 1 || !e.proven || e.freshTesco || e.pending || e.recentAttempt
+    || Number(e.sameSkuCount) !== 1
+    || !(e.proven || (e.firstPriceOnboarding === true && Array.isArray(e.peers) && e.peers.length === 2))
+    || e.freshTesco || e.pending || e.recentAttempt
     || m.url_status !== 'resolved' || !/^\d{6,12}$/.test(m.store_sku)
     || m.store_url !== `https://www.tesco.ie/shop/en-IE/products/${m.store_sku}`
     || e.page.outcome !== 'ok' || Number(e.page.http_status) !== 200 || e.page.mode !== 'products'

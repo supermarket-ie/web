@@ -1,5 +1,85 @@
 # Supermarket.ie — Canonical Project State
 
+## 14 November 2026 — First-price path made workable + evidence-only acquisition + recovery queue (migration 20261113090000 still NOT applied)
+
+FINDINGS (verified):
+- INHERITED PRIVILEGES (production, non-destructive probe): service_role got 204
+  on DELETE (filter matching no row) for tesco_apify_provider_evidence, pages,
+  identity verifications, budget reservations, receipts and price_observations.
+  provider_evidence was only ever granted select,insert explicitly, so Supabase
+  default privileges (ALL to service_role on new public tables) are in force.
+  The new approvals table would have inherited ALL too, letting service_role
+  insert or reset approvals directly.
+- APPROVAL PREPARATION WAS UNWORKABLE: the combined AI verdict requires
+  independentExactIdentity, which hard-required `proven`. The PR #396 approval
+  code passed proven=true for no-receipt mappings (so its tests passed); with
+  the truth (proven=false) nothing could ever be approved. Also: it excluded
+  freshly acquired evidence via the 24h request window, accepted legacy
+  non-Apify pages, and admitted proven mappings as candidates.
+- The no-receipt cohort has almost no usable evidence: of 120 queue pages only
+  19 are Apify pages bound to the same mapping; the rest are legacy pages up to
+  46 days old. Evidence must be acquired fresh.
+
+MIGRATION 20261113090000 (edited in place; unapplied) now also:
+- re-grants exactly the intended privileges: approvals and provider evidence
+  SELECT-only for service_role; pages/verifications/reservations keep their
+  explicit select,insert,update (legacy direct collector) but lose inherited
+  DELETE/TRUNCATE/REFERENCES/TRIGGER. price_observations / receipts unchanged
+  (other retailer collectors write them) — stated trust boundary.
+- binds approvals to the IMMUTABLE provider-evidence row (evidence_provider_id)
+  and pins the assessed product (evidence_product); finalise rechecks both the
+  provider row and the page digest. Legacy (non-Apify) pages are refused.
+- adds an EVIDENCE-ONLY run mode (begin/reserve accept 'evidence'; an evidence
+  run reserves only evidence requests and finalise refuses any price write in
+  it). Purposes: first_price (unproven, resolved, own URL), repair_target
+  (unowned canonical target URL), repair_activation (a staged repair, url_status
+  failed). 24h/pending exclusion, pacing, lease, owner, snapshot all preserved.
+- adds tesco_internal.completed_apify_evidence_source (postgres bridge only);
+  repair activation accepts it alongside the supervised source. The hold-reentry
+  completed_evidence_source is unchanged.
+- default approval TTL 72h (the 24h request window means the first-price fetch
+  can only happen >= 24h after evidence acquisition).
+
+IDENTITY POLICY CHANGE (explicit, for owner awareness): independentExactIdentity
+accepts `firstPriceOnboarding` in place of `proven` ONLY with BOTH distinct
+fresh peers (the proven path accepts <= 2). All other checks unchanged; the AI
+verified_exact verdict is still required; the canonical-gap recovery route is
+closed to first prices. This is what lets the approved receipt substitute work.
+
+CODE: collector 'evidence' mode (no AI, no staging, no finalise); RPC args are
+omitted when there is no approval so the new image also works against the
+8-arg reserve / 10-arg finalise deployed today; recovery queue
+scripts/data/tesco-recovery-queue-20261113.json orders work (expansion: queue A
+same-SKU first; evidence: queue B same-SKU, both-peer first; repair evidence:
+queue C); APIFY_MODE=approve runs approval preparation on ECS (Bedrock role).
+
+TESTS: migration validator 91 assertions, incl. simulated Supabase default
+privileges with a mutation check (removing the service_role revokes fails 11
+assertions). END-TO-END (src/lib/tesco-first-price-e2e.test.ts): the production
+collector + approval code against PGlite with the REAL migrations and finaliser:
+evidence-only acquisition -> AI approval -> 24h window held -> first price +
+receipt + approval consumed; AI uncertain -> nothing; live identity drift ->
+hold, approval unconsumed; evidence run cannot finalise. Full suite 1207 pass.
+
+RECOVERY QUEUE (13 Nov, 122 entries) live status:
+- A prior receipt 28: 19 same-SKU (ordinary expansion; 8 fetched by the running
+  rev10 expansion and held by identity guards, 11 still eligible), 9 differing.
+- B no receipt 92: 71 same-SKU (55 with both fresh peers -> evidence path after
+  the migration), 21 differing (the repair guard requires a prior receipt:
+  reported, not actionable).
+- C public catalogue leads 2 (Pedigree 253050178->305429764, Andrex
+  316313515->309762431): proven, branded, unowned targets, no retained page ->
+  repair-target evidence first.
+- Repair stage manifest for the supervised bridge (dry-run first):
+  scripts/data/tesco-repair-stage-manifest-20261113.jsonl (8 rows; own-label
+  Fresh Whole Milk excluded — the guard refuses own-label). Cream Cheese,
+  Mayonnaise and Laundry Capsules had their current URL fetched within 24h, so
+  staging them waits for the guard's 24h window.
+
+REV10 COLLECTION (in parallel): renewal 65 requested / 43 accepted; expansion
+(still running at writing) 375 requested / 1 accepted. Provider spend $5.49 of
+$10. Re-requesting the identity-held proven cohort daily yields ~0.3%.
+
 ## 13 November 2026 (rev) — First-price path REDESIGNED: single-use, evidence-bound approvals (supersedes the p_allow_first_price boolean; migration still NOT applied)
 
 The boolean flag described in the section below was too weak (any service_role

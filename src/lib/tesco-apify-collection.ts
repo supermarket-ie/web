@@ -34,7 +34,20 @@ import type { ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
 
-export type ApifyCollectionMode = 'renewal' | 'expansion';
+// 'evidence' is EVIDENCE-ONLY acquisition: fetch + record a page, NEVER a price
+// (the database refuses any finalise in an evidence run).
+export type ApifyCollectionMode = 'renewal' | 'expansion' | 'evidence';
+export type EvidencePurpose = 'first_price' | 'repair_target' | 'repair_activation';
+export type RepairTarget = { mappingId: string; targetSku: string };
+export type SelectionOptions = {
+  // Return the unproven, never-observed, both-peer mappings with recent Apify
+  // evidence and NO live approval (approval-recording script only).
+  approvalCandidates?: boolean;
+  // Mapping ids to work FIRST, in this order (e.g. the recovery queue).
+  priorityIds?: string[];
+  // Evidence mode only: differing-SKU repair candidates to acquire evidence for.
+  repairTargets?: RepairTarget[];
+};
 
 export type ApifyMapping = {
   id: string;
@@ -71,6 +84,10 @@ export type ApifyMapping = {
   // passed to reserve + finalise; its fingerprint is rechecked against the LIVE
   // page identity before anything is staged.
   approval: FirstPriceApproval | null;
+  // Evidence mode: the URL to fetch (the mapping URL, or a repair target URL)
+  // and why. Undefined in renewal/expansion.
+  evidenceUrl?: string;
+  evidencePurpose?: EvidencePurpose;
 };
 
 export type FirstPriceApproval = { id: string; identityFingerprint: string };
@@ -110,6 +127,8 @@ export type ApifyCollectionDeps = {
   // single-use approval row (tesco_first_price_approvals) bound to the exact
   // mapping snapshot. Without an approval nothing is admitted. Default false.
   allowFirstPrice?: boolean;
+  // Priority queue + repair targets (see SelectionOptions).
+  selection?: SelectionOptions;
   sleep?: (ms: number) => Promise<void>;
   log?: (event: Record<string, unknown>) => void;
 };
@@ -128,12 +147,12 @@ export async function selectApifyMappings(
   mode: ApifyCollectionMode,
   limit: number,
   allowFirstPrice = false,
-  // approvalCandidates: return the unproven, never-observed, both-peer mappings
-  // that have NO live approval yet (the cohort an approval can be recorded for).
-  // Used by the approval-recording script only; never by the collector.
-  opts: { approvalCandidates?: boolean } = {},
+  opts: SelectionOptions = {},
 ): Promise<ApifyMapping[]> {
   const candidateMode = opts.approvalCandidates === true && mode === 'expansion';
+  const evidenceMode = mode === 'evidence';
+  const priorityRank = new Map((opts.priorityIds ?? []).map((id, i) => [id, i]));
+  const rankOf = (id: string) => priorityRank.get(id) ?? Number.MAX_SAFE_INTEGER;
   // Pull resolved tesco mappings with canonical identity.
   const mappings: Record<string, unknown>[] = [];
   for (let offset = 0; ; offset += 1000) {
@@ -177,6 +196,7 @@ export async function selectApifyMappings(
   // attempt_already_recorded. Load BOTH sets. Pending records are only READ
   // here; they are preserved untouched.
   const recentUrls = new Set<string>();
+  const pendingUrls = new Set<string>();
   const since = new Date(Date.now() - 24 * 3600_000).toISOString();
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await sb.from('tesco_direct_collection_pages')
@@ -195,8 +215,22 @@ export async function selectApifyMappings(
       .select('requested_url,outcome').eq('outcome', 'pending')
       .order('requested_url').range(offset, offset + 999);
     if (error) throw new Error(`Loading pending attempts: ${error.message}`);
-    for (const r of data ?? []) recentUrls.add(String(r.requested_url));
+    for (const r of data ?? []) { recentUrls.add(String(r.requested_url)); pendingUrls.add(String(r.requested_url)); }
     if ((data ?? []).length < 1000) break;
+  }
+  // Recent Apify provider evidence (<= 14 days), keyed by mapping + URL. Evidence
+  // mode skips mappings that already have it; approval candidates require it.
+  const apifyEvidence = new Set<string>();
+  if (evidenceMode || candidateMode) {
+    const evSince = new Date(Date.now() - 14 * 86400_000).toISOString();
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await sb.from('tesco_apify_provider_evidence')
+        .select('store_product_id,requested_url,captured_at').gte('captured_at', evSince)
+        .order('captured_at', { ascending: false }).range(offset, offset + 999);
+      if (error) throw new Error(`Loading Apify evidence: ${error.message}`);
+      for (const r of data ?? []) apifyEvidence.add(`${r.store_product_id}|${r.requested_url}`);
+      if ((data ?? []).length < 1000) break;
+    }
   }
 
   const canonical = (r: Record<string, unknown>) => (Array.isArray(r.products) ? r.products[0] : r.products) as Record<string, unknown> | undefined;
@@ -240,7 +274,7 @@ export async function selectApifyMappings(
   // for expansion with the path enabled. The DB re-validates everything at
   // reserve and finalise; this is the selector-side mirror.
   const approvals = new Map<string, { id: string; identityFingerprint: string; snapshot: unknown }>();
-  if ((allowFirstPrice || candidateMode) && mode === 'expansion') {
+  if (((allowFirstPrice || candidateMode) && mode === 'expansion') || evidenceMode) {
     for (let offset = 0; ; offset += 1000) {
       const { data, error } = await sb.from('tesco_first_price_approvals')
         .select('id,store_product_id,identity_fingerprint,mapping_snapshot,expires_at')
@@ -270,11 +304,18 @@ export async function selectApifyMappings(
     // requires proven.
     const observedAt = fresh.get(id) ?? null;
     const approval = !candidateMode && allowFirstPrice && mode === 'expansion' ? approvals.get(id) ?? null : null;
-    const firstPriceEligible = candidateMode
-      ? !approvals.has(id) && !observedAt && peerStoreCount(String(r.product_id)) >= 2
-      : !!approval && !observedAt && peerStoreCount(String(r.product_id)) >= 2;
+    const bothPeers = !observedAt && peerStoreCount(String(r.product_id)) >= 2;
+    const hasEvidence = apifyEvidence.has(`${id}|${url}`);
+    const firstPriceEligible = candidateMode ? !approvals.has(id) && bothPeers && hasEvidence
+      : evidenceMode ? !approvals.has(id) && bothPeers && !hasEvidence
+      : !!approval && bothPeers;
+    // Evidence + approval candidates are the NO-receipt cohort only; proven
+    // mappings use ordinary expansion.
+    if ((evidenceMode || candidateMode) && proven.has(id)) continue;
     if (!proven.has(id) && !firstPriceEligible) continue; // only proven mappings (or a first-price candidate)
-    if (recentUrls.has(url)) continue;                    // pending/recent exclusion
+    // Pending of any age always excludes. The 24h window excludes requests; an
+    // approval candidate is assessed from evidence that may be minutes old.
+    if (pendingUrls.has(url) || (!candidateMode && recentUrls.has(url))) continue;
     const group = skuGroups.get(sku) ?? [];
     if (group.length > 1) continue;                       // defer shared-SKU
     if (mode === 'renewal') {
@@ -294,17 +335,24 @@ export async function selectApifyMappings(
       snapshot: null, // filled below from the authoritative server snapshot
       peers: [],      // filled below from fresh Dunnes/SuperValu peers
       firstPrice: firstPriceEligible,  // an unproven expansion first-price candidate
-      approval: firstPriceEligible ? { id: approval!.id, identityFingerprint: approval!.identityFingerprint } : null,
+      approval: approval && firstPriceEligible ? { id: approval.id, identityFingerprint: approval.identityFingerprint } : null,
+      ...(evidenceMode ? { evidenceUrl: url, evidencePurpose: 'first_price' as const } : {}),
     });
+  }
+  if (evidenceMode && opts.repairTargets?.length) {
+    rows.push(...await selectRepairTargets(sb, opts.repairTargets, { fresh, proven, recentUrls, apifyEvidence }));
   }
   // Renewal: oldest observation first (closest to expiry) — expiry order.
   // Expansion: strongest cross-retailer evidence first — most fresh peer stores
   // (both dunnes+supervalu = 2) before one, before none; then stable by id. The
   // both-peer cohort is the most likely to pass identity + AI, so collect it
   // first within the batch budget.
+  // Expansion / evidence: an explicit priority queue (e.g. the recovery queue)
+  // is worked first, in its order; then by peer evidence as before.
   rows.sort((a, b) => mode === 'renewal'
     ? (a.observed_at ?? '').localeCompare(b.observed_at ?? '') || a.id.localeCompare(b.id)
-    : peerStoreCount(b.product_id) - peerStoreCount(a.product_id) || a.id.localeCompare(b.id));
+    : rankOf(a.id) - rankOf(b.id)
+      || peerStoreCount(b.product_id) - peerStoreCount(a.product_id) || a.id.localeCompare(b.id));
   const selected = rows.slice(0, limit);
   // Capture the authoritative server snapshot at SELECTION time for each chosen
   // mapping, so selection/assessment/reservation all reference the SAME value.
@@ -315,7 +363,7 @@ export async function selectApifyMappings(
   }
   // A first-price candidate whose mapping changed since its approval was bound
   // is dropped here (the DB would refuse it at reserve anyway).
-  const bound = selected.filter(m => !m.firstPrice || candidateMode
+  const bound = selected.filter(m => !m.firstPrice || candidateMode || evidenceMode
     || stableStringify(m.snapshot) === stableStringify(approvals.get(m.id)?.snapshot));
   selected.length = 0;
   selected.push(...bound);
@@ -326,6 +374,65 @@ export async function selectApifyMappings(
   // the freshness window qualify; capped to one per store (freshest).
   await attachFreshPeers(sb, selected);
   return selected;
+}
+
+// Repair-target evidence candidates (evidence mode only). A differing-SKU lead
+// is fetched as EVIDENCE for the guarded (postgres-bridge) repair; nothing here
+// changes a mapping. Mirrors the repair guard's preconditions so no request is
+// spent on a lead the guard would refuse: proven, branded (not own label), never
+// observed, target SKU owned by no Tesco mapping, no pending/recent attempt.
+// A mapping already STAGED at the target (url_status failed) gets an activation
+// source instead.
+async function selectRepairTargets(
+  sb: SupabaseClient, targets: RepairTarget[],
+  ctx: { fresh: Map<string, string>; proven: Set<string>; recentUrls: Set<string>; apifyEvidence: Set<string> },
+): Promise<ApifyMapping[]> {
+  const out: ApifyMapping[] = [];
+  const ids = [...new Set(targets.map(t => t.mappingId))];
+  const rowsById = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < ids.length; i += 50) {
+    const { data, error } = await sb.from('store_products')
+      .select('id,product_id,store,store_sku,store_url,store_product_name,brand,is_own_brand,url_status,gtin,products(canonical_name,brand,ean)')
+      .in('id', ids.slice(i, i + 50));
+    if (error) throw new Error(`Loading repair mappings: ${error.message}`);
+    for (const r of data ?? []) rowsById.set(String(r.id), r);
+  }
+  const skus = [...new Set(targets.map(t => t.targetSku))];
+  const owners = new Map<string, string[]>();
+  for (let i = 0; i < skus.length; i += 50) {
+    const { data, error } = await sb.from('store_products').select('id,store_sku')
+      .eq('store', 'tesco').in('store_sku', skus.slice(i, i + 50));
+    if (error) throw new Error(`Loading repair target owners: ${error.message}`);
+    for (const r of data ?? []) owners.set(String(r.store_sku), [...(owners.get(String(r.store_sku)) ?? []), String(r.id)]);
+  }
+  const claimed = new Set<string>();
+  for (const t of targets) {
+    const r = rowsById.get(t.mappingId);
+    if (!r || r.store !== 'tesco' || !/^\d{6,12}$/.test(t.targetSku)) continue;
+    const url = `https://www.tesco.ie/shop/en-IE/products/${t.targetSku}`;
+    const activation = String(r.store_sku) === t.targetSku;
+    if (activation ? r.url_status !== 'failed' || String(r.store_url) !== url
+      : !['resolved', 'failed'].includes(String(r.url_status))) continue;
+    if (!ctx.proven.has(t.mappingId) || r.is_own_brand === true || ctx.fresh.has(t.mappingId)) continue;
+    const otherOwners = (owners.get(t.targetSku) ?? []).filter(o => o !== t.mappingId);
+    if (otherOwners.length > 0 || claimed.has(t.targetSku)) continue; // one lead per target SKU
+    if (ctx.recentUrls.has(url)) continue;
+    if (!activation && ctx.apifyEvidence.has(`${t.mappingId}|${url}`)) continue;
+    claimed.add(t.targetSku);
+    const c = (Array.isArray(r.products) ? r.products[0] : r.products) as Record<string, unknown> | undefined;
+    out.push({
+      id: t.mappingId, product_id: String(r.product_id),
+      canonical_name: String(c?.canonical_name ?? ''), canonical_brand: (c?.brand as string) ?? null,
+      canonical_ean: (c?.ean as string) ?? null,
+      store_product_name: String(r.store_product_name ?? ''), store_brand: (r.brand as string) ?? null,
+      is_own_brand: r.is_own_brand === true, store_sku: String(r.store_sku ?? ''), store_url: String(r.store_url ?? ''),
+      url_status: String(r.url_status), gtin: (r.gtin as string) ?? null,
+      observed_at: null, price: null, peerCanonicalNames: [], sameSkuCount: 1,
+      snapshot: null, peers: [], firstPrice: false, approval: null,
+      evidenceUrl: url, evidencePurpose: activation ? 'repair_activation' : 'repair_target',
+    });
+  }
+  return out;
 }
 
 function stableStringify(v: unknown): string {
@@ -415,7 +522,7 @@ export function snapshotMappingEvidence(s: SnapshotIdentity, isFresh: boolean): 
 // verifies Tesco identity only (never a cross-retailer price comparison), and
 // the AI never overrides a deterministic rejection.
 export function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: string, live: TescoCollectedProduct,
-  peers: ApifyPeer[] = []): ReentryEvidence {
+  peers: ApifyPeer[] = [], proven = true): ReentryEvidence {
   return {
     mapping: {
       id: s.storeProductId, product_id: s.productId, canonical_name: s.canonicalName,
@@ -424,7 +531,7 @@ export function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha2
       is_own_brand: s.isOwnBrand, store_sku: s.storeSku, store_url: s.storeUrl,
       url_status: 'resolved', gtin: s.gtin,
     },
-    sameSkuCount: Math.max(s.sameSkuCanonicalNames.length, 1), proven: true, freshTesco: false, pending: false, recentAttempt: false,
+    sameSkuCount: Math.max(s.sameSkuCanonicalNames.length, 1), proven, firstPriceOnboarding: !proven, freshTesco: false, pending: false, recentAttempt: false,
     page: {
       id: pageId, requested_url: s.storeUrl, final_url: s.storeUrl, outcome: 'ok', http_status: 200,
       body_sha256: bodySha256, mode: 'products', parsed: { products: [live], listing: null },
@@ -471,6 +578,8 @@ export type ApifyCollectionResult = {
   held: number;
   unavailable: number;
   stopped: string | null;
+  // Evidence mode: usable ok pages recorded (never a price).
+  evidenceRecorded: number;
   spentUsd: number;
   perProduct: Array<{
     storeProductId: string; sku: string; outcome: string; accepted: boolean;
@@ -488,9 +597,10 @@ export async function collectTescoApify(
   const owner = `fargate-${createHash('sha256').update(String(Date.now()) + Math.random()).digest('hex').slice(0, 24)}`;
   let spentUsd = deps.spentUsd ?? 0;
 
-  const mappings = await selectApifyMappings(sb, mode, limit, deps.allowFirstPrice === true);
+  const mappings = await selectApifyMappings(sb, mode, limit, deps.allowFirstPrice === true,
+    { priorityIds: deps.selection?.priorityIds, repairTargets: deps.selection?.repairTargets });
   const result: ApifyCollectionResult = {
-    runId: '', mode, requested: 0, accepted: 0, held: 0, unavailable: 0, stopped: null, spentUsd, perProduct: [],
+    runId: '', mode, requested: 0, accepted: 0, held: 0, unavailable: 0, stopped: null, evidenceRecorded: 0, spentUsd, perProduct: [],
   };
   if (!mappings.length) { result.stopped = 'no_eligible_products'; return result; }
 
@@ -540,10 +650,12 @@ export async function collectTescoApify(
       try {
         const reserved = await rpc<{ reserved: boolean; snapshot: Record<string, unknown> }>(sb, 'apify_reserve_tesco_request', {
           p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
-          p_store_product_id: m.id, p_store_url: m.store_url, p_mode: mode,
+          p_store_product_id: m.id, p_store_url: m.evidenceUrl ?? m.store_url, p_mode: mode,
           p_expected_snapshot: m.snapshot,
           // An unproven expansion mapping reserves ONLY with its live approval.
-          p_approval_id: m.approval?.id ?? null,
+          // Omitted otherwise, so the call also matches the pre-20261113090000
+          // 8-argument signature still deployed in production.
+          ...(m.approval ? { p_approval_id: m.approval.id } : {}),
         });
         boundSnapshot = reserved?.snapshot ?? null;
       } catch (e) {
@@ -562,7 +674,10 @@ export async function collectTescoApify(
       }
 
       // Pass the RESERVED amount as the provider-side ceiling for this request.
-      const { response, provider } = await deps.fetchApify(ident.storeUrl, deps.perRequestUsd);
+      // Evidence mode may fetch a repair-target URL rather than the mapping URL.
+      const fetchUrl = mode === 'evidence' && m.evidenceUrl ? m.evidenceUrl : ident.storeUrl;
+      const targetSku = fetchUrl.slice(fetchUrl.lastIndexOf('/') + 1);
+      const { response, provider } = await deps.fetchApify(fetchUrl, deps.perRequestUsd);
       result.requested += 1;
       // Settle ONLY when a CONFIRMED TERMINAL charge is known: provider identity
       // present, a non-null runUsageUsd, AND runUsageIsTerminal. Provider
@@ -597,10 +712,54 @@ export async function collectTescoApify(
       let outcome: string = response.outcome;
       try { if (outcome === 'ok') parsed = parseTescoCollectedPage(response.html, response.finalUrl); }
       catch { outcome = 'parse_error'; }
-      const product: TescoCollectedProduct | undefined = parsed?.products.find(p => p.sku === ident.storeSku);
+      const product: TescoCollectedProduct | undefined = parsed?.products.find(p => p.sku === targetSku);
       const unavailable = tescoResourceUnavailable(response);
       const transportStop = outcome !== 'ok' && !unavailable;
       const adapterBody = createHash('sha256').update(response.html).digest('hex');
+      const pauseUntil = transportStop
+        ? tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter)
+        : null;
+      const blocked = response.outcome === 'access_block';
+      const providerJson = provider ? {
+        sku: provider.sku, actorId: provider.actorId, actorBuildId: provider.actorBuildId,
+        actorBuildNumber: provider.actorBuildNumber, runId: provider.runId, datasetId: provider.datasetId,
+        rawItem: provider.rawItem, rawItemSha256: provider.rawItemSha256,
+        scrapedAt: provider.scrapedAt, freshness: provider.freshness,
+        freshnessVerified: false, // set true only after the batch audit establishes it
+      } : null;
+
+      // --- EVIDENCE-ONLY acquisition: record the page and stop. No AI, no
+      // staging, no finalise; the database also refuses any price write in an
+      // evidence run. A first-price page is assessed later by the separate,
+      // AI-verified approval step; a repair page feeds the guarded repair.
+      if (mode === 'evidence') {
+        const evReasons = product && m.evidencePurpose === 'first_price'
+          ? validateTescoCollectedIdentity(snapshotMappingEvidence(ident, false), product)
+          : product ? [] : ['missing_exact_product'];
+        const usable = outcome === 'ok' && !!product;
+        await rpc(sb, 'apify_record_tesco_page', {
+          p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
+          p_store_product_id: ident.storeProductId, p_store_url: fetchUrl, p_mode: mode,
+          p_outcome: outcome, p_http_status: response.status, p_retry_after: response.retryAfter,
+          p_elapsed_ms: response.elapsedMs, p_adapter_body_sha256: adapterBody,
+          p_parsed: parsed, p_identity_results: [{ storeProductId: ident.storeProductId, sku: targetSku, reasons: evReasons }],
+          p_detail: {
+            provider: 'apify', evidenceOnly: true, acquisitionOnly: true, pricesInserted: 0,
+            purpose: m.evidencePurpose ?? 'first_price',
+            disposition: usable ? 'evidence_recorded' : outcome === 'ok' ? 'evidence_unusable' : undefined,
+            resourceUnavailable: unavailable || undefined, freshness: provider?.freshness.level ?? null,
+            evidenceOrigin: 'synthetic-apify-adapter',
+          },
+          p_pause: !!pauseUntil, p_pause_until: pauseUntil, p_blocked: blocked,
+          p_provider: providerJson,
+        });
+        if (usable) result.evidenceRecorded += 1; else if (unavailable) result.unavailable += 1; else if (outcome === 'ok') result.held += 1;
+        result.perProduct.push({ storeProductId: ident.storeProductId, sku: targetSku, outcome, accepted: false,
+          reasons: evReasons, price: null, freshness: provider?.freshness.level ?? null });
+        deps.log?.({ event: 'evidence', sku: targetSku, purpose: m.evidencePurpose, outcome, usable, reasons: evReasons });
+        if (pauseUntil) { result.stopped = outcome; break; }
+        continue;
+      }
 
       // --- Identity + inference acceptance path (defects 2 + 3) ---
       // Deterministic gate FIRST (authoritative; AI can never override a reject).
@@ -622,7 +781,9 @@ export async function collectTescoApify(
 
       // Evidence WITH the fresh Dunnes/SuperValu peers (from `m`, keyed by
       // canonical product_id). Peers corroborate IDENTITY only, never a price.
-      const ev = product ? assessmentEvidence(ident, runId, adapterBody, product, m.peers) : null;
+      // A first-price candidate is NOT proven; say so to the assessment (this
+      // also keeps it off the canonical-gap route, which requires proven).
+      const ev = product ? assessmentEvidence(ident, runId, adapterBody, product, m.peers, !m.firstPrice) : null;
 
       // HELD-MAPPING RECOVERY (canonical-evidence gap): the ordinary gate
       // rejects a mapping when the ONLY problem is an incomplete/generic
@@ -636,7 +797,7 @@ export async function collectTescoApify(
       // It merely admits the item to the SAME AI assessment every other
       // new/changed identity must pass; the AI verified_exact verdict is still
       // required (preserved below).
-      const canonicalGapEligible = !!(product && ev && perItemFreshOk
+      const canonicalGapEligible = !!(product && ev && perItemFreshOk && !m.firstPrice
         && deterministicReasons.length > 0
         && reviewedCanonicalEvidenceGap(ev, product, deterministicReasons));
       if (canonicalGapEligible) {
@@ -725,24 +886,13 @@ export async function collectTescoApify(
         reasons.push('freshness_precondition_not_met');
       }
 
-      const pauseUntil = transportStop
-        ? tescoPauseUntil(response.outcome === 'ok' ? 'http_error' : response.outcome, response.retryAfter)
-        : null;
-      const blocked = response.outcome === 'access_block';
-      const providerJson = provider ? {
-        sku: provider.sku, actorId: provider.actorId, actorBuildId: provider.actorBuildId,
-        actorBuildNumber: provider.actorBuildNumber, runId: provider.runId, datasetId: provider.datasetId,
-        rawItem: provider.rawItem, rawItemSha256: provider.rawItemSha256,
-        scrapedAt: provider.scrapedAt, freshness: provider.freshness,
-        freshnessVerified: false, // set true only after the batch audit establishes it
-      } : null;
 
       // Record the page NOW (evidence ONLY — the record RPC can never write a
       // price). Finalisation is a separate, fencing-token-guarded RPC that runs
       // after the per-batch freshness audit.
       await rpc(sb, 'apify_record_tesco_page', {
         p_run_id: runId, p_egress_key: APIFY_GATE, p_lease_token: leaseToken, p_owner: owner,
-        p_store_product_id: ident.storeProductId, p_store_url: ident.storeUrl, p_mode: mode,
+        p_store_product_id: ident.storeProductId, p_store_url: fetchUrl, p_mode: mode,
         p_outcome: outcome, p_http_status: response.status, p_retry_after: response.retryAfter,
         p_elapsed_ms: response.elapsedMs, p_adapter_body_sha256: adapterBody,
         p_parsed: parsed, p_identity_results: [{ storeProductId: ident.storeProductId, sku: ident.storeSku, reasons }],
@@ -779,8 +929,9 @@ export async function collectTescoApify(
         p_store_product_id: s.ident.storeProductId, p_mode: mode,
         p_regular_price: s.product.price, p_previous_price: s.previousPrice,
         p_store_product_name: s.product.name, p_assessed_snapshot: s.snapshot,
-        p_approval_id: s.approval?.id ?? null,
-        p_live_identity_fingerprint: s.approval ? s.fingerprint : null,
+        // Approval params only for a first price, so a proven write also
+        // matches the pre-20261113090000 10-argument signature.
+        ...(s.approval ? { p_approval_id: s.approval.id, p_live_identity_fingerprint: s.fingerprint } : {}),
       });
       } catch (err) {
         // A first-price finalise refusal (approval invalid/consumed/changed,

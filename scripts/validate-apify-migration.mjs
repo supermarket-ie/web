@@ -11,6 +11,15 @@ const q = (sql) => db.exec(sql);
 
 // Supabase roles referenced by revoke/grant.
 await q(`create role anon; create role authenticated; create role service_role;`);
+// Mirror Supabase's DEFAULT PRIVILEGES: every new public table/function/sequence
+// is granted ALL to anon, authenticated AND service_role. Migrations must revoke
+// what they do not intend; the assertions below check that they do.
+await q(`
+grant usage on schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+`);
 
 // Base tables (store_products/products/price_observations/scrape_runs/
 // receipts/failures/latest_prices) PREDATE the migration history — there is no
@@ -313,34 +322,124 @@ await db.query(`select public.apify_record_identity_verification($1,$2,'{}'::jso
 const activeV = (await db.query(`select identity_fingerprint from public.tesco_identity_verifications where store_product_id=$1 and invalidated_at is null`, [MID])).rows;
 assert(activeV.length === 1 && activeV[0].identity_fingerprint === 'e'.repeat(64), 'a new fingerprint invalidates the prior active verification');
 
-// ---- FIRST-PRICE expansion path (20261113090000): single-use, evidence-bound approval ----
-// Mapping C: resolved, canonical URL, NEVER observed, NO success receipt, one-to-one SKU.
-const MID_FP = 'a1a1a1a1-0000-0000-0000-000000000001';
+
+// ============================================================
+// 20261113090000: inherited privileges, evidence-only acquisition, and the
+// single-use evidence-bound first-price approval.
+// ============================================================
+const MID_FP = 'a1a1a1a1-0000-0000-0000-000000000001'; // unproven, never observed
 const PID_FP = 'a2a2a2a2-0000-0000-0000-000000000002';
-const URL_FP = 'https://www.tesco.ie/shop/en-IE/products/279000001';
-// Mapping D: a second unproven mapping (used to test cross-mapping reuse).
-const MID_FR = 'b1b1b1b1-0000-0000-0000-000000000001';
+const SKU_FP = '279000001';
+const URL_FP = `https://www.tesco.ie/shop/en-IE/products/${SKU_FP}`;
+const MID_FR = 'b1b1b1b1-0000-0000-0000-000000000001'; // a second unproven mapping
 const PID_FR = 'b2b2b2b2-0000-0000-0000-000000000002';
-const URL_FR = 'https://www.tesco.ie/shop/en-IE/products/279000002';
-const EV_FP = 'c1c1c1c1-0000-0000-0000-000000000001'; // retained evidence page for C
-const EV_FR_OLD = 'c2c2c2c2-0000-0000-0000-000000000002'; // 20-day-old evidence page for D
+const SKU_FR = '279000002';
+const URL_FR = `https://www.tesco.ie/shop/en-IE/products/${SKU_FR}`;
+const SKU_REPAIR = '279000099'; // owned by no mapping
+const URL_REPAIR = `https://www.tesco.ie/shop/en-IE/products/${SKU_REPAIR}`;
 const SHA_EV = 'c'.repeat(64);
-const FPR = 'd'.repeat(64); // approved identity fingerprint
-const SEED_RUN = '33333333-3333-3333-3333-333333333333';
+const FPR = 'd'.repeat(64);
 await q(`
 insert into public.products(id, canonical_name, brand, ean) values
   ('${PID_FP}','Nutella Hazelnut Spread 400g','Nutella','7622300441074'),
   ('${PID_FR}','Example Soup 400g','Example',null);
 insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, gtin, url_status)
 values
-  ('${MID_FP}','${PID_FP}','tesco','279000001','${URL_FP}','Nutella Hazelnut Spread 400g','Nutella',false,null,'resolved'),
-  ('${MID_FR}','${PID_FR}','tesco','279000002','${URL_FR}','Example Soup 400g','Example',false,null,'resolved');
-insert into public.tesco_direct_collection_pages(id, run_id, egress_key, requested_url, store_product_id, mode, outcome, body_sha256, parsed, created_at)
-values
-  ('${EV_FP}','${SEED_RUN}','${GATE}','${URL_FP}','${MID_FP}','products','ok','${SHA_EV}','{"products":[{"sku":"279000001"}]}'::jsonb, now() - interval '3 days'),
-  ('${EV_FR_OLD}','${SEED_RUN}','${GATE}','${URL_FR}','${MID_FR}','products','ok','${'e'.repeat(64)}','{"products":[{"sku":"279000002"}]}'::jsonb, now() - interval '20 days');
+  ('${MID_FP}','${PID_FP}','tesco','${SKU_FP}','${URL_FP}','Nutella Hazelnut Spread 400g','Nutella',false,null,'resolved'),
+  ('${MID_FR}','${PID_FR}','tesco','${SKU_FR}','${URL_FR}','Example Soup 400g','Example',false,null,'resolved');
 `);
 const resetPacing = () => db.query(`update public.tesco_egress_pool set last_success_at = null where egress_key = $1`, [GATE]);
+const close = (a) => db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'complete')`, [a.runId, GATE, a.token, a.owner]);
+async function beginMode(mode, owner) {
+  const r = (await db.query(`select public.apify_begin_tesco_run($1,$2,10,$3) as b`, [GATE, mode, owner])).rows[0].b;
+  return { runId: r.runId, token: r.leaseToken, owner };
+}
+async function reserveMode(a, mid, url, mode, approvalId = null) {
+  await resetPacing();
+  return db.query(`select public.apify_reserve_tesco_request($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9) as r`,
+    [a.runId, GATE, a.token, a.owner, mid, url, mode, JSON.stringify(await snapshotOf(mid)), approvalId]);
+}
+const product = (sku, price = 3.5) => ({ sku, url: `https://www.tesco.ie/shop/en-IE/products/${sku}`, name: 'Nutella Hazelnut Spread 400G',
+  brand: 'Nutella', gtin: null, price, currency: 'EUR', available: true, quantity: { grams: 400 } });
+async function recordPage(a, mid, url, sku, sha, mode, detail = { provider: 'apify' }) {
+  return db.query(`select public.apify_record_tesco_page($1,$2,$3,$4,$5,$6,$7,'ok',200,null,120,$8,
+    $9::jsonb, '[]'::jsonb, $10::jsonb, false, null, false, $11::jsonb)`,
+    [a.runId, GATE, a.token, a.owner, mid, url, mode, sha, JSON.stringify({ products: [product(sku)], listing: null }),
+      JSON.stringify(detail), JSON.stringify({ sku, actorId: 'A', runId: 'r', datasetId: 'd', rawItem: {}, rawItemSha256: 'a'.repeat(64) })]);
+}
+const pageOf = async (runId, url) => (await db.query(`select id, created_at from public.tesco_direct_collection_pages where run_id=$1 and requested_url=$2`, [runId, url])).rows[0];
+// Age every page for a URL (simulates elapsed time for the 24h exclusion).
+const agePages = (url, interval) => db.query(`update public.tesco_direct_collection_pages set created_at = created_at - $2::interval where requested_url = $1`, [url, interval]);
+const evDetail = { provider: 'apify', acquisitionOnly: true, pricesInserted: 0, evidenceOnly: true };
+
+// ---- A. INHERITED PRIVILEGES ----
+const priv = async (t, p) => (await db.query(`select has_table_privilege('service_role', $1, $2) ok`, [`public.${t}`, p])).rows[0].ok;
+for (const p of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
+  assert(!(await priv('tesco_first_price_approvals', p)), `service_role has NO inherited ${p} on tesco_first_price_approvals`);
+  assert(!(await priv('tesco_apify_provider_evidence', p)), `service_role has NO inherited ${p} on tesco_apify_provider_evidence (immutable anchor)`);
+}
+assert(await priv('tesco_first_price_approvals', 'SELECT') && await priv('tesco_apify_provider_evidence', 'SELECT'), 'service_role can still READ approvals and provider evidence');
+assert(!(await priv('tesco_direct_collection_pages', 'DELETE')) && !(await priv('tesco_direct_collection_pages', 'TRUNCATE')), 'inherited DELETE/TRUNCATE on evidence pages removed');
+assert(await priv('tesco_direct_collection_pages', 'UPDATE') && await priv('tesco_direct_collection_pages', 'INSERT'), 'legacy supervised collector keeps its explicit page INSERT/UPDATE');
+const anonExec = (await db.query(`select has_function_privilege('anon', 'public.apify_record_first_price_approval(uuid,uuid,text,text,jsonb,jsonb,integer)', 'EXECUTE') ok`)).rows[0].ok;
+assert(!anonExec, 'anon cannot execute the approval RPC');
+async function asServiceRole(sql, params = []) {
+  await q(`set role service_role`);
+  try { return await db.query(sql, params); } finally { await q(`reset role`); }
+}
+await expectThrows(() => asServiceRole(`insert into public.tesco_first_price_approvals(store_product_id, mapping_snapshot, evidence_page_id, evidence_provider_id, evidence_body_sha256, evidence_product, identity_fingerprint, assessment, model, expires_at)
+  values ($1,'{}'::jsonb,gen_random_uuid(),gen_random_uuid(),$2,'{}'::jsonb,$2,'{}'::jsonb,'mmm', now()+interval '1 day')`, [MID_FP, 'c'.repeat(64)]),
+  'permission denied', 'service_role cannot INSERT an approval directly (must go through the RPC)');
+await expectThrows(() => asServiceRole(`update public.tesco_first_price_approvals set consumed_at = null`), 'permission denied', 'service_role cannot UPDATE approvals (no reset of consumed_at)');
+await expectThrows(() => asServiceRole(`update public.tesco_apify_provider_evidence set adapter_body_sha256 = $1`, ['0'.repeat(64)]), 'permission denied', 'service_role cannot rewrite provider evidence');
+assert((await asServiceRole(`select public.apify_mapping_snapshot($1) s`, [MID_FP])).rows[0].s.store_sku === SKU_FP, 'service_role can still call the granted RPCs');
+
+// ---- B. EVIDENCE-ONLY ACQUISITION ----
+await expectThrows(() => beginMode('bogus', 'fargate-owner-xxxxxxxx'), 'mode_must_be', 'begin refuses an unknown mode');
+const EV = await beginMode('evidence', 'fargate-owner-evevevev');
+await expectThrows(() => reserveMode(EV, MID_FP, URL_FP, 'expansion'), 'run_mode_mismatch', 'an evidence run cannot reserve an expansion (price-writing) request');
+await expectThrows(() => reserveMode(EV, MID, URL_A, 'evidence'), 'already_observed', 'evidence mode refuses a mapping that already has a fresh price');
+await expectThrows(() => reserveMode(EV, MID_FP, 'https://www.tesco.ie/shop/en-IE/products/abc', 'evidence'), 'repair_target_url_invalid', 'repair-target evidence needs a canonical Tesco product URL');
+await expectThrows(() => reserveMode(EV, MID_FP, URL_FR, 'evidence'), 'repair_target_owned', 'repair-target evidence refuses a SKU another mapping owns');
+const evR = (await reserveMode(EV, MID_FP, URL_FP, 'evidence')).rows[0].r;
+assert(evR.reserved === true && evR.purpose === 'first_price' && evR.firstPrice === false, 'evidence reserve admits the UNPROVEN mapping at its own URL (purpose first_price)');
+await recordPage(EV, MID_FP, URL_FP, SKU_FP, SHA_EV, 'evidence', evDetail);
+const evRep = (await reserveMode(EV, MID_FR, URL_REPAIR, 'evidence')).rows[0].r;
+assert(evRep.purpose === 'repair_target', 'evidence reserve admits an unowned repair-target URL (purpose repair_target)');
+await recordPage(EV, MID_FR, URL_REPAIR, SKU_REPAIR, 'e'.repeat(64), 'evidence', evDetail);
+const evSnap = JSON.stringify(await snapshotOf(MID_FP));
+await expectThrows(() => db.query(`select public.apify_finalise_tesco_page($1,$2,$3,$4,$5,'expansion',3.5,null,'x',$6::jsonb) as r`,
+  [EV.runId, GATE, EV.token, EV.owner, MID_FP, evSnap]), 'evidence_run_never_writes_price', 'an EVIDENCE run can never write a price, whatever mode the caller claims');
+await close(EV);
+assert(await allPriceCountFP() === 0, 'the evidence run wrote NO price');
+async function allPriceCountFP() { return (await db.query(`select count(*)::int n from public.price_observations where store_product_id in ($1,$2)`, [MID_FP, MID_FR])).rows[0].n; }
+assert((await db.query(`select count(*)::int n from public.scrape_product_receipts where run_id=$1`, [EV.runId])).rows[0].n === 0, 'the evidence run wrote NO receipt');
+const EV_FP = (await pageOf(EV.runId, URL_FP)).id;
+const EV_REPAIR = (await pageOf(EV.runId, URL_REPAIR)).id;
+const completed = async (id) => (await db.query(`select tesco_internal.completed_apify_evidence_source($1) ok`, [id])).rows[0].ok;
+assert(await completed(EV_REPAIR), 'a closed evidence-run page with provider evidence is a completed repair source');
+// Proven mapping in evidence mode is refused (ordinary expansion covers it).
+await q(`update public.price_observations set observed_at = now() - interval '30 days' where store_product_id = '${MID_B}'`);
+const EV2 = await beginMode('evidence', 'fargate-owner-ev2ev2ev');
+await expectThrows(() => reserveMode(EV2, MID_B, URL_B, 'evidence'), 'evidence_mode_unproven_only', 'evidence mode refuses a PROVEN mapping at its own URL');
+// A STAGED repair (url_status failed at its target URL) may fetch an
+// activation source; it is still evidence-only.
+await db.query(`update public.store_products set url_status = 'failed' where id = $1`, [MID_B]);
+await db.query(`update public.tesco_direct_collection_pages set outcome = 'ok' where requested_url = $1 and outcome = 'pending'`, [URL_B]);
+await agePages(URL_B, '25 hours');
+const act = (await reserveMode(EV2, MID_B, URL_B, 'evidence')).rows[0].r;
+assert(act.purpose === 'repair_activation', 'evidence reserve admits a STAGED repair at its target URL (purpose repair_activation)');
+await recordPage(EV2, MID_B, URL_B, '260300754', '7'.repeat(64), 'evidence', evDetail);
+await close(EV2);
+assert(await completed((await pageOf(EV2.runId, URL_B)).id), 'the activation page is a completed Apify evidence-only source');
+await db.query(`update public.store_products set url_status = 'resolved' where id = $1`, [MID_B]);
+
+// The 24h exclusion still applies to the URL just acquired.
+const XA = await beginMode('expansion', 'fargate-owner-xaxaxaxa');
+await expectThrows(() => reserveMode(XA, MID_FP, URL_FP, 'evidence'), 'run_mode_mismatch', 'an expansion run cannot reserve an evidence request');
+await close(XA);
+
+// ---- C. APPROVAL RECORDING ----
 const assessmentFor = (over = {}) => ({
   decision: 'verified_exact', model: 'anthropic.claude-test', rule_version: 'tesco-identity-v1',
   reason: 'Same brand, product type and size; the Tesco page title and SKU match the mapped canonical product.',
@@ -351,99 +450,84 @@ async function recordApproval({ mid = MID_FP, page = EV_FP, sha = SHA_EV, fp = F
   return (await db.query(`select public.apify_record_first_price_approval($1,$2,$3,$4,$5::jsonb,$6::jsonb) as id`,
     [mid, page, sha, fp, JSON.stringify(assessment), JSON.stringify(snap)])).rows[0].id;
 }
-async function reserveExp(a, mid, url, approvalId, mode = 'expansion') {
-  await resetPacing();
-  const exp = await snapshotOf(mid);
-  return db.query(`select public.apify_reserve_tesco_request($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9) as r`,
-    [a.runId, GATE, a.token, a.owner, mid, url, mode, JSON.stringify(exp), approvalId]);
-}
-async function recordExp(a, mid, url, sku) {
-  return db.query(`select public.apify_record_tesco_page($1,$2,$3,$4,$5,$6,'expansion','ok',200,null,120,$7,
-    $8::jsonb, '[]'::jsonb, '{"provider":"apify"}'::jsonb, false, null, false,
-    '{"sku":"${sku}","actorId":"A","runId":"r","datasetId":"d","rawItem":{},"rawItemSha256":"${'a'.repeat(64)}"}'::jsonb)`,
-    [a.runId, GATE, a.token, a.owner, mid, url, 'f'.repeat(64), JSON.stringify({ products: [{ sku }], listing: null })]);
-}
-async function finaliseExp(a, mid, price, approvalId, liveFp) {
-  const asn = await snapshotOf(mid);
-  return db.query(`select public.apify_finalise_tesco_page($1,$2,$3,$4,$5,'expansion',$6,null,'x',$7::jsonb,$8,$9) as r`,
-    [a.runId, GATE, a.token, a.owner, mid, price, JSON.stringify(asn), approvalId, liveFp]);
-}
-const approvalRow = async (id) => (await db.query(`select * from public.tesco_first_price_approvals where id=$1`, [id])).rows[0];
-const receiptCount = async (mid) => (await db.query(`select count(*)::int n from public.scrape_product_receipts where store_product_id=$1 and outcome='success'`, [mid])).rows[0].n;
-const allPriceCount = async (mid) => (await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1`, [mid])).rows[0].n;
-
-// -- Approval recording: every binding is validated before a row exists. --
+// A legacy (non-Apify) page for the mapping: never acceptable evidence.
+const LEGACY = (await db.query(`insert into public.tesco_direct_collection_pages(run_id, egress_key, requested_url, store_product_id, mode, outcome, body_sha256, parsed)
+  values ($1,'legacy',$2,$3,'products','ok',$4,$5::jsonb) returning id`, ['33333333-3333-3333-3333-333333333333', URL_FP + '?legacy', MID_FP, '9'.repeat(64),
+  JSON.stringify({ products: [product(SKU_FP)] })])).rows[0].id;
 await expectThrows(() => recordApproval({ mid: MID }), 'already_proven_no_approval_needed', 'approval refused for a mapping that already has a success receipt');
-await expectThrows(() => recordApproval({ sha: 'b'.repeat(64), assessment: assessmentFor({ source_body_sha256: 'b'.repeat(64) }) }), 'evidence_mismatch', 'approval refused when the evidence sha256 does not match the retained page');
-await expectThrows(() => recordApproval({ page: EV_FR_OLD, sha: 'e'.repeat(64), assessment: assessmentFor({ source_page_id: EV_FR_OLD, source_body_sha256: 'e'.repeat(64) }) }), 'evidence_mismatch', 'approval refused for an evidence page that belongs to a DIFFERENT mapping');
-await expectThrows(() => recordApproval({ mid: MID_FR, page: EV_FR_OLD, sha: 'e'.repeat(64), assessment: assessmentFor({ mapping_id: MID_FR, source_page_id: EV_FR_OLD, source_body_sha256: 'e'.repeat(64) }) }), 'evidence_stale', 'approval refused for retained evidence older than 14 days');
+await expectThrows(() => recordApproval({ sha: 'b'.repeat(64), assessment: assessmentFor({ source_body_sha256: 'b'.repeat(64) }) }), 'evidence_mismatch', 'MISMATCHED evidence: sha256 differs from the retained page');
+await expectThrows(() => recordApproval({ page: EV_REPAIR, sha: 'e'.repeat(64), assessment: assessmentFor({ source_page_id: EV_REPAIR, source_body_sha256: 'e'.repeat(64) }) }), 'evidence_mismatch', 'MISMATCHED evidence: a page for ANOTHER mapping / URL');
+await expectThrows(() => recordApproval({ page: LEGACY, sha: '9'.repeat(64), assessment: assessmentFor({ source_page_id: LEGACY, source_body_sha256: '9'.repeat(64) }) }), 'evidence_mismatch', 'MISMATCHED evidence: a legacy page with no Apify provider evidence');
 await expectThrows(() => recordApproval({ assessment: assessmentFor({ decision: 'needs_review' }) }), 'assessment_invalid', 'approval refused unless the AI decision is verified_exact');
 await expectThrows(() => recordApproval({ assessment: assessmentFor({ reason: 'ok' }) }), 'assessment_invalid', 'approval refused for an AI assessment with no substantive reason');
 await expectThrows(() => recordApproval({ assessment: assessmentFor({ mapping_id: MID_FR }) }), 'assessment_binding_mismatch', 'approval refused when the assessment is bound to another mapping');
-await expectThrows(() => recordApproval({ assessment: assessmentFor({ identity_fingerprint: 'a'.repeat(64) }) }), 'assessment_binding_mismatch', 'approval refused when the assessment fingerprint differs from the supplied one');
+await expectThrows(() => recordApproval({ assessment: assessmentFor({ identity_fingerprint: 'a'.repeat(64) }) }), 'assessment_binding_mismatch', 'approval refused when the assessment fingerprint differs');
 const staleSnap = { ...(await snapshotOf(MID_FP)), canonical_name: 'Something Else' };
-await expectThrows(() => recordApproval({ snapshot: staleSnap }), 'expected_snapshot_changed', 'approval refused when the supplied mapping snapshot is not the live mapping');
+await expectThrows(() => recordApproval({ snapshot: staleSnap }), 'expected_snapshot_changed', 'CHANGED MAPPING: approval refused when the snapshot is not the live mapping');
+await agePages(URL_FP, '15 days');
+await expectThrows(() => recordApproval(), 'evidence_stale', 'approval refused for evidence older than 14 days');
+await agePages(URL_FP, '-15 days');
 assert((await db.query(`select count(*)::int n from public.tesco_first_price_approvals`)).rows[0].n === 0, 'no approval row exists after every refused attempt');
-
-// -- MISSING approval: reserve and finalise both refuse an unproven mapping. --
-const FPA = { ...(await begin('fargate-owner-cccccccc')), owner: 'fargate-owner-cccccccc' };
-await expectThrows(() => reserveExp(FPA, MID_FP, URL_FP, null), 'mapping_not_resolved_or_unproven', 'MISSING approval: expansion reserve refuses an unproven mapping');
-await expectThrows(() => reserveExp(FPA, MID_FP, URL_FP, '99999999-9999-9999-9999-999999999999'), 'first_price_approval_invalid', 'unknown approval id is refused at reserve');
 
 const APPROVAL = await recordApproval();
 const ap0 = await approvalRow(APPROVAL);
-assert(ap0 && ap0.consumed_at === null && ap0.evidence_page_id === EV_FP && ap0.evidence_body_sha256 === SHA_EV && ap0.identity_fingerprint === FPR,
-  'a valid approval is recorded, unconsumed, bound to the retained page, its sha256 and the identity fingerprint');
+async function approvalRow(id) { return (await db.query(`select * from public.tesco_first_price_approvals where id=$1`, [id])).rows[0]; }
+assert(ap0 && ap0.consumed_at === null && ap0.evidence_page_id === EV_FP && ap0.evidence_provider_id && ap0.evidence_product?.sku === SKU_FP
+  && Date.parse(ap0.expires_at) - Date.parse(ap0.approved_at) === 72 * 3600_000,
+  'approval recorded: unconsumed, bound to the page + immutable provider row, product pinned, 72h TTL');
 
-// -- Approval can never be used for a different mapping or in RENEWAL. --
-await expectThrows(() => reserveExp(FPA, MID_FR, URL_FR, APPROVAL), 'first_price_approval_invalid', 'REUSE ACROSS MAPPINGS: an approval for mapping C cannot reserve mapping D');
-await expectThrows(() => reserveExp(FPA, MID_FP, URL_FP, APPROVAL, 'renewal'), 'mapping_not_resolved_or_unproven', 'RENEWAL never accepts a first-price approval');
-
-// -- CHANGED mapping: any change to the approved mapping invalidates the approval. --
+// ---- D. RESERVE / FINALISE with the approval ----
+const receiptCount = async (mid) => (await db.query(`select count(*)::int n from public.scrape_product_receipts where store_product_id=$1 and outcome='success'`, [mid])).rows[0].n;
+const priceN = async (mid) => (await db.query(`select count(*)::int n from public.price_observations where store_product_id=$1`, [mid])).rows[0].n;
+async function finaliseExp(a, mid, price, approvalId, liveFp) {
+  return db.query(`select public.apify_finalise_tesco_page($1,$2,$3,$4,$5,'expansion',$6,null,'x',$7::jsonb,$8,$9) as r`,
+    [a.runId, GATE, a.token, a.owner, mid, price, JSON.stringify(await snapshotOf(mid)), approvalId, liveFp]);
+}
+const FPA = await beginMode('expansion', 'fargate-owner-cccccccc');
+await expectThrows(() => reserveMode(FPA, MID_FP, URL_FP, 'expansion', APPROVAL), 'attempt_already_recorded', 'the 24h exclusion still applies after evidence acquisition');
+await agePages(URL_FP, '25 hours');
+await expectThrows(() => reserveMode(FPA, MID_FP, URL_FP, 'expansion', null), 'mapping_not_resolved_or_unproven', 'MISSING approval: expansion reserve refuses an unproven mapping');
+await expectThrows(() => reserveMode(FPA, MID_FP, URL_FP, 'expansion', '99999999-9999-9999-9999-999999999999'), 'first_price_approval_invalid', 'unknown approval id refused at reserve');
+await expectThrows(() => reserveMode(FPA, MID_FR, URL_FR, 'expansion', APPROVAL), 'first_price_approval_invalid', 'REUSE ACROSS MAPPINGS: approval for C cannot reserve D');
+await expectThrows(() => reserveMode(FPA, MID_FP, URL_FP, 'renewal', APPROVAL), 'mapping_not_resolved_or_unproven', 'RENEWAL never accepts a first-price approval');
 await db.query(`update public.store_products set brand = 'Nutella Changed' where id = $1`, [MID_FP]);
-await expectThrows(() => reserveExp(FPA, MID_FP, URL_FP, APPROVAL), 'first_price_approval_snapshot_changed', 'CHANGED MAPPING: reserve refuses once the mapping differs from the approved snapshot');
+await expectThrows(() => reserveMode(FPA, MID_FP, URL_FP, 'expansion', APPROVAL), 'first_price_approval_snapshot_changed', 'CHANGED MAPPING: reserve refuses once the mapping differs from the approved snapshot');
 await db.query(`update public.store_products set brand = 'Nutella' where id = $1`, [MID_FP]);
-
-// -- Happy reserve + record, then the finalise guards. --
-const rsv = (await reserveExp(FPA, MID_FP, URL_FP, APPROVAL)).rows[0].r;
-assert(rsv && rsv.reserved === true && rsv.firstPrice === true, 'reserve admits the unproven mapping ONLY with its live approval (firstPrice=true)');
+const rsv = (await reserveMode(FPA, MID_FP, URL_FP, 'expansion', APPROVAL)).rows[0].r;
+assert(rsv.reserved === true && rsv.firstPrice === true, 'reserve admits the unproven mapping ONLY with its live approval');
 assert((await approvalRow(APPROVAL)).consumed_at === null, 'reserve does NOT consume the approval');
-await recordExp(FPA, MID_FP, URL_FP, '279000001');
-assert(await allPriceCount(MID_FP) === 0, 'recording evidence writes no price');
-
+await recordPage(FPA, MID_FP, URL_FP, SKU_FP, 'f'.repeat(64), 'expansion');
 await expectThrows(() => finaliseExp(FPA, MID_FP, 3.5, null, FPR), 'first_price_approval_required', 'MISSING approval: finalise refuses a first price');
-await expectThrows(() => finaliseExp(FPA, MID_FP, 3.5, '99999999-9999-9999-9999-999999999999', FPR), 'first_price_approval_invalid', 'finalise refuses an unknown approval id');
-await expectThrows(() => finaliseExp(FPA, MID_FP, 3.5, APPROVAL, 'a'.repeat(64)), 'first_price_live_identity_mismatch', 'MISMATCHED identity: finalise refuses when the live fingerprint differs from the approved one');
+await expectThrows(() => finaliseExp(FPA, MID_FP, 3.5, APPROVAL, 'a'.repeat(64)), 'first_price_live_identity_mismatch', 'MISMATCHED identity: live fingerprint differs from the approved one');
 await expectThrows(() => finaliseExp(FPA, MID_FP, 3.5, APPROVAL, null), 'first_price_live_identity_mismatch', 'finalise refuses a missing live fingerprint');
 await db.query(`update public.tesco_direct_collection_pages set body_sha256 = $2 where id = $1`, [EV_FP, '1'.repeat(64)]);
-await expectThrows(() => finaliseExp(FPA, MID_FP, 3.5, APPROVAL, FPR), 'first_price_evidence_mismatch', 'MISMATCHED evidence: finalise refuses when the retained evidence no longer matches the approval');
+await expectThrows(() => finaliseExp(FPA, MID_FP, 3.5, APPROVAL, FPR), 'first_price_evidence_mismatch', 'MISMATCHED evidence: a tampered retained page is refused at finalise');
 await db.query(`update public.tesco_direct_collection_pages set body_sha256 = $2 where id = $1`, [EV_FP, SHA_EV]);
 await db.query(`update public.store_products set brand = 'Nutella Changed' where id = $1`, [MID_FP]);
 await expectThrows(() => finaliseExp(FPA, MID_FP, 3.5, APPROVAL, FPR), 'mapping_snapshot_changed', 'CHANGED MAPPING: finalise refuses when the mapping changed after reservation');
 await db.query(`update public.store_products set brand = 'Nutella' where id = $1`, [MID_FP]);
-assert(await allPriceCount(MID_FP) === 0 && await receiptCount(MID_FP) === 0 && (await approvalRow(APPROVAL)).consumed_at === null,
+assert(await priceN(MID_FP) === 0 && await receiptCount(MID_FP) === 0 && (await approvalRow(APPROVAL)).consumed_at === null,
   'every refused finalise left NO price, NO receipt and the approval UNCONSUMED');
-
-// -- Success: price + first receipt + consumption in one transaction. --
-assert((await finaliseExp(FPA, MID_FP, 3.5, APPROVAL, FPR)).rows[0].r.finalised === true, 'finalise with a valid approval and matching live identity writes the first price');
+assert((await finaliseExp(FPA, MID_FP, 3.5, APPROVAL, FPR)).rows[0].r.finalised === true, 'finalise with a valid approval + matching live identity writes the FIRST price');
 const ap1 = await approvalRow(APPROVAL);
-assert(await allPriceCount(MID_FP) === 1 && await receiptCount(MID_FP) === 1, 'exactly one price and one success receipt were written');
-assert(ap1.consumed_at !== null && ap1.consumed_run_id === FPA.runId, 'the approval was consumed by this run in the same transaction');
-await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'complete')`, [FPA.runId, GATE, FPA.token, FPA.owner]);
+assert(await priceN(MID_FP) === 1 && await receiptCount(MID_FP) === 1, 'exactly one price and one success receipt were written');
+assert(ap1.consumed_at !== null && ap1.consumed_run_id === FPA.runId, 'approval consumed by this run in the same transaction');
+await close(FPA);
+assert(!(await completed((await pageOf(FPA.runId, URL_FP)).id)), 'a price-writing run page is never a completed evidence-only source');
 
-// -- ATTEMPTED REUSE: a consumed approval is dead even if the mapping looks unproven again. --
-await expectThrows(() => recordApproval(), 'already_proven_no_approval_needed', 'a proven mapping cannot receive a fresh approval');
+// ---- E. ATTEMPTED REUSE ----
+await expectThrows(() => recordApproval(), 'already_proven_no_approval_needed', 'a now-proven mapping cannot receive a fresh approval');
 await db.query(`delete from public.scrape_product_receipts where store_product_id = $1`, [MID_FP]);
 await db.query(`delete from public.price_observations where store_product_id = $1`, [MID_FP]);
-await db.query(`delete from public.tesco_direct_collection_pages where run_id = $1`, [FPA.runId]);
-const FPB = { ...(await begin('fargate-owner-dddddddd')), owner: 'fargate-owner-dddddddd' };
-await expectThrows(() => reserveExp(FPB, MID_FP, URL_FP, APPROVAL), 'first_price_approval_invalid', 'REUSE: reserve refuses a consumed approval');
+await agePages(URL_FP, '25 hours');
+const FPB = await beginMode('expansion', 'fargate-owner-dddddddd');
+await expectThrows(() => reserveMode(FPB, MID_FP, URL_FP, 'expansion', APPROVAL), 'first_price_approval_invalid', 'REUSE: reserve refuses a consumed approval');
 await db.query(`insert into public.tesco_direct_collection_pages(run_id, egress_key, requested_url, store_product_id, mapping_snapshot, mode, outcome, body_sha256, parsed)
-  values ($1,$2,$3,$4,$5::jsonb,'products','ok',$6,'{"products":[{"sku":"279000001"}]}'::jsonb)`,
-  [FPB.runId, GATE, URL_FP, MID_FP, JSON.stringify(await snapshotOf(MID_FP)), 'f'.repeat(64)]);
+  values ($1,$2,$3,$4,$5::jsonb,'products','ok',$6,$7::jsonb)`,
+  [FPB.runId, GATE, URL_FP, MID_FP, JSON.stringify(await snapshotOf(MID_FP)), 'f'.repeat(64), JSON.stringify({ products: [product(SKU_FP)] })]);
 await expectThrows(() => finaliseExp(FPB, MID_FP, 3.5, APPROVAL, FPR), 'first_price_approval_already_consumed', 'REUSE: finalise refuses a consumed approval and writes nothing');
-assert(await allPriceCount(MID_FP) === 0 && await receiptCount(MID_FP) === 0, 'the replay attempt wrote NO price and NO receipt');
-await db.query(`select public.apify_close_tesco_run($1,$2,$3,$4,'complete')`, [FPB.runId, GATE, FPB.token, FPB.owner]);
+assert(await priceN(MID_FP) === 0 && await receiptCount(MID_FP) === 0, 'the replay attempt wrote NO price and NO receipt');
+await close(FPB);
 
 console.log(`\n${failures === 0 ? 'ALL MIGRATION ASSERTIONS PASSED' : failures + ' MIGRATION ASSERTION(S) FAILED'}`);
 process.exit(failures === 0 ? 0 : 1);

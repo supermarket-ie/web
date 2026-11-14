@@ -5,7 +5,12 @@
 // Env:
 //   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — service_role client
 //   APIFY_TOKEN                                          — Apify API token
-//   APIFY_MODE          = renewal | expansion            (default renewal)
+//   APIFY_MODE          = renewal | expansion | evidence | approve (default renewal)
+//                         evidence: EVIDENCE-ONLY acquisition (never a price)
+//                         approve:  AI-assess recent evidence and record single-use
+//                                   first-price approvals (APPROVAL_APPLY=1 to write)
+//   APIFY_PRIORITY_QUEUE = recovery queue JSON (default scripts/data/tesco-recovery-queue-20261113.json;
+//                          '' disables). Orders work; every entry is rechecked live.
 //   APIFY_BATCH_LIMIT   = batch size                     (default 25)
 //   APIFY_BUDGET_USD    = campaign budget cap            (default 10)
 //   APIFY_PER_REQUEST_USD = marginal cost per request    (default 0.002)
@@ -13,6 +18,9 @@
 //   APIFY_REQUIRE_FRESHNESS = '0' to RELAX freshness (default: enforced)
 import { createClient } from '@supabase/supabase-js';
 import { collectTescoApify, type ApifyCollectionResult } from '../src/lib/tesco-apify-collection';
+import { readFileSync } from 'node:fs';
+import { planRecoveryQueue, type RecoveryPlan } from '../src/lib/tesco-recovery-queue';
+import { prepareFirstPriceApprovals } from '../src/lib/tesco-first-price-approval';
 import { createApifyRunClient, createApifyFetchPage, reconcileCampaignSpendUsd, confirmedTerminalChargeUsd, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
 
 function env(name: string, fallback?: string): string {
@@ -26,7 +34,24 @@ async function main() {
   const key = env('SUPABASE_SERVICE_ROLE_KEY');
   const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const mode = (process.env.APIFY_MODE ?? 'renewal') as 'renewal' | 'expansion';
+  const mode = (process.env.APIFY_MODE ?? 'renewal') as 'renewal' | 'expansion' | 'evidence' | 'approve';
+  if (!['renewal', 'expansion', 'evidence', 'approve'].includes(mode)) throw new Error(`Unknown APIFY_MODE ${mode}`);
+  const queuePath = process.env.APIFY_PRIORITY_QUEUE ?? 'scripts/data/tesco-recovery-queue-20261113.json';
+  let plan: RecoveryPlan | null = null;
+  if (queuePath) {
+    try { plan = planRecoveryQueue(JSON.parse(readFileSync(queuePath, 'utf8'))); }
+    catch (e) { console.log(JSON.stringify({ event: 'priority_queue_unavailable', path: queuePath, message: e instanceof Error ? e.message : 'error' })); }
+  }
+  if (mode === 'approve') {
+    // No provider request and no price write: assess retained evidence only.
+    const summary = await prepareFirstPriceApprovals(sb, {
+      limit: Number(process.env.APPROVAL_LIMIT ?? 50), apply: process.env.APPROVAL_APPLY === '1',
+      ttlHours: Number(process.env.APPROVAL_TTL_HOURS ?? 72), priorityIds: plan?.evidencePriority,
+      log: (e) => console.log(JSON.stringify(e)),
+    });
+    console.log(JSON.stringify({ event: 'approval_summary', apply: process.env.APPROVAL_APPLY === '1', ...summary }));
+    return;
+  }
   const limit = Number(process.env.APIFY_BATCH_LIMIT ?? 25);
   const budgetUsd = Number(process.env.APIFY_BUDGET_USD ?? 10);
   const perRequestUsd = Number(process.env.APIFY_PER_REQUEST_USD ?? 0.002);
@@ -62,7 +87,7 @@ async function main() {
   // restarts. Here we additionally log an INDEPENDENT provider-side cross-check
   // of total actual spend across all run statuses, for observability.
   const campaign = process.env.APIFY_CAMPAIGN ?? 'tesco-apify-20261108';
-  async function logProviderSpend(label) {
+  async function logProviderSpend(label: string) {
     try {
       const r = await reconcileCampaignSpendUsd({ sinceISO: campaignSinceISO });
       console.log(JSON.stringify({ event: 'provider_spend_crosscheck', label, totalUsd: r.totalUsd, runs: r.runs, byStatus: r.byStatus, cap: budgetUsd }));
@@ -73,7 +98,7 @@ async function main() {
   // OUTSTANDING reservation linked to a provider run, read that run's CONFIRMED
   // terminal usage and settle the reservation to it. A run that is not yet
   // terminal, or still reports no usage, is left reserved (keeps counting).
-  async function reconcileOutstandingReservations(label) {
+  async function reconcileOutstandingReservations(label: string) {
     const { data: rows, error } = await sb.from('tesco_apify_budget_reservations')
       .select('id,provider_run_id').eq('campaign', campaign).eq('state', 'reserved')
       .not('provider_run_id', 'is', null);
@@ -108,12 +133,16 @@ async function main() {
       // fresh peers to the first-price path (needs the 20261113090000 migration
       // + its reserve-RPC param, else reserve raises mapping_not_resolved_or_unproven).
       allowFirstPrice: process.env.APIFY_ALLOW_FIRST_PRICE === '1',
+      selection: plan ? {
+        priorityIds: mode === 'evidence' ? plan.evidencePriority : mode === 'expansion' ? plan.expansionPriority : undefined,
+        repairTargets: mode === 'evidence' ? plan.repairEvidenceTargets : undefined,
+      } : undefined,
       log: (e) => console.log(JSON.stringify(e)),
     });
     batches.push(result);
     console.log(JSON.stringify({ event: 'batch_done', batch: b, runId: result.runId,
       requested: result.requested, accepted: result.accepted, held: result.held,
-      unavailable: result.unavailable, stopped: result.stopped, spentUsd: result.spentUsd }));
+      unavailable: result.unavailable, evidenceRecorded: result.evidenceRecorded, stopped: result.stopped, spentUsd: result.spentUsd }));
     if (result.stopped === 'no_eligible_products') break;
     if (result.stopped === 'budget_exhausted') break;
     // A transport stop paused the gate; do not start another batch this run.
@@ -122,8 +151,8 @@ async function main() {
 
   const totals = batches.reduce((a, r) => ({
     requested: a.requested + r.requested, accepted: a.accepted + r.accepted,
-    held: a.held + r.held, unavailable: a.unavailable + r.unavailable,
-  }), { requested: 0, accepted: 0, held: 0, unavailable: 0 });
+    held: a.held + r.held, unavailable: a.unavailable + r.unavailable, evidenceRecorded: a.evidenceRecorded + r.evidenceRecorded,
+  }), { requested: 0, accepted: 0, held: 0, unavailable: 0, evidenceRecorded: 0 });
   await logProviderSpend('end');
   await reconcileOutstandingReservations('end');
   console.log(JSON.stringify({ event: 'campaign_summary', mode, batches: batches.length, ...totals }));
