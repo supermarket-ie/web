@@ -8,8 +8,12 @@ import { reviewRetained, type RetainedReview } from '../src/lib/tesco-retained-r
 import type { ApifyPeer } from '../src/lib/tesco-apify-collection';
 
 const sb = createClient(process.env.SB_URL!, process.env.SB_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+// PostgREST rows from dynamic selects (read-only reporting script).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
-async function all(t: string, s: string, f: (q: any) => any, o: string): Promise<Row[]> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Query = any;
+async function all(t: string, s: string, f: (q: Query) => Query, o: string): Promise<Row[]> {
   const out: Row[] = [];
   for (let x = 0; ; x += 1000) {
     const { data, error } = await f(sb.from(t).select(s)).order(o).range(x, x + 999);
