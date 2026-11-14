@@ -316,6 +316,42 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
   // receipts and mapped Tesco metadata remain; those are insufficient.
   return false;
 }
+// FIRST-PRICE peer corroboration (owner policy, 14 Nov 2026): a mapping with
+// NO prior success receipt needs TWO fresh peers, one per store (Dunnes and
+// SuperValu), and EACH must independently and positively match the Tesco
+// product. The general helper below accepts on the strength of ONE matching
+// peer; this check never does. Returns the reasons each peer fails ([] = ok).
+export function firstPricePeerReasons(source: TescoCollectedProduct, peer: ReentryEvidence['peers'][number]): string[] {
+  const reasons: string[] = [];
+  const tesco = declaredPack(source.name), other = declaredPack(peer.store_product_name);
+  const sourceTotal = tesco.total ?? structuredMeasure(source.quantity);
+  // Pack: the peer must STATE the same total (absence is not a match) and,
+  // when either side states a count, the same count.
+  if (sourceTotal == null) reasons.push('source_pack_unknown');
+  else if (other.total == null) reasons.push('peer_pack_missing');
+  else if (other.total !== sourceTotal) reasons.push('peer_pack_conflict');
+  if ((tesco.countExplicit || other.countExplicit) && tesco.units !== other.units) reasons.push('peer_pack_count_conflict');
+  // Brand: the peer's structured brand, or (when absent) its title, must carry
+  // the Tesco product's brand.
+  const brand = source.brand ?? '';
+  const brandOk = !!normalized(brand) && (peer.brand != null ? sameBrand(peer.brand, brand)
+    : (` ${normalized(peer.store_product_name)} `).includes(` ${normalized(brand)} `));
+  if (!brandOk) reasons.push('peer_brand_conflict');
+  // Variant / formulation and title.
+  if (canonicalVariantConflict(source.name, peer.store_product_name)) reasons.push('peer_variant_conflict');
+  if (!titleSupport(source.name, peer.store_product_name)) reasons.push('peer_title_unsupported');
+  // A stated peer barcode must agree.
+  if (peer.gtin != null && !sameBarcode(peer.gtin, source.gtin)) reasons.push('peer_barcode_conflict');
+  if (!peer.observed_at || !(Number(peer.price) > 0)) reasons.push('peer_not_fresh');
+  return reasons;
+}
+export function firstPriceCorroboration(e: ReentryEvidence, rawSource: TescoCollectedProduct) {
+  const source = normaliseNetPackQuantity(rawSource);
+  const stores = (e.peers ?? []).map(p => p.store).sort().join(',');
+  const perPeer = (e.peers ?? []).map(p => ({ store: p.store, id: p.id, reasons: firstPricePeerReasons(source, p) }));
+  const ok = stores === 'dunnes,supervalu' && perPeer.every(p => p.reasons.length === 0);
+  return { ok, stores, perPeer };
+}
 export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollectedProduct): boolean {
   const m = e.mapping, rawSource = e.page?.parsed?.products?.[0];
   const source=rawSource?normaliseNetPackQuantity(rawSource):rawSource;
@@ -341,7 +377,9 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
     || (m.canonical_brand != null && !sameBrand(m.canonical_brand, source.brand))
     || independentPackConflict(e, source)
     || canonicalVariantConflict(m.canonical_name, source.name)
-    || !sufficientIndependentSupport(e,source)) return false;
+    || !sufficientIndependentSupport(e,source)
+    // First price: BOTH peers must independently match (never one of two).
+    || (!e.proven && !firstPriceCorroboration(e, source).ok)) return false;
   // The source's exact brand, pack, barcode and variant become immutable
   // constraints on the NEW live page. A changed SKU/name/pack/brand/GTIN
   // cannot inherit the approval. New price is never taken from the source.

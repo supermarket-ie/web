@@ -442,11 +442,16 @@ begin
     then raise exception 'first_price_evidence_mismatch'; end if;
   end if;
 
+  -- Transaction-local marker read by tesco_internal.guard_apify_run_receipt:
+  -- the shared writer may record an Apify-run receipt only for THIS mapping,
+  -- from inside THIS guarded finalise. Cleared straight after.
+  perform set_config('smie.apify_finalise_mapping', p_store_product_id::text, true);
   v_finalised := public.finalize_store_scrape_product(
     p_run_uuid => p_run_id, p_store => 'tesco', p_store_product_id => p_store_product_id,
     p_success => true, p_price => p_regular_price, p_previous_price => p_previous_price,
     p_store_url => null, p_store_sku => null, p_store_product_name => null,
     p_fetched => 1, p_extracted => 1);
+  perform set_config('smie.apify_finalise_mapping', '', true);
 
   if not v_proven and v_finalised then
     update public.tesco_first_price_approvals
@@ -498,3 +503,41 @@ returns boolean language sql stable security invoker set search_path = '' as $bo
       and not exists(select 1 from public.scrape_product_receipts z where z.run_id = r.id));
 $body$;
 revoke all on function tesco_internal.completed_apify_evidence_source(uuid) from public, anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 7. SHARED PRICE WRITERS. service_role can also call the shared finalisers
+-- (finalize_store_scrape_product, finalize_tesco_scrape_product_pepesto) with
+-- any run id, bypassing apify_finalise_tesco_page. Both write the run receipt
+-- FIRST, in the same transaction as the price, so a guard on the receipt insert
+-- rolls the price back too. For any Apify run (run_id 'tesco_apify_%'):
+--   * an EVIDENCE-ONLY run can never record a receipt (so never a price);
+--   * any other Apify run may record a receipt ONLY from inside
+--     apify_finalise_tesco_page for exactly the mapping it is finalising (a
+--     transaction-local marker that a PostgREST caller cannot set: every RPC is
+--     its own transaction and set_config is not an exposed function).
+-- Runs of every other collector (Dunnes, SuperValu, Aldi, supervised Tesco) are
+-- untouched. Direct table writes by service_role to price_observations remain a
+-- stated trust boundary (other collectors rely on that grant).
+-- ---------------------------------------------------------------------------
+create or replace function tesco_internal.guard_apify_run_receipt()
+returns trigger language plpgsql security definer set search_path = '' as $fn$
+declare
+  v_run_id text;
+  v_summary jsonb;
+begin
+  select r.run_id, nullif(r.error_summary, '')::jsonb into v_run_id, v_summary
+    from public.scrape_runs r where r.id = new.run_id;
+  if coalesce(v_run_id, '') not like 'tesco_apify_%' then return new; end if;
+  if v_run_id like 'tesco_apify_evidence_%'
+    or coalesce(v_summary->>'mode', '') = 'evidence'
+    or coalesce((v_summary->>'evidenceOnly')::boolean, false)
+  then raise exception 'evidence_run_never_writes_price'; end if;
+  if coalesce(current_setting('smie.apify_finalise_mapping', true), '') <> new.store_product_id::text
+  then raise exception 'apify_run_writes_only_via_apify_finalise'; end if;
+  return new;
+end;
+$fn$;
+revoke all on function tesco_internal.guard_apify_run_receipt() from public, anon, authenticated, service_role;
+drop trigger if exists guard_apify_run_receipt on public.scrape_product_receipts;
+create trigger guard_apify_run_receipt before insert on public.scrape_product_receipts
+  for each row execute function tesco_internal.guard_apify_run_receipt();

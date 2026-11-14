@@ -170,6 +170,18 @@ describe('first trusted price: evidence -> approval -> guarded write (real migra
     expect(await n(`select count(*)::int n from public.tesco_first_price_approvals where store_product_id = $1 and consumed_at is null`, [T])).toBe(1);
   });
 
+  it('the SHARED price writer cannot write in an evidence run or bypass the approval in an Apify run', async () => {
+    await collectTescoApify('evidence', 10, deps({ selection: { priorityIds: [T] } }));
+    const evRun = (await db.query<{ run_id: string }>(`select run_id from public.tesco_direct_collection_pages where requested_url = $1`, [URL])).rows[0].run_id;
+    const viaShared = (runId: string) => sb.rpc('finalize_store_scrape_product', { p_run_uuid: runId, p_store: 'tesco',
+      p_store_product_id: T, p_success: true, p_price: 3.5, p_fetched: 1, p_extracted: 1 });
+    expect((await viaShared(evRun)).error?.message).toContain('evidence_run_never_writes_price');
+    const exp = (await sb.rpc('apify_begin_tesco_run', { p_egress_key: 'apify-tesco-ie-20261108', p_mode: 'expansion', p_target_count: 1, p_owner: 'fargate-e2e-owner2' })).data as { runId: string };
+    expect((await viaShared(exp.runId)).error?.message).toContain('apify_run_writes_only_via_apify_finalise');
+    expect(await n(`select count(*)::int n from public.price_observations where store_product_id = $1`, [T])).toBe(0);
+    expect(await n(`select count(*)::int n from public.scrape_product_receipts where store_product_id = $1`, [T])).toBe(0);
+  });
+
   it('an evidence run never writes a price, even if a finalise is attempted directly', async () => {
     const begin = (await sb.rpc('apify_begin_tesco_run', { p_egress_key: 'apify-tesco-ie-20261108', p_mode: 'evidence', p_target_count: 1, p_owner: 'fargate-e2e-owner' })).data as { runId: string; leaseToken: string };
     const snap = (await sb.rpc('apify_mapping_snapshot', { p_store_product_id: T })).data;

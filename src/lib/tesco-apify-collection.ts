@@ -29,7 +29,7 @@ import {
   IDENTITY_ASSESSMENT_RULE_VERSION,
   type AssessOptions,
 } from './tesco-identity-assessment';
-import { reviewedCanonicalEvidenceGap, type ReentryEvidence } from './tesco-hold-reentry';
+import { firstPriceCorroboration, reviewedCanonicalEvidenceGap, type ReentryEvidence } from './tesco-hold-reentry';
 import type { ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
@@ -804,7 +804,19 @@ export async function collectTescoApify(
         deps.log?.({ event: 'canonical_gap_recovery_candidate', sku: ident.storeSku, reasons: deterministicReasons });
       }
 
-      if (outcome === 'ok' && product && ev && perItemFreshOk && (deterministicReasons.length === 0 || canonicalGapEligible)) {
+      // FIRST PRICE: both peers must independently match before the AI is asked.
+      let firstPricePeerHold = false;
+      if (m.firstPrice && product && ev && deterministicReasons.length === 0) {
+        const corroboration = firstPriceCorroboration(ev, product);
+        if (!corroboration.ok) {
+          firstPricePeerHold = true;
+          reasons.push('first_price_peer_hold');
+          deps.log?.({ event: 'first_price_peer_hold', sku: ident.storeSku, stores: corroboration.stores, perPeer: corroboration.perPeer });
+        }
+      }
+
+      if (outcome === 'ok' && product && ev && perItemFreshOk && !firstPricePeerHold
+        && (deterministicReasons.length === 0 || canonicalGapEligible)) {
         liveFingerprint = identityFingerprint({
           canonical: { name: ident.canonicalName, brand: ident.canonicalBrand, ean: ident.canonicalEan },
           tesco: { sku: product.sku, name: product.name, brand: product.brand, gtin: product.gtin, quantity: product.quantity },

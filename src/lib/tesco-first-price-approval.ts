@@ -16,6 +16,7 @@ import {
   type TescoCollectedProduct,
 } from './tesco-direct-collection-core';
 import { assessAndCombine, type AssessOptions } from './tesco-identity-assessment';
+import { firstPriceCorroboration } from './tesco-hold-reentry';
 import {
   assessmentEvidence, selectApifyMappings, snapshotIdentity, snapshotMappingEvidence,
   type ApifyPeer, type SelectionOptions,
@@ -80,6 +81,12 @@ export async function assessFirstPriceCandidate(input: {
   // recovery route is NOT available to a first price.
   const reasons = validateTescoCollectedIdentity(snapshotMappingEvidence(ident, false), product);
   if (reasons.length > 0) return { ok: false, reason: `deterministic_hold:${reasons.join(',')}` };
+  // BOTH peers must independently match; one matching peer is never enough.
+  const corroboration = firstPriceCorroboration(ev, product);
+  if (!corroboration.ok) {
+    const detail = corroboration.perPeer.filter(p => p.reasons.length).map(p => `${p.store}=${p.reasons.join('+')}`);
+    return { ok: false, reason: `first_price_peer_hold:${detail.join(';') || `stores=${corroboration.stores}`}` };
+  }
 
   const retries = input.aiRetries ?? 2;
   const sleep = input.sleep ?? ((ms: number) => new Promise<void>(r => setTimeout(r, ms)));
