@@ -1,0 +1,3829 @@
+{
+ "generatedAt": "2026-11-15T14:00:28.418Z",
+ "readOnly": true,
+ "rule": "Tesco catalogue item + >=1 independent Dunnes/SuperValu offer must agree; canonical must not contradict",
+ "tally": {
+  "needs_split": 38,
+  "contradicted": 4,
+  "insufficient_evidence": 15,
+  "substantiated": 3
+ },
+ "repairsFullyUnblockedByEnrichment": 2,
+ "rows": [
+  {
+   "mapping_id": "5cb35a07-f9a9-478e-bc48-24048c69f7ab",
+   "current_sku": "289081921",
+   "proposed_sku": "257518392",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/257518392",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "014dfd6d-a376-428f-968a-abdd7eefc8f7",
+   "current": {
+    "name": "Cajun Seasoning",
+    "brand": "Schwartz",
+    "ean": "00000050020737"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Schwartz Cajun Seasoning 44g",
+     "brand": "Schwartz",
+     "sku": "257518392"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Schwartz Cajun Seasoning (44 g)",
+     "brand": "Schwartz",
+     "sku": "1020899000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores Cajun Seasoning 35g",
+     "brand": null,
+     "sku": "100206328"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "Schwartz",
+     "pack": "44g",
+     "variant": "Cajun Seasoning",
+     "sources": [
+      "tesco:proposed:257518392",
+      "supervalu:peer:1020899000"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "35g",
+     "variant": "Cajun Seasoning",
+     "sources": [
+      "dunnes:peer:100206328"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "4ac78cfcbfd454101007f753839436916431eb2d05daf8e29e950d9c65502220",
+    "gtin": "00000050020737",
+    "pack_size": "44G",
+    "net_contents": "44g ℮",
+    "category": "Food Cupboard > Cooking Ingredients > Seasoning, Herbs & Spices > Seasoning"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "16100d88-4792-4e91-a000-5facbb4bba92",
+   "current_sku": "311803709",
+   "proposed_sku": "300399973",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/300399973",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "03bf824e-0b5d-4b9c-a6db-9197917b915f",
+   "current": {
+    "name": "Granola",
+    "brand": "Special K",
+    "ean": "05057753031664"
+   },
+   "supportingSources": [],
+   "status": "contradicted",
+   "reasons": [
+    "canonical_brand_contradicts(Special K vs TESCO finest)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "58d1319e28b0b58e057371af70e411dc03c8946339ba6d4630c528aed8be0ff4",
+    "gtin": "05057753031664",
+    "pack_size": "500G",
+    "net_contents": "500g e",
+    "category": "Food Cupboard > Breakfast Cereals > Muesli & Granola > Granola"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "4900e7d4-91c7-4b6e-a08d-e2baff554072",
+   "current_sku": "324441800",
+   "proposed_sku": "315384103",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/315384103",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "0ae99318-3b2d-4015-a36a-44a7e252121b",
+   "current": {
+    "name": "Mango",
+    "brand": null,
+    "ean": "08713807003670"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "0ad47ec221fc5806a326c864fe3ea63e8b9d5b5c797909eea6aaca85e02661f4",
+    "gtin": "08713807003670",
+    "pack_size": "SNGL",
+    "net_contents": null,
+    "category": "Fresh Food > Fresh Fruit > Mango, Kiwi & Exotic Fruit > Mango"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "d2b283eb-f194-41a9-999f-bbf6e3cba8b2",
+   "current_sku": "281464913",
+   "proposed_sku": "305983187",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/305983187",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "0b60ed74-3548-43f4-b6ed-37be09aefdfb",
+   "current": {
+    "name": "Tuna in Water",
+    "brand": "John West",
+    "ean": "05000171057822"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "John West Tuna Chunks In Spring Water 145G",
+     "brand": "JOHN WEST",
+     "sku": "305983187"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "John West Tuna Chunks in Spring Water 3 x 80g",
+     "brand": "John West",
+     "sku": "100765926"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "John West Tuna Steak with a Little Spring Water 3 Pack (60 g)",
+     "brand": "John West",
+     "sku": "1622617000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "JOHN WEST",
+     "pack": "145g",
+     "variant": "Tuna Chunks In Spring Water",
+     "sources": [
+      "tesco:proposed:305983187"
+     ]
+    },
+    {
+     "brand": "John West",
+     "pack": "240g",
+     "variant": "Tuna Chunks in Spring Water",
+     "sources": [
+      "dunnes:peer:100765926"
+     ]
+    },
+    {
+     "brand": "John West",
+     "pack": "60g",
+     "variant": "Tuna Steak with a Little Spring Water 3 Pack",
+     "sources": [
+      "supervalu:peer:1622617000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "c9da8cc8c4cdc3d1a3c319e8e6f6a5012ebd85179810552c495bcac2dfc37ba3",
+    "gtin": "05000171057822",
+    "pack_size": "102G",
+    "net_contents": "145g ℮",
+    "category": "Food Cupboard > Tins, Cans & Packets > Tinned Fish & Seafood > Tinned Tuna"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "148b0696-9e8f-4b20-8a85-75c6199f7247",
+   "current_sku": "253610173",
+   "proposed_sku": "253610046",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/253610046",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "0b771cf5-e4a3-4c30-bb30-749f22cad202",
+   "current": {
+    "name": "Tea Bags 160 Pack",
+    "brand": "barry's tea",
+    "ean": "05099810552408"
+   },
+   "supportingSources": [],
+   "status": "contradicted",
+   "reasons": [
+    "canonical_brand_contradicts(barry's tea vs BARRYS)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "5fde341687ed56b22b04caf95d56a566c9f7420cedbdc12b1048b358234c521c",
+    "gtin": "05099810552408",
+    "pack_size": "500G",
+    "net_contents": "500g ℮",
+    "category": "Drinks > Tea > Everyday Tea Bags > Everyday Tea Bags"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "253517d5-763c-4b97-b571-8896b178cf0e",
+   "current_sku": "277492902",
+   "proposed_sku": "273592358",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/273592358",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "0cc2849f-3090-4eec-a81c-d8722c2111b2",
+   "current": {
+    "name": "Butternut Squash",
+    "brand": null,
+    "ean": "05052909439455"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:conflicts,supervalu:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "83e542ca65a8559c143c6c81e5d2ff024a8f75e47743583d8a804fab84acc6de",
+    "gtin": "05052909439455",
+    "pack_size": "300G",
+    "net_contents": "300g e",
+    "category": "Fresh Food > Fresh Vegetables > Prepared Vegetables > Prepared Single Vegetables"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "3ff6b554-4fae-4fc9-a15b-97c36c4e3ee8",
+   "current_sku": "293687406",
+   "proposed_sku": "257231200",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/257231200",
+   "repair_blockers": [
+    "own_label (repair guard refuses)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "0d9e4009-150e-48eb-aa6d-e1f800692b4f",
+   "current": {
+    "name": "Broccoli",
+    "brand": null,
+    "ean": "00268280000000"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Broccoli Loose",
+     "brand": "TESCO",
+     "sku": "257231200"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Broccoli  (350 g)",
+     "brand": "SuperValu",
+     "sku": "1030326000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores Fresh Broccoli",
+     "brand": "Dunnes Stores",
+     "sku": "100807377"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": null,
+     "variant": "Broccoli Loose",
+     "sources": [
+      "tesco:proposed:257231200"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "350g",
+     "variant": "Broccoli",
+     "sources": [
+      "supervalu:peer:1030326000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "b0d393632fb047c22299b14c0d2589e482300db4c6e6bdc8673aac2d5fc6eb47",
+    "gtin": "00268280000000",
+    "pack_size": "",
+    "net_contents": null,
+    "category": "Fresh Food > Fresh Vegetables > Broccoli & Cauliflower > Broccoli"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "9a26acc2-0aa5-43f4-a759-0f7770a0fbaf",
+   "current_sku": "277408019",
+   "proposed_sku": "254921258",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/254921258",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "1050f8be-5285-4746-98f0-4f42e4ed77dc",
+   "current": {
+    "name": "Custard Creams",
+    "brand": "McVitie's",
+    "ean": "05000119003034"
+   },
+   "supportingSources": [],
+   "status": "contradicted",
+   "reasons": [
+    "canonical_brand_contradicts(McVitie's vs TESCO)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "87c0012679724fae4094828e71404c8b2bfe4e0ac0920611ace9450517fe7236",
+    "gtin": "05000119003034",
+    "pack_size": "400G",
+    "net_contents": "400g ℮",
+    "category": "Food Cupboard > Biscuits & Cereal Bars > Creams, Mallows & Wafer Biscuits > Custard Creams & Flavoured Cream Biscuits"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "9592def9-c513-45b2-929f-6f3347abe946",
+   "current_sku": "256146389",
+   "proposed_sku": "257515124",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/257515124",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "109abf03-5350-40d3-bad8-3181a2d7cbf8",
+   "current": {
+    "name": "Black Pepper Ground",
+    "brand": "Schwartz",
+    "ean": "00000050020317"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Schwartz Ground Black Pepper 33G Jar",
+     "brand": "Schwartz",
+     "sku": "257515124"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Schwartz Black Pepper Ground Jar (33 g)",
+     "brand": "Schwartz",
+     "sku": "1004862000"
+    }
+   ],
+   "status": "substantiated",
+   "reasons": [],
+   "proposed": {
+    "name": "Schwartz Ground Black Pepper 33g",
+    "brand": "Schwartz",
+    "pack": "33g",
+    "variant": "Ground Black Pepper"
+   },
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "9efc16385a3f728d72ec7a3f195d8b217954e018ef8f29e8ace68f1838da0e2a",
+    "gtin": "00000050020317",
+    "pack_size": "33G",
+    "net_contents": "33g ℮",
+    "category": "Food Cupboard > Cooking Ingredients > Salt & Pepper > Ground Pepper"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": {
+    "table": "products",
+    "id": "109abf03-5350-40d3-bad8-3181a2d7cbf8",
+    "set": {
+     "canonical_name": "Schwartz Ground Black Pepper 33g",
+     "brand": "Schwartz"
+    },
+    "from": {
+     "canonical_name": "Black Pepper Ground",
+     "brand": "Schwartz"
+    }
+   },
+   "remaining_repair_blockers_after_enrichment": [
+    "not_proven (repair guard requires a prior receipt)"
+   ]
+  },
+  {
+   "mapping_id": "a4e410a7-2d44-4fb7-a77b-9b48ce27675a",
+   "current_sku": "272640603",
+   "proposed_sku": "315362515",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/315362515",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "18242359-c314-43b8-9344-19bbc5cc29b4",
+   "current": {
+    "name": "Egg Noodles",
+    "brand": null,
+    "ean": "05000354924712"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Sharwood's Medium Egg Noodles 226g",
+     "brand": "SHARWOOD'S",
+     "sku": "315362515"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Medium Egg Noodles (250 g)",
+     "brand": null,
+     "sku": "1535861000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Blue Dragon Fine Egg Noodles 250g",
+     "brand": null,
+     "sku": "100298257"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "SHARWOOD'S",
+     "pack": "226g",
+     "variant": "Medium Egg Noodles",
+     "sources": [
+      "tesco:proposed:315362515"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "250g",
+     "variant": "Medium Egg Noodles",
+     "sources": [
+      "supervalu:peer:1535861000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "939de369a648efbbf27f1e75ceff77f29d6c497514e2148c2f612bd14f272159",
+    "gtin": "05000354924712",
+    "pack_size": "226G",
+    "net_contents": "226g ℮",
+    "category": "Food Cupboard > Dried Pasta, Rice, Noodles & Cous Cous > Noodles > Oriental Noodles"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "41f36453-5afc-4ebe-ab45-d5327163410a",
+   "current_sku": "315060999",
+   "proposed_sku": "251970492",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/251970492",
+   "repair_blockers": [
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "1cca7ae6-2118-4871-be9a-d8eeb359f0ed",
+   "current": {
+    "name": "Muesli",
+    "brand": "Lifeforce",
+    "ean": "05099856000017"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Lifeforce Irish Muesli 750G",
+     "brand": "LIFEFORCE",
+     "sku": "251970492"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Lifeforce Muesli (750 g)",
+     "brand": "Lifeforce",
+     "sku": "1008602002"
+    }
+   ],
+   "status": "substantiated",
+   "reasons": [],
+   "proposed": {
+    "name": "Lifeforce Muesli 750g",
+    "brand": "Lifeforce",
+    "pack": "750g",
+    "variant": "Muesli"
+   },
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "30ed97f0bc4575bfb61bfaff0a7ce300814a903f361fe2c799fa4d11828fb04c",
+    "gtin": "05099856000017",
+    "pack_size": "750G",
+    "net_contents": "750g ℮",
+    "category": "Food Cupboard > Breakfast Cereals > Muesli & Granola > Muesli"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": {
+    "table": "products",
+    "id": "1cca7ae6-2118-4871-be9a-d8eeb359f0ed",
+    "set": {
+     "canonical_name": "Lifeforce Muesli 750g",
+     "brand": "Lifeforce"
+    },
+    "from": {
+     "canonical_name": "Muesli",
+     "brand": "Lifeforce"
+    }
+   },
+   "remaining_repair_blockers_after_enrichment": []
+  },
+  {
+   "mapping_id": "dcffd4ed-540a-4f93-aa13-ebee2cbbe6c8",
+   "current_sku": "300992005",
+   "proposed_sku": "300991951",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/300991951",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "1cfc9685-b902-4cda-bc56-86dd98518e6b",
+   "current": {
+    "name": "Tuna Steak",
+    "brand": null,
+    "ean": "05057753304027"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:silent,supervalu:conflicts)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "1fbcdf0eee5f69f89a260be0dca13fbcf7ab1a944c95339f17fe46de2d275a58",
+    "gtin": "05057753304027",
+    "pack_size": "110G",
+    "net_contents": "110g ℮",
+    "category": "Food Cupboard > Tins, Cans & Packets > Tinned Fish & Seafood > Tinned Tuna"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "ea5a3572-4056-4021-ba40-1ee74a1dea0f",
+   "current_sku": "330746314",
+   "proposed_sku": "308859526",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/308859526",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "20ef8ecd-4dfc-4694-b224-93aad00d4f03",
+   "current": {
+    "name": "Pineapple Chunks Tinned",
+    "brand": null,
+    "ean": "05059512729492"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:conflicts,supervalu:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "b1aac77e8bc0ee87ea4a9edf5e8a00dfc527bcb9e36b50a124205f2fc12132ea",
+    "gtin": "05059512729492",
+    "pack_size": "260G",
+    "net_contents": "425g ℮",
+    "category": "Food Cupboard > Tins, Cans & Packets > Tinned & Pot Fruit > Pineapple"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "dfd6ec23-56d9-4cb5-8b09-90e02238e857",
+   "current_sku": "323647795",
+   "proposed_sku": "253951621",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/253951621",
+   "repair_blockers": [
+    "current_sku_shared",
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "20f86b46-f134-4dcb-a56e-2a5de9853dfc",
+   "current": {
+    "name": "Mackerel Fillets",
+    "brand": "Unbranded",
+    "ean": "05018374729330"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Mackerel in Sunflower Oil 125g",
+     "brand": "TESCO",
+     "sku": "253951621"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Mackerel Fillets Fish Counter (1 kg)",
+     "brand": null,
+     "sku": "1028893000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores Peppered Irish Mackerel Fillets 160g",
+     "brand": null,
+     "sku": "100820063"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Unbranded vs TESCO)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "125g",
+     "variant": "Mackerel in Sunflower Oil",
+     "sources": [
+      "tesco:proposed:253951621"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "160g",
+     "variant": "Peppered Irish Mackerel Fillets",
+     "sources": [
+      "dunnes:peer:100820063"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "506ad85b51c751c73ac96c14d0c68b96a51b1ff1283de714616c1bcefe21d568",
+    "gtin": "05018374729330",
+    "pack_size": "88G",
+    "net_contents": "125g e",
+    "category": "Food Cupboard > Tins, Cans & Packets > Tinned Fish & Seafood > Tinned Pilchards, Mackrel & Sardines"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "e61a9919-7c27-4ab9-b609-98633f99772a",
+   "current_sku": "297646576",
+   "proposed_sku": "259061829",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/259061829",
+   "repair_blockers": [
+    "attempt_within_24h",
+    "brand_not_confirmed"
+   ],
+   "canonicalId": "2e1cb2ad-1719-44f1-a07f-88848553ed56",
+   "current": {
+    "name": "Red Kidney Beans 400g",
+    "brand": null,
+    "ean": "05018374442215"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(supervalu:silent,dunnes:conflicts)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "6bd005701184ce7db32774f0f875752a26fdbc2b777ccb6f9b961a4bca0ee5b5",
+    "gtin": "05018374442215",
+    "pack_size": "240G",
+    "net_contents": "400g ℮",
+    "category": "Food Cupboard > Tins, Cans & Packets > Pulses, Lentils & Beans > Tinned Kidney Beans"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "047cea9e-8322-41d2-9dc3-90c1d740cd8c",
+   "current_sku": "254926800",
+   "proposed_sku": "254926662",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/254926662",
+   "repair_blockers": [
+    "current_sku_shared",
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "2f5bb2df-bfe6-418c-b386-df452c01bad7",
+   "current": {
+    "name": "Crisps Ready Salted 6 Pack",
+    "brand": "Walkers",
+    "ean": "05000119007247"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Ready Salted Crisps 6X25g",
+     "brand": "TESCO",
+     "sku": "254926662"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Crisps Ready Salted 6 Pack",
+     "brand": null,
+     "sku": null
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Walkers Ready Salted Crisps 6 Pack (25 g)",
+     "brand": "Walkers",
+     "sku": "1430354004"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Walkers vs TESCO)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "150g",
+     "variant": "Ready Salted Crisps",
+     "sources": [
+      "tesco:proposed:254926662"
+     ]
+    },
+    {
+     "brand": "Walkers",
+     "pack": "25g",
+     "variant": "Ready Salted Crisps 6 Pack",
+     "sources": [
+      "supervalu:peer:1430354004"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "5a70f6506be89298791ed3e9302b1265f75a8e436446ada93c0a80a194e9a655",
+    "gtin": "05000119007247",
+    "pack_size": "150G",
+    "net_contents": "6 x 25g ℮",
+    "category": "Food Cupboard > Crisps, Nuts and Popcorn > Multipack Crisps > Ready Salted Multipack Crisps"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "835814a0-379f-403e-aa7f-a753ba8c69b2",
+   "current_sku": "311943382",
+   "proposed_sku": "255770060",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/255770060",
+   "repair_blockers": [
+    "own_label (repair guard refuses)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "3527bf56-1476-4a09-a7ae-1ce9a214b0b5",
+   "current": {
+    "name": "Curry Sauce Mild",
+    "brand": "Daily Basics",
+    "ean": "05010204914312"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Mild Curry Powder 80G",
+     "brand": "TESCO",
+     "sku": "255770060"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Daily Basics Mild Curry Sauce (460 g)",
+     "brand": "Daily Basics",
+     "sku": "1943983000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "McDonnells Mild Curry Sauce 200g",
+     "brand": "Dunnes Stores",
+     "sku": "100278273"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Daily Basics vs TESCO)",
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "80g",
+     "variant": "Mild Curry Powder",
+     "sources": [
+      "tesco:proposed:255770060"
+     ]
+    },
+    {
+     "brand": "Daily Basics",
+     "pack": "460g",
+     "variant": "Mild Curry Sauce",
+     "sources": [
+      "supervalu:peer:1943983000"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "200g",
+     "variant": "McDonnells Mild Curry Sauce",
+     "sources": [
+      "dunnes:peer:100278273"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "decd4ff43dd48f1d03b2a41fa82a72e8376a01c2f4e6935da189cdb76c59b80f",
+    "gtin": "05010204914312",
+    "pack_size": "80G",
+    "net_contents": "80g e",
+    "category": "Food Cupboard > Cooking Ingredients > Seasoning, Herbs & Spices > Curry Powder"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "35d767a9-858e-4a1f-a499-dc5f4941c85d",
+   "current_sku": "258108501",
+   "proposed_sku": "277512644",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/277512644",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "own_label (repair guard refuses)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "3c8a4916-2887-419c-94ce-62f8771b115f",
+   "current": {
+    "name": "Pork Sausages",
+    "brand": null,
+    "ean": "05053947012112"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Irish Pork Sausages 227G",
+     "brand": "TESCO",
+     "sku": "277512644"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Clonakilty 16 Irish Pork Sausages 454g",
+     "brand": "Dunnes Stores",
+     "sku": "100746405"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Signature Tastes Irish Pork Traditional Sausages (380 g)",
+     "brand": "SuperValu",
+     "sku": "1009076000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "227g",
+     "variant": "Irish Pork Sausages",
+     "sources": [
+      "tesco:proposed:277512644"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "454g",
+     "variant": "Clonakilty 16 Irish Pork Sausages",
+     "sources": [
+      "dunnes:peer:100746405"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "380g",
+     "variant": "Signature Tastes Irish Pork Traditional Sausages",
+     "sources": [
+      "supervalu:peer:1009076000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "1a6ab137e91f1d626fc37007d9a4da9319f4b6e206012d2292055805274b71e2",
+    "gtin": "05053947012112",
+    "pack_size": "227G",
+    "net_contents": "227g e",
+    "category": "Fresh Food > Fresh Meat & Poultry > Sausages > Pork Sausages & Chipolatas"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "9569975c-ab31-4950-9a81-d30446af2663",
+   "current_sku": "251994901",
+   "proposed_sku": "251994596",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/251994596",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "3e1f035d-5025-4e05-9ac8-8b0a5039c839",
+   "current": {
+    "name": "Chilli Powder",
+    "brand": "Schwartz",
+    "ean": "05031021195418"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Hot Chilli Powder 50G",
+     "brand": "TESCO",
+     "sku": "251994596"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Schwartz Chilli Powder Mild  (38 g)",
+     "brand": "Schwartz",
+     "sku": "1020898000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Schwartz Mild Chilli Powder 38g",
+     "brand": null,
+     "sku": "100111838"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Schwartz vs TESCO)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "50g",
+     "variant": "Hot Chilli Powder",
+     "sources": [
+      "tesco:proposed:251994596"
+     ]
+    },
+    {
+     "brand": "Schwartz",
+     "pack": "38g",
+     "variant": "Chilli Powder Mild",
+     "sources": [
+      "supervalu:peer:1020898000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "2321ac7f4fda26192fd3614b00a89eb2781fdcbae08067176bcea7223bbf4605",
+    "gtin": "05031021195418",
+    "pack_size": "50G",
+    "net_contents": "50g ℮",
+    "category": "Food Cupboard > Cooking Ingredients > Seasoning, Herbs & Spices > Spices"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "f39f63be-17ac-4630-bc1a-d2659e0afce0",
+   "current_sku": "322842145",
+   "proposed_sku": "304788437",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/304788437",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "41c5505f-92ff-4e3e-ac4f-9271f78ee7e4",
+   "current": {
+    "name": "Oat Milk Unsweetened",
+    "brand": "Alpro",
+    "ean": "05411188127697"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "3112dfd1f5eb0ca8a0b96a4a94ffdb4d911e8b0475e9f7f9ea39ae0f577bea79",
+    "gtin": "05411188127697",
+    "pack_size": "1L",
+    "net_contents": "1l",
+    "category": "Fresh Food > Dairy Free & Dairy Alternatives > Dairy Free Drinks & Milk Alternatives  > Oat Drinks"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "0a5c6ba6-5b31-4182-9e01-03e41f72d512",
+   "current_sku": "318069098",
+   "proposed_sku": "260138854",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/260138854",
+   "repair_blockers": [
+    "current_sku_shared",
+    "attempt_within_24h",
+    "brand_not_confirmed"
+   ],
+   "canonicalId": "43f8ff40-9cdc-4adc-8e5f-543e53b05901",
+   "current": {
+    "name": "Grapes Seedless 500g",
+    "brand": "TESCO",
+    "ean": "00000010066140"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(supervalu:silent,dunnes:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "399c9dcfda6534d68f40535ae4843b63979d7f46c13a969a43afd95dc6c2afe8",
+    "gtin": "00000010066140",
+    "pack_size": "0.5KG",
+    "net_contents": "500g",
+    "category": "Fresh Food > Fresh Fruit > Grapes > Seedless Red Grapes"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "676d178e-6215-4bc8-8db8-c4dd7c04c2ae",
+   "current_sku": "300864578",
+   "proposed_sku": "285513101",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/285513101",
+   "repair_blockers": [
+    "current_sku_shared",
+    "own_label (repair guard refuses)",
+    "brand_not_confirmed"
+   ],
+   "canonicalId": "47fdba0f-8c8f-4244-b8e6-ce9795e2350b",
+   "current": {
+    "name": "Potatoes 2kg",
+    "brand": null,
+    "ean": "05054402078131"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Irish Rooster 2Kg",
+     "brand": "TESCO",
+     "sku": "285513101"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Irish Rooster Potatoes (2 kg)",
+     "brand": "SuperValu",
+     "sku": "1025850000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores Floury Irish Rooster Potatoes 2kg",
+     "brand": "Dunnes Stores",
+     "sku": "100817440"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "2kg",
+     "variant": "Irish Rooster",
+     "sources": [
+      "tesco:proposed:285513101"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "2kg",
+     "variant": "Irish Rooster Potatoes",
+     "sources": [
+      "supervalu:peer:1025850000"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "2kg",
+     "variant": "Floury Irish Rooster Potatoes",
+     "sources": [
+      "dunnes:peer:100817440"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "c77b7f0eb7d955a44729fdf9a1bc6046a1144f6913b5f86bfc158aaa2bda4c10",
+    "gtin": "05054402078131",
+    "pack_size": "2KG",
+    "net_contents": "1kg/ 2kg/ 4kg/ 7.5kg",
+    "category": "Fresh Food > Fresh Vegetables > Potatoes & Sweet Potatoes > Rooster Potatoes"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "81003c41-97ef-4838-8b91-c9156bd3f36f",
+   "current_sku": "292621112",
+   "proposed_sku": "285859613",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/285859613",
+   "repair_blockers": [
+    "current_sku_shared",
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "55fcbad1-5083-4772-b5fd-1a7c69d7fc0b",
+   "current": {
+    "name": "Turkey Mince",
+    "brand": null,
+    "ean": "05391518933634"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "McCaughey Turkeys Turkey Breast Mince 400g",
+     "brand": "IGWT",
+     "sku": "285859613"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Hogan's Farm Turkey Breast Mince  454g",
+     "brand": null,
+     "sku": "100301551"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Fresh Irish Turkey Breast Mince (275 g)",
+     "brand": "SuperValu",
+     "sku": "1033493000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "IGWT",
+     "pack": "400g",
+     "variant": "McCaughey Turkeys Turkey Breast Mince",
+     "sources": [
+      "tesco:proposed:285859613"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "275g",
+     "variant": "Fresh Irish Turkey Breast Mince",
+     "sources": [
+      "supervalu:peer:1033493000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "f9748636238e2c37b3cce1d1039df16c5ca0382392afeac2809c6f14d0d80e9a",
+    "gtin": "05391518933634",
+    "pack_size": "400G",
+    "net_contents": "400g ℮",
+    "category": "Fresh Food > Fresh Meat & Poultry > Fresh Turkey > Turkey Mince & Burgers"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "448fd8b1-6374-4452-bd2b-2c813bf6a30b",
+   "current_sku": "313164995",
+   "proposed_sku": "251975227",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/251975227",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "58aaddfa-a30d-447c-8678-f52e8e5d1865",
+   "current": {
+    "name": "Table Salt",
+    "brand": null,
+    "ean": "05010024111076"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "1caa9c4f6fc4aad2a9142cd75d0a290ad24203a86193babaa26eb5fdfd5ba52d",
+    "gtin": "05010024111076",
+    "pack_size": "750G",
+    "net_contents": "750g ℮",
+    "category": "Food Cupboard > Cooking Ingredients > Salt & Pepper > Table & Cooking Salt"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "3bb206c4-9dbf-44d8-aa4a-ccce2851baf5",
+   "current_sku": "303815811",
+   "proposed_sku": "314419463",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/314419463",
+   "repair_blockers": [
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "5a2618d2-e94a-4f87-a9e6-f5a200104ce5",
+   "current": {
+    "name": "Mayonnaise",
+    "brand": "Hellmann's",
+    "ean": "08720182592446"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Hellmann's Real Mayonnaise Squeezy 580ml",
+     "brand": "HELLMANN'S",
+     "sku": "314419463"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Hellmann's Real Mayonnaise (430 ml)",
+     "brand": "Hellmann's",
+     "sku": "1039871001"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Hellmann's Real Mayonnaise 430ml",
+     "brand": "Hellmanns",
+     "sku": "100742981"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "HELLMANN'S",
+     "pack": "580ml",
+     "variant": "Real Mayonnaise Squeezy",
+     "sources": [
+      "tesco:proposed:314419463"
+     ]
+    },
+    {
+     "brand": "Hellmann's",
+     "pack": "430ml",
+     "variant": "Real Mayonnaise",
+     "sources": [
+      "supervalu:peer:1039871001",
+      "dunnes:peer:100742981"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "ef8186fd025786763729e7c6a9ba7de0c466acd1052a372727e68b24dd71b24e",
+    "gtin": "08720182592446",
+    "pack_size": "580ML",
+    "net_contents": "580 ℮",
+    "category": "Food Cupboard > Condiments, Table Sauces, Olives & Pickles > Mayonnaise & Salad Cream > Original Mayonnaise"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "47b0b2ba-d358-4d3e-bac0-1b9dac4deca4",
+   "current_sku": "308093360",
+   "proposed_sku": "308094779",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/308094779",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "5fcf2885-75d4-49aa-a571-cf59b109959c",
+   "current": {
+    "name": "Creme Fraiche",
+    "brand": null,
+    "ean": "05059512729621"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Creme Fraiche 300G",
+     "brand": "TESCO",
+     "sku": "308094779"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores Crème Fraîche 200ml",
+     "brand": null,
+     "sku": "100782436"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Crème Fraîche (200 ml)",
+     "brand": "SuperValu",
+     "sku": "1343396001"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "300g",
+     "variant": "Creme Fraiche",
+     "sources": [
+      "tesco:proposed:308094779"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "200ml",
+     "variant": "Crème Fraîche",
+     "sources": [
+      "dunnes:peer:100782436"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "200ml",
+     "variant": "Crème Fraîche",
+     "sources": [
+      "supervalu:peer:1343396001"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "b4ded90f2435c321c0ab8eb7e9424f7b0a26a1abaf29c922051ff9d003ccaae2",
+    "gtin": "05059512729621",
+    "pack_size": "300G",
+    "net_contents": "300g e",
+    "category": "Fresh Food > Milk, Butter & Eggs > Fresh Cream & Custard > Crème Fraiche"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "ea072449-57a7-4008-9013-121b086070af",
+   "current_sku": "268497375",
+   "proposed_sku": "280663792",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/280663792",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "617f1528-f019-4015-a891-e56a2ce9a05c",
+   "current": {
+    "name": "Popcorn Sweet",
+    "brand": "Keogh's",
+    "ean": "05053526283131"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Sweet & Salted Popcorn 110G",
+     "brand": "TESCO",
+     "sku": "280663792"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Gourmet Popcorn Sweet & Salty (80 g)",
+     "brand": "Keogh's",
+     "sku": "1388898000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Propercorn Sweet & Salty Popcorn 30g",
+     "brand": null,
+     "sku": "100820098"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Keogh's vs TESCO)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "110g",
+     "variant": "Sweet & Salted Popcorn",
+     "sources": [
+      "tesco:proposed:280663792"
+     ]
+    },
+    {
+     "brand": "Keogh's",
+     "pack": "80g",
+     "variant": "Gourmet Popcorn Sweet & Salty",
+     "sources": [
+      "supervalu:peer:1388898000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "5f0785a6866884d5cd262c71afc4692e7aab21185315f493001e6edfa66f2518",
+    "gtin": "05053526283131",
+    "pack_size": "110G",
+    "net_contents": "110g ℮",
+    "category": "Food Cupboard > Crisps, Nuts and Popcorn > Popcorn > Sweet & Salted Popcorn"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "748b6439-0d2e-4ad7-baa5-574674a8cd88",
+   "current_sku": "309190911",
+   "proposed_sku": "309469243",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/309469243",
+   "repair_blockers": [
+    "current_sku_shared",
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "6a9b9da2-8f22-411b-82ed-d0e772799773",
+   "current": {
+    "name": "Sweet Chilli Sauce",
+    "brand": "Thai Gold",
+    "ean": "08850367991198"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Mae Ploy Blue Sweet Chilli Sauce 730Ml",
+     "brand": "MAE PLOY",
+     "sku": "309469243"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Thai Gold Sweet Chilli Sauce  (200 ml)",
+     "brand": "Thai Gold",
+     "sku": "1036386000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Blue Dragon Original Sweet Chilli Sauce 250ml",
+     "brand": null,
+     "sku": "100316594"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Thai Gold vs MAE PLOY)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "MAE PLOY",
+     "pack": "730ml",
+     "variant": "Blue Sweet Chilli Sauce",
+     "sources": [
+      "tesco:proposed:309469243"
+     ]
+    },
+    {
+     "brand": "Thai Gold",
+     "pack": "200ml",
+     "variant": "Sweet Chilli Sauce",
+     "sources": [
+      "supervalu:peer:1036386000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "49166b8f85064feed96c1f8934b5cc3ac6e35aa63bf805fb81aaafd8378c3939",
+    "gtin": "08850367991198",
+    "pack_size": "730ML",
+    "net_contents": "730ml",
+    "category": "Food Cupboard > Cooking Sauces & World Foods > Chinese > Dipping Sauces"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "e4053902-a6db-4b32-b58e-484bd1c62623",
+   "current_sku": "307161477",
+   "proposed_sku": "292990463",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/292990463",
+   "repair_blockers": [
+    "current_sku_shared",
+    "not_proven (repair guard requires a prior receipt)",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "7c11d732-8aa3-498c-bd5f-fcc7c5b2a386",
+   "current": {
+    "name": "Oat Milk Barista",
+    "brand": "Oatly!",
+    "ean": "07394376616228"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(supervalu:silent,dunnes:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "da1b5804f020dfab63d91d1443bbfa514d634682fa33f0526b5fa8609e90d0e7",
+    "gtin": "07394376616228",
+    "pack_size": "1L",
+    "net_contents": "1l",
+    "category": "Fresh Food > Dairy Free & Dairy Alternatives > Dairy Free Drinks & Milk Alternatives  > Oat Drinks"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "713b8ed5-78f4-4ebd-8f20-556e40f157c2",
+   "current_sku": "256338738",
+   "proposed_sku": "255769961",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/255769961",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "7ed6b5c0-5d83-4205-831d-4b0644342dbd",
+   "current": {
+    "name": "Curry Powder",
+    "brand": "Schwartz",
+    "ean": "05010204914275"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Medium Curry Powder 80G",
+     "brand": "TESCO",
+     "sku": "255769961"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Schwartz Hot Curry Powder 85g",
+     "brand": null,
+     "sku": "100113237"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Schwartz Medium Curry Powder (90 g)",
+     "brand": "Schwartz",
+     "sku": "1020922000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Schwartz vs TESCO)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "80g",
+     "variant": "Medium Curry Powder",
+     "sources": [
+      "tesco:proposed:255769961"
+     ]
+    },
+    {
+     "brand": "Schwartz",
+     "pack": "90g",
+     "variant": "Medium Curry Powder",
+     "sources": [
+      "supervalu:peer:1020922000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "8e3f2597c24f874fe59d802f0bfb988943f9e3433cd8ec54948e328dd7df7023",
+    "gtin": "05010204914275",
+    "pack_size": "80G",
+    "net_contents": "80g e",
+    "category": "Food Cupboard > Cooking Ingredients > Seasoning, Herbs & Spices > Curry Powder"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "e5fe6b28-85cd-4121-8c80-dcd1a3273115",
+   "current_sku": "262229847",
+   "proposed_sku": "252004443",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/252004443",
+   "repair_blockers": [
+    "attempt_within_24h",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "8f27ef73-0ffb-4072-acdf-bd6722bcf2ab",
+   "current": {
+    "name": "Baked Beans",
+    "brand": "Heinz",
+    "ean": "05000157024886"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Heinz Baked Beans In Tomato Sauce 4X415g",
+     "brand": "HEINZ",
+     "sku": "252004443"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Heinz Baked Beans (415 g)",
+     "brand": "Heinz",
+     "sku": "1011892000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Heinz Baked Beans 415g",
+     "brand": "Heinz",
+     "sku": "100111378"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "HEINZ",
+     "pack": "1660g",
+     "variant": "Baked Beans In Tomato Sauce",
+     "sources": [
+      "tesco:proposed:252004443"
+     ]
+    },
+    {
+     "brand": "Heinz",
+     "pack": "415g",
+     "variant": "Baked Beans",
+     "sources": [
+      "supervalu:peer:1011892000",
+      "dunnes:peer:100111378"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "5018b481b400136362a27698362f8af7c61a39dcadb24493f8930b27901e1162",
+    "gtin": "05000157024886",
+    "pack_size": "1660G",
+    "net_contents": "415g",
+    "category": "Food Cupboard > Tins, Cans & Packets > Baked Beans & Pasta > Baked Beans"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "1cc6b056-f84b-4f00-8008-98869b1f72f4",
+   "current_sku": "263061639",
+   "proposed_sku": "260691779",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/260691779",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "9243499b-1888-447c-afc0-b99928a1a973",
+   "current": {
+    "name": "Wholegrain Mustard",
+    "brand": "Lakeshore",
+    "ean": "05051140474263"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Wholegrain Mustard 180G",
+     "brand": "TESCO",
+     "sku": "260691779"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Lakeshore Wholegrain Mustard (205 g)",
+     "brand": "Lakeshore",
+     "sku": "1157616000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Lakeshore Wholegrain Mustard 205g",
+     "brand": null,
+     "sku": "100717998"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Lakeshore vs TESCO)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "180g",
+     "variant": "Wholegrain Mustard",
+     "sources": [
+      "tesco:proposed:260691779"
+     ]
+    },
+    {
+     "brand": "Lakeshore",
+     "pack": "205g",
+     "variant": "Wholegrain Mustard",
+     "sources": [
+      "supervalu:peer:1157616000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "e480cf122960f0f0cdfb2b94039fb5e695347bb6f41e3f39f30507ad95ed79e4",
+    "gtin": "05051140474263",
+    "pack_size": "180G",
+    "net_contents": "180g ℮",
+    "category": "Food Cupboard > Condiments, Table Sauces, Olives & Pickles > Table Sauces > Mustard"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "0ca472e8-376b-431e-8517-b1fa090ca8c8",
+   "current_sku": "299768716",
+   "proposed_sku": "251825089",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/251825089",
+   "repair_blockers": [
+    "own_label (repair guard refuses)",
+    "brand_not_confirmed"
+   ],
+   "canonicalId": "92a236f1-40b9-4f42-8718-a003556df16a",
+   "current": {
+    "name": "Chopped Tomatoes 400g",
+    "brand": null,
+    "ean": "05031021164032"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Italian Chopped Tomatoes 400G",
+     "brand": "TESCO",
+     "sku": "251825089"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Chopped Tomatoes (400 g)",
+     "brand": "SuperValu",
+     "sku": "1018383000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Mutti Finely Chopped Tomatoes 400g",
+     "brand": "Dunnes Stores",
+     "sku": "100835406"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "400g",
+     "variant": "Italian Chopped Tomatoes",
+     "sources": [
+      "tesco:proposed:251825089"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "400g",
+     "variant": "Chopped Tomatoes",
+     "sources": [
+      "supervalu:peer:1018383000"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "400g",
+     "variant": "Mutti Finely Chopped Tomatoes",
+     "sources": [
+      "dunnes:peer:100835406"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "8353d2e43c4bb20466442bc3a7eef07edd5917226bfa7a1c19b8752199d8d327",
+    "gtin": "05031021164032",
+    "pack_size": "400G",
+    "net_contents": "400g e",
+    "category": "Food Cupboard > Tins, Cans & Packets > Tomatoes, Passata & Puree > Chopped Tomatoes"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "46bf45a7-71df-44f8-98f3-db308713bc66",
+   "current_sku": "260691710",
+   "proposed_sku": "250858535",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/250858535",
+   "repair_blockers": [
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "95000afc-bf7f-4478-a624-b098446b6799",
+   "current": {
+    "name": "Dijon Mustard",
+    "brand": "Maille",
+    "ean": "08712566134144"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Maille Dijon Original Mustard 215G",
+     "brand": "MAILLE",
+     "sku": "250858535"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Maille Dijon Mustard (215 g)",
+     "brand": "Maille",
+     "sku": "1038275000"
+    }
+   ],
+   "status": "substantiated",
+   "reasons": [],
+   "proposed": {
+    "name": "Maille Dijon Mustard 215g",
+    "brand": "Maille",
+    "pack": "215g",
+    "variant": "Dijon Mustard"
+   },
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "f032bbf275ef077185f456248bcb32effb452b9e1c1e607ac0f10d802228a44d",
+    "gtin": "08712566134144",
+    "pack_size": "215G",
+    "net_contents": "215g ℮",
+    "category": "Food Cupboard > Condiments, Table Sauces, Olives & Pickles > Table Sauces > Mustard"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": {
+    "table": "products",
+    "id": "95000afc-bf7f-4478-a624-b098446b6799",
+    "set": {
+     "canonical_name": "Maille Dijon Mustard 215g",
+     "brand": "Maille"
+    },
+    "from": {
+     "canonical_name": "Dijon Mustard",
+     "brand": "Maille"
+    }
+   },
+   "remaining_repair_blockers_after_enrichment": []
+  },
+  {
+   "mapping_id": "1f71fbd3-d10f-4605-8281-a838270a0c43",
+   "current_sku": "300594937",
+   "proposed_sku": "301393718",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/301393718",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "9b5ae276-500d-4cbc-b38a-7340bf521be9",
+   "current": {
+    "name": "Bran Flakes",
+    "brand": "Kellogg's",
+    "ean": "05053827193368"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Kellogg's Bran Flakes Breakfast Cereal 500g",
+     "brand": "Kellogg's",
+     "sku": "301393718"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Kellogg's Bran Flakes Cereal (750 g)",
+     "brand": "Kellogg's",
+     "sku": "1012982000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores Bran Flakes 500g",
+     "brand": null,
+     "sku": "100290477"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "Kellogg's",
+     "pack": "500g",
+     "variant": "Bran Flakes Breakfast Cereal",
+     "sources": [
+      "tesco:proposed:301393718"
+     ]
+    },
+    {
+     "brand": "Kellogg's",
+     "pack": "750g",
+     "variant": "Bran Flakes Cereal",
+     "sources": [
+      "supervalu:peer:1012982000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "21dfef73896c52a5c2eb0ea7ac99a79955bf4d1fda03aa73d3441a509d178b80",
+    "gtin": "05053827193368",
+    "pack_size": "500G",
+    "net_contents": "500g ℮",
+    "category": "Food Cupboard > Breakfast Cereals > Healthier Cereals > Bran Cereals"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "3783221d-e7ee-4999-8be4-7a1565c0b3c7",
+   "current_sku": "311436216",
+   "proposed_sku": "317546635",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/317546635",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "9ef70376-7bbb-4877-bad4-9fccf7e880c0",
+   "current": {
+    "name": "Cream Cheese",
+    "brand": "Philadelphia",
+    "ean": "05011038139209"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Kerrygold Natural Cream Cheese 150g",
+     "brand": "KERRYGOLD",
+     "sku": "317546635"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Philadelphia Original Soft Cream Cheese (165 g)",
+     "brand": "Philadelphia",
+     "sku": "1402970001"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Philadelphia Original Soft Cream Cheese 165G",
+     "brand": null,
+     "sku": "100270059"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Philadelphia vs KERRYGOLD)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "KERRYGOLD",
+     "pack": "150g",
+     "variant": "Natural Cream Cheese",
+     "sources": [
+      "tesco:proposed:317546635"
+     ]
+    },
+    {
+     "brand": "Philadelphia",
+     "pack": "165g",
+     "variant": "Original Soft Cream Cheese",
+     "sources": [
+      "supervalu:peer:1402970001"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "38702248a9b6673517663ae298c02caa4d39a8477e15973e16cad33875431c18",
+    "gtin": "05011038139209",
+    "pack_size": "150G",
+    "net_contents": "150g ℮",
+    "category": "Fresh Food > Cheese > Soft & Spreadable Cheese > Soft Cheese & Cream Cheese"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "1c2c57aa-6e5c-40ff-adb2-ab7921062ad4",
+   "current_sku": "264014086",
+   "proposed_sku": "268991832",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/268991832",
+   "repair_blockers": [
+    "own_label (repair guard refuses)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "a2ba258b-b550-4c94-8ce7-092a2eac0407",
+   "current": {
+    "name": "Cheddar Cheese Block",
+    "brand": null,
+    "ean": "05052526060544"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Irish Medium Grated Cheddar 250G",
+     "brand": "TESCO",
+     "sku": "268991832"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Signature Tastes Vintage Irish White Cheddar (200 g)",
+     "brand": "SuperValu",
+     "sku": "1346851000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Charleville Select Red Cheddar 200g",
+     "brand": "Dunnes Stores",
+     "sku": "100710659"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "250g",
+     "variant": "Irish Medium Grated Cheddar",
+     "sources": [
+      "tesco:proposed:268991832"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "200g",
+     "variant": "Signature Tastes Vintage Irish White Cheddar",
+     "sources": [
+      "supervalu:peer:1346851000"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "200g",
+     "variant": "Charleville Select Red Cheddar",
+     "sources": [
+      "dunnes:peer:100710659"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "1410276ccdb68ee415e794d85e51401fb18bd324ec716a15ce9489cad760c0f4",
+    "gtin": "05052526060544",
+    "pack_size": "250G",
+    "net_contents": "250",
+    "category": "Fresh Food > Cheese > Grated & Sliced Cheese > Grated Cheese"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "49af3551-e906-4679-9c04-07f4ccf5d976",
+   "current_sku": "300118119",
+   "proposed_sku": "307741868",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/307741868",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "a37eecc2-3d5f-42bb-aaa4-0b51f18c6919",
+   "current": {
+    "name": "Coconut Milk Drink",
+    "brand": "OKF",
+    "ean": "05411188119753"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Alpro Barista Coconut Long Life Dairy Free Drink 1L",
+     "brand": "alpro",
+     "sku": "307741868"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Alpro Matcha Coconut Drink, 1L",
+     "brand": null,
+     "sku": "100338466"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Okf Coconut Drink (1.5 L)",
+     "brand": "OKF",
+     "sku": "1425480000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(OKF vs alpro)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "alpro",
+     "pack": "1L",
+     "variant": "Barista Coconut Long Life Dairy Free Drink",
+     "sources": [
+      "tesco:proposed:307741868"
+     ]
+    },
+    {
+     "brand": "OKF",
+     "pack": "1500ml",
+     "variant": "Coconut Drink",
+     "sources": [
+      "supervalu:peer:1425480000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "2e5e1368620d3f9ffd8c392a0746b73971a1e19936328d9a386ab18bc5a3fc19",
+    "gtin": "05411188119753",
+    "pack_size": "1L",
+    "net_contents": "1l",
+    "category": "Fresh Food > Milk, Butter & Eggs > Dairy Free Drinks > Coconut Drinks"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "cb7d3b92-8504-4b64-a5f9-cf2e7b52130b",
+   "current_sku": "322238768",
+   "proposed_sku": "322649034",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/322649034",
+   "repair_blockers": [
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "b9e831b0-96ac-483e-a209-599d1027e836",
+   "current": {
+    "name": "Beef Steak Sirloin",
+    "brand": null,
+    "ean": "05391509192125"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "IRISH COUNTRY IRISH BEEF SIRLOIN STEAK 200g",
+     "brand": "IRISH COUNTRY",
+     "sku": "322649034"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores 2 Extra Matured Irish Beef Sirloin Steaks 400g",
+     "brand": null,
+     "sku": "100291087"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Fresh Irish Beef Sirloin Steak (1 kg)",
+     "brand": "SuperValu",
+     "sku": "1019164002"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "IRISH COUNTRY",
+     "pack": "200g",
+     "variant": "IRISH BEEF SIRLOIN STEAK",
+     "sources": [
+      "tesco:proposed:322649034"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "400g",
+     "variant": "2 Extra Matured Irish Beef Sirloin Steaks",
+     "sources": [
+      "dunnes:peer:100291087"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "1kg",
+     "variant": "Fresh Irish Beef Sirloin Steak",
+     "sources": [
+      "supervalu:peer:1019164002"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "fec4313cbf2fd8b874fff46cccfb16b7f6770e6f519588a822eefa24e26eab97",
+    "gtin": "05391509192125",
+    "pack_size": "200G",
+    "net_contents": "200g",
+    "category": "Fresh Food > Fresh Meat & Poultry > Fresh Beef > Beef Steaks"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "c4ff923a-309b-43bc-b39b-049e4698496b",
+   "current_sku": "312109194",
+   "proposed_sku": "308475640",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/308475640",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "be13bf81-8e4a-4400-9dd2-3cbc17ac2f96",
+   "current": {
+    "name": "Shreddies",
+    "brand": "Shreddies",
+    "ean": "07613287136053"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(supervalu:silent,dunnes:conflicts)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "38139ce76f74d9b3cb914f9e1f535fee837bf3770381de338c94b60279251372",
+    "gtin": "07613287136053",
+    "pack_size": "460G",
+    "net_contents": "460g ℮",
+    "category": "Food Cupboard > Breakfast Cereals > Family Cereals > Wheat Biscuits"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "19756b4e-2b49-448e-9ccb-260c8cc03305",
+   "current_sku": "323643868",
+   "proposed_sku": "279458624",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/279458624",
+   "repair_blockers": [
+    "brand_not_confirmed"
+   ],
+   "canonicalId": "c098f427-2adb-4d1f-aa18-1300665986ac",
+   "current": {
+    "name": "Instant Coffee 100g",
+    "brand": null,
+    "ean": "05053947665561"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "cb05284a109f02332a23ba7222e7a94bf93fbfa758fa1a38c32588b5aa95b9ed",
+    "gtin": "05053947665561",
+    "pack_size": "100G",
+    "net_contents": "100g ℮",
+    "category": "Drinks > Coffee > Premium Instant Coffee > Colombian & Costa Rican Instant Coffee"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "aca69ca1-35e3-4cfc-b442-a201ab50f839",
+   "current_sku": "285332502",
+   "proposed_sku": "299685376",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/299685376",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "c1a46bb3-0309-47a0-8da7-d3b76a4a7d3b",
+   "current": {
+    "name": "Smoked Salmon",
+    "brand": null,
+    "ean": "05906730601034"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Suempol Norwegian Smoked Salmon 200G",
+     "brand": "SUEMPOL",
+     "sku": "299685376"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Nolan's Smoked Salmon Slices 250g",
+     "brand": null,
+     "sku": "100287618"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Smoked Salmon (100 g)",
+     "brand": "SuperValu",
+     "sku": "1028051000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "SUEMPOL",
+     "pack": "200g",
+     "variant": "Norwegian Smoked Salmon",
+     "sources": [
+      "tesco:proposed:299685376"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "100g",
+     "variant": "Smoked Salmon",
+     "sources": [
+      "supervalu:peer:1028051000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "064ef9d288fecbf69482798f356d57fb6f6cf344d67960e8f83ed9249d57d14a",
+    "gtin": "05906730601034",
+    "pack_size": "200G",
+    "net_contents": null,
+    "category": "Fresh Food > Chilled Fish & Sea Food > Salmon & Trout > Smoked Salmon"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "aa6cf0a0-f4a6-472a-ac61-571af14ea10f",
+   "current_sku": "303183503",
+   "proposed_sku": "311691137",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/311691137",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "c1fc4582-0de0-49ee-907d-d7a89b035cf5",
+   "current": {
+    "name": "Oyster Sauce",
+    "brand": "Thai Gold",
+    "ean": "08710605018714"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Go Tan Oyster Sauce 140Ml",
+     "brand": "GO TAN",
+     "sku": "311691137"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Blue Dragon Oyster Sauce 150ml",
+     "brand": null,
+     "sku": "100308470"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Thai Gold Oyster Sauce  (200 ml)",
+     "brand": "Thai Gold",
+     "sku": "1036385000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Thai Gold vs GO TAN)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "GO TAN",
+     "pack": "140ml",
+     "variant": "Oyster Sauce",
+     "sources": [
+      "tesco:proposed:311691137"
+     ]
+    },
+    {
+     "brand": "Thai Gold",
+     "pack": "200ml",
+     "variant": "Oyster Sauce",
+     "sources": [
+      "supervalu:peer:1036385000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "24551349cb0b0a2edc16890cf6b79022bdefe576a319ad33a8fccc0ef7716f86",
+    "gtin": "08710605018714",
+    "pack_size": "140ML",
+    "net_contents": "140g ℮",
+    "category": "Food Cupboard > Cooking Sauces & World Foods > Chinese > Dipping Sauces"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "2370d23a-6eb3-4414-a20e-deaa91729b89",
+   "current_sku": "309466350",
+   "proposed_sku": "256381115",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/256381115",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "own_label (repair guard refuses)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "ce51c212-4ba7-4244-8e1c-ebd8ca47faf7",
+   "current": {
+    "name": "Greek Style Yogurt Plain",
+    "brand": null,
+    "ean": "05052320269839"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Finest Greek Yogurt 500G",
+     "brand": "TESCO finest",
+     "sku": "256381115"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Greek Style Natural Yogurt (500 g)",
+     "brand": "SuperValu",
+     "sku": "1493166000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Alpro Greek Style Plain Dairy Free Yoghurt Alternative 400g",
+     "brand": "Dunnes Stores",
+     "sku": "100850693"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO finest",
+     "pack": "500g",
+     "variant": "Greek Yogurt",
+     "sources": [
+      "tesco:proposed:256381115"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "500g",
+     "variant": "Greek Style Natural Yogurt",
+     "sources": [
+      "supervalu:peer:1493166000"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "400g",
+     "variant": "Alpro Greek Style Plain Dairy Free Yoghurt Alternative",
+     "sources": [
+      "dunnes:peer:100850693"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "a1dc6d1174fc2d6bca29579bb8b057790031994943497e38da73efbab8e03c9c",
+    "gtin": "05052320269839",
+    "pack_size": "500G",
+    "net_contents": "500g e",
+    "category": "Fresh Food > Yoghurts > Natural & Greek Style Yoghurts > Greek Yoghurt"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "1f1e91c0-c4b8-4e4c-8599-1202f74e14ed",
+   "current_sku": "256762546",
+   "proposed_sku": "271074203",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/271074203",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "d683d6ea-d19b-4bf6-90d2-2db879b27b20",
+   "current": {
+    "name": "Mixed Dried Fruit",
+    "brand": null,
+    "ean": "05052109860981"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Cranberries 200G",
+     "brand": "TESCO",
+     "sku": "271074203"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Shamrock Diced Mixed Fruit 200g",
+     "brand": null,
+     "sku": "100111631"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Mixed Fruit  (375 g)",
+     "brand": "SuperValu",
+     "sku": "1023682000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "200g",
+     "variant": "Cranberries",
+     "sources": [
+      "tesco:proposed:271074203"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "375g",
+     "variant": "Mixed Fruit",
+     "sources": [
+      "supervalu:peer:1023682000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "814a045a0eea2b01e9d91bf97072c775433ee8cb0c24aa92f5ea04d130f1f337",
+    "gtin": "05052109860981",
+    "pack_size": "200G",
+    "net_contents": "200g e",
+    "category": "Food Cupboard > Home Baking & Sugar > Dried Fruit & Mixed Fruit > Mixed Dried Fruit"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "168dfc02-f3f6-4f21-97ed-e3f1bb23a419",
+   "current_sku": "321676158",
+   "proposed_sku": "278532342",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/278532342",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "d6fcc217-3ebc-4fdb-930e-03ea5054c829",
+   "current": {
+    "name": "Vanilla Extract",
+    "brand": "Goodall's",
+    "ean": "00000096081280"
+   },
+   "supportingSources": [],
+   "status": "contradicted",
+   "reasons": [
+    "canonical_brand_contradicts(Goodall's vs Dr. Oetker)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "ab3f503dc4274985fadcaa990ccef388a3460fce23def82680bd434102262b7f",
+    "gtin": "00000096081280",
+    "pack_size": "35ML",
+    "net_contents": "35ml ℮",
+    "category": "Food Cupboard > Home Baking & Sugar > Extracts, Flavourings & Food Colourings > Vanilla Extract & Vanilla Paste"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "e14d59c6-afcb-4b5b-9710-ad3729ce876c",
+   "current_sku": "309476129",
+   "proposed_sku": "306804572",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/306804572",
+   "repair_blockers": [
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "d7aa0663-8601-41a0-b571-af30d2495c0d",
+   "current": {
+    "name": "Baking Powder",
+    "brand": "Odlums",
+    "ean": "05099809145154"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Gem Baking Powder 150G",
+     "brand": "GEM",
+     "sku": "306804572"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Odlums Baking Powder (200 g)",
+     "brand": "Odlums",
+     "sku": "1288448000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores Baking at Home Baking Powder 200g",
+     "brand": null,
+     "sku": "100846449"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Odlums vs GEM)",
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "GEM",
+     "pack": "150g",
+     "variant": "Baking Powder",
+     "sources": [
+      "tesco:proposed:306804572"
+     ]
+    },
+    {
+     "brand": "Odlums",
+     "pack": "200g",
+     "variant": "Baking Powder",
+     "sources": [
+      "supervalu:peer:1288448000"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "200g",
+     "variant": "Baking at Home Baking Powder",
+     "sources": [
+      "dunnes:peer:100846449"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "a15ad02f14e156bca80f45d489180fb5b042ff980dafc983451e26ebaaecefca",
+    "gtin": "05099809145154",
+    "pack_size": "150G",
+    "net_contents": "150g ℮",
+    "category": "Food Cupboard > Home Baking & Sugar > Baking Aids & Ingredients > Bicarbonate of Soda & Baking Powder"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "c823c3d6-4c2a-44ba-8b95-8b79e339651b",
+   "current_sku": "322838006",
+   "proposed_sku": "300771048",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/300771048",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "dbeb09c2-8c2b-4b96-8437-f9f6bf031661",
+   "current": {
+    "name": "Ready Meal Lasagne",
+    "brand": "Meals Made Easy",
+    "ean": "05057753211233"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:conflicts,supervalu:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "ab1e0056ab6b1f2dad7cd45def2b72f00c926286f29f48768330e2d06446ca48",
+    "gtin": "05057753211233",
+    "pack_size": "1KG",
+    "net_contents": "1kg",
+    "category": "Fresh Food > Ready Meals > Family Meals > Family Meals"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "542c8e90-7fe7-4d7d-a7b7-0f4d35e0c8df",
+   "current_sku": "305833629",
+   "proposed_sku": "272781689",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/272781689",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "dbff500a-d0e4-43c4-8c50-371eb6d90929",
+   "current": {
+    "name": "BBQ Sauce",
+    "brand": "Chef",
+    "ean": "00000050457878"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Heinz Classic Barbecue Sauce 480G",
+     "brand": "HEINZ",
+     "sku": "272781689"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Chef Smokey BBQ Sauce (385 g)",
+     "brand": "Chef",
+     "sku": "1027620004"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Heinz Sweet Barbecue Sauce 500g",
+     "brand": null,
+     "sku": "100789742"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Chef vs HEINZ)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "HEINZ",
+     "pack": "480g",
+     "variant": "Classic Barbecue Sauce",
+     "sources": [
+      "tesco:proposed:272781689"
+     ]
+    },
+    {
+     "brand": "Chef",
+     "pack": "385g",
+     "variant": "Smokey BBQ Sauce",
+     "sources": [
+      "supervalu:peer:1027620004"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "646416926bea13bc5c1f2d6da174ec114f6bf1adafe0b9f0befd842aeda4e451",
+    "gtin": "00000050457878",
+    "pack_size": "480G",
+    "net_contents": "480g",
+    "category": "Food Cupboard > Condiments, Table Sauces, Olives & Pickles > Table Sauces > BBQ, Burger, Pizza Sauces & Marinades"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "30bb2827-05c7-497b-a63a-d63838e7fb76",
+   "current_sku": "317988083",
+   "proposed_sku": "304696389",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/304696389",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "attempt_within_24h",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "de39a5e0-38a3-4508-a656-c67f8690c198",
+   "current": {
+    "name": "Roast Chicken Slices",
+    "brand": null,
+    "ean": "05057967924967"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Roast Turkey Slices 120G X 12",
+     "brand": "TESCO",
+     "sku": "304696389"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Roast Chicken Slices",
+     "brand": null,
+     "sku": "100170457"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Carved Roast Chicken Slices (120 g)",
+     "brand": "SuperValu",
+     "sku": "1220535000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "120g",
+     "variant": "Roast Turkey Slices X 12",
+     "sources": [
+      "tesco:proposed:304696389"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "120g",
+     "variant": "Carved Roast Chicken Slices",
+     "sources": [
+      "supervalu:peer:1220535000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "4b8418f14d4679d3a2ef413c2d2f1c29b587614998571d9d708e07bc8a2c5827",
+    "gtin": "05057967924967",
+    "pack_size": "120G",
+    "net_contents": "120g ℮",
+    "category": "Fresh Food > Cooked Meats, Antipasti & Dips > Chicken & Turkey Slices > Turkey Slices"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "4afcf8fc-1060-4d76-af61-ead3717c80c8",
+   "current_sku": "266578876",
+   "proposed_sku": "315381849",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/315381849",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "dfafd210-7b48-4450-8e71-c07dcbbe9952",
+   "current": {
+    "name": "Pesto Green",
+    "brand": null,
+    "ean": "05391510683490"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "The Galway Kitchen Green Basil Pesto 140G",
+     "brand": "THE GALWAY KTCHN",
+     "sku": "315381849"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Antipasto Green Pesto (150 g)",
+     "brand": "SuperValu",
+     "sku": "1090068000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Biona Organic Green Pesto with Pine Kernels 120g",
+     "brand": null,
+     "sku": "100860779"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "THE GALWAY KTCHN",
+     "pack": "140g",
+     "variant": "The Galway Kitchen Green Basil Pesto",
+     "sources": [
+      "tesco:proposed:315381849"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "150g",
+     "variant": "Antipasto Green Pesto",
+     "sources": [
+      "supervalu:peer:1090068000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "1025b7642a64919a80bb3d8b4819875a2b555961c71eee494a72dc95d53695d5",
+    "gtin": "05391510683490",
+    "pack_size": "140G",
+    "net_contents": "140g ℮",
+    "category": "Fresh Food > Fresh Pizza, Pasta & Garlic Bread > Chilled Pasta Sauce & Pesto > Pesto"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "ac2c4f2b-a5d5-4cf5-ae70-0716dbb8e8df",
+   "current_sku": "278104918",
+   "proposed_sku": "266837858",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/266837858",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "dfb6df02-fda2-43ae-bd0e-18f8307e4e8e",
+   "current": {
+    "name": "Naan Bread 2 Pack",
+    "brand": "Fitzgeralds Family Bakery",
+    "ean": "05052004938068"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Garlic & Coriander Naan 2 Pack 260G",
+     "brand": "TESCO",
+     "sku": "266837858"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Naan Bread 2 Pack",
+     "brand": null,
+     "sku": null
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Fitzgeralds Large Authentic Naan Breads 2 Pack (260 g)",
+     "brand": "Fitzgeralds Family Bakery",
+     "sku": "1552645001"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Fitzgeralds Family Bakery vs TESCO)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "260g",
+     "variant": "Garlic & Coriander Naan 2 Pack",
+     "sources": [
+      "tesco:proposed:266837858"
+     ]
+    },
+    {
+     "brand": "Fitzgeralds Family Bakery",
+     "pack": "260g",
+     "variant": "Fitzgeralds Large Authentic Naan Breads 2 Pack",
+     "sources": [
+      "supervalu:peer:1552645001"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "e02bfa576aa72cf6f4b3a58c8498512291c9f392a0ebe48854402539ff6ec0c6",
+    "gtin": "05052004938068",
+    "pack_size": "260G",
+    "net_contents": null,
+    "category": "Food Cupboard > Cooking Sauces & World Foods > Indian > Indian Naans & Chapattis"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "f404a757-0a0c-4429-b3f4-855da3bbdc03",
+   "current_sku": "254722768",
+   "proposed_sku": "250167878",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/250167878",
+   "repair_blockers": [
+    "attempt_within_24h",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "e57e2132-5e09-4cc2-8c59-0ba471abe171",
+   "current": {
+    "name": "Tomato Ketchup",
+    "brand": "Heinz",
+    "ean": "00000050457243"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "51b69b6098614378dbc0f8fec7e0adfa68b8c5a78dd48924bc198cbdbc2ec9f6",
+    "gtin": "00000050457243",
+    "pack_size": "460G",
+    "net_contents": "460g",
+    "category": "Food Cupboard > Condiments, Table Sauces, Olives & Pickles > Tomato Ketchup > Tomato Ketchup"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "cdd7523d-0a86-4f33-98f6-753d73d3e7a4",
+   "current_sku": "322245120",
+   "proposed_sku": "254875197",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/254875197",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)"
+   ],
+   "canonicalId": "e58d4303-fda2-4844-ae9f-08e787f06ee9",
+   "current": {
+    "name": "Sweetcorn Tinned 340g",
+    "brand": "Green giant",
+    "ean": "05010046002017"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(supervalu:silent,dunnes:conflicts)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "aa470fb0ddbf193ff04c828af45e84ffd62041009e97a00c94829846dbe8cbb3",
+    "gtin": "05010046002017",
+    "pack_size": "285G",
+    "net_contents": "340g",
+    "category": "Food Cupboard > Tins, Cans & Packets > Tinned Vegetables > Tinned Sweetcorn"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "30d28e8b-2b2f-4da6-89c8-6d90c4711732",
+   "current_sku": "299600086",
+   "proposed_sku": "278001994",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/278001994",
+   "repair_blockers": [
+    "current_sku_shared",
+    "not_proven (repair guard requires a prior receipt)",
+    "own_label (repair guard refuses)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "e7cb47bd-d72b-43ff-a5e7-898d888247aa",
+   "current": {
+    "name": "Strawberry Jam",
+    "brand": null,
+    "ean": "00000003234648"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Strawberry 227G",
+     "brand": "TESCO",
+     "sku": "278001994"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Strawberry Jam (454 g)",
+     "brand": "SuperValu",
+     "sku": "1764932000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Chivers Strawberry Jam 340g",
+     "brand": "Dunnes Stores",
+     "sku": "100332499"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "227g",
+     "variant": "Strawberry",
+     "sources": [
+      "tesco:proposed:278001994"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "454g",
+     "variant": "Strawberry Jam",
+     "sources": [
+      "supervalu:peer:1764932000"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "340g",
+     "variant": "Chivers Strawberry Jam",
+     "sources": [
+      "dunnes:peer:100332499"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "5fad1e3b8ebe410c91451d0f6d3147cd053bdf7b6719d0b6d70aed05f14debe6",
+    "gtin": "00000003234648",
+    "pack_size": "227G",
+    "net_contents": "300g",
+    "category": "Fresh Food > Fresh Fruit > Berries & Cherries > Strawberries"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "73a19d37-e81a-45d2-858d-b919cb070845",
+   "current_sku": null,
+   "proposed_sku": "255676120",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/255676120",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "f0d1eb43-6587-4c36-80b1-7e21c015d2f7",
+   "current": {
+    "name": "Marmalade",
+    "brand": null,
+    "ean": "05391509390521"
+   },
+   "supportingSources": [],
+   "status": "insufficient_evidence",
+   "reasons": [
+    "no_independent_retailer_confirms(dunnes:conflicts,supervalu:conflicts)"
+   ],
+   "proposed": null,
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "c202f1a79a42ecdc7125c580ec0fe895527ce0a2a4baa6786960dfab5391bbae",
+    "gtin": "05391509390521",
+    "pack_size": "454G",
+    "net_contents": "454g ℮",
+    "category": "Food Cupboard > Jams, Sweet & Savoury Spreads > Marmalades & Curds > Orange Marmalade"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "eb6021e4-15ee-43ac-b27e-0e92d0afdd7c",
+   "current_sku": "318181908",
+   "proposed_sku": "297372202",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/297372202",
+   "repair_blockers": [
+    "current_sku_shared",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "f25bf074-5749-4f34-b998-d91223848de0",
+   "current": {
+    "name": "Worcestershire Sauce",
+    "brand": "Goodall's of Ireland",
+    "ean": "05057373870810"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Worcester Sauce 150Ml",
+     "brand": "TESCO",
+     "sku": "297372202"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Goodall's of Ireland Worcestershire Sauce 125ml",
+     "brand": null,
+     "sku": "100110609"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Goodall's Worcestershire Sauce (125 ml)",
+     "brand": "Goodall's of Ireland",
+     "sku": "1011445001"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Goodall's of Ireland vs TESCO)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "150ml",
+     "variant": "Worcester Sauce",
+     "sources": [
+      "tesco:proposed:297372202"
+     ]
+    },
+    {
+     "brand": "Goodall's of Ireland",
+     "pack": "125ml",
+     "variant": "Goodall's Worcestershire Sauce",
+     "sources": [
+      "supervalu:peer:1011445001"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "54b446c09873efaf1a36f63e90b023098217bfb5cdcb4231d223519cbccfe76d",
+    "gtin": "05057373870810",
+    "pack_size": "150ML",
+    "net_contents": "150ml ℮",
+    "category": "Food Cupboard > Condiments, Table Sauces, Olives & Pickles > Condiments, Worcestershire & Soy Sauce > Worcestershire Sauce & Soy Sauce"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "d9abb9db-07c7-4fe6-8249-38b35c008da7",
+   "current_sku": "262516473",
+   "proposed_sku": "303126912",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/303126912",
+   "repair_blockers": [
+    "not_proven (repair guard requires a prior receipt)",
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "f739a8d0-bf39-4b4f-8cf2-9cbebf89cc39",
+   "current": {
+    "name": "Teriyaki Sauce",
+    "brand": "Kikkoman",
+    "ean": "05010338200077"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Blue Dragon Teriyaki Stir Fry Sauce 120G",
+     "brand": "BLUE DRAGON",
+     "sku": "303126912"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "Obento Teriyaki Marinade Sauce (250 ml)",
+     "brand": "Kikkoman",
+     "sku": "1441877001"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Kikkoman Teriyaki Wok Sauce with Toasted Sesame 250ml",
+     "brand": null,
+     "sku": "100208743"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "canonical_brand_contradicts(Kikkoman vs BLUE DRAGON)",
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "BLUE DRAGON",
+     "pack": "120g",
+     "variant": "Teriyaki Stir Fry Sauce",
+     "sources": [
+      "tesco:proposed:303126912"
+     ]
+    },
+    {
+     "brand": "Kikkoman",
+     "pack": "250ml",
+     "variant": "Obento Teriyaki Marinade Sauce",
+     "sources": [
+      "supervalu:peer:1441877001"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "339a19865cca9fc6c328d14b13c626af229aa38354c93de91132402b27d6ee80",
+    "gtin": "05010338200077",
+    "pack_size": "120G",
+    "net_contents": "120g ℮",
+    "category": "Food Cupboard > Cooking Sauces & World Foods > Chinese > Stir Fry Sauce & Vegetables"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "79b03c1b-2a20-4582-a6e2-6b9c8fd419b4",
+   "current_sku": "292769876",
+   "proposed_sku": "250005606",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/250005606",
+   "repair_blockers": [
+    "current_sku_shared",
+    "own_label (repair guard refuses)",
+    "brand_not_confirmed"
+   ],
+   "canonicalId": "fbf1ad4d-fecd-4303-9d12-0add3b6f6e6c",
+   "current": {
+    "name": "Fresh Whole Milk 2L",
+    "brand": null,
+    "ean": "05011100650236"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Fresh Milk 2 Litre",
+     "brand": "TESCO",
+     "sku": "250005606"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Dunnes Stores Irish Whole Milk 2 Litres",
+     "brand": "Dunnes Stores",
+     "sku": "100806905"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Fresh Irish Whole Milk (2 L)",
+     "brand": "SuperValu",
+     "sku": "1025460000"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_3_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "2L",
+     "variant": "Fresh Milk",
+     "sources": [
+      "tesco:proposed:250005606"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "2L",
+     "variant": "Irish Whole Milk",
+     "sources": [
+      "dunnes:peer:100806905"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "2L",
+     "variant": "Fresh Irish Whole Milk",
+     "sources": [
+      "supervalu:peer:1025460000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "1GmfEpifwr0VgEo0c",
+    "captured_at": "2026-11-15T00:38:50.533Z",
+    "raw_sha256": "32c830a525784c9605b22deaf84cdf090b6bb120e87d8b9bf886f3be76b5019c",
+    "gtin": "05011100650236",
+    "pack_size": "2L",
+    "net_contents": "2l ℮",
+    "category": "Fresh Food > Milk, Butter & Eggs > Fresh Milk > Whole Milk"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  },
+  {
+   "mapping_id": "b4046ed9-129e-440e-a277-190ab6eee7a6",
+   "current_sku": "276731075",
+   "proposed_sku": "308109574",
+   "proposed_url": "https://www.tesco.ie/shop/en-IE/products/308109574",
+   "repair_blockers": [
+    "brand_not_confirmed",
+    "pack_not_confirmed"
+   ],
+   "canonicalId": "fe4a0dd2-fff7-43ed-8784-cfa9e8cda4de",
+   "current": {
+    "name": "Hoisin Sauce",
+    "brand": null,
+    "ean": "05010338200107"
+   },
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Blue Dragon Hoisin & Garlic Stir Fry Sauce 120G",
+     "brand": "BLUE DRAGON",
+     "sku": "308109574"
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "name": "SuperValu Signature Tastes Hoisin Sauce (285 g)",
+     "brand": "SuperValu",
+     "sku": "1771052000"
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "name": "Blue Dragon Rich Hoisin Sauce 250ml",
+     "brand": null,
+     "sku": "100320409"
+    }
+   ],
+   "status": "needs_split",
+   "reasons": [
+    "retailers_offer_2_different_products"
+   ],
+   "proposed": null,
+   "splitInto": [
+    {
+     "brand": "BLUE DRAGON",
+     "pack": "120g",
+     "variant": "Hoisin & Garlic Stir Fry Sauce",
+     "sources": [
+      "tesco:proposed:308109574"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "285g",
+     "variant": "Signature Tastes Hoisin Sauce",
+     "sources": [
+      "supervalu:peer:1771052000"
+     ]
+    }
+   ],
+   "tesco_catalogue_evidence": {
+    "provider_run_id": "15bOhJeCdF4evSS1I",
+    "captured_at": "2026-11-15T00:24:54.220Z",
+    "raw_sha256": "5475086601de82a51106527ca1899ed35c1b92b7943e56804fa9637bf6e00de6",
+    "gtin": "05010338200107",
+    "pack_size": "120G",
+    "net_contents": "120g ℮",
+    "category": "Food Cupboard > Cooking Sauces & World Foods > Chinese > Stir Fry Sauce & Vegetables"
+   },
+   "canonical_ean_tesco_sourced": true,
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
+  }
+ ]
+}

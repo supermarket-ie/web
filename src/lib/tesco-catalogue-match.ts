@@ -14,10 +14,12 @@ import { canonicalVariantConflict, declaredPack, normalized, sameBarcode, sameBr
 
 export type CatalogueItem = { sku: string; gtin: string | null; name: string; brand: string | null; url: string;
   department: string | null; superDepartment: string | null; price: number | null };
-export type Canonical = { id: string; name: string; brand: string | null; ean: string | null };
+// eanIndependent: product_barcode_provenance backs the canonical EAN. Without it
+// the EAN is treated as Tesco-sourced (measured: 306/313 equal the Tesco GTIN).
+export type Canonical = { id: string; name: string; brand: string | null; ean: string | null; eanIndependent?: boolean };
 export type Peer = { store: 'dunnes' | 'supervalu'; name: string; brand: string | null; gtin: string | null };
 export type TescoMapping = { id: string; sku: string | null };
-export type MatchKind = 'barcode_exact' | 'peer_candidate' | 'barcode_conflict' | 'ambiguous' | 'no_match';
+export type MatchKind = 'barcode_exact' | 'tesco_sourced_barcode' | 'peer_candidate' | 'barcode_conflict' | 'ambiguous' | 'no_match';
 export type Relation = 'confirms_mapping' | 'replacement' | 'new_link' | 'shared' | 'none';
 export type MatchResult = { productId: string; kind: MatchKind; relation: Relation; sku: string | null; skus: string[]; reasons: string[] };
 
@@ -47,7 +49,9 @@ function relationFor(sku: string, mappings: TescoMapping[], owners: Map<string, 
 
 export function matchCanonical(c: Canonical, peers: Peer[], mappings: TescoMapping[],
   idx: ReturnType<typeof indexCatalogue>, skuOwner: Map<string, string>): MatchResult {
-  const codes = new Set([c.ean, ...peers.map(p => p.gtin)].map(code).filter((x): x is string => !!x));
+  // Only independently sourced codes can verify a link: peer GTINs and a
+  // provenance-backed canonical EAN. A Tesco-sourced EAN is reported separately.
+  const codes = new Set([c.eanIndependent ? c.ean : null, ...peers.map(p => p.gtin)].map(code).filter((x): x is string => !!x));
   const hits = new Map<string, CatalogueItem>();
   for (const k of codes) for (const it of idx.byGtin.get(k) ?? []) hits.set(it.sku, it);
   if (hits.size) {
@@ -58,6 +62,14 @@ export function matchCanonical(c: Canonical, peers: Peer[], mappings: TescoMappi
     }
     if (clean.length > 1) return { productId: c.id, kind: 'ambiguous', relation: 'none', sku: null, skus: clean.map(x => x.sku), reasons: ['multiple_barcode_skus'] };
     return { productId: c.id, kind: 'barcode_conflict', relation: 'none', sku: null, skus: [...hits.keys()], reasons: ['barcode_hit_contradicts_canonical'] };
+  }
+  // Tesco-sourced canonical EAN hit: a LEAD only (same evidence twice), never a link.
+  const tescoCode = !c.eanIndependent ? code(c.ean) : null;
+  const tescoHits = tescoCode ? (idx.byGtin.get(tescoCode) ?? []) : [];
+  if (tescoHits.length === 1) {
+    const it = tescoHits[0];
+    return { productId: c.id, kind: 'tesco_sourced_barcode', relation: relationFor(it.sku, mappings, skuOwner, c.id), sku: it.sku, skus: [it.sku],
+      reasons: ['canonical_ean_not_independent'] };
   }
   // No barcode: brand + stated pack + title must agree with the canonical AND with
   // BOTH peers (one per store) independently. AI still required afterwards.

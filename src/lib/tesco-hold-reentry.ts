@@ -30,6 +30,14 @@ export type ReentryEvidence = {
   // identity support ONLY when the live Tesco GTIN carries it; every other
   // check (pack, variant, brand, peers, AI) still applies.
   verifiedBarcode?: string | null;
+  // The canonical EAN counts as INDEPENDENT identity support only when its
+  // provenance is recorded as independent of Tesco (product_barcode_provenance).
+  // Measured 15 Nov 2026: 306 of 313 canonical EANs equal the Tesco mapping's
+  // own GTIN and none equals a Dunnes/SuperValu GTIN, so by default a canonical
+  // EAN is treated as Tesco-sourced: re-seeing it on a Tesco page is the same
+  // evidence twice. A canonical EAN that DIFFERS from the Tesco GTIN is still
+  // a conflict.
+  canonicalEanIndependent?: boolean;
 };
 export type Reentry = { reviewId: string; sourcePageId: string; evidence: ReentryEvidence };
 export type ReviewRecord = {
@@ -253,7 +261,7 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
   const sourceBrand = source.brand;
   // A matching canonical barcode independently establishes the Tesco identity.
   // Peer classification stays separate; Tesco/canonical conflicts still fail.
-  if (sameBarcode(m.canonical_ean,source.gtin)) return true;
+  if (e.canonicalEanIndependent === true && sameBarcode(m.canonical_ean,source.gtin)) return true;
   if (e.verifiedBarcode && sameBarcode(e.verifiedBarcode, source.gtin)) return true;
   // A generic catalogue title can omit its manufacturer and measure. Require
   // exact original/source product words and one fully matching branded pack;

@@ -90,9 +90,12 @@ export type ApifyMapping = {
   evidencePurpose?: EvidencePurpose;
   // Active barcode-verified catalogue link for this mapping's SKU (if any).
   link?: VerifiedLink | null;
+  // True only when product_barcode_provenance records the canonical EAN as
+  // captured from a non-Tesco source. Otherwise the EAN is Tesco-sourced.
+  canonicalEanIndependent?: boolean;
 };
 
-export type VerifiedLink = { id: string; sku: string; gtin: string; identityFingerprint: string };
+export type VerifiedLink = { id: string; sku: string; gtin: string; identityFingerprint: string; mappingSnapshot?: unknown };
 
 export type FirstPriceApproval = { id: string; identityFingerprint: string };
 
@@ -299,11 +302,22 @@ export async function selectApifyMappings(
   const links = new Map<string, VerifiedLink>();
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await sb.from('tesco_verified_links')
-      .select('id,store_product_id,tesco_sku,gtin,identity_fingerprint').eq('status', 'active')
+      .select('id,store_product_id,tesco_sku,gtin,identity_fingerprint,mapping_snapshot').eq('status', 'active')
       .order('id').range(offset, offset + 999);
     if (error) break;
     for (const l of data ?? []) links.set(String(l.store_product_id), { id: String(l.id), sku: String(l.tesco_sku),
-      gtin: String(l.gtin), identityFingerprint: String(l.identity_fingerprint) });
+      gtin: String(l.gtin), identityFingerprint: String(l.identity_fingerprint), mappingSnapshot: l.mapping_snapshot });
+    if ((data ?? []).length < 1000) break;
+  }
+
+  // Independently sourced barcodes (product_barcode_provenance, migration
+  // 20261115120000). Missing table = none: canonical EANs are then Tesco-sourced.
+  const provenance = new Set<string>();
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await sb.from('product_barcode_provenance')
+      .select('product_id,gtin').is('revoked_at', null).order('id').range(offset, offset + 999);
+    if (error) break;
+    for (const p of data ?? []) provenance.add(`${p.product_id}|${String(p.gtin).replace(/^0+/, '')}`);
     if ((data ?? []).length < 1000) break;
   }
 
@@ -354,6 +368,7 @@ export async function selectApifyMappings(
       firstPrice: firstPriceEligible,  // an unproven expansion first-price candidate
       approval: approval && firstPriceEligible ? { id: approval.id, identityFingerprint: approval.identityFingerprint } : null,
       link: links.get(id)?.sku === sku ? links.get(id)! : null,
+      canonicalEanIndependent: !!c?.ean && provenance.has(`${r.product_id}|${String(c.ean).replace(/^0+/, '')}`),
       ...(evidenceMode ? { evidenceUrl: url, evidencePurpose: 'first_price' as const } : {}),
     });
   }
@@ -540,7 +555,7 @@ export function snapshotMappingEvidence(s: SnapshotIdentity, isFresh: boolean): 
 // verifies Tesco identity only (never a cross-retailer price comparison), and
 // the AI never overrides a deterministic rejection.
 export function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: string, live: TescoCollectedProduct,
-  peers: ApifyPeer[] = [], proven = true, verifiedBarcode: string | null = null): ReentryEvidence {
+  peers: ApifyPeer[] = [], proven = true, verifiedBarcode: string | null = null, canonicalEanIndependent = false): ReentryEvidence {
   return {
     mapping: {
       id: s.storeProductId, product_id: s.productId, canonical_name: s.canonicalName,
@@ -549,7 +564,7 @@ export function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha2
       is_own_brand: s.isOwnBrand, store_sku: s.storeSku, store_url: s.storeUrl,
       url_status: 'resolved', gtin: s.gtin,
     },
-    sameSkuCount: Math.max(s.sameSkuCanonicalNames.length, 1), proven, firstPriceOnboarding: !proven, verifiedBarcode, freshTesco: false, pending: false, recentAttempt: false,
+    sameSkuCount: Math.max(s.sameSkuCanonicalNames.length, 1), proven, firstPriceOnboarding: !proven, verifiedBarcode, canonicalEanIndependent, freshTesco: false, pending: false, recentAttempt: false,
     page: {
       id: pageId, requested_url: s.storeUrl, final_url: s.storeUrl, outcome: 'ok', http_status: 200,
       body_sha256: bodySha256, mode: 'products', parsed: { products: [live], listing: null },
@@ -806,16 +821,24 @@ export async function collectTescoApify(
       // and the item is assessed (and held) without it.
       let linkBarcode: string | null = null;
       if (m.link && product) {
-        const same = product.sku === m.link.sku && (product.gtin ?? '').replace(/^0+/, '') === m.link.gtin.replace(/^0+/, '');
+        // Revalidate: the canonical product / mapping the link was verified
+        // against must be unchanged (bound snapshot), as well as SKU + GTIN.
+        const snapshotSame = m.link.mappingSnapshot === undefined
+          || stableStringify(m.link.mappingSnapshot) === stableStringify(boundSnapshot);
+        const same = snapshotSame && product.sku === m.link.sku && (product.gtin ?? '').replace(/^0+/, '') === m.link.gtin.replace(/^0+/, '');
         if (same) linkBarcode = m.link.gtin;
         else {
           reasons.push('verified_link_identity_changed');
           await rpc(sb, 'apify_reopen_verified_link', { p_link_id: m.link.id,
-            p_reason: `live identity changed: sku ${product.sku} gtin ${product.gtin ?? 'none'}` }).catch(() => undefined);
+            p_reason: snapshotSame ? `live identity changed: sku ${product.sku} gtin ${product.gtin ?? 'none'}`
+              : 'canonical product or mapping changed since verification' }).catch(() => undefined);
           deps.log?.({ event: 'verified_link_reopened', sku: ident.storeSku, linkId: m.link.id });
         }
       }
-      const ev = product ? assessmentEvidence(ident, runId, adapterBody, product, m.peers, !m.firstPrice, linkBarcode) : null;
+      // The canonical EAN is independent only if provenance backs the EAN in the
+      // BOUND snapshot (a changed canonical EAN loses it).
+      const eanIndependent = m.canonicalEanIndependent === true && ident.canonicalEan === m.canonical_ean;
+      const ev = product ? assessmentEvidence(ident, runId, adapterBody, product, m.peers, !m.firstPrice, linkBarcode, eanIndependent) : null;
 
       // HELD-MAPPING RECOVERY (canonical-evidence gap): the ordinary gate
       // rejects a mapping when the ONLY problem is an incomplete/generic

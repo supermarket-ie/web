@@ -245,8 +245,14 @@ describe('independent Tesco naming and pack evidence',()=>{
     const e=evidence('Example Cheese Crisps','Example Cheese Crisps100g','Example Cheese Crisps 45g');
     expect(independentExactIdentity(e)).toBe(false);
   });
-  it('keeps Tesco identity independent of a conflicting peer with positive canonical barcode evidence',()=>{
+  it('a canonical EAN without independent provenance is NOT independent support (same evidence twice)',()=>{
     const e=evidence('Example Butter 100g','Example Butter 100g','Example Vanilla Butter 200g');
+    e.mapping.canonical_ean=e.page.parsed.products[0].gtin!;
+    expect(independentExactIdentity(e)).toBe(false);
+    expect(independentExactIdentity({...e,canonicalEanIndependent:false})).toBe(false);
+  });
+  it('keeps Tesco identity independent of a conflicting peer with positive, independently sourced canonical barcode evidence',()=>{
+    const e={...evidence('Example Butter 100g','Example Butter 100g','Example Vanilla Butter 200g'),canonicalEanIndependent:true};
     e.mapping.canonical_ean=e.page.parsed.products[0].gtin!;
     expect(independentExactIdentity(e)).toBe(true);
     e.mapping.gtin='05000000000000';
