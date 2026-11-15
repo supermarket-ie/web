@@ -443,6 +443,9 @@ export type ApifyFetchDeps = {
   // Optional provenance sink called once per fetched product with the provider
   // identity + freshness. The caller persists it alongside the page evidence.
   onProviderIdentity?: (identity: ApifyProviderIdentity) => void;
+  // Called with the provider's error message when a run cannot be started or
+  // completed (e.g. the account's monthly usage hard limit).
+  onProviderError?: (message: string) => void;
   // Require the active per-request freshness proof (scraped_at strictly after
   // our request submit) before returning an `ok` page. DEFAULT true (fail
   // closed): when freshness is not established the page is returned as a
@@ -455,6 +458,22 @@ export type ApifyFetchDeps = {
 // renders the single returned item as a Tesco page. One request == one run ==
 // one billed product-scraped event, so the existing per-request ledger and the
 // $-budget accounting line up one-to-one.
+// Apify ACCOUNT-level monthly usage headroom (Billing -> Limits). Independent of
+// our per-campaign ledgers: when the account hard limit is reached Apify refuses
+// every new run, so callers must check this BEFORE reserving or recording.
+export type ApifyUsageHeadroom = { limitUsd: number; usedUsd: number; headroomUsd: number; cycleEndAt: string | null };
+export async function apifyUsageHeadroom(options: { token?: string; fetchImpl?: typeof fetch } = {}): Promise<ApifyUsageHeadroom> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const token = options.token ?? requireToken();
+  const res = await fetchImpl('https://api.apify.com/v2/users/me/limits', { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Apify limits -> ${res.status}`);
+  const d = (await res.json())?.data ?? {};
+  const limitUsd = Number(d.limits?.maxMonthlyUsageUsd);
+  const usedUsd = Number(d.current?.monthlyUsageUsd);
+  if (!Number.isFinite(limitUsd) || !Number.isFinite(usedUsd)) throw new Error('Apify limits response missing usage');
+  return { limitUsd, usedUsd, headroomUsd: Math.max(0, limitUsd - usedUsd), cycleEndAt: d.monthlyUsageCycle?.endAt ?? null };
+}
+
 export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string, maxChargeUsd?: number) => Promise<TescoPageResponse> {
   return async function fetchPageViaApify(url: string, maxChargeUsd?: number): Promise<TescoPageResponse> {
     if (!isTescoCollectionUrl(url)) throw new Error('Unsafe Tesco collection URL');
@@ -468,9 +487,11 @@ export function createApifyFetchPage(deps: ApifyFetchDeps): (url: string, maxCha
     let run: ApifyRunResult;
     try {
       run = await deps.client.runProductUrls([url], maxChargeUsd);
-    } catch {
+    } catch (err) {
       // Provider/transport failure. Never a silent success; the collector treats
       // this as a network error (holds, no finalisation), same as a direct fetch.
+      // The provider's reason is surfaced so an account limit is not misread.
+      deps.onProviderError?.(err instanceof Error ? err.message : String(err));
       return { outcome: 'network_error', status: null, finalUrl: url, html: '', retryAfter: null, elapsedMs: Date.now() - start };
     }
 

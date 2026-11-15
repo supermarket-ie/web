@@ -21,7 +21,7 @@ import { collectTescoApify, type ApifyCollectionResult } from '../src/lib/tesco-
 import { readFileSync } from 'node:fs';
 import { planRecoveryQueue, type RecoveryPlan } from '../src/lib/tesco-recovery-queue';
 import { prepareFirstPriceApprovals } from '../src/lib/tesco-first-price-approval';
-import { createApifyRunClient, createApifyFetchPage, reconcileCampaignSpendUsd, confirmedTerminalChargeUsd, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
+import { apifyUsageHeadroom, createApifyRunClient, createApifyFetchPage, reconcileCampaignSpendUsd, confirmedTerminalChargeUsd, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
 
 function env(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -81,6 +81,7 @@ async function main() {
     const fetchPage = createApifyFetchPage({
       client,
       onProviderIdentity: (i) => { captured = i; },
+      onProviderError: (message) => console.log(JSON.stringify({ event: 'provider_start_failed', url: u, message })),
       requireVerifiedFreshness: requireFreshness,
     });
     fetchPage(u, maxChargeUsd).then((response) => resolve({ response, provider: captured })).catch(reject);
@@ -145,13 +146,35 @@ async function main() {
     } catch (e) { console.log(JSON.stringify({ event: 'coverage_snapshot_failed', label, message: e instanceof Error ? e.message : 'err' })); }
   }
 
+  // ACCOUNT-LEVEL preflight: when Apify's monthly hard limit leaves less than one
+  // full batch of headroom, stop BEFORE reserving budget, recording a page (which
+  // would exclude the URL for 24h) or starting a run.
+  async function providerHeadroomOk(label: string): Promise<boolean> {
+    const need = Math.max(0.05, perRequestUsd * limit);
+    try {
+      const h = await apifyUsageHeadroom();
+      const ok = h.headroomUsd >= need;
+      console.log(JSON.stringify({ event: ok ? 'provider_headroom' : 'provider_usage_limit', label, ...h, needUsd: need }));
+      return ok;
+    } catch (e) {
+      console.log(JSON.stringify({ event: 'provider_headroom_unknown', label, message: e instanceof Error ? e.message : 'err' }));
+      return false;
+    }
+  }
+
   await logCoverage('start');
+  if (!(await providerHeadroomOk('start'))) {
+    console.log(JSON.stringify({ event: 'campaign_summary', mode, batches: 0, requested: 0, accepted: 0, held: 0, unavailable: 0, evidenceRecorded: 0, stopped: 'provider_usage_limit' }));
+    process.exitCode = 3;
+    return;
+  }
   await logProviderSpend('start');
   await reconcileOutstandingReservations('start');
 
   const batches: ApifyCollectionResult[] = [];
   for (let b = 0; b < maxBatches; b += 1) {
-    if (b > 0) { await logProviderSpend(`before_batch_${b}`); await reconcileOutstandingReservations(`before_batch_${b}`); }
+    if (b > 0) { await logProviderSpend(`before_batch_${b}`); await reconcileOutstandingReservations(`before_batch_${b}`);
+      if (!(await providerHeadroomOk(`before_batch_${b}`))) break; }
     const result = await collectTescoApify(mode, limit, {
       sb, fetchApify, campaign, budgetUsd, perRequestUsd,
       // APIFY_ALLOW_FIRST_PRICE='1' admits unproven expansion mappings with both
