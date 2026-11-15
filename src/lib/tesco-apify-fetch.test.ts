@@ -317,3 +317,17 @@ describe('confirmedTerminalChargeUsd — billing-finality guard for reconciliati
     expect(confirmedTerminalChargeUsd({ status: 'SUCCEEDED', finishedAt: justFinished, usageTotalUsd: 0.0018 }, later)).toBe(0.0018);
   });
 });
+
+import { apifyUsageHeadroom } from './tesco-apify-fetch';
+describe('apifyUsageHeadroom (account-level monthly hard limit)', () => {
+  const f = (body: unknown, ok = true) => (async () => ({ ok, status: ok ? 200 : 401, json: async () => body })) as unknown as typeof fetch;
+  it('reports zero headroom when the account limit is reached (the 15 Nov renewal failure)', async () => {
+    const h = await apifyUsageHeadroom({ token: 't', fetchImpl: f({ data: { limits: { maxMonthlyUsageUsd: 19 }, current: { monthlyUsageUsd: 19.0003 },
+      monthlyUsageCycle: { endAt: '2026-12-07T23:59:59.999Z' } } }) });
+    expect(h).toEqual({ limitUsd: 19, usedUsd: 19.0003, headroomUsd: 0, cycleEndAt: '2026-12-07T23:59:59.999Z' });
+  });
+  it('fails closed on an error or a malformed response', async () => {
+    await expect(apifyUsageHeadroom({ token: 't', fetchImpl: f({}, false) })).rejects.toThrow('401');
+    await expect(apifyUsageHeadroom({ token: 't', fetchImpl: f({ data: {} }) })).rejects.toThrow('missing usage');
+  });
+});

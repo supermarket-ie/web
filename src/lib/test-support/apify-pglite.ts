@@ -71,7 +71,8 @@ export async function createApifyDb(): Promise<PGlite> {
   await db.exec(extractFunction('supabase/migrations/20260822100000_add_price_observation_source.sql', 'finalize_store_scrape_product'));
   await db.exec(extractFunction('supabase/migrations/20260929093608_tesco_direct_collection_evidence.sql', 'pause_tesco_collection_egress'));
   for (const m of ['20261108200000_tesco_apify_unattended_collection', '20261109090000_tesco_apify_lease_fencing_and_page_binding',
-    '20261109140000_tesco_apify_snapshot_binding', '20261113090000_tesco_apify_first_price_expansion']) {
+    '20261109140000_tesco_apify_snapshot_binding', '20261113090000_tesco_apify_first_price_expansion',
+    '20261115120000_tesco_verified_links']) {
     await db.exec(readFileSync(`supabase/migrations/${m}.sql`, 'utf8'));
   }
   return db;

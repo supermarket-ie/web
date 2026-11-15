@@ -56,6 +56,8 @@ export async function assessFirstPriceCandidate(input: {
   now?: number;
   aiRetries?: number;
   sleep?: (ms: number) => Promise<void>;
+  // DB-verified independent barcode from an active tesco_verified_links row.
+  verifiedBarcode?: string | null;
 }): Promise<ApprovalAssessment> {
   const { snapshot, page, peers } = input;
   const now = input.now ?? Date.now();
@@ -76,7 +78,8 @@ export async function assessFirstPriceCandidate(input: {
 
   // proven=false: the mapping has NO success receipt and the evidence says so
   // (firstPriceOnboarding), which requires BOTH fresh peers in the stronger gate.
-  const ev = assessmentEvidence(ident, page.id, page.body_sha256, product, peers, false);
+  const linkOk = !!input.verifiedBarcode && (product.gtin ?? '').replace(/^0+/, '') === input.verifiedBarcode.replace(/^0+/, '');
+  const ev = assessmentEvidence(ident, page.id, page.body_sha256, product, peers, false, linkOk ? input.verifiedBarcode! : null);
   // The deterministic gate must pass, or reject ONLY on an incomplete canonical
   // description that the reviewed gap route resolves (which for a first price
   // requires BOTH peers to match independently). The AI is still required.
@@ -166,7 +169,8 @@ export async function prepareFirstPriceApprovals(
     }
     if (!page || !m.snapshot) { summary.noEvidence += 1; continue; }
     summary.assessed += 1;
-    const r = await assessFirstPriceCandidate({ snapshot: m.snapshot, page, peers: m.peers, assessOptions: opts.assessOptions });
+    const r = await assessFirstPriceCandidate({ snapshot: m.snapshot, page, peers: m.peers, assessOptions: opts.assessOptions,
+      verifiedBarcode: m.link?.gtin ?? null });
     if (!r.ok) { reject(r.reason); opts.log?.({ event: 'approval_rejected', sku: m.store_sku, reason: r.reason }); continue; }
     summary.approved += 1;
     if (!opts.apply) { opts.log?.({ event: 'approval_dry_run', sku: m.store_sku, route: r.route }); continue; }

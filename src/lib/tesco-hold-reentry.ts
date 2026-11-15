@@ -24,6 +24,12 @@ export type ReentryEvidence = {
   // fresh peers (stricter than the proven path's <=2). Every other check is
   // unchanged, and the AI verified_exact verdict is still required on top.
   firstPriceOnboarding?: boolean;
+  // A GTIN the DATABASE verified as independent for this canonical product
+  // (canonical EAN or a Dunnes/SuperValu peer GTIN) via an active
+  // tesco_verified_links row for this mapping's SKU. Counts as independent
+  // identity support ONLY when the live Tesco GTIN carries it; every other
+  // check (pack, variant, brand, peers, AI) still applies.
+  verifiedBarcode?: string | null;
 };
 export type Reentry = { reviewId: string; sourcePageId: string; evidence: ReentryEvidence };
 export type ReviewRecord = {
@@ -248,6 +254,7 @@ function sufficientIndependentSupport(e: ReentryEvidence, source: TescoCollected
   // A matching canonical barcode independently establishes the Tesco identity.
   // Peer classification stays separate; Tesco/canonical conflicts still fail.
   if (sameBarcode(m.canonical_ean,source.gtin)) return true;
+  if (e.verifiedBarcode && sameBarcode(e.verifiedBarcode, source.gtin)) return true;
   // A generic catalogue title can omit its manufacturer and measure. Require
   // exact original/source product words and one fully matching branded pack;
   // keep every other peer unchanged and unverified for comparisons.

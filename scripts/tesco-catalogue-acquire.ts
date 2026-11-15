@@ -12,14 +12,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { confirmedTerminalChargeUsd } from '../src/lib/tesco-apify-fetch';
+import { apifyUsageHeadroom, confirmedTerminalChargeUsd } from '../src/lib/tesco-apify-fetch';
 
 const PER_PRODUCT_USD = 0.002;   // published ceiling ($1.99/1,000) + start fee headroom below
 const START_FEE_USD = 0.01;
 
 async function main() {
   const [outDir, categoryUrl, maxItemsArg] = process.argv.slice(2);
-  const maxItems = Number(maxItemsArg);
+  let maxItems = Number(maxItemsArg);
   if (!outDir || !/^https:\/\/www\.tesco\.ie\/groceries\/en-IE\/shop\/[a-z0-9-/]+$/.test(categoryUrl ?? '')
     || !Number.isInteger(maxItems) || maxItems < 1 || maxItems > 12000) throw new Error('usage: <outDir> <tesco.ie category URL> <maxItems 1..12000>');
   const token = process.env.APIFY_TOKEN;
@@ -27,6 +27,16 @@ async function main() {
   const sb = createClient(process.env.SB_URL!, process.env.SB_KEY!, { auth: { persistSession: false } });
   const campaign = process.env.CATALOGUE_CAMPAIGN ?? 'tesco-catalogue-20261115';
   const cap = Number(process.env.CATALOGUE_CAP_USD ?? 50);
+  // ACCOUNT-LEVEL preflight: never start a run the Apify account cannot pay for.
+  // Shrink the run to the available headroom; stop if not even 50 items fit.
+  const h = await apifyUsageHeadroom({ token });
+  const affordable = Math.floor((h.headroomUsd - START_FEE_USD) / PER_PRODUCT_USD);
+  if (affordable < 50) {
+    console.log(JSON.stringify({ event: 'provider_usage_limit', ...h, categoryUrl }));
+    process.exitCode = 3;
+    return;
+  }
+  if (affordable < maxItems) maxItems = affordable;
   const amount = Number((maxItems * PER_PRODUCT_USD + START_FEE_USD).toFixed(4));
 
   const res = await sb.rpc('apify_reserve_budget', { p_campaign: campaign, p_run_id: null, p_amount: amount, p_cap: cap });
