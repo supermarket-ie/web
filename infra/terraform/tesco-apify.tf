@@ -13,7 +13,7 @@ variable "tesco_apify_task_definition" {
   description = "Pinned family:revision of the Tesco Apify collector to schedule, e.g. smie-prod-tesco-apify-collect:13. Empty = no schedule."
   type        = string
   # Version-controlled production pin (bump together with a new image).
-  default = "smie-prod-tesco-apify-collect:15"
+  default = "smie-prod-tesco-apify-collect:16"
 }
 
 variable "tesco_renewal_schedule_state" {
