@@ -1,5 +1,31 @@
 # Supermarket.ie — Canonical Project State
 
+## 15 November 2026 00:30Z — Budgets split; first-price cohort approved; catalogue tranche 1 measured
+
+Owner: post-#400 migration confirmed live (Supabase receipt 20261114214015).
+Approved ceilings: renewals $20/month (ledger campaign tesco-renewal-YYYY-MM,
+PR #405, schedule pinned to rev15 a11e58b-prod, applied); catalogue $50 one-off
+(tesco-catalogue-20261115); growth stays on tesco-apify-20261108 ($10;
+$6.21 committed, $3.79 left). Catalogue runs reserve first, cap the provider
+run at the reservation and settle ONLY to Apify's final charge.
+
+FIRST-PRICE COHORT: evidence-only 226 requested / 225 usable (no prices).
+Approval job (00:15Z, AI on ECS): 225 assessed, 22 single-use approvals
+recorded (72h TTL), 196 deterministic holds (generic canonical records), 4 AI
+uncertain, 3 AI rejected. First-price collection scheduled 2026-11-16 00:30Z.
+
+CATALOGUE TRANCHE 1 (Food Cupboard, in progress; 5,500 items at $9.85 when
+measured; raw JSONL in private store ~/smie-private/tesco-catalogue, not in repo).
+Matcher (src/lib/tesco-catalogue-match.ts) over 1,415 comparable unpriced
+canonical products: barcode_exact 41 confirms current mapping, 39 replacement
+(guarded repair), 7 shared; peer_candidate (needs AI) 14 confirms, 2
+replacement, 11 shared; ambiguous 22; barcode_conflict 7 (held). Yield is
+saturating: only 241 of the 1,415 carry any barcode.
+
+NOT YET BUILT: catalogue/verified-link tables (migration), link-aware acceptance
+in the collector (barcode-verified identity + AI), the shared/ambiguous queue,
+and loading catalogue prices as a refresh path.
+
 ## 14 November 2026 (evening) — Migration live; daily renewal scheduled; first-price cohort in flight; catalogue costed
 
 MIGRATION 20261113090000 is APPLIED (verified by safe probes: approvals table
