@@ -1,5 +1,37 @@
 # Supermarket.ie — Canonical Project State
 
+## 15 November 2026 15:20Z — Apify limit raised; renewals restored; barcode provenance enforced; enrichment proposal
+
+- Owner raised the Apify account limit to $80 (used $19.05). Renewal on rev16
+  with the scheduled config: 186 requested / 179 accepted (receipt-backed), 7
+  held; charged to tesco-renewal-2026-11 ($0.34 final of $20). Fresh total 369
+  before and after (renewals preserve; 0 expiring within 48h).
+- PR #409 (owner review of #407; migration 20261115120000 STILL UNAPPLIED):
+  * Finding: 306/313 canonical EANs equal the Tesco mapping's own GTIN; 0 equal
+    a peer GTIN; no Dunnes/SuperValu offer stores a GTIN. Canonical EANs are
+    Tesco-sourced; re-seeing one in Tesco's catalogue is the same evidence twice.
+  * product_barcode_provenance (written only from Dunnes/SuperValu offers via
+    record_product_barcode_provenance); links require it (barcode_not_independent
+    otherwise). Consequence: 0 links can be created today.
+  * Live gate: canonical EAN counts only with provenance (canonicalEanIndependent).
+    12 of 369 fresh prices passed the strong gate only via the Tesco-sourced EAN;
+    they keep renewing through 30-day AI-verified reuse and need independent
+    corroboration after that. All 22 first-price approvals pass without it.
+  * Revalidation triggers reopen links on canonical product, any retailer offer,
+    linked-SKU ownership or provenance change (same SKU/barcode or not); the
+    collector also reopens on mapping-snapshot drift.
+  * Read-only enrichment proposal for the 60 blocked repairs:
+    docs/proposals/tesco-canonical-enrichment-20261115.md — substantiated 3
+    (Schwartz Ground Black Pepper 33g; Lifeforce Muesli 750g; Maille Dijon
+    Mustard 215g), needs_split 38, contradicted 4, insufficient 15. Muesli and
+    Dijon repairs are fully unblocked by enrichment; Black Pepper still needs a
+    prior receipt.
+- rev17 (4db5a9b-prod) registered; daily renewal (applied 0/1/0) and the
+  2026-11-16 00:30Z first-price job (22 approvals, expire ~2026-11-18 00:18Z)
+  now run rev17.
+- Spend (final): growth $6.20 (+$0.01 reserved) of $10; renewal 2026-11 $0.34
+  of $20; catalogue $12.74 of $50.
+
 ## 15 November 2026 11:30Z — Apify ACCOUNT limit reached; renewal ledger fixed; verified links built (migration 20261115120000 unapplied)
 
 ROOT CAUSE of the 03:40 renewal failure (CloudWatch + Apify API): the Apify
