@@ -544,18 +544,19 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     expect(rows[0].overlap).toBe(1);
     expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
   });
-  it('admits a zero-peer mapping only with an independently matching canonical Tesco barcode',async()=>{
+  it('does NOT admit a zero-peer mapping on a canonical EAN that only Tesco supplied (no independent provenance)',async()=>{
     const gtin='05012345678901';
     const {page,live}=await heldEvidence({gtin});
     await db.exec('alter table products add column ean text');
     await db.query('update products set ean=$1 where id=$2',[gtin,products[0]]);
     await db.exec(`delete from price_observations where store_product_id in
       (select id from store_products where store in ('dunnes','supervalu'))`);
-    const review=await approve(page);
-    const rows=await selectReviewedCandidates(execute,[review]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].overlap).toBe(0);
-    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+    const before=await observations();
+    const review=await approve(page).catch(()=>null);
+    const rows=review?await selectReviewedCandidates(execute,[review]):[];
+    expect(rows).toHaveLength(0);
+    expect(await observations()).toEqual(before);
+    void live;
   });
   it('does not admit a zero-peer mapping on historical receipts and Tesco page metadata alone',async()=>{
     const {page,live}=await heldEvidence();
@@ -603,16 +604,16 @@ describe('audited held Tesco re-entry (production database transactions)', () =>
     expect(await selectReviewedCandidates(execute,[review])).toEqual([]);
     expect((await collect(review,live)).fetchPage).not.toHaveBeenCalled();
   });
-  it('recovers an independently barcoded Tesco offer without asserting a conflicting peer is exact',async()=>{
+  it('does not recover an offer whose only barcode evidence is a Tesco-sourced canonical EAN, and never edits the peer',async()=>{
     const gtin='05012345678901';
     const {page,live}=await heldEvidence({gtin});
     await db.exec('alter table products add column ean text');
     await db.query('update products set ean=$1 where id=$2',[gtin,products[0]]);
     await db.exec(`update store_products set store_product_name='Tesco Vanilla Whole Milk 1L'
       where store='dunnes'`);
-    const review=await approve(page);
-    expect(await selectReviewedCandidates(execute,[review])).toHaveLength(1);
-    expect((await collect(review,live)).result).toMatchObject({result:'complete',inserted:1});
+    const review=await approve(page).catch(()=>null);
+    expect(review?await selectReviewedCandidates(execute,[review]):[]).toHaveLength(0);
+    void live;
     expect((await db.query("select store_product_name from store_products where store='dunnes'")).rows[0])
       .toEqual({store_product_name:'Tesco Vanilla Whole Milk 1L'});
   });

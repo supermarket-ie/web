@@ -15,6 +15,8 @@ function makeFakeSb(opts: {
   // Live first-price approval rows. mapping_snapshot: 'auto' resolves to the
   // mapping's CURRENT authoritative snapshot (i.e. an approval bound to it).
   approvals?: Row[];
+  // product_barcode_provenance rows (independently sourced barcodes).
+  provenance?: Row[];
   finaliseError?: string; // force apify_finalise_tesco_page to return an RPC error
   finaliseResult?: (args: Row) => { finalised: boolean };
   reserveResult?: (args: Row) => { data: unknown; error: { message: string } | null };
@@ -52,6 +54,7 @@ function makeFakeSb(opts: {
       : name === 'latest_prices' ? opts.latest
       : name === 'scrape_product_receipts' ? opts.receipts
       : name === 'tesco_identity_verifications' ? (opts.verifications ?? [])
+      : name === 'product_barcode_provenance' ? (opts.provenance ?? [])
       : name === 'tesco_first_price_approvals' ? (opts.approvals ?? []).map(a => ({
         ...a, mapping_snapshot: a.mapping_snapshot === 'auto' ? snapshotFor(String(a.store_product_id)) : a.mapping_snapshot }))
       : name === 'tesco_direct_collection_pages' ? opts.recent : [];
@@ -177,6 +180,9 @@ function fixtures(overMapping: Row = {}, overLatest: Row = {}) {
     latest: [{ store_product_id: id, observed_at: '2026-10-01T00:00:00Z', price: 1.3, ...overLatest }],
     receipts: [{ store_product_id: id, outcome: 'success' }],
     recent: [] as Row[],
+    // The canonical EAN is recorded as independently sourced (e.g. captured
+    // from a Dunnes/SuperValu page), so it counts as identity support.
+    provenance: [{ product_id: 'p1', gtin: '05000119309228' }] as Row[],
   };
 }
 
@@ -213,12 +219,28 @@ const baseDeps = (sb: SupabaseClient, fetchApify: (u: string, maxChargeUsd?: num
 });
 
 describe('collectTescoApify — identity + AI inference acceptance path', () => {
+  it('HOLDS when the only barcode support is a Tesco-sourced canonical EAN (no provenance), even if the AI agrees', async () => {
+    const fx = fixtures();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: [] });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { assessOptions: { runModel: aiRunner('verified_exact') as never } }));
+    expect(res.accepted).toBe(0);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  it('a provenance row for a DIFFERENT barcode does not make the canonical EAN independent', async () => {
+    const fx = fixtures();
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent,
+      provenance: [{ product_id: 'p1', gtin: '05000000000002' }] });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { assessOptions: { runModel: aiRunner('verified_exact') as never } }));
+    expect(res.accepted).toBe(0);
+  });
+
   it('finalises a new/changed mapping only when AI + deterministic agree, via the separate finalise RPC', async () => {
     // Barcode-backed fixture: canonical EAN matches the live GTIN, so the
     // strict positive gate independentExactIdentity passes and the mapping is
     // accepted (the AI concurs). This is a legitimate accept.
     const fx = fixtures();
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item())));
     expect(res.accepted).toBe(1);
     // record (evidence only, never writes a price) then a SEPARATE finalise RPC.
@@ -242,7 +264,7 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
       gtin: null, canonical_name: 'Free Range Eggs 12', canonical_brand: null,
       canonical_ean: null, same_sku_canonical_names: ['Free Range Eggs 12'],
     });
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, snapshotOverride: eggsSnap });
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance, snapshotOverride: eggsSnap });
     // The live Apify item matches the EGGS snapshot identity (so the
     // deterministic gate passes and the AI is actually invoked). No barcode and
     // no peers, so the AI path — not the peer/barcode route — is exercised.
@@ -259,7 +281,7 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
 
   it('HOLDS when the AI rejects, even though the deterministic gate would pass (fail-closed)', async () => {
     const fx = noBarcodeFixtures();
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(noBarcodeItem()), {
       assessOptions: { runModel: aiRunner('rejected', { flavour_formulation_matches: false }) as never },
     }));
@@ -270,7 +292,7 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
 
   it('HOLDS when the AI is uncertain', async () => {
     const fx = noBarcodeFixtures();
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(noBarcodeItem()), {
       assessOptions: { runModel: aiRunner('uncertain') as never },
     }));
@@ -280,7 +302,7 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
 
   it('HOLDS (does not abort, never accepts) when the AI assessment THROWS (e.g. schema miss / model error)', async () => {
     const fx = noBarcodeFixtures();
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     const throwingRunner = async () => { throw new Error('No object generated: response did not match schema.'); };
     // The run must COMPLETE (not reject) and hold the item, writing no price.
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(noBarcodeItem()), {
@@ -478,7 +500,7 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
 
   it('REJECTS a genuine barcode conflict via the deterministic gate (AI cannot override)', async () => {
     const fx = fixtures();
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     // Live GTIN differs from canonical EAN → deterministic reject; AI says exact.
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item({ gtin: '05099999999999' })), {
       assessOptions: { runModel: aiRunner('verified_exact') as never },
@@ -491,7 +513,7 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
     const fx = fixtures();
     // The server reserve RPC rejects because the current mapping no longer
     // matches the snapshot the collector selected/assessed (expected_snapshot_changed).
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent,
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance,
       reserveResult: () => ({ data: null, error: { message: 'expected_snapshot_changed' } }) });
     let fetched = 0;
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, async (u) => { fetched++; return okFetch(item())(u); }));
@@ -505,7 +527,7 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
     const fx = fixtures(
       { store_product_name: 'Example Tuna 4x145g', gtin: null, products: { canonical_name: 'Example Tuna 4 Pack 580g', brand: 'Example', ean: null } },
     );
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     const live = item({ name: 'Example Tuna 2x290g', brand_name: 'Example', gtin: null, pack_size: '580', pack_size_unit: 'G' });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(live), {
       assessOptions: { runModel: aiRunner('verified_exact') as never },
@@ -518,7 +540,7 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
 describe('collectTescoApify — freshness precondition (defect 1)', () => {
   it('HOLDS when the freshness precondition fails (scraped_at not after submit) — no finalise', async () => {
     const fx = fixtures();
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item(), /*preconditionMet*/ false)));
     expect(res.accepted).toBe(0);
     expect(res.held).toBe(1);
@@ -536,11 +558,11 @@ describe('collectTescoApify — reusable verification (defect 3)', () => {
     const countingRunner = async () => { aiCalls++; return aiRunner('verified_exact')(); };
     // Provide a verification row with a matching fingerprint: we capture it by
     // running once WITHOUT a stored verification, reading the recorded fp.
-    const first = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const first = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     await collectTescoApify('renewal', 10, baseDeps(first.sb, okFetch(item())));
     const fp = String(first.calls.find(c => c.fn === 'apify_record_identity_verification')!.args.p_identity_fingerprint);
 
-    const second = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent,
+    const second = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance,
       verifications: [{ identity_fingerprint: fp, rule_version: IDENTITY_ASSESSMENT_RULE_VERSION,
         reusable_until: new Date(Date.now() + 86_400_000).toISOString(), invalidated_at: null }] });
     const res = await collectTescoApify('renewal', 10, {
@@ -566,7 +588,7 @@ describe('collectTescoApify — reusable verification (defect 3)', () => {
 describe('collectTescoApify — durable budget reservations (defect 5)', () => {
   it('RESERVES before each provider launch and stops when a reservation would exceed the cap', async () => {
     const fx = fixtures();
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { budgetUsd: 0.001, perRequestUsd: 0.002 }));
     expect(res.requested).toBe(0);
     expect(res.stopped).toBe('budget_exhausted');
@@ -578,7 +600,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
   it('$9.99 already committed: a 0.002 reservation against a $10 cap is refused (restart safety)', async () => {
     const fx = fixtures();
     // initialCommittedUsd models durable prior spend surviving a restart.
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, initialCommittedUsd: 9.999 });
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance, initialCommittedUsd: 9.999 });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { budgetUsd: 10, perRequestUsd: 0.002 }));
     expect(res.requested).toBe(0);
     expect(res.stopped).toBe('budget_exhausted');
@@ -586,7 +608,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
 
   it('settles the reservation to the ACTUAL provider charge after a successful fetch', async () => {
     const fx = fixtures();
-    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item())));
     const settle = calls.find(c => c.fn === 'apify_settle_budget')!;
     expect(settle.args.p_actual_usd).toBe(0.0005); // the run's actual usageTotalUsd
@@ -596,7 +618,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
 
   it('delayed/uncertain billing: a reservation that is never settled KEEPS counting against the cap', async () => {
     const fx = fixtures();
-    const { sb, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     // fetch throws AFTER the reservation (uncertain outcome) → no settle.
     await expect(collectTescoApify('renewal', 10, baseDeps(sb, async () => { throw new Error('provider timeout'); },
       { budgetUsd: 10, perRequestUsd: 0.002 }))).rejects.toThrow();
@@ -606,7 +628,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
 
   it('passes the RESERVED amount as the outgoing provider monetary ceiling', async () => {
     const fx = fixtures();
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     fetchCeilings.length = 0;
     await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { perRequestUsd: 0.003 }));
     // The outgoing request's maxChargeUsd equals the reserved amount (0.003).
@@ -615,7 +637,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
 
   it('caught provider timeout (REAL transport): network_error, no provider → reservation RETAINED (not settled as estimate)', async () => {
     const fx = fixtures();
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     // Use the REAL transport wiring: createApifyFetchPage over a client whose
     // runProductUrls throws (a caught provider timeout). The transport returns
     // network_error with NO provider identity.
@@ -635,7 +657,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
 
   it('successful retrieval with MISSING usageTotalUsd: reservation RETAINED, not settled as zero', async () => {
     const fx = fixtures();
-    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     // Provider returns a product but NO cost (runUsageUsd null, not terminal).
     const noCost = async (url: string, max?: number) => {
       const r = await okFetch(item())(url, max);
@@ -650,7 +672,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
 
   it('PRELIMINARY total (present but not terminal): reservation RETAINED until a confirmed terminal charge', async () => {
     const fx = fixtures();
-    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent });
+    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance });
     // A completion-time total of 0 that is NOT terminal must not be booked.
     const prelim = async (url: string, max?: number) => {
       const r = await okFetch(item())(url, max);
@@ -668,7 +690,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
     const fx = fixtures();
     // Model a prior process that reserved 0.002 but never settled it (crash
     // before terminal reconciliation): initialCommittedUsd carries it over.
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, initialCommittedUsd: 9.999 });
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance, initialCommittedUsd: 9.999 });
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { budgetUsd: 10, perRequestUsd: 0.002 }));
     expect(res.requested).toBe(0);
     expect(res.stopped).toBe('budget_exhausted');
@@ -676,7 +698,7 @@ describe('collectTescoApify — durable budget reservations (defect 5)', () => {
 
   it('releases the reservation (settle 0) when the per-request reservation RPC refuses — no fetch', async () => {
     const fx = fixtures();
-    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent,
+    const { sb, calls, budgetState } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance,
       reserveResult: () => ({ data: null, error: { message: 'attempt_already_recorded' } }) });
     let fetched = 0;
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, async (u) => { fetched++; return okFetch(item())(u); }));
@@ -809,7 +831,7 @@ describe('collectTescoApify — transient AI retry (same evidence, open run)', (
 
   it('RETRIES a transient throw against the same evidence and ACCEPTS when a later attempt succeeds', async () => {
     const fx = brandedNoBarcode();
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, peers: rtPeers() });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance, peers: rtPeers() });
     let attempts = 0;
     const flaky = async () => { attempts++; if (attempts < 3) throw new Error('No object generated: response did not match schema.'); return aiRunner('verified_exact')(); };
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(rtItem()), { assessOptions: { runModel: flaky as never } }));
@@ -821,7 +843,7 @@ describe('collectTescoApify — transient AI retry (same evidence, open run)', (
   it('HOLDS (ai_error) after exhausting retries on a persistent transient failure', async () => {
     const fx = brandedNoBarcode();
     let attempts = 0;
-    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, peers: rtPeers() });
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance, peers: rtPeers() });
     const alwaysThrows = async () => { attempts++; throw new Error('Bedrock throttled'); };
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(rtItem()), { assessOptions: { runModel: alwaysThrows as never }, aiRetries: 2 }));
     expect(attempts).toBe(3);                 // 1 + 2 retries
@@ -834,7 +856,7 @@ describe('collectTescoApify — transient AI retry (same evidence, open run)', (
   it('does NOT retry a clean uncertain VERDICT (only transient throws are retried)', async () => {
     const fx = brandedNoBarcode();
     let attempts = 0;
-    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, peers: rtPeers() });
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: (fx as { provenance?: Row[] }).provenance, peers: rtPeers() });
     const cleanUncertain = async () => { attempts++; return aiRunner('uncertain')(); };
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(rtItem()), { assessOptions: { runModel: cleanUncertain as never }, aiRetries: 2 }));
     expect(attempts).toBe(1);                 // a clean verdict is NOT retried
