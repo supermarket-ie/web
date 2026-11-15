@@ -1,5 +1,49 @@
 # Supermarket.ie — Canonical Project State
 
+## 15 November 2026 11:30Z — Apify ACCOUNT limit reached; renewal ledger fixed; verified links built (migration 20261115120000 unapplied)
+
+ROOT CAUSE of the 03:40 renewal failure (CloudWatch + Apify API): the Apify
+account is STARTER with maxMonthlyUsageUsd = $19; usage for the cycle
+2026-11-08..2026-12-07 is $19.0003, so Apify refuses every new run (surfaced as
+network_error; provider run count unchanged). Our ledger ceilings ($10 growth +
+$20/month renewal + $50 catalogue) exceed the account limit; the catalogue runs
+($12.74) used the headroom. OWNER ACTION: raise the Apify monthly usage limit
+(Billing -> Limits) to >= $80 or upgrade the plan. Until then NO Apify work runs.
+
+FIXES (PR #407, image e1b09ba-prod, task-def rev16):
+- Account-headroom preflight in the collector and catalogue acquisition: stop
+  BEFORE reserving, recording a page (24h URL exclusion) or starting a run;
+  provider start errors are logged. Proven in prod: rev16 renewal with the
+  scheduled config logged budget_campaign tesco-renewal-2026-11 cap $20 and
+  stopped with provider_usage_limit (exit 3), no page, no reservation.
+- rev16 drops the APIFY_CAMPAIGN / APIFY_BUDGET_USD task-def overrides that
+  sent renewals to the growth ledger. Daily schedule pinned to :16 (applied:
+  0 add, 1 change). The 16 Nov 00:30Z first-price one-off now targets :16.
+- Released the 03:40 run's orphan $0.002 growth reservation (no provider run).
+- Migration 20261115120000 (NOT applied): tesco_verified_links +
+  apify_record_verified_link / apify_reopen_verified_link (same SKU only; GTIN =
+  canonical EAN or a Dunnes/SuperValu peer GTIN; settled catalogue-ledger run;
+  <= 14 days; shared SKUs refused; service_role SELECT only). Collector and
+  approval use a link's barcode ONLY while the live page has the same SKU+GTIN,
+  else the link is reopened. Gate-gap-only, AI, two-peer and approval rules kept.
+
+QUEUES:
+- First-price approvals: 22 live, 0 consumed, expire ~2026-11-18 00:18Z
+  (21 via the reviewed gap route). 1 overlaps the same-SKU barcode matches.
+- Same-SKU barcode matches 54: 24 eligible for links (dry run), 30 held for
+  brand contradictions (canonical brand e.g. Schwartz vs Tesco own-label item
+  carrying the canonical EAN -> canonical EANs are not always independent).
+- Replacement-SKU matches 60: 0 pass the repair guard preconditions
+  (scripts/data/tesco-repair-batch-candidates-20261115.json): pack_not_confirmed
+  53, brand_not_confirmed 46, not_proven 34, attempt_within_24h 19,
+  current_sku_shared 10, own_label 9. Nearest 5 need canonical pack enrichment
+  (Lifeforce Muesli 750g, Hellmann's Real Squeezy 580ml, Maille Dijon 215g) or a
+  receipt (Green Giant Sweetcorn 340g). No bridge handoff is eligible yet.
+
+SPEND (ledger, final charges): growth $6.21 of $10; renewal 2026-11 $0 of $20;
+catalogue $12.74 of $50 (Food Cupboard 5,879 items $10.52; Fresh Food 1,236
+items $2.21). Apify account: $19.0003 of $19.
+
 ## 15 November 2026 00:30Z — Budgets split; first-price cohort approved; catalogue tranche 1 measured
 
 Owner: post-#400 migration confirmed live (Supabase receipt 20261114214015).
