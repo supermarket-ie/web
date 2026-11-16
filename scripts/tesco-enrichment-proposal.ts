@@ -2,7 +2,7 @@
 // Usage: tsx scripts/tesco-enrichment-proposal.ts <repair-batch.json> <catalogueRawDir> <out.json>
 import { createClient } from '@supabase/supabase-js';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { proposeEnrichment, type Offer } from '../src/lib/tesco-enrichment-proposal';
+import { proposeEnrichment, setBrandLexicon, type Offer } from '../src/lib/tesco-enrichment-proposal';
 
 const sb = createClient(process.env.SB_URL!, process.env.SB_KEY!, { auth: { persistSession: false } });
 async function main() {
@@ -13,6 +13,15 @@ async function main() {
       const r = JSON.parse(l); if (r.providerRunId) raw.set(String(r.item.product_id), { ...r.item, _run: r.providerRunId, _at: r.capturedAt, _sha: r.rawSha256 });
     }
   const batch = JSON.parse(readFileSync(batchPath, 'utf8')).rows as Array<Record<string, string | null>>;
+  // Brand lexicon: every structured brand known to the catalogue and retailers.
+  const lex = new Set<string>();
+  for (const t of ['store_products', 'products']) for (let x = 0; ; x += 1000) {
+    const { data } = await sb.from(t).select('brand').not('brand', 'is', null).range(x, x + 999);
+    for (const r of data ?? []) if (r.brand) lex.add(String(r.brand));
+    if ((data ?? []).length < 1000) break;
+  }
+  for (const it of raw.values()) if (it.brand_name) lex.add(String(it.brand_name));
+  setBrandLexicon(lex);
   const rows = [];
   for (const b of batch) {
     const pid = String(b.canonical_product_id);
@@ -24,7 +33,7 @@ async function main() {
       gtin: (it.gtin as string) ?? null, url: String(b.proposed_url) });
     for (const o of offers ?? []) {
       const lp = Array.isArray(o.latest_prices) ? o.latest_prices[0] : o.latest_prices;
-      list.push({ store: o.store, role: o.store === 'tesco' ? 'current' : 'peer', sku: o.store_sku, name: String(o.store_product_name ?? ''),
+      list.push({ store: o.store, role: o.store === 'tesco' ? 'current' : ['dunnes', 'supervalu'].includes(o.store) ? 'peer' : 'other', sku: o.store_sku, name: String(o.store_product_name ?? ''),
         brand: o.brand ?? null, gtin: o.gtin ?? null, url: o.store_url, observedAt: (lp as { observed_at?: string } | null)?.observed_at ?? null });
     }
     const prop = proposeEnrichment({ id: pid, name: String(p?.canonical_name ?? ''), brand: p?.brand ?? null, ean: p?.ean ?? null }, list);

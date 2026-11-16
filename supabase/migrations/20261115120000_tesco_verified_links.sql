@@ -17,16 +17,26 @@
 -- price) the single-use approval with both peers independently matching.
 -- Written ONLY through the SECURITY DEFINER RPCs below; service_role: SELECT.
 
--- Independently sourced barcodes. Written ONLY by record_product_barcode_provenance
--- from a Dunnes/SuperValu offer of the canonical product; never from Tesco.
+create schema if not exists tesco_internal;
+
+-- Independently sourced barcodes. REVISION (owner review of PR #409): every
+-- provenance row is BOUND to one retained, append-only retailer capture
+-- (retailer_identity_responses) that itself establishes the Dunnes/SuperValu
+-- offer, the source URL and the GTIN. The RPC derives the offer, product, URL
+-- and capture time FROM the capture; the caller supplies only the capture id
+-- and the GTIN to look for. Measured 15 Nov 2026: no retained Dunnes or
+-- SuperValu capture exposes a barcode field yet, so no row can be recorded
+-- until a collector captures one (e.g. SuperValu product-page JSON-LD gtin13).
 create table if not exists public.product_barcode_provenance (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references public.products(id) on delete cascade,
   gtin text not null check (gtin ~ '^[0-9]{8,14}$'),
   source_store text not null check (source_store in ('dunnes', 'supervalu')),
   store_product_id uuid not null references public.store_products(id) on delete cascade,
+  source_sku text not null,
   source_url text not null,
-  evidence_sha256 text not null check (evidence_sha256 ~ '^[a-f0-9]{64}$'),
+  capture_id uuid not null references public.retailer_identity_responses(id) on delete restrict,
+  capture_body_sha256 text not null check (capture_body_sha256 ~ '^[a-f0-9]{64}$'),
   captured_at timestamptz not null,
   recorded_at timestamptz not null default now(),
   revoked_at timestamptz,
@@ -38,30 +48,102 @@ grant select on public.product_barcode_provenance to service_role;
 create unique index if not exists product_barcode_provenance_one_live
   on public.product_barcode_provenance (store_product_id, ltrim(gtin, '0')) where revoked_at is null;
 
-create or replace function public.record_product_barcode_provenance(
-  p_store_product_id uuid, p_gtin text, p_source_url text, p_evidence_sha256 text, p_captured_at timestamptz
-) returns uuid
+-- True when the capture body states p_gtin as a barcode OF THE CAPTURED OFFER:
+-- JSON bodies: an object whose sku equals the capture SKU carries a barcode key
+-- with that value; HTML product pages: a JSON-LD Product block carries it.
+create or replace function tesco_internal.capture_states_gtin(p_capture public.retailer_identity_responses, p_gtin text)
+returns boolean language plpgsql stable security definer set search_path = '' as $fn$
+declare
+  v_code text := ltrim(p_gtin, '0');
+  v_keys text[] := array['gtin', 'gtin8', 'gtin12', 'gtin13', 'gtin14', 'ean', 'ean13', 'barcode', 'upc'];
+  v_doc jsonb;
+  v_block text;
+begin
+  if split_part(p_capture.content_type, ';', 1) ilike '%json%' then
+    begin v_doc := p_capture.body_text::jsonb; exception when others then return false; end;
+    return exists (select 1 from jsonb_path_query(v_doc, 'strict $.**') o
+      where jsonb_typeof(o) = 'object' and o->>'sku' = p_capture.sku
+        and exists (select 1 from unnest(v_keys) k where ltrim(coalesce(o->>k, ''), '0') = v_code));
+  end if;
+  if p_capture.source_kind <> 'captured_product' then return false; end if;
+  for v_block in select (regexp_matches(p_capture.body_text,
+      '<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', 'gis'))[1] loop
+    begin v_doc := v_block::jsonb; exception when others then continue; end;
+    if exists (select 1 from jsonb_path_query(v_doc, 'strict $.**') o
+      where jsonb_typeof(o) = 'object' and o->>'@type' = 'Product'
+        and exists (select 1 from unnest(v_keys) k where ltrim(coalesce(o->>k, ''), '0') = v_code)) then return true; end if;
+  end loop;
+  return false;
+end;
+$fn$;
+revoke all on function tesco_internal.capture_states_gtin(public.retailer_identity_responses, text) from public, anon, authenticated, service_role;
+
+create or replace function public.record_product_barcode_provenance(p_capture_id uuid, p_gtin text)
+returns uuid
 language plpgsql security definer set search_path = public
 as $$
-declare v_sp record; v_id uuid;
+declare v_cap public.retailer_identity_responses; v_sp record; v_id uuid;
 begin
   if p_gtin is null or p_gtin !~ '^[0-9]{8,14}$' then raise exception 'gtin_invalid'; end if;
-  if p_evidence_sha256 is null or p_evidence_sha256 !~ '^[a-f0-9]{64}$' then raise exception 'evidence_hash_invalid'; end if;
-  if p_captured_at is null or p_captured_at > now() + interval '5 minutes' or p_captured_at < now() - interval '14 days'
-  then raise exception 'captured_at_invalid'; end if;
-  select id, product_id, store into v_sp from public.store_products where id = p_store_product_id;
-  if v_sp.id is null or v_sp.store not in ('dunnes', 'supervalu') then raise exception 'source_must_be_dunnes_or_supervalu'; end if;
-  if p_source_url is null or p_source_url !~ '^https://' then raise exception 'source_url_invalid'; end if;
-  insert into public.product_barcode_provenance (product_id, gtin, source_store, store_product_id, source_url, evidence_sha256, captured_at)
-  values (v_sp.product_id, p_gtin, v_sp.store, v_sp.id, p_source_url, p_evidence_sha256, p_captured_at)
-  on conflict (store_product_id, ltrim(gtin, '0')) where revoked_at is null do update set captured_at = excluded.captured_at,
-    evidence_sha256 = excluded.evidence_sha256, source_url = excluded.source_url
+  select * into v_cap from public.retailer_identity_responses where id = p_capture_id;
+  if v_cap.id is null then raise exception 'capture_not_found'; end if;
+  if v_cap.store not in ('dunnes', 'supervalu') then raise exception 'source_must_be_dunnes_or_supervalu'; end if;
+  -- The retained body must still hash to its recorded digest.
+  if encode(sha256(convert_to(v_cap.body_text, 'UTF8')), 'hex') is distinct from v_cap.body_sha256
+  then raise exception 'capture_hash_mismatch'; end if;
+  if v_cap.retrieved_at < now() - interval '14 days' or v_cap.retrieved_at > now() + interval '5 minutes'
+  then raise exception 'capture_stale'; end if;
+  -- The capture must establish THIS offer: same row, same store, same SKU and,
+  -- where the offer has a URL, the same URL.
+  select id, product_id, store, store_sku, store_url into v_sp from public.store_products where id = v_cap.store_product_id for update;
+  if v_sp.id is null or v_sp.store <> v_cap.store or v_sp.store_sku is distinct from v_cap.sku
+    or (v_sp.store_url is not null and v_sp.store_url not in (v_cap.product_url, v_cap.final_url))
+  then raise exception 'capture_offer_mismatch'; end if;
+  if not tesco_internal.capture_states_gtin(v_cap, p_gtin) then raise exception 'capture_does_not_state_gtin'; end if;
+
+  insert into public.product_barcode_provenance (product_id, gtin, source_store, store_product_id, source_sku, source_url,
+    capture_id, capture_body_sha256, captured_at)
+  values (v_sp.product_id, p_gtin, v_sp.store, v_sp.id, v_cap.sku, v_cap.final_url, v_cap.id, v_cap.body_sha256, v_cap.retrieved_at)
+  on conflict (store_product_id, ltrim(gtin, '0')) where revoked_at is null do update set
+    capture_id = excluded.capture_id, capture_body_sha256 = excluded.capture_body_sha256,
+    captured_at = excluded.captured_at, source_url = excluded.source_url
   returning id into v_id;
   return v_id;
 end;
 $$;
-revoke all on function public.record_product_barcode_provenance(uuid, text, text, text, timestamptz) from public, anon, authenticated;
-grant execute on function public.record_product_barcode_provenance(uuid, text, text, text, timestamptz) to service_role;
+revoke all on function public.record_product_barcode_provenance(uuid, text) from public, anon, authenticated;
+grant execute on function public.record_product_barcode_provenance(uuid, text) to service_role;
+
+-- USE-TIME recheck: a provenance row is usable as independent evidence only
+-- while its source offer still belongs to the same canonical product with the
+-- same SKU and store, and its capture still hashes as recorded. Consumers (the
+-- link RPC and the collector) read THIS view, never the table directly.
+create or replace view public.product_barcode_provenance_live with (security_invoker = true) as
+  select pb.id, pb.product_id, pb.gtin, pb.source_store, pb.store_product_id, pb.capture_id, pb.captured_at
+  from public.product_barcode_provenance pb
+  join public.store_products x on x.id = pb.store_product_id
+  join public.retailer_identity_responses c on c.id = pb.capture_id
+  where pb.revoked_at is null and x.product_id = pb.product_id and x.store = pb.source_store
+    and x.store_sku = pb.source_sku and c.body_sha256 = pb.capture_body_sha256 and c.sku = pb.source_sku;
+revoke all on public.product_barcode_provenance_live from public, anon, authenticated, service_role;
+grant select on public.product_barcode_provenance_live to service_role;
+
+-- An offer that moves to another product, or changes store or SKU, revokes its
+-- provenance (which in turn reopens any link that used it).
+create or replace function tesco_internal.provenance_on_offer_change() returns trigger
+language plpgsql security definer set search_path = '' as $fn$
+begin
+  if new.product_id is distinct from old.product_id or new.store is distinct from old.store or new.store_sku is distinct from old.store_sku then
+    update public.product_barcode_provenance set revoked_at = now(), revoked_reason = 'source_offer_changed'
+      where store_product_id = old.id and revoked_at is null;
+  end if;
+  return new;
+end;
+$fn$;
+revoke all on function tesco_internal.provenance_on_offer_change() from public, anon, authenticated, service_role;
+drop trigger if exists provenance_on_offer_change on public.store_products;
+create trigger provenance_on_offer_change after update on public.store_products
+  for each row execute function tesco_internal.provenance_on_offer_change();
 
 create table if not exists public.tesco_verified_links (
   id uuid primary key default gen_random_uuid(),
@@ -140,10 +222,10 @@ begin
   -- Independent barcode: ONLY a live provenance row for THIS canonical product,
   -- captured from a Dunnes/SuperValu offer that still belongs to it. A matching
   -- canonical EAN alone is not independent (it is usually Tesco-sourced).
-  select pb.id, pb.source_store into v_prov from public.product_barcode_provenance pb
-    join public.store_products x on x.id = pb.store_product_id
-    where pb.product_id = (v_snapshot->>'product_id')::uuid and pb.revoked_at is null
-      and ltrim(pb.gtin, '0') = v_code and x.product_id = pb.product_id and x.store = pb.source_store
+  -- Rechecked at USE time through the live view: the source offer must STILL
+  -- belong to this canonical product with the captured store/SKU.
+  select pb.id, pb.source_store into v_prov from public.product_barcode_provenance_live pb
+    where pb.product_id = (v_snapshot->>'product_id')::uuid and ltrim(pb.gtin, '0') = v_code
     order by pb.captured_at desc limit 1;
   if v_prov.id is null then raise exception 'barcode_not_independent'; end if;
 

@@ -310,12 +310,14 @@ export async function selectApifyMappings(
     if ((data ?? []).length < 1000) break;
   }
 
-  // Independently sourced barcodes (product_barcode_provenance, migration
-  // 20261115120000). Missing table = none: canonical EANs are then Tesco-sourced.
+  // Independently sourced barcodes, read through product_barcode_provenance_live
+  // (migration 20261115120000): only rows whose capture-bound source offer STILL
+  // belongs to the canonical product. Missing view = none: canonical EANs are
+  // then Tesco-sourced.
   const provenance = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await sb.from('product_barcode_provenance')
-      .select('product_id,gtin').is('revoked_at', null).order('id').range(offset, offset + 999);
+    const { data, error } = await sb.from('product_barcode_provenance_live')
+      .select('product_id,gtin').order('id').range(offset, offset + 999);
     if (error) break;
     for (const p of data ?? []) provenance.add(`${p.product_id}|${String(p.gtin).replace(/^0+/, '')}`);
     if ((data ?? []).length < 1000) break;
