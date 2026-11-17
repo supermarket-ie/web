@@ -1,25 +1,17 @@
 import { PGlite } from '@electric-sql/pglite';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { repairSql, type RepairPlan } from './pair-repair-sql';
 
-// Runs the REAL generated SQL (scripts/pair-repair-prepare.ts) against stub tables in PGlite.
+// Runs the REAL generated SQL (src/lib/pair-repair-sql.ts, used by scripts/pair-repair-prepare.ts) against stub tables in PGlite.
 const LF = '1cca7ae6-2118-4871-be9a-d8eeb359f0ed', FL = 'ac3ad0c4-b393-451b-b9a2-9e4a6bb87b7c';
 const D = '7d80821c-7231-4e2f-b09c-36a463d1cc78', PH = '55b87c18-db0c-4f1d-83d0-4531c7e004f0', SF = '79948eeb-fadc-447f-9e07-36d77423012e';
 const op = (extra: Record<string, unknown> = {}) => ({ offerId: D, store: 'dunnes', sku: '100673561', title: "Flahavan's Hi8 Muesli Original 1kg",
   fromProductId: LF, toProductId: FL, toProductBrand: "Flahavan's", retirePlaceholderId: PH, identityVerifiedBy: 'pair-review:test', ...extra });
-let dir: string;
-beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'pair-repair-')); });
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
-
 function generate(name: string, ops: unknown[]) {
-  const plan = join(dir, `${name}.json`);
-  writeFileSync(plan, JSON.stringify({ id: name, generatedAt: '2026-11-16T00:00:00.000Z', ops }));
-  execFileSync('npx', ['tsx', 'scripts/pair-repair-prepare.ts', plan, join(dir, name)], { stdio: 'pipe' });
-  return { dry: readFileSync(join(dir, `${name}-dry-run.sql`), 'utf8'), apply: readFileSync(join(dir, `${name}-apply.sql`), 'utf8') };
+  const plan = { id: name, generatedAt: '2026-11-16T00:00:00.000Z', ops } as RepairPlan;
+  return { dry: repairSql(plan, false), apply: repairSql(plan, true) };
 }
+const PGLITE_TIMEOUT = 30_000;
 async function db() {
   const pg = new PGlite();
   await pg.exec(`
@@ -48,7 +40,7 @@ describe('generated Dunnes/SuperValu re-point SQL', () => {
     await expect(pg.exec(apply)).rejects.toThrow(/HELD/);
     await pg.exec('rollback').catch(() => undefined);
     expect(await count(pg, `select count(*) n from store_products where id='${D}' and product_id='${LF}'`)).toBe(1);
-  });
+  }, PGLITE_TIMEOUT);
   it('apply moves the offer, retires only the empty placeholder, and keeps 84 price rows + 10 receipts attached', async () => {
     const { apply } = generate('ok', [op()]);
     const pg = await db();
@@ -60,14 +52,14 @@ describe('generated Dunnes/SuperValu re-point SQL', () => {
     // no 1kg/750g merge and no duplicate ownership in the final state
     expect(await count(pg, `select count(*) n from store_products where product_id='${FL}' and store='dunnes' and store_sku is not null`)).toBe(1);
     expect(await count(pg, `select count(*) n from store_products where store='dunnes' and store_sku='100673561'`)).toBe(1);
-  });
+  }, PGLITE_TIMEOUT);
   it('dry run rolls everything back', async () => {
     const { dry } = generate('dry', [op()]);
     const pg = await db();
     await pg.exec(dry);
     expect(await count(pg, `select count(*) n from store_products where id='${D}' and product_id='${LF}'`)).toBe(1);
     expect(await count(pg, `select count(*) n from store_products where id='${PH}'`)).toBe(1);
-  });
+  }, PGLITE_TIMEOUT);
   it('aborts if the reviewed row drifted, the placeholder has history, or the SKU is owned twice', async () => {
     const { apply } = generate('guards', [op()]);
     const cases: [string, string, RegExp][] = [
@@ -81,6 +73,7 @@ describe('generated Dunnes/SuperValu re-point SQL', () => {
       await expect(pg.exec(apply)).rejects.toThrow(expected);
       await pg.exec('rollback').catch(() => undefined);
       expect(await count(pg, `select count(*) n from price_observations where store_product_id='${D}'`)).toBe(84);
+      await pg.close();
     }
-  });
+  }, PGLITE_TIMEOUT);
 });
