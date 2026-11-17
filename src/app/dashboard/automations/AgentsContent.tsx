@@ -78,7 +78,7 @@ function MealPlannerCard({ token, agent }: { token: string; agent: UserAgent | n
       </div>
       <div className="px-4 py-4">
         <p className="text-sm mb-3" style={{ color: 'var(--on-surface)' }}>
-          Generates dinner or lunch plans built around this week&apos;s cheapest items and promotions at Irish supermarkets. Uses your household profile.
+          Generates dinner or lunch plans built around this week&apos;s prices and promotions at Irish supermarkets. Uses your household profile.
         </p>
 
         {!output && !loading && (
@@ -322,7 +322,7 @@ export default function AgentsPage() {
             </button>
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
-            {['Alert when eggs drop below €3', 'Thursday planning reminder', 'Cheapest basket this week'].map(s => (
+            {['Alert when eggs drop below €3', 'Thursday planning reminder', 'Compare my basket this week'].map(s => (
               <button key={s} onClick={() => setCustomInput(s)}
                 className="text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-80"
                 style={{ background: 'rgba(0,220,255,0.07)', color: 'var(--on-surface)', border: '1px solid rgba(0,220,255,0.25)' }}>

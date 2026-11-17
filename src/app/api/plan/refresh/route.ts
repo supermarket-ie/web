@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { queryPriceChanges } from '@/lib/shopping/price-history';
 import { getSubscriberId } from '@/lib/auth';
+import { fetchCurrentExactOffers } from '@/lib/shopping/current-offers';
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
@@ -53,20 +54,12 @@ export async function GET(req: NextRequest) {
     .eq('subscriber_id', subscriberId);
   const paid = (lastItems ?? []) as Array<{ canonical_name: string; store: string; price_paid: number; quantity: number | null }>;
   const lastTotal = paid.reduce((sum, item) => sum + Number(item.price_paid) * (item.quantity ?? 1), 0);
-  // Only fresh, exact store offers count as a current price; page past the 1,000-row default.
-  const current: Array<{ canonical_name: string; store: string; price: number }> = [];
-  const names = [...new Set(paid.map(i => i.canonical_name))];
-  for (let from = 0; names.length; from += 1000) {
-    const { data: page, error } = await supabaseAdmin.from('latest_prices')
-      .select('canonical_name, store, price')
-      .in('canonical_name', names)
-      .eq('relationship_type', 'exact')
-      .eq('freshness_state', 'fresh')
-      .order('store_product_id')
-      .range(from, from + 999);
-    if (error) return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 });
-    current.push(...((page ?? []) as typeof current));
-    if (!page || page.length < 1000) break;
+  // Only fresh, exact store offers count as a current price (paged past the 1,000-row default).
+  let current: Array<{ canonical_name: string; store: string; price: number }>;
+  try {
+    current = await fetchCurrentExactOffers(paid.map(i => i.canonical_name), 'canonical_name, store, price');
+  } catch {
+    return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 });
   }
   const sameStorePrice = (item: (typeof paid)[number]) => current
     .filter(r => r.canonical_name === item.canonical_name && String(r.store).toLowerCase() === String(item.store).toLowerCase())

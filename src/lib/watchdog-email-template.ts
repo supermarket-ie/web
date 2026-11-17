@@ -154,8 +154,8 @@ function storeSplitHTML(storeSplit: StoreSplitInfo): string {
       <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #F0FDF4; border-radius: 10px; border: 1px solid #BBF7D0;">
         <tr>
           <td style="padding: 18px 20px;">
-            <p style="margin: 0 0 4px 0; font-size: 13px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">Where your tracked items are listed lowest</p>
-            <p style="margin: 0 0 14px 0; font-size: 14px; color: #166534; line-height: 1.5;">Lowest listed prices for your tracked items are at ${topStores.slice(0, 3).map(storeLabel).join(' &amp; ')}. Products at different stores are not yet verified as identical, so check pack sizes before switching:</p>
+            <p style="margin: 0 0 4px 0; font-size: 13px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">Price drops by store</p>
+            <p style="margin: 0 0 14px 0; font-size: 14px; color: #166534; line-height: 1.5;">Items you bought dropped in price at the store you bought them from, ${topStores.slice(0, 3).map(storeLabel).join(' &amp; ')}:</p>
             <table width="100%" cellpadding="0" cellspacing="0" border="0">
               ${storeRows}
             </table>

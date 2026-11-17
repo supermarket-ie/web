@@ -108,7 +108,7 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
                             <p className="text-[10px] font-medium text-[#82591a]">{COMPARISON_LABELS[item.selected_offer.comparison_status]}</p>
                           )}
                           {item.candidate_offers.filter(o => o.retailer !== item.selected_offer!.retailer).length > 0 && (
-                            <ul className="mt-1 max-w-[11rem] space-y-0.5 text-[10px] leading-4 text-[#7f8982]" aria-label={`Other retailers for ${item.display_label}`}>
+                            <ul className="mt-1 max-w-[11rem] space-y-0.5 text-[10px] leading-4 text-[#5c675f]" aria-label={`Other retailers for ${item.display_label}`}>
                               {item.candidate_offers.filter(o => o.retailer !== item.selected_offer!.retailer).map(o => (
                                 <li key={o.retailer_product_id}>
                                   {storeName(o.retailer)} {euro(o.current_price)} · {o.retailer_product_name}

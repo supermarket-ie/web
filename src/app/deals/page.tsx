@@ -207,7 +207,7 @@ export default async function DealsPage() {
           <div className="text-2xl mb-2">🛒</div>
           <h3 className="font-bold text-[#2F2F2E] mb-1">Let your AI agent handle this →</h3>
           <p className="text-sm text-[#5c5b5b] mb-4">
-            Our AI planner uses live promotion data to find you the cheapest meals and ingredients across all stores.
+            Our AI planner uses live prices and promotions to plan meals and show what each store charges for your ingredients.
           </p>
           <Link href="/"
             className="inline-block px-6 py-3 rounded-full font-semibold transition text-white"

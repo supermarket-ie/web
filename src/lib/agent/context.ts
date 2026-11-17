@@ -183,7 +183,7 @@ export async function buildSystemPrompt(input: BuildSystemPromptInput): Promise<
             generated_at: shopData.generated_at,
             items: shopItems,
             // Only verified-exact basket totals; the agent must not repeat legacy unverified "cheapest" totals.
-            store_totals: sanitizeStoreTotals(shopData.store_totals),
+            store_totals: sanitizeStoreTotals(shopData.store_totals, shopData.generated_at),
           }
         : null,
     },

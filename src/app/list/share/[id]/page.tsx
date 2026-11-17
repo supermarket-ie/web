@@ -56,11 +56,11 @@ interface StoreTotal { store: string; total: number; }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const { data } = await supabaseAdmin.from('shared_lists').select('store_totals,family_size').eq('id', id).single();
+  const { data } = await supabaseAdmin.from('shared_lists').select('store_totals,family_size,generated_at').eq('id', id).single();
   if (!data) return { title: 'Shopping List | supermarket.ie' };
 
   // Only verified-exact basket totals support a "best price" claim (legacy totals compared unverified products).
-  const totals: StoreTotal[] = sanitizeStoreTotals(data.store_totals);
+  const totals: StoreTotal[] = sanitizeStoreTotals(data.store_totals, data.generated_at);
   const cheapest = totals[0];
   const desc = cheapest
     ? `Weekly shop for ${familySizeLabel(data.family_size)} — best price ${fmt(cheapest.total)} at ${storeDisplayName(cheapest.store)}`
@@ -94,7 +94,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
   if (error || !data) notFound();
 
   const items = data.items as SharedItem[];
-  const storeTotals: StoreTotal[] = sanitizeStoreTotals(data.store_totals);
+  const storeTotals: StoreTotal[] = sanitizeStoreTotals(data.store_totals, data.generated_at);
   const cheapest = storeTotals[0];
   const priciest = storeTotals[storeTotals.length - 1];
   const saving = cheapest && priciest ? Math.round((priciest.total - cheapest.total) * 100) / 100 : 0;

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { sanitizeStoreTotals, sanitizeStructuredItems } from '../saved-list-sanitize';
 
+const fresh = new Date(Date.now() - 3600_000).toISOString();
+
 describe('saved list monetary sanitization', () => {
   it('drops incomplete/null item prices before client currency formatting', () => {
     expect(sanitizeStructuredItems([
@@ -19,7 +21,7 @@ describe('saved list monetary sanitization', () => {
     expect(sanitizeStoreTotals([
       { store: 'dunnes', total: '41.20', basis: 'verified_exact' },
       { store: 'supervalu', total: 42, basis: 'verified_exact' },
-    ])?.[0].total).toBe(41.2);
+    ], fresh)?.[0].total).toBe(41.2);
   });
 
   it('drops incomplete/null store totals rather than coercing them to zero', () => {
@@ -28,17 +30,26 @@ describe('saved list monetary sanitization', () => {
       { store: 'dunnes', total: 41.2, item_count: 7, basis: 'verified_exact' },
       { store: 'aldi', total: 40.5, item_count: 7, basis: 'verified_exact' },
       { store: 'supervalu', total: Number.NaN, item_count: 5, basis: 'verified_exact' },
-    ])).toEqual([
+    ], fresh)).toEqual([
       { store: 'aldi', total: 40.5, item_count: 7, basis: 'verified_exact' },
       { store: 'dunnes', total: 41.2, item_count: 7, basis: 'verified_exact' },
     ]);
   });
 
   it('never displays legacy or indicative store totals (unverified canonical associations)', () => {
-    expect(sanitizeStoreTotals([{ store: 'dunnes', total: 41.2 }, { store: 'supervalu', total: 39 }])).toEqual([]);
-    expect(sanitizeStoreTotals([{ store: 'dunnes', total: 41.2, basis: 'indicative' }, { store: 'supervalu', total: 39, basis: 'indicative' }])).toEqual([]);
+    expect(sanitizeStoreTotals([{ store: 'dunnes', total: 41.2 }, { store: 'supervalu', total: 39 }], fresh)).toEqual([]);
+    expect(sanitizeStoreTotals([{ store: 'dunnes', total: 41.2, basis: 'indicative' }, { store: 'supervalu', total: 39, basis: 'indicative' }], fresh)).toEqual([]);
     // A single verified total is not a comparison between stores.
-    expect(sanitizeStoreTotals([{ store: 'dunnes', total: 41.2, basis: 'verified_exact' }])).toEqual([]);
+    expect(sanitizeStoreTotals([{ store: 'dunnes', total: 41.2, basis: 'verified_exact' }], fresh)).toEqual([]);
+  });
+
+  it('hides verified totals once the 14-day pair-review horizon has passed, or when the time is unknown', () => {
+    const both = [{ store: 'dunnes', total: 41.2, basis: 'verified_exact' }, { store: 'supervalu', total: 39, basis: 'verified_exact' }];
+    const now = Date.parse('2026-11-17T12:00:00Z');
+    expect(sanitizeStoreTotals(both, '2026-11-04T12:00:00Z', now)).toHaveLength(2);
+    expect(sanitizeStoreTotals(both, '2026-11-03T11:59:00Z', now)).toEqual([]);
+    expect(sanitizeStoreTotals(both, null, now)).toEqual([]);
+    expect(sanitizeStoreTotals(both, 'not a date', now)).toEqual([]);
   });
 
   it('returns null when a saved list contains no safely renderable priced items', () => {

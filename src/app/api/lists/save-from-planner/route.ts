@@ -81,8 +81,9 @@ export async function POST(request: NextRequest) {
     const storeTotals = structured
       // Persist only verified-exact basket totals; indicative store totals are not a like-for-like basis.
       ? sanitizeStoreTotals(structured.store_coverage.map(row => ({ store: row.retailer, total: row.verified_exact_total ?? null,
-        item_count: row.covered_lines, basis: row.comparison_basis })))
-      : sanitizeStoreTotals(legacy!.storeTotals);
+        item_count: row.covered_lines, basis: row.comparison_basis })), new Date())
+      // Legacy markdown totals are client text, never re-verified: none are persisted.
+      : [];
 
     const name = body.name ?? (structured ? `${structured.household.planning_period.label} household shop` : body.markdown!.split('\n').find(line => line.startsWith('# '))?.slice(2).trim()) ?? 'Weekly grocery list';
     const { data: saved, error } = await supabaseAdmin.from('saved_lists').insert({

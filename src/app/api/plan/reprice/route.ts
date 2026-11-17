@@ -15,6 +15,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
 import { getCurrentPairReviews } from '@/lib/comparison-reviews';
 import { repriceBasket, type RepriceItem, type RepricePrice } from '@/lib/shopping/reprice';
+import { fetchCurrentExactOffers } from '@/lib/shopping/current-offers';
 
 export type { RepriceResult, StoreTotal } from '@/lib/shopping/reprice';
 
@@ -63,17 +64,17 @@ export async function POST(req: NextRequest) {
   }
 
   const canonicalNames = [...new Set(items.map(i => i.canonical_name))];
-  const [{ data: prices }, reviews] = await Promise.all([
-    supabaseAdmin
-      .from('latest_prices')
-      .select('canonical_name, store, price, store_product_id, store_product_name, relationship_type, freshness_state')
-      .in('canonical_name', canonicalNames)
-      .in('store', MAIN_STORES),
-    getCurrentPairReviews(),
-  ]);
-  const current = ((prices ?? []) as Array<RepricePrice & { relationship_type?: string | null; freshness_state?: string | null }>)
-    .filter(p => p.relationship_type === 'exact' && p.freshness_state === 'fresh')
-    .map(p => ({ ...p, price: Number(p.price) }));
+  let prices: RepricePrice[];
+  let reviews: Awaited<ReturnType<typeof getCurrentPairReviews>>;
+  try {
+    [prices, reviews] = await Promise.all([
+      fetchCurrentExactOffers<RepricePrice>(canonicalNames, 'canonical_name, store, price, store_product_id, store_product_name', MAIN_STORES),
+      getCurrentPairReviews(),
+    ]);
+  } catch {
+    return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 });
+  }
+  const current = prices.map(p => ({ ...p, price: Number(p.price) }));
 
   return NextResponse.json(repriceBasket(items, current, MAIN_STORES, reviews));
 }

@@ -71,7 +71,10 @@ Customer-facing change, pending review. Not merged or deployed.
     A cheapest store needs ≥ 2 complete baskets in which every line is an approved
     Exact match among those stores. Otherwise stores are listed by coverage, never
     by price, and totals are indicative.
-  - Labels: Exact match / Similar product / Unverified / Different product.
+  - Labels: Exact match / Similar product / Unverified / Different product or pack.
+  - A verified cheapest claim needs EVERY pair among the compared stores to be
+    an approved exact match (`allPairsExact`); exactness is not transitive
+    through the Tesco anchor.
 - Paths fixed:
   - Lightweight-agent `compare_shop_stores`: per-line retailer title, price, unit
     price and label; `cheapest_verified_store` only when verified; the tool
@@ -108,16 +111,29 @@ Customer-facing change, pending review. Not merged or deployed.
   - `/api/lists` POST and `/api/share` persist `store_totals: []`: client totals
     are forgeable, so a client `verified_exact` flag is never trusted.
     `save-from-planner` passes pair reviews to `compareBasket`.
-  - The Eve tool `agent/tools/compare_shop_stores.ts` DID change: honest text,
-    per-line labels, no cheapest claim unless verified.
+  - Eve (`agent/`) DID change: `compare_shop_stores` reads exact/fresh offers
+    (paged) with retailer titles and offer ids, but has no pair reviews, so it is
+    always indicative. `loadCurrentShop` and session context pass only
+    sanitized totals; `recommended_store` is withheld unless verified. Eve write
+    tools still return per-store SPEND breakdowns of the shopper's own
+    selections (not cross-store comparisons).
   - `compare.ts`: `retailer_product_name` null when unknown (no canonical
     fallback). HouseholdShopCard verified headline needs a `verified_exact` row.
-  - Watchdog email "Best split for maximum savings" replaced with
-    lowest-listed wording plus a not-verified note; suggestion detail
-    "Currently from" → "Listed at". SmartRefreshCard shows a saving only with a
-    complete total. `/api/plan/refresh` uses exact, fresh offers and pages.
+  - Watchdog email "Best split for maximum savings" → "Price drops by store"
+    (same-store drops only); suggestion detail "Currently from" → "Listed at";
+    deals/automations copy no longer promises "cheapest". SmartRefreshCard
+    shows a saving only with a complete total.
+  - `fetchCurrentExactOffers` (`src/lib/shopping/current-offers.ts`): one
+    paged exact/fresh latest_prices reader for `/api/plan/refresh`,
+    `/api/plan/reprice` and `queryPriceChanges` (watchdog, weekly notice).
+  - Saved verified totals expire with the 14-day review horizon
+    (`sanitizeStoreTotals(totals, computedAt)`; unknown time fails closed).
+    `/api/share` also downgrades client-claimed `verified_exact` item labels.
+  - HouseholdShopCard lists every other retailer's offer per line (price,
+    retailer title, unit price, label).
 - Flagged to owner (NOT changed): hardcoded price claims in `src/lib/blog.ts`;
-  `/api/plan/weekly` `store_assignment` per-item lowest store.
+  `/api/plan/weekly` persists a client `store_assignment`; `/api/plan/reprice`
+  still includes Aldi (no own-label prefix rule for Aldi ranges).
 - NOT changed:
   - The unused `src/components/ProductPrices.tsx`.
 - Tests: `comparison-safety.test.ts` and `comparison-safety-paths.test.ts`

@@ -78,8 +78,7 @@ export function compareBasket(lines: BasketLine[], stores: string[], reviews: Pa
     const names = new Set(complete.map(b => b.store));
     const allExact = lines.every(line => {
       const subset = line.offers.filter(o => names.has(o.store));
-      const s = classifyOfferGroup(subset, reviews, now);
-      return subset.length === names.size && subset.every(o => s[o.store] === 'exact_product');
+      return subset.length === names.size && allPairsExact(subset, reviews, now);
     });
     if (allExact) for (const b of complete) b.verifiedExactTotal = b.completeTotal;
   }
@@ -247,8 +246,20 @@ export function classifyOfferGroup(offers: OfferIdentity[], reviews: PairReview[
   return result;
 }
 
+/**
+ * EVERY pair of offers is an approved, unvetoed exact match. Exactness is not transitive through an anchor:
+ * Tesco = SuperValu and Tesco = Dunnes does not make SuperValu = Dunnes when that pair is only Similar.
+ */
+export function allPairsExact(offers: OfferIdentity[], reviews: PairReview[], now = Date.now()): boolean {
+  if (offers.length < 2) return offers.length === 1;
+  for (let i = 0; i < offers.length; i++) for (let j = i + 1; j < offers.length; j++) {
+    const s = classifyOfferGroup([offers[i], offers[j]], reviews, now);
+    if (s[offers[i].store] !== 'exact_product' || s[offers[j].store] !== 'exact_product') return false;
+  }
+  return true;
+}
+
 export function isVerifiedExactThree(offers: OfferIdentity[], reviews: PairReview[], now = Date.now()) {
   if (offers.length !== 3 || new Set(offers.map(o => o.store)).size !== 3) return false;
-  const statuses = classifyOfferGroup(offers, reviews, now);
-  return offers.every(o => statuses[o.store] === 'exact_product');
+  return allPairsExact(offers, reviews, now);
 }

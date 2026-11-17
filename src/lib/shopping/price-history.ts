@@ -1,5 +1,6 @@
 import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase';
+import { fetchCurrentExactOffers } from './current-offers';
 
 export async function queryUserHistory(subscriberId: string) {
   const { data } = await supabaseAdmin
@@ -21,13 +22,14 @@ export async function queryPriceChanges(subscriberId: string) {
   const history = await queryUserHistory(subscriberId);
   if (!history.length) return [];
   const names = history.slice(0, 30).map(item => item.canonical_name);
-  const { data } = await supabaseAdmin
-    .from('latest_prices')
-    .select('canonical_name, store, price, was_price, on_promotion')
-    .in('canonical_name', names);
-  if (!data) return [];
+  let data: Array<{ canonical_name: string; store: string; price: number }>;
+  try {
+    data = await fetchCurrentExactOffers(names, 'canonical_name, store, price, was_price, on_promotion');
+  } catch {
+    return []; // no notice rather than a notice built on partial or untrusted prices
+  }
 
-  return priceChangesAtSameStore(history.slice(0, 30), data as Array<{ canonical_name: string; store: string; price: number }>);
+  return priceChangesAtSameStore(history.slice(0, 30), data);
 }
 
 /**

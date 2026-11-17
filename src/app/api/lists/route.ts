@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   // Only verified-exact basket totals leave the server (legacy totals compared unverified products).
-  return NextResponse.json({ lists: (data ?? []).map(list => ({ ...list, store_totals: sanitizeStoreTotals(list.store_totals) })) });
+  return NextResponse.json({ lists: (data ?? []).map(list => ({ ...list, store_totals: sanitizeStoreTotals(list.store_totals, list.generated_at ?? list.created_at) })) });
 }
 
 export async function POST(req: NextRequest) {

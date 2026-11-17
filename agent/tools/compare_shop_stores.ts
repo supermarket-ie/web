@@ -9,7 +9,8 @@ type PriceRow = {
   canonical_name: string;
   store: string;
   price: number;
-  on_promotion: boolean | null;
+  store_product_id: string;
+  store_product_name: string | null;
 };
 
 export default defineDynamic({
@@ -26,11 +27,21 @@ export default defineDynamic({
               const shop = await loadCurrentShop(subscriberId);
               if (!shop) return { ok: false, reason: 'no_current_shop', message: 'There is no current saved shop to compare.' };
               const names = [...new Set(shop.items.map(item => item.canonical_name).filter(Boolean))];
-              const { data, error } = await agentSupabase.from('latest_prices').select('canonical_name, store, price, on_promotion').in('canonical_name', names);
-              if (error) throw new Error(`Unable to compare current supermarket prices: ${error.message}`);
+              // Only fresh, exact store offers; page past the 1,000-row default.
+              const data: PriceRow[] = [];
+              for (let from = 0; names.length; from += 1000) {
+                const { data: page, error } = await agentSupabase.from('latest_prices')
+                  .select('canonical_name, store, price, store_product_id, store_product_name')
+                  .in('canonical_name', names).eq('relationship_type', 'exact').eq('freshness_state', 'fresh')
+                  .order('store_product_id').range(from, from + 999);
+                if (error) throw new Error(`Unable to compare current supermarket prices: ${error.message}`);
+                data.push(...((page ?? []) as PriceRow[]));
+                if (!page || page.length < 1000) break;
+              }
               const comparison = compareBasketStores(
                 shop.items.map(item => ({ canonical_name: item.canonical_name, quantity: item.quantity ?? 1, current_price: item.price ?? null })),
-                ((data ?? []) as PriceRow[]).map(row => ({ canonical_name: row.canonical_name, store: row.store, price: Number(row.price) })),
+                data.map(row => ({ canonical_name: row.canonical_name, store: row.store, price: Number(row.price),
+                  store_product_id: String(row.store_product_id), store_product_name: row.store_product_name ?? undefined })),
                 input.store,
               );
               // No retailer offer identities or pair reviews here, so totals are always indicative: never name a

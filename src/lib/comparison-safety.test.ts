@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyOfferGroup, compareBasket, deterministicDifference, isOwnLabel, normalizedUnitPrice, readPack, type BasketLine, type PairReview } from './comparison-policy';
+import { classifyOfferGroup, compareBasket, deterministicDifference, isOwnLabel, isVerifiedExactThree, normalizedUnitPrice, readPack, type BasketLine, type PairReview } from './comparison-policy';
 
 // Regression fixtures for the comparison-safety rule. Real production titles (16 Nov 2026).
 const now = Date.parse('2026-11-17T12:00:00Z');
@@ -128,5 +128,29 @@ describe('review fixes: packs, unit prices and own-label scope', () => {
     const old = '2026-10-30T10:00:00Z';
     const stale = { ...review('d-chilli', 's-chilli'), left_captured_at: old, right_captured_at: old, reviewed_at: old };
     expect(classifyOfferGroup(chilli.offers, [stale], now)).toEqual({ dunnes: 'unverified', supervalu: 'unverified' });
+  });
+});
+
+describe('three-store verified baskets', () => {
+  // Tesco = SuperValu and Tesco = Dunnes are approved, but SuperValu vs Dunnes is only a Similar product.
+  const three: BasketLine = { id: 'beans', quantity: 1, offers: [
+    { store: 'tesco', storeProductId: 't', name: 'Heinz Beanz 415g', price: 1.4 },
+    { store: 'supervalu', storeProductId: 's', name: 'Heinz Beanz (415 g)', price: 1.35 },
+    { store: 'dunnes', storeProductId: 'd', name: 'Heinz Beanz 415g', price: 1.3 },
+  ] };
+  it('exactness is not transitive through the anchor: no verified claim unless every pair is exact', () => {
+    const reviews = [review('t', 's'), review('t', 'd'), review('s', 'd', 'comparable_alternative')];
+    const c = compareBasket([three], ['tesco', 'supervalu', 'dunnes'], reviews, now);
+    expect(c.cheapestVerified).toBeNull();
+    expect(c.basis).toBe('indicative');
+    expect(isVerifiedExactThree(three.offers, reviews, now)).toBe(false);
+  });
+  it('all three pairs approved exact gives a verified cheapest store', () => {
+    const c = compareBasket([three], ['tesco', 'supervalu', 'dunnes'], [review('t', 's'), review('t', 'd'), review('s', 'd')], now);
+    expect(c.cheapestVerified).toEqual({ store: 'dunnes', total: 1.3 });
+  });
+  it('a two-store Similar pair labels both sides Similar product', () => {
+    expect(classifyOfferGroup(three.offers.slice(0, 2), [review('t', 's', 'comparable_alternative')], now))
+      .toEqual({ tesco: 'comparable_alternative', supervalu: 'comparable_alternative' });
   });
 });
