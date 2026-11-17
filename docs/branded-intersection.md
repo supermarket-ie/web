@@ -92,26 +92,48 @@ canonical metadata including descriptions/ingredients/images where available.
 Image URLs are references; no claim is made that image pixels were inspected.
 Canonical metadata cannot establish retailer identity.
 
-`branded:infer` is a separate operator command using the existing server-side
-Anthropic provider/model from `agent/agent.ts`. It never reads another deployment's
-credentials or automatically falls back to a new provider. No credential means
-no calls. A private budget JSON must explicitly set `model`, `maxCalls` (1–20),
-`maxUsd` (positive, at most 1), positive `inputUsdPerMillion` and
-`outputUsdPerMillion`, plus `rateSource` and `ratesCheckedAt`. Verify current
-provider rates before supplying them; these are operator assertions, not an
-automatically fetched price list. There are no preset monetary rates.
+`branded:infer` is a separate operator command. It uses the project model resolver
+(`src/lib/agent/model.ts`): Bedrock `eu.anthropic.claude-sonnet-4-6` through the AWS
+credential chain by default, or the direct-Anthropic rollback via
+`AGENT_MODEL_PROVIDER=anthropic`. It never falls back to another provider. The
+credential is resolved before any input is read; no credential means no calls.
+
+The private budget JSON is an AUTHORISED CAMPAIGN. It must set:
+- `model` (must equal the configured project model)
+- `campaign`, `authorisedBy` and `authorisedAt`
+- cumulative `maxUsd` and `maxCalls`, at most the code backstop
+  `INFERENCE_HARD_CEILING` ($100 / 5,000 calls per campaign)
+- optionally `batchSize` (1–100, default 10) and `maxOutputTokens` (256–4,000,
+  default 1,400)
+- positive `inputUsdPerMillion` / `outputUsdPerMillion`, with `rateSource` and
+  `ratesCheckedAt`
+
+Take the rates from the AWS Price List API (service `AmazonBedrockFoundationModels`;
+for eu-west-1 Regional CRIS use usage types `EU-MP:EU_InputTokenCount-Units` and
+`EU-MP:EU_OutputTokenCount-Units`). There are no preset monetary rates.
 
 ```sh
-npm run branded:infer -- /private/audit/branded-DIGEST/report.json \
-  /private/inference /private/budget.json --confirm-bounded-inference
+AWS_PROFILE=smie-prod AWS_REGION=eu-west-1 npm run branded:infer -- /private/audit/branded-DIGEST/report.json \
+  /private/inference /private/budget.json --confirm-bounded-inference [--priority PAIR_IDS.json]
+npm run branded:infer -- --reconcile-failed /private/inference   # operator review of uncertain calls
 npm run branded:intersection -- --input /private/snapshot.json --out /private/replay \
   --inference /private/inference/inference-replay.json
 ```
 
-At most 20 eligible unresolved wording pairs are considered. Each request is
-bounded to 12,000 UTF-8 input bytes and 1,400 output tokens. A conservative spend
-reservation is fsynced before sending; retries are disabled, timeout is 60 seconds,
-reservations are never refunded and uncertain outcomes stop further calls.
+Eligibility (`selectInferenceCandidates`) is fixed in code: real retailer SKUs on
+both sides, and wording as the ONLY open gap. `--priority` orders eligible pairs but
+cannot add any. At most `maxCalls` pairs are prepared. Each request is bounded to
+12,000 UTF-8 input bytes and `maxOutputTokens`.
+
+Before each call a worst-case reservation is fsynced:
+`(request bytes + 8,000) × input rate + maxOutputTokens × output rate`. A call whose
+reservation would take the campaign's cumulative reservations past `maxUsd` is never
+sent, so actual spend cannot exceed the cap. Caps are per campaign and cumulative
+across runs; the ledger also caches across campaigns, so a request id already
+assessed is never paid for twice. Retries are disabled, timeout is 60 seconds and
+reservations are never refunded. Any uncertain outcome (`failed_unknown_spend`,
+with the error recorded) stops further calls. Only `--reconcile-failed` resumes:
+that call stays counted at full reservation and is never re-sent.
 Concurrent access is locked. A crash lock or unresolved ledger must be reconciled
 against provider usage before manual recovery; deleting it is not a retry policy.
 All runs in an exercise must reuse the same ledger so the cap remains cumulative.

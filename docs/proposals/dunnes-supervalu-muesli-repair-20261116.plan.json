@@ -1,0 +1,18 @@
+{
+  "id": "dunnes-supervalu-muesli-20261116",
+  "generatedAt": "2026-11-16T22:30:00.000Z",
+  "ops": [
+    {
+      "offerId": "7d80821c-7231-4e2f-b09c-36a463d1cc78",
+      "store": "dunnes",
+      "sku": "100673561",
+      "title": "Flahavan's Hi8 Muesli Original 1kg",
+      "fromProductId": "1cca7ae6-2118-4871-be9a-d8eeb359f0ed",
+      "toProductId": "ac3ad0c4-b393-451b-b9a2-9e4a6bb87b7c",
+      "toProductBrand": "Flahavan's",
+      "retirePlaceholderId": "55b87c18-db0c-4f1d-83d0-4531c7e004f0",
+      "placeholderTitle": "Flahavan's Hi 8 No Added Sugar Muesli 1kg",
+      "note": "HELD: no identityVerifiedBy. Add it only after the SuperValu 1023559000 source body (ingredients, sugar claim) is retained and an approved pair review exists."
+    }
+  ]
+}

@@ -102,11 +102,20 @@ it('applies the versioned claims migration without touching catalogue tables',as
 },15000);
 
 it('starts the real inference CLI and fails before reading input or making calls without a provider credential',()=>{
- const env={...process.env};delete env.ANTHROPIC_API_KEY;
- const r=spawnSync(process.execPath,['--import','tsx','scripts/branded-intersection-infer.ts','missing-report.json','unused-output','missing-budget.json','--confirm-bounded-inference'],{env,encoding:'utf8'});
+ const env:Record<string,string|undefined>={...process.env,AGENT_MODEL_PROVIDER:'anthropic'};delete env.ANTHROPIC_API_KEY;
+ const r=spawnSync(process.execPath,['--import','tsx','scripts/branded-intersection-infer.ts','missing-report.json','unused-output','missing-budget.json','--confirm-bounded-inference'],{env:env as NodeJS.ProcessEnv,encoding:'utf8'});
  expect(r.status).toBe(1);expect(r.stderr).toContain('Approved Anthropic provider credential unavailable; no calls made');
  expect(r.stderr).not.toContain('Transform failed');
 });
+
+it('the Bedrock path also fails before reading input or making calls when no AWS credential resolves',()=>{
+ const env:Record<string,string|undefined>={...process.env,AGENT_MODEL_PROVIDER:'bedrock',AWS_PROFILE:'smie-nonexistent-test-profile',
+   AWS_CONFIG_FILE:'/dev/null',AWS_SHARED_CREDENTIALS_FILE:'/dev/null',AWS_EC2_METADATA_DISABLED:'true'};
+ for(const k of ['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_SESSION_TOKEN','AWS_CONTAINER_CREDENTIALS_RELATIVE_URI','AWS_CONTAINER_CREDENTIALS_FULL_URI','AWS_WEB_IDENTITY_TOKEN_FILE','AWS_ROLE_ARN'])delete env[k];
+ const r=spawnSync(process.execPath,['--import','tsx','scripts/branded-intersection-infer.ts','missing-report.json','unused-output','missing-budget.json','--confirm-bounded-inference'],{env:env as NodeJS.ProcessEnv,encoding:'utf8',timeout:20000});
+ expect(r.status).toBe(1);expect(r.stderr).toContain('Approved Bedrock credential unavailable; no calls made');
+ expect(r.stderr).not.toContain('ENOENT');
+},25000);
 
 it('holds explicit structured flavour/formulation disagreement even when titles are identical',()=>{
  const a=evidence('Heinz Sauce 500g'),b=evidence('Heinz Sauce 500g','dunnes');

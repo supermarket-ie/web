@@ -1,5 +1,168 @@
 # Supermarket.ie — Canonical Project State
 
+## 17 November 2026 (later) — First $10 bounded inference campaign: 100 Dunnes/SuperValu wording-only pairs
+
+Owner-authorised campaign `dunnes-supervalu-wording-20261117`: cap $10, 100 calls.
+Bedrock `eu.anthropic.claude-sonnet-4-6` from the local AWS SSO session; no
+infrastructure or deployment.
+- Rates were verified on the AWS Price List API (eu-west-1 Regional CRIS):
+  $3.30/M input, $16.50/M output.
+- The pairs were the top 100 wording-only candidates, all with fresh prices at
+  both stores and one-to-one.
+
+Results, as CANDIDATES only (gate accepted 0; no ledger approvals, no mapping writes):
+- 100 calls: 97 valid verdicts. 3 answers failed the response schema
+  (AI_NoObjectGeneratedError); they were reconciled and not retried.
+- Model exact_match: 77 (all on the same canonical record). 76 state no
+  contradiction; Kellogg's Fruit 'n Fibre flags Dunnes brand metadata "All-Bran".
+  Every one names missing evidence, chiefly GTINs (94 mentions), ingredients and
+  images, so the gate holds them.
+- Model not_exact_match: 15.
+  - All 12 cross-canonical pairs: sibling products (Dr. Oetker chips vs chunks,
+    Blue Dragon oyster vs fish sauce, Odlums scone vs bread mix, Flahavan's
+    Vitamin vs Barista oat drink). This confirms the existing separation is right.
+  - 3 same-canonical pairs suggest association errors: Ben's Mild Curry "Creamy",
+    Heinz Ketchup vs "Top Down", Ella's Mango Brekkie "with Peach".
+- Model insufficient_evidence: 5 (Colgate x3, Pringles Texas BBQ vs BBQ, Felix
+  Original Mix vs Original with Chicken).
+- Cost: $5.95 reserved of the $10 cap. Token-estimated actual is $1.52 for the 97
+  completed calls, plus at most $0.18 for the 3 failed calls (≤ $1.70; about
+  $0.016 per pair). The superseded v2 trial ($0.29 estimated) ran under its own $1
+  campaign.
+- Code (PR #412):
+  - Authorised per-campaign budgets with a $100 / 5,000-call code backstop.
+  - Configurable `batchSize` and `maxOutputTokens`.
+  - Errors recorded in the ledger, plus an explicit `--reconcile-failed` step.
+  - The cache spans campaigns.
+  - Prompt v3: cite only retailer record ids (9 of 17 v2 answers cited canonical
+    ids and were refused).
+
+## 17 November 2026 — Dunnes↔SuperValu: evidence route, capture pilot, comparison gaps, catalogue cases
+
+No production writes, mapping repairs or pair-review approvals. No retailer
+requests, Tesco or Apify runs.
+
+Dunnes↔SuperValu status (16 Nov snapshot; details below):
+
+| Tier | Count |
+|---|---|
+| Fresh trusted prices (latest_prices, 7 days) | Dunnes 911, SuperValu 1,608; 743 associated pairs fresh on both sides |
+| Deterministic exact-match candidates (recorded evidence) | 93 (all both fresh) + 1 unmapped (Club Orange 500ml) |
+| Independently verified exact matches (ledger) | 0 |
+| Supported similar products (comparable_alternative) | 0 |
+| Incorrect associations needing repair | 188 contradictions (133 both fresh); 165 own-label vs branded (separate products unless substitutability evidence); 116 SKUs with more than one owner; 17 Dunnes URL/SKU mismatches |
+| Missing products/mappings | 1,406 Dunnes + 608 SV SKU-less placeholders; 923 SV-only canonicals (767 fresh); 125 Dunnes-only; Dunnes Lifeforce 100115556; Dunnes Club Orange 100297983; O'Donnells; Hovis (below) |
+| LLM candidates (wording-only, not evidence) | 349 eligible; 17 fit the $1 cap |
+
+- WHY NO QUALIFYING EVIDENCE: Dunnes production only calls the gateway search
+  API, so it is always captured_listing. No Dunnes product-page fetch exists,
+  and the www page was Cloudflare-blocked in August. SuperValu's daily run GETs
+  product pages (all 41 runs are vercel_direct_product_page), but its capture
+  returns null every time; the only 38 SV bodies come from search remaps.
+  Likely cause: parseSupervaluProductPage keeps `sku` only when it's a string
+  (unconfirmed without one live page). Retention runs only after a successful
+  price finalise. There is no evidence-only mode.
+- PILOT (proposed, NOT executed): docs/proposals/dunnes-supervalu-capture-pilot-20261117.md.
+  - 10 pairs, about 12 retailer requests: 1 SV diagnostic, 1 Dunnes probe, then
+    10 Dunnes evidence-only captures if reachable.
+  - Fixing SuperValu capture gives captured_product for every SV SKU from the
+    daily run, at zero extra requests.
+  - If the Dunnes page is blocked, no Dunnes edge can verify without a policy
+    decision.
+- COMPARISON GAPS (code review): docs/proposals/comparison-equivalence-gaps-20261117.md.
+  - The agent tools compare_shop_stores and present_household_shop, plus
+    generateList, /api/plan/reprice and product JSON-LD, treat a shared
+    canonical record as the same product. They make complete-basket and
+    cheapest claims with no ledger check.
+  - The weekly-shop and shop-builder totals are ledger-aware and labelled
+    indicative.
+  - The fix needs an owner decision: every cross-store total becomes indicative
+    until edges exist.
+- Bounded inference: scripts/branded-intersection-infer.ts now uses the
+  project model resolver (src/lib/agent/model.ts; Bedrock
+  eu.anthropic.claude-sonnet-4-6, as both ECS task definitions) with an AWS
+  credential preflight and an optional priority order. Eligibility is unchanged:
+  real SKUs and wording-only gaps.
+  - The deployed image doesn't include this, so ECS can't run it without a new
+    image.
+  - Budget: $3.30/$16.50 per M (EU profile, secondary sources), ≤20 calls / ≤$1.
+    17 calls fit on reservations.
+  - Model verdicts are candidates only; gateInference keeps deterministic
+    contradictions first.
+- CATALOGUE COVERAGE CASES (for the catalogue build, not this PR):
+  - Hovis Soft White Thick Sliced Bread 800g is Tesco 254550817 on the generic
+    "White Mega Toast Thick Sliced Bread" canonical (66f1d5b2) with Aldi
+    BALLYMORE CRUST and SKU-less Dunnes/SV placeholders. It has no price and
+    needs its own canonical.
+  - O'Donnells crisps: no product, canonical or mapping at any retailer. The
+    brand is absent from the catalogue (only McDonnells/Donnelly Fresh match).
+
+## 16 November 2026 22:30Z — Dunnes↔SuperValu exact-pair assessment (read-only) + Muesli proposal
+
+READ-ONLY. No production writes, no retailer fetches, no Tesco/Apify runs, no
+model calls. Data: chunked service_role REST GETs 22:06:34–22:06:52Z. They are
+not atomic, but head counts before and after match for every table. Outputs are
+private in ~/smie-private/dunnes-supervalu-assessment-20261116/ and not in git.
+Tools: scripts/pair-assessment-fetch.ts and scripts/pair-assessment.ts. These
+reuse branded-intersection evaluate() in two-retailer mode (tesco = []). They do
+not use the three-retailer metric.
+
+- The owner's 743 reproduces exactly: Dunnes SKUs sharing a canonical where
+  BOTH sides have a fresh price. 841 have a fresh SuperValu price; 929 Dunnes↔SV
+  association pairs exist in total.
+- The 929 existing associations break down as:
+
+  | Category | Pairs | Both fresh |
+  |---|---|---|
+  | Deterministic exact candidates | 93 | 93 |
+  | Incorrect or misleading (pack/brand/count/formulation contradiction) | 188 | 133 |
+  | Private label vs other (not exact) | 165 | 137 |
+  | Count-wording only (same total, e.g. "6 Bagels 270g" vs "6 Pack 270g") | 16 | |
+  | Brand ownership unverified | 94 | |
+  | Other evidence gaps | 373 | 307 |
+
+  Of the 373 evidence-gap pairs, 179 are blocked only by evidence age. The rest
+  are duplicate SKU records, multipack basis or missing pack.
+- Exact counterparts under a different canonical: 0 deterministic. 1 exact pair
+  has a side not on any canonical (Club Orange 500ml: Dunnes 100297983 is
+  unmapped and unpriced; SuperValu 1856518001 is €2.25).
+- Plausible same-pack candidates the evaluator can't settle: 823 real-SKU pairs
+  (530 cross-canonical). 349 are wording-only. Most cross-canonical ones are
+  sibling variants (Batchelors Butter/Curried/Chilli Beans), not counterparts.
+  111 are one-to-one subset-wording pairs (107 both fresh, 3 cross-canonical).
+  These are the best LLM batch.
+- Missing mappings:
+  - 1,406 Dunnes and 608 SuperValu mapping rows are SKU-less placeholders.
+  - 923 canonicals have a SuperValu SKU only (767 fresh). 125 have Dunnes only.
+  - 116 SKUs are owned by more than one canonical (60 SV, 56 Dunnes).
+  - 17 Dunnes URLs end in a different SKU than store_sku. None are priced.
+- GTINs: 0 of 4,845 Dunnes/SV records carry one, so there is no barcode route today.
+- LEDGER QUALIFICATION: 0 captured_product responses exist (959 latest are all
+  captured_listing: search API bodies). retailer_offer_pair_reviews has 0 rows.
+  The trigger requires source_kind='captured_product' with matching
+  store_product_id, store, sku, body_sha256 and retrieved_at, all within 14
+  days. NOTHING qualifies, so all 93 are deterministic candidates, NOT approved
+  matches. A qualifying capture needs requested and final URL equal to the
+  direct product URL. Catalogue-crawl listing pages would also be
+  captured_listing and would NOT qualify.
+- Precision flag: Oral-B Pro-Expert 75ml (€6.00 vs €2.90) needs review before
+  approval.
+- Muesli: docs/proposals/dunnes-supervalu-muesli-repair-20261116.md.
+  - The Flahavan's formulation is UNVERIFIED. There is no SuperValu body or GTIN,
+    and Flahavan's has two Hi8 recipes.
+  - The plan is held. Coordinate with the unapplied Tesco split batch, which
+    moves Dunnes 100673561 to a new canonical first.
+- New code:
+  - src/lib/pair-repair-guard.ts is the adapted Tesco safeguards: one owner per
+    SKU, no slot displacement, empty-placeholder retirement only, pack/brand
+    checks, 14-day non-stored evidence, a 24h attempt window, and an identity
+    basis.
+  - scripts/pair-repair-prepare.ts is assert-first SQL, postgres-only, with
+    rollback for dry runs and history rechecks. It raises if held.
+  - 14 tests (PGlite runs the real generated SQL).
+  - branded-intersection-infer now skips SKU-less placeholder pairs.
+- Bounded inference: see the 17 Nov entry.
+
 ## 15 November 2026 15:20Z — Apify limit raised; renewals restored; barcode provenance enforced; enrichment proposal
 
 - Owner raised the Apify account limit to $80 (used $19.05). Renewal on rev16
