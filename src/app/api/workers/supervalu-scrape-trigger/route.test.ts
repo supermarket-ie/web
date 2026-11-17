@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const select = vi.hoisted(() => vi.fn());
 const createRun = vi.hoisted(() => vi.fn(async () => 'run-uuid'));
-const send = vi.hoisted(() => vi.fn(async (_topic: string, _message: unknown, _options?: unknown) => undefined));
+const send = vi.hoisted(() => vi.fn<(topic: string, message: unknown, options?: unknown) => Promise<undefined>>(async () => undefined));
 vi.mock('@/lib/queue', () => ({ send }));
 vi.mock('@/lib/supabase', () => ({ supabaseAdmin: {} }));
 vi.mock('@/lib/preview-guard', () => ({ retailerCollectionBlocked: () => false, RETAILER_COLLECTION_BLOCKED_REASON: 'blocked' }));
@@ -13,7 +13,6 @@ import { GET } from './route';
 const product = { storeProductId: 'sp', canonicalName: 'Chilli Powder', storeProductName: 'Schwartz', storeUrl: 'https://shop.supervalu.ie/x/product/y-id-1020898000', storeSku: '1020898000', previousPrice: 3.4 };
 const call = (qs: string) => GET(new Request(`https://example.test/api/workers/supervalu-scrape-trigger?${qs}`, { headers: { authorization: 'Bearer secret' } }));
 const queuedProducts = () => send.mock.calls.flatMap(c => (c[1] as { products: Array<Record<string, unknown>> }).products);
-void [send.mock.calls]; // typed (topic, message, options) calls
 
 describe('supervalu-scrape-trigger evidence runs', () => {
   beforeEach(() => {
