@@ -4,6 +4,7 @@ import { unstable_cache } from 'next/cache';
 import { supabaseAdmin } from './supabase';
 import { getAllLatestPrices } from './price-data';
 import { buildProductCatalogue, type CatalogueRecord } from './product-catalogue';
+import { getCurrentPairReviews } from './comparison-reviews';
 import { isPreviewEnv } from './runtime-env';
 
 const getProductRecords = unstable_cache(async (): Promise<CatalogueRecord[]> => {
@@ -36,6 +37,6 @@ const getProductRecords = unstable_cache(async (): Promise<CatalogueRecord[]> =>
 // Metadata, page content and discovery all use the same identities and guarded prices.
 // Reapply freshness at render time rather than caching a derived eligibility decision.
 export const getProductCatalogue = cache(async () => {
-  const [records, prices] = await Promise.all([getProductRecords(), getAllLatestPrices()]);
-  return buildProductCatalogue(records, prices);
+  const [records, prices, reviews] = await Promise.all([getProductRecords(), getAllLatestPrices(), getCurrentPairReviews()]);
+  return buildProductCatalogue(records, prices, Date.now(), reviews);
 });

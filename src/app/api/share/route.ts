@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-
 // 16 chars × 5 bits (32-char alphabet) = 80 bits of entropy
 function randomId(len = 16) {
   const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -14,9 +13,9 @@ function randomId(len = 16) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { items, store_totals, family_size, generated_at } = body;
+    const { items, family_size, generated_at } = body;
 
-    if (!items?.length || !store_totals || !family_size) {
+    if (!Array.isArray(items) || !items.length || !family_size) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -27,8 +26,12 @@ export async function POST(req: Request) {
       .insert({
         id,
         family_size,
-        items,
-        store_totals,
+        // A client-claimed "verified_exact" item label is not re-verified here, so it is stored as indicative.
+        items: (items as unknown[]).map(item => item && typeof item === 'object' && (item as { price_comparison?: unknown }).price_comparison === 'verified_exact'
+          ? { ...item, price_comparison: 'indicative' } : item),
+        // This route is public and unauthenticated: client-supplied totals cannot be trusted, and the share page
+        // labels the first one "best value". No totals are persisted from client input.
+        store_totals: [],
         generated_at: generated_at ?? new Date().toISOString(),
       });
 

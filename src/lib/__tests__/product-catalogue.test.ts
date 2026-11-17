@@ -63,7 +63,10 @@ describe('public product discovery and evidence', () => {
 
   it('marks up only visible offers and links every listed identity to its own page', () => {
     const products = buildProductCatalogue([record], [offer(), offer({ store: 'tesco', price: 2.1 })], now);
-    expect(productStructuredData(products[0], 'https://supermarket.ie').offers).toMatchObject({ '@type': 'AggregateOffer', offerCount: 2, lowPrice: '2.10', highPrice: '2.25' });
+    // Two stores' offers are not verified as the same product: no cross-store low/high range is published.
+    expect(productStructuredData(products[0], 'https://supermarket.ie').offers).toBeUndefined();
+    const [single] = buildProductCatalogue([record], [offer()], now);
+    expect(productStructuredData(single, 'https://supermarket.ie').offers).toMatchObject({ '@type': 'Offer', price: '2.25' });
     expect(catalogueItemList(products, 'Dairy', '/shop/dairy', 'https://supermarket.ie').itemListElement[0].url).toBe('https://supermarket.ie/browse/whole-milk-2l');
     const [unsafe] = buildProductCatalogue([{ ...record, image_url: 'javascript:alert(1)' }], [offer({ store_url: 'javascript:alert(1)', was_price: 2 })], now);
     expect(unsafe.imageUrl).toBeNull();

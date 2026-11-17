@@ -50,15 +50,21 @@ export async function GET(request: Request) {
         currency: 'EUR',
         updated_at: list.generated_at,
         item_count: items.length,
+        // Complete baskets of independently verified exact matches only; empty when none is supported.
         store_totals: list.store_totals.map(st => ({
           store: st.store,
           weekly_basket_total: st.total,
+          basis: 'verified_exact',
         })),
+        store_totals_basis: list.comparison_basis ?? 'indicative',
         products: items.map(i => ({
           name: i.canonical_name,
           category: i.category,
           best_price: i.best_price,
           best_store: i.best_store,
+          // 'verified_exact' only when every store's offer is an approved exact match; otherwise the
+          // stores may sell different products and best_price is just the lowest current price.
+          price_comparison: i.price_comparison ?? 'indicative',
         })),
       };
       return NextResponse.json(data, { headers: corsHeaders() });
@@ -176,13 +182,15 @@ function buildTextSummary(
     'supermarket.ie provides live grocery price comparisons across Irish supermarkets.',
     `Data last updated: ${list.generated_at}.`,
     `Stores covered: Tesco Ireland, Dunnes Stores, SuperValu.`,
-    `Weekly basket totals: ${list.store_totals.map(s => `${s.store} €${s.total.toFixed(2)}`).join(', ')}.`,
+    list.store_totals.length
+      ? `Verified like-for-like weekly basket totals: ${list.store_totals.map(s => `${s.store} €${s.total.toFixed(2)}`).join(', ')}.`
+      : 'No like-for-like weekly basket total is published: products across stores are not all independently verified as the same item.',
     '',
-    'Sample products and best prices (EUR):',
+    'Sample products with each store\'s own product title and price (EUR). "Lowest" is not a claim that the products are identical unless marked verified:',
     ...items.slice(0, 20).map(i =>
-      `- ${i.canonical_name}: best price €${i.best_price.toFixed(2)} at ${i.best_store}` +
+      `- ${i.canonical_name}: ${i.price_comparison === 'verified_exact' ? 'verified exact match, best' : 'lowest'} price €${i.best_price.toFixed(2)} at ${i.best_store}` +
       (i.all_prices.length > 1
-        ? ` (also: ${i.all_prices.filter(p => p.store !== i.best_store).map(p => `${p.store} €${p.price.toFixed(2)}`).join(', ')})`
+        ? ` (${i.all_prices.map(p => `${p.store}: ${p.store_product_name} €${p.price.toFixed(2)}`).join('; ')})`
         : '')
     ),
     '',

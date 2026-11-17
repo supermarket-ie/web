@@ -57,6 +57,96 @@ NEXT VERIFICATION ROUTE: SuperValu↔Tesco.
 - With SuperValu evidence runs, both sides can satisfy the ledger. No Dunnes
   involvement.
 
+## 17 November 2026 — Comparison safety: unverified canonical associations are no longer treated as the same product (PR, NOT deployed)
+
+Customer-facing change, pending review. Not merged or deployed.
+
+- ONE RULE (`src/lib/comparison-policy.ts`):
+  - `classifyOfferGroup` (pair-review ledger) now also marks an unreviewed pair
+    Different product when stated facts contradict:
+    - two unambiguous packs differ (single unit or explicit N x M; "6 Pack (270 g)" is ambiguous and ignored)
+    - an identity/variant conflict
+    - retailer own-label on either side
+  - `compareBasket` is the only source of cross-store totals and cheapest claims.
+    A cheapest store needs ≥ 2 complete baskets in which every line is an approved
+    Exact match among those stores. Otherwise stores are listed by coverage, never
+    by price, and totals are indicative.
+  - Labels: Exact match / Similar product / Unverified / Different product or pack.
+  - A verified cheapest claim needs EVERY pair among the compared stores to be
+    an approved exact match (`allPairsExact`); exactness is not transitive
+    through the Tesco anchor. Per-offer labels: the largest pairwise-exact set
+    is Exact match, every other reviewed offer is Similar product.
+- Paths fixed:
+  - Lightweight-agent `compare_shop_stores`: per-line retailer title, price, unit
+    price and label; `cheapest_verified_store` only when verified; the tool
+    description forbids other cheapest claims.
+  - `present_household_shop` / `groundHouseholdShop`: per-offer
+    `comparison_status` and `unit_price`. `single_retailer` only for a verified
+    cheapest basket, else the new `indicative_single_retailer`. Different-product
+    lines are listed and excluded from store totals.
+  - `generateList`: store totals and `recommended_store` only for verified
+    baskets. Items carry `price_comparison`, and the list card shows each
+    retailer's title and unit price with an indicative or different-products note.
+  - `/api/plan/reprice`: current prices only. Missing items are never filled with
+    historical paid prices. No cheapest store or saving without a verified basket.
+  - `/api/plan/refresh` and price-change notices: the same store and same items
+    only. No "promotion at a different store" count.
+  - Persisted `store_totals` (saved lists, share pages, `/api/lists`, agent
+    context, the public products API): `sanitizeStoreTotals` shows only totals
+    marked `verified_exact`. Legacy totals are hidden, not migrated.
+  - Product-page JSON-LD: no cross-store AggregateOffer unless verified. The page
+    shows labels and unit prices.
+  - Weekly-shop: a separate `verifiedExactTotal` (excludes Similar products).
+  - Agent catalogue lookups label each store's offer and state that `best_price`
+    is the lowest price, not proof of the same product.
+- Effect today: the ledger has 0 approved edges, so NO cross-store cheapest claim
+  appears anywhere. Individual retailer prices and indicative totals remain visible.
+- Review fixes (semantic review 2026-11-17):
+  - Own-label detection limited to Dunnes/SuperValu/Tesco/Simply Better/
+    Signature Tastes (Aldi/Lidl/Deluxe/Specially Selected removed: brand false
+    positives). `readPack` reads trailing "125g x 4"; `unambiguousPack` makes
+    unit price null for ambiguous "8 Pack 454g". "2 x 150g" ≠ "300g" (policy).
+  - An APPROVED exact review is vetoed only by a deterministic difference, not by
+    an unparseable pack.
+  - `getCurrentPairReviews`: reviews ≤ 14 days (SQL filter), 60 s cache.
+  - `/api/lists` POST and `/api/share` persist `store_totals: []`: client totals
+    are forgeable, so a client `verified_exact` flag is never trusted.
+    `save-from-planner` passes pair reviews to `compareBasket`.
+  - Eve (`agent/`) DID change: `compare_shop_stores` reads exact/fresh offers
+    (paged) with retailer titles and offer ids, but has no pair reviews, so it is
+    always indicative. `loadCurrentShop` and session context pass only
+    sanitized totals; `recommended_store` is withheld unless verified. Eve write
+    tools still return per-store SPEND breakdowns of the shopper's own
+    selections (not cross-store comparisons).
+  - `compare.ts`: `retailer_product_name` null when unknown (no canonical
+    fallback). HouseholdShopCard verified headline needs a `verified_exact` row.
+  - Watchdog email "Best split for maximum savings" → "Price drops by store"
+    (same-store drops only); suggestion detail "Currently from" → "Listed at";
+    deals/automations copy no longer promises "cheapest". SmartRefreshCard
+    shows a saving only with a complete total.
+  - `fetchCurrentExactOffers` (`src/lib/shopping/current-offers.ts`): one
+    paged exact/fresh latest_prices reader for `/api/plan/refresh`,
+    `/api/plan/reprice` and `queryPriceChanges` (watchdog, weekly notice).
+  - Saved verified totals expire with the 14-day review horizon
+    (`sanitizeStoreTotals(totals, computedAt)`; unknown time fails closed).
+    `/api/share` also downgrades client-claimed `verified_exact` item labels.
+  - HouseholdShopCard lists every other retailer's offer per line (price,
+    retailer title, unit price, label).
+- Flagged to owner (NOT changed): hardcoded price claims in `src/lib/blog.ts`;
+  `/api/plan/weekly` persists a client `store_assignment`; `/api/plan/reprice`
+  still includes Aldi (no own-label prefix rule for Aldi ranges);
+  `TestimonialsSection.tsx` quotes ("€2 cheaper at Dunnes", "from the
+  cheapest stores") are attributed testimonials, left for the owner.
+- Known limits: saved-total expiry runs from save time, not evidence time (a
+  total saved on a review's day 13 stays visible ~14 more days).
+  `/api/plan/refresh` returns 500 (uncached) if current prices cannot be read;
+  price-change notices log and send nothing.
+- NOT changed:
+  - The unused `src/components/ProductPrices.tsx`.
+- Tests: `comparison-safety.test.ts` and `comparison-safety-paths.test.ts`
+  (Flahavan's/Lifeforce, incomplete baskets, different packs, own-label, verified
+  cheapest), plus updated household-shop, product-catalogue and sanitize tests.
+
 ## 15 November 2026 15:20Z — Apify limit raised; renewals restored; barcode provenance enforced; enrichment proposal
 
 - Owner raised the Apify account limit to $80 (used $19.05). Renewal on rev16

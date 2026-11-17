@@ -1,6 +1,7 @@
 import { defineDynamic, defineInstructions } from 'eve/instructions';
 import { agentSupabase } from '../lib/supabase';
 import { buildBoundedSessionContext } from '../lib/session-context';
+import { sanitizeStoreTotals } from '../../src/lib/saved-list-sanitize';
 import { messageText, selectEveCapabilities } from '../lib/instruction-routing';
 
 function weekStart(now: Date) {
@@ -37,7 +38,7 @@ export default defineDynamic({
       const context = buildBoundedSessionContext({
         now, capabilities,
         explicitFacts: household.data ?? null,
-        currentShop: shop.data ? { id: shop.data.id, name: shop.data.name, family_size: shop.data.family_size, generated_at: shop.data.generated_at, items: shopItems, store_totals: shop.data.store_totals } : null,
+        currentShop: shop.data ? { id: shop.data.id, name: shop.data.name, family_size: shop.data.family_size, generated_at: shop.data.generated_at, items: shopItems, store_totals: sanitizeStoreTotals(shop.data.store_totals, shop.data.generated_at) } : null,
         mealPlan: meals.data?.meals ?? null,
         recentBehaviour: [...counts.entries()].slice(0, 20).map(([canonical_name, evidence]) => ({ canonical_name, ...evidence, source: 'inferred_from_list_items' })),
         watches: (watches.data ?? []).map(row => ({ type: row.type, canonical_name: row.canonical_name, product_family: row.product_family, condition: row.condition })),

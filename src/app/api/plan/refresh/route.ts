@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { queryPriceChanges } from '@/lib/shopping/price-history';
+import { queryPriceChangesStrict } from '@/lib/shopping/price-history';
 import { getSubscriberId } from '@/lib/auth';
+import { fetchCurrentExactOffers } from '@/lib/shopping/current-offers';
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
@@ -19,7 +20,9 @@ export async function GET(req: NextRequest) {
 
   if (subscriber?.refresh_cache && subscriber?.refresh_cache_at) {
     const age = Date.now() - new Date(subscriber.refresh_cache_at).getTime();
-    if (age < CACHE_TTL_MS) return NextResponse.json(subscriber.refresh_cache);
+    const cached = subscriber.refresh_cache as { hasRecentList?: boolean; basis?: string };
+    // Reuse only results computed on the like-for-like basis (older cached results mixed stores).
+    if (age < CACHE_TTL_MS && (cached.hasRecentList === false || cached.basis === 'same_store_same_items')) return NextResponse.json(subscriber.refresh_cache);
   }
 
   const { data: lastList } = await supabaseAdmin
@@ -41,17 +44,45 @@ export async function GET(req: NextRequest) {
 
   const listAge = Date.now() - new Date(lastList.created_at).getTime();
   const daysSince = Math.floor(listAge / (1000 * 60 * 60 * 24));
-  const storeTotals = (lastList.store_totals ?? []) as Array<{ store: string; total: number }>;
-  const lastTotal = storeTotals.reduce((sum, t) => sum + t.total, 0);
-  const priceChanges = await queryPriceChanges(subscriberId);
+  // Like-for-like only: what was paid for the last list's items versus the SAME stores' current prices for
+  // those items. Other stores' offers on a canonical record are not verified to be the same product, and
+  // summing several stores' totals is not a basket at all.
+  const { data: lastItems } = await supabaseAdmin
+    .from('list_items')
+    .select('canonical_name, store, price_paid, quantity')
+    .eq('list_id', lastList.id)
+    .eq('subscriber_id', subscriberId);
+  const paid = (lastItems ?? []) as Array<{ canonical_name: string; store: string; price_paid: number; quantity: number | null }>;
+  const lastTotal = paid.reduce((sum, item) => sum + Number(item.price_paid) * (item.quantity ?? 1), 0);
+  // Only fresh, exact store offers count as a current price (paged past the 1,000-row default).
+  let current: Array<{ canonical_name: string; store: string; price: number }>;
+  try {
+    current = await fetchCurrentExactOffers(paid.map(i => i.canonical_name), 'canonical_name, store, price');
+  } catch {
+    return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 });
+  }
+  const sameStorePrice = (item: (typeof paid)[number]) => current
+    .filter(r => r.canonical_name === item.canonical_name && String(r.store).toLowerCase() === String(item.store).toLowerCase())
+    .reduce<number | null>((min, r) => (min === null || Number(r.price) < min ? Number(r.price) : min), null);
+  const repriced = paid.map(item => ({ item, now: sameStorePrice(item) }));
+  const unpriced = repriced.filter(r => r.now === null).length;
+  // A current total exists only when every item still has a current price at the store it was bought from.
+  const thisWeekTotal = paid.length && unpriced === 0
+    ? repriced.reduce((sum, r) => sum + r.now! * (r.item.quantity ?? 1), 0)
+    : null;
+  let priceChanges: Awaited<ReturnType<typeof queryPriceChangesStrict>>;
+  try {
+    priceChanges = await queryPriceChangesStrict(subscriberId);
+  } catch {
+    // Not cached: a transient read failure must not be served for an hour as "no price changes".
+    return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 });
+  }
 
   const cheaper = priceChanges.filter(c => c.direction === 'cheaper');
   const dearer = priceChanges.filter(c => c.direction === 'dearer');
-  const promoSwaps = priceChanges.filter(c => c.direction === 'cheaper' && c.best_store_now !== c.last_store);
   const cheaperAmount = cheaper.reduce((sum, c) => sum + Math.abs(c.change), 0);
   const dearerAmount = dearer.reduce((sum, c) => sum + c.change, 0);
-  const netChange = cheaperAmount - dearerAmount;
-  const thisWeekTotal = Math.max(0, lastTotal - netChange);
+  const netChange = thisWeekTotal === null ? cheaperAmount - dearerAmount : lastTotal - thisWeekTotal;
 
   const result = {
     hasRecentList: true,
@@ -65,12 +96,16 @@ export async function GET(req: NextRequest) {
     priceDiff: {
       cheaper: cheaper.length,
       dearer: dearer.length,
-      promoSwaps: promoSwaps.length,
+      // Cross-store "promotion elsewhere" counts are not produced: other stores' products are unverified.
+      promoSwaps: 0,
       cheaperAmount: Math.round(cheaperAmount * 100) / 100,
       dearerAmount: Math.round(dearerAmount * 100) / 100,
       netChange: Math.round(netChange * 100) / 100,
     },
-    thisWeekTotal: Math.round(thisWeekTotal * 100) / 100,
+    /** Same items at the same stores at today's prices; null when any item has no current price there. */
+    thisWeekTotal: thisWeekTotal === null ? null : Math.round(thisWeekTotal * 100) / 100,
+    unpricedItems: unpriced,
+    basis: 'same_store_same_items' as const,
   };
 
   supabaseAdmin

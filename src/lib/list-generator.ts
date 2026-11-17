@@ -1,6 +1,8 @@
 import { supabaseAdmin } from './supabase';
 import { withSupabaseRetry } from './supabase-resilience';
 import { NUTRITION, type NutritionData } from './nutrition-data';
+import { classifyOfferGroup, compareBasket, normalizedUnitPrice, type BasketLine, type ComparisonType, type PairReview } from './comparison-policy';
+import { getCurrentPairReviews } from './comparison-reviews';
 
 export type FamilySize = '1' | '2' | '3-4' | '5+';
 
@@ -9,6 +11,8 @@ export interface StorePrice {
   price: number;
   store_product_name: string;
   store_url: string | null;
+  comparison?: ComparisonType;
+  unit_price?: { price: number; per: 'kg' | 'l' | 'each' } | null;
 }
 
 export interface ListItem {
@@ -24,12 +28,17 @@ export interface ListItem {
   all_prices: StorePrice[];
   nutrition: NutritionData | null;
   store_overridden?: boolean;
+  /** Whether best_price is for the same product as the other stores' prices. Absent on legacy lists = indicative. */
+  price_comparison?: 'verified_exact' | 'indicative' | 'different_products' | 'single_store';
 }
 
 export interface SmartList {
   family_size: FamilySize;
+  /** Cheapest verified exact basket, or '' when no such claim is supported. */
   recommended_store: string;
-  store_totals: { store: string; total: number }[];
+  /** Complete baskets of verified exact matches only (>= 2 stores), else empty. */
+  store_totals: { store: string; total: number; item_count?: number; basis?: 'verified_exact' }[];
+  comparison_basis?: 'verified_exact' | 'indicative' | 'incomplete';
   items: ListItem[];
   generated_at: string;
 }
@@ -63,21 +72,35 @@ export async function generateList(
   // `latest_prices` is the fail-closed trusted-offer boundary. Never rebuild
   // current offers from raw observations here: that would admit stale prices,
   // unresolved identity and observations without trusted provenance.
-  const { data: trustedOffers, error: offerError } = await withSupabaseRetry(
-    'latest_prices.generate_list',
-    () => supabaseAdmin
-      .from('latest_prices')
-      .select('canonical_product_id, canonical_name, category, store, store_product_name, store_url, price'),
-  );
+  const [{ data: trustedOffers, error: offerError }, reviews] = await Promise.all([
+    withSupabaseRetry(
+      'latest_prices.generate_list',
+      () => supabaseAdmin
+        .from('latest_prices')
+        .select('canonical_product_id, canonical_name, category, store, store_product_id, store_product_name, store_url, price'),
+    ),
+    getCurrentPairReviews(),
+  ]);
 
   if (offerError) throw offerError;
+  return buildSmartList((trustedOffers ?? []) as TrustedListOffer[], reviews, familySize, customisations, quantity, removedSet, addedSet, overrides);
+}
 
-  type PriceInfo = { price: number; store_product_name: string; store_url: string | null };
+export type TrustedListOffer = { canonical_product_id: string; canonical_name: string; category: string | null; store: string;
+  store_product_id?: string | null; store_product_name: string; store_url: string | null; price: number };
+
+/** Pure: builds the list from trusted offers. Cross-store totals and "recommended store" follow compareBasket. */
+export function buildSmartList(
+  trustedOffers: TrustedListOffer[], reviews: PairReview[], familySize: FamilySize, customisations: ListCustomisations | undefined,
+  quantity = Math.ceil(getMultiplier(familySize)), removedSet = new Set(customisations?.removedItems ?? []),
+  addedSet = new Set(customisations?.addedItems ?? []), overrides = customisations?.storeOverrides ?? {}, now = Date.now(),
+): SmartList {
+  type PriceInfo = { price: number; store_product_name: string; store_url: string | null; store_product_id?: string | null };
   type ProductEntry = { canonical_name: string; category: string | null; stores: Map<string, PriceInfo> };
 
   const byProduct = new Map<string, ProductEntry>();
 
-  for (const offer of trustedOffers ?? []) {
+  for (const offer of trustedOffers) {
     const productId = String(offer.canonical_product_id);
     const price = Number(offer.price);
     if (!productId || !Number.isFinite(price) || price <= 0) continue;
@@ -93,12 +116,13 @@ export async function generateList(
     byProduct.get(productId)!.stores.set(offer.store, {
       price,
       store_product_name: offer.store_product_name,
-      store_url: offer.store_url
+      store_url: offer.store_url,
+      store_product_id: offer.store_product_id,
     });
   }
 
   const items: ListItem[] = [];
-  const storeTotals = new Map<string, number>();
+  const basketLines: BasketLine[] = [];
 
   for (const [productId, { canonical_name, category, stores }] of byProduct) {
     if (stores.size < 2 && !addedSet.has(productId)) continue;
@@ -120,16 +144,23 @@ export async function generateList(
       }
     }
 
-    for (const [store, { price }] of stores) {
-      storeTotals.set(store, (storeTotals.get(store) ?? 0) + price * quantity);
-    }
+    const offers = Array.from(stores.entries()).map(([store, info]) => ({ store, storeProductId: info.store_product_id ?? undefined,
+      name: info.store_product_name, price: info.price }));
+    basketLines.push({ id: productId, quantity, offers });
+    const status = classifyOfferGroup(offers, reviews, now);
+    const statuses = Object.values(status);
+    const priceComparison: ListItem['price_comparison'] = stores.size < 2 ? 'single_store'
+      : statuses.every(s => s === 'exact_product') ? 'verified_exact'
+      : statuses.some(s => s === 'not_comparable') ? 'different_products' : 'indicative';
 
     const allPrices: StorePrice[] = Array.from(stores.entries())
       .map(([store, info]) => ({
         store,
         price: info.price,
         store_product_name: info.store_product_name,
-        store_url: info.store_url
+        store_url: info.store_url,
+        comparison: status[store] ?? 'unverified',
+        unit_price: normalizedUnitPrice(info.store_product_name, info.price),
       }))
       .sort((a, b) => a.price - b.price);
 
@@ -149,19 +180,26 @@ export async function generateList(
       all_prices: allPrices,
       nutrition: NUTRITION[canonical_name] ?? null,
       store_overridden: !!overrideStore && bestPrice > cheapestPrice,
+      price_comparison: priceComparison,
     });
   }
 
   items.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
 
-  const sortedStoreTotals = Array.from(storeTotals.entries())
-    .map(([store, total]) => ({ store, total: Math.round(total * 100) / 100 }))
-    .sort((a, b) => a.total - b.total);
+  // Store totals exist ONLY as complete baskets of independently verified exact matches (>= 2 stores).
+  // Summing whatever each store happens to stock would rank unequal, unverified baskets.
+  const comparison = compareBasket(basketLines, [...new Set(basketLines.flatMap(l => l.offers.map(o => o.store)))], reviews, now);
+  const verifiedTotals = comparison.cheapestVerified
+    ? comparison.stores.filter(s => s.verifiedExactTotal !== null)
+      .map(s => ({ store: s.store, total: Math.round(s.verifiedExactTotal! * 100) / 100, item_count: s.totalLines, basis: 'verified_exact' as const }))
+      .sort((a, b) => a.total - b.total)
+    : [];
 
   return {
     family_size: familySize,
-    recommended_store: sortedStoreTotals[0]?.store ?? '',
-    store_totals: sortedStoreTotals,
+    recommended_store: comparison.cheapestVerified?.store ?? '',
+    store_totals: verifiedTotals,
+    comparison_basis: comparison.basis,
     items,
     generated_at: new Date().toISOString()
   };

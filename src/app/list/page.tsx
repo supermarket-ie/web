@@ -164,7 +164,7 @@ export default async function ListPage({
   }
 
   const structuredItems = sanitizeStructuredItems(activeList.items);
-  const storeTotals = sanitizeStoreTotals(activeList.store_totals);
+  const storeTotals = sanitizeStoreTotals(activeList.store_totals, activeList.generated_at ?? activeList.created_at);
   const decisionTrace = (activeList.agent_decision_trace ?? null) as DecisionTrace | null;
 
   return (
@@ -183,7 +183,7 @@ export default async function ListPage({
         allLists={lists.map(l => ({
           id: l.id,
           name: l.name,
-          store_totals: sanitizeStoreTotals(l.store_totals),
+          store_totals: sanitizeStoreTotals(l.store_totals, l.generated_at ?? l.created_at),
           created_at: l.created_at,
         }))}
         activeListId={activeList.id}

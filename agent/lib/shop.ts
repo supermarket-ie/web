@@ -1,4 +1,5 @@
 import { agentSupabase } from './supabase';
+import { sanitizeStoreTotals } from '../../src/lib/saved-list-sanitize';
 import { OptimisticConcurrencyError } from './optimistic-retry';
 import { computeBasketStoreTotals } from '../../src/lib/shopping/basket';
 import { requireCanonicalProductId, requireMatchingTrustedOffer, requireSensibleQuantity } from '../../src/lib/shopping/action-gates';
@@ -70,8 +71,13 @@ export async function loadCurrentShop(subscriberId: string) {
   if (error) throw new Error(`Unable to load the current shop: ${error.message}`);
   if (!data) return null;
 
+  // Only fresh verified-exact totals reach the model; legacy totals compared unverified products, so the
+  // legacy recommended store is withheld unless it is the cheapest verified total.
+  const storeTotals = sanitizeStoreTotals(data.store_totals, data.generated_at ?? data.created_at);
   return {
     ...data,
+    store_totals: storeTotals,
+    recommended_store: storeTotals[0]?.store ?? null,
     items: ((data.items ?? []) as AgentListItem[]).map(item => ({ ...item })),
   };
 }

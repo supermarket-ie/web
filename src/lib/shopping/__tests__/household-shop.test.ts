@@ -22,7 +22,8 @@ const row = (
   category: catalogue.find(product => product.canonical_product_id === productId)?.category ?? null,
   store_product_id: `${store}-${productId}`,
   store,
-  store_product_name: `${store} product`,
+  // Realistic branded titles: a "<retailer> ..." title is retailer own-label and never the same product cross-store.
+  store_product_name: catalogue.find(product => product.canonical_product_id === productId)?.canonical_name ?? 'Unknown',
   store_sku: `${store}-sku`,
   store_url: `https://example.test/${store}/${productId}`,
   price,
@@ -128,9 +129,44 @@ describe('groundHouseholdShop', () => {
     expect(result.totals.by_selected_retailer).toEqual([
       { retailer: 'dunnes', total: 8, lines: 2, units: 3 },
     ]);
-    expect(result.store_coverage[0]).toMatchObject({ retailer: 'dunnes', complete: true, basket_total: 8 });
-    expect(result.recommended_retailer_strategy.kind).toBe('single_retailer');
+    // Same titles, no independent review: totals are shown but indicative, and no store is named cheapest.
+    expect(result.store_coverage[0]).toMatchObject({ retailer: 'dunnes', complete: true, basket_total: 8, comparison_basis: 'indicative', verified_exact_total: null });
+    expect(result.recommended_retailer_strategy).toMatchObject({ kind: 'indicative_single_retailer', retailer: null });
+    expect(result.items[0].candidate_offers.every(o => o.comparison_status === 'unverified')).toBe(true);
     expect(result.provenance).toMatchObject({ price_boundary: 'latest_prices', totals_calculated_by: 'server' });
+  });
+
+  it('names the cheapest store only for complete baskets of independently verified exact matches', () => {
+    const at = new Date(Date.now() - 3600_000).toISOString();
+    const review = (a: string, b: string) => ({ left_offer_id: a, right_offer_id: b, classification: 'exact_product' as const,
+      left_source_hash: 'a'.repeat(64), right_source_hash: 'b'.repeat(64), left_captured_at: at, right_captured_at: at, reviewed_at: at,
+      rationale: 'Independent direct-capture review.', reviewer: 'test' });
+    const result = groundHouseholdShop({
+      pair_reviews: [review('dunnes-milk-id', 'supervalu-milk-id'), review('dunnes-cleaner-id', 'supervalu-cleaner-id')],
+      proposal,
+      catalogue_products: catalogue,
+      latest_prices: [row('milk-id', 'dunnes', 2.5), row('milk-id', 'supervalu', 2.75), row('cleaner-id', 'dunnes', 3), row('cleaner-id', 'supervalu', 3.25)],
+      comparison_retailers: ['dunnes', 'supervalu'],
+    });
+    expect(result.recommended_retailer_strategy).toMatchObject({ kind: 'single_retailer', retailer: 'dunnes' });
+    expect(result.store_coverage[0]).toMatchObject({ retailer: 'dunnes', comparison_basis: 'verified_exact', verified_exact_total: 8 });
+    expect(result.items[0].candidate_offers.every(o => o.comparison_status === 'exact_product')).toBe(true);
+  });
+
+  it('keeps Flahavan\'s 1kg and Lifeforce 750g on a generic Muesli record out of every store total', () => {
+    const muesliCatalogue = [{ canonical_product_id: 'muesli-id', canonical_name: 'Muesli', category: 'Breakfast' }];
+    const offer = (store: string, name: string, price: number) => ({ ...row('muesli-id', store, price), canonical_name: 'Muesli', category: 'Breakfast', store_product_name: name });
+    const result = groundHouseholdShop({
+      proposal: { ...proposal, items: [{ ...proposal.items[0], line_id: 'muesli', canonical_product_id: 'muesli-id', display_label: 'Muesli', quantity: 1, unit_or_pack_expectation: 'one bag' }] },
+      catalogue_products: muesliCatalogue,
+      latest_prices: [offer('dunnes', "Flahavan's Hi8 Muesli Original 1kg", 5.5), offer('supervalu', 'Lifeforce Muesli (750 g)', 5.19)],
+      comparison_retailers: ['dunnes', 'supervalu'],
+    });
+    expect(result.items[0].candidate_offers.map(o => o.comparison_status)).toEqual(['not_comparable', 'not_comparable']);
+    expect(result.items[0].selected_offer?.retailer_product_name).toBe('Lifeforce Muesli (750 g)'); // still priced as a muesli choice
+    expect(result.store_coverage.every(s => !s.complete && s.basket_total === null && s.different_product_line_ids?.includes('muesli'))).toBe(true);
+    expect(result.recommended_retailer_strategy.kind).toBe('mixed_retailer');
+    expect(result.recommended_retailer_strategy.rationale).toMatch(/different products/);
   });
 
   it('downgrades an invalid canonical product id to an unresolved need', () => {

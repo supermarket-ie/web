@@ -65,6 +65,31 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
   if (!result) return null;
 
   const { bestSplitTotal, splitBreakdown, bestSingleStore, savings } = result;
+
+  // No verified like-for-like basket: show each store's coverage, never a cheapest store or a saving.
+  if (!bestSingleStore || savings === null || bestSplitTotal === null) {
+    return (
+      <div className="rounded-xl p-4 mb-4 border" style={{ background: 'var(--surface-container-low)', borderColor: 'var(--outline-variant)' }}>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-base">🏪</span>
+          <span className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>Store prices for your list</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {result.singleStoreTotals.filter(s => s.itemsCovered > 0).map(s => (
+            <div key={s.store} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium"
+              style={{ background: 'var(--surface-container)', color: 'var(--on-surface)' }}>
+              <span className="w-2 h-2 rounded-full inline-block" style={{ background: getStoreBadgeStyle(s.store).backgroundColor }} />
+              {storeDisplayName(s.store)}
+              <span className="font-bold">€{s.total.toFixed(2)}</span>
+              <span style={{ opacity: 0.6 }}>({s.itemsCovered}/{result.itemCount} items)</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs" style={{ color: 'var(--on-surface-variant)', opacity: 0.8 }}>{result.explanation}</p>
+      </div>
+    );
+  }
+
   const worthSplitting = savings >= 3 && splitBreakdown.length > 1;
 
   return (

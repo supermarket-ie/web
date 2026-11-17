@@ -53,7 +53,7 @@ export async function buildHouseholdBriefing(subscriberId: string): Promise<Hous
         kind: 'price_drop',
         priority: (isFrequent ? 50 : 25) + Math.min(30, Math.abs(change.change) * 5),
         title: `${change.canonical_name} is ${euro(change.change)} cheaper`,
-        body: `Best current price is €${change.best_price_now.toFixed(2)} at ${change.best_store_now}.`,
+        body: `Now €${change.best_price_now.toFixed(2)} at ${change.best_store_now}, where you last bought it.`,
         canonicalName: change.canonical_name,
         action: 'add_to_list',
       });
@@ -62,7 +62,7 @@ export async function buildHouseholdBriefing(subscriberId: string): Promise<Hous
         kind: 'price_rise',
         priority: 25 + Math.min(20, change.change * 4),
         title: `${change.canonical_name} has gone up ${euro(change.change)}`,
-        body: `It is currently €${change.best_price_now.toFixed(2)} at ${change.best_store_now}. I can look for an alternative when you build your shop.`,
+        body: `It is currently €${change.best_price_now.toFixed(2)} at ${change.best_store_now}, where you last bought it. I can look for an alternative when you build your shop.`,
         canonicalName: change.canonical_name,
         action: 'review',
       });

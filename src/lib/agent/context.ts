@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { catalogueSupabase } from './supabase';
+import { sanitizeStoreTotals } from '../saved-list-sanitize';
 
 /**
  * Stable base system prompt. We read the SAME `agent/instructions.md` the Eve
@@ -181,7 +182,8 @@ export async function buildSystemPrompt(input: BuildSystemPromptInput): Promise<
             family_size: shopData.family_size,
             generated_at: shopData.generated_at,
             items: shopItems,
-            store_totals: shopData.store_totals,
+            // Only verified-exact basket totals; the agent must not repeat legacy unverified "cheapest" totals.
+            store_totals: sanitizeStoreTotals(shopData.store_totals, shopData.generated_at),
           }
         : null,
     },

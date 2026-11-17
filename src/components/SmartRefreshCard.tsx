@@ -17,7 +17,9 @@ export interface RefreshData {
     dearerAmount: number;
     netChange: number;
   };
-  thisWeekTotal: number;
+  /** The same items at the same stores at today's prices; null when an item has no current price there. */
+  thisWeekTotal: number | null;
+  unpricedItems?: number;
 }
 
 interface SmartRefreshCardProps {
@@ -28,7 +30,8 @@ interface SmartRefreshCardProps {
 
 export function SmartRefreshCard({ data, onSameAgain, onModify }: SmartRefreshCardProps) {
   const { lastList, priceDiff, thisWeekTotal, daysSince } = data;
-  const saving = priceDiff.netChange > 0;
+  // A saving is only claimed against a complete like-for-like total.
+  const saving = thisWeekTotal !== null && priceDiff.netChange > 0;
   const stale = daysSince >= 14;
 
   return (
@@ -103,13 +106,18 @@ export function SmartRefreshCard({ data, onSameAgain, onModify }: SmartRefreshCa
         style={{ background: saving ? 'var(--primary-container)' : 'var(--surface-container)' }}
       >
         <span className="text-xs font-medium" style={{ color: 'var(--on-surface-variant)' }}>
-          Net this week
+          Same items, same stores, today
         </span>
         <div className="text-right">
           <span className="text-base font-bold" style={{ color: saving ? 'var(--primary)' : 'var(--on-surface)' }}>
-            €{thisWeekTotal.toFixed(2)}
+            {thisWeekTotal === null ? '—' : `€${thisWeekTotal.toFixed(2)}`}
           </span>
-          {priceDiff.netChange !== 0 && (
+          {thisWeekTotal === null && (
+            <span className="block text-[10px]" style={{ color: 'var(--on-surface-variant)' }}>
+              {data.unpricedItems ?? 0} item(s) have no current price at the store you used
+            </span>
+          )}
+          {thisWeekTotal !== null && priceDiff.netChange !== 0 && (
             <span
               className="text-xs ml-1.5"
               style={{ color: saving ? '#16a34a' : '#dc2626' }}

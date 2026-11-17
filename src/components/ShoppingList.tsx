@@ -246,7 +246,7 @@ export function ShoppingList({
         body: JSON.stringify({
           items: items.map(i => ({
             canonical_name: i.canonical_name, category: i.category,
-            best_store: i.best_store, best_price: i.best_price, all_prices: i.all_prices,
+            best_store: i.best_store, best_price: i.best_price, all_prices: i.all_prices, price_comparison: i.price_comparison,
           })),
           store_totals: storeTotals ?? [],
           family_size: familySize ?? '2',

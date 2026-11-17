@@ -7,6 +7,7 @@ import {
 import type { CataloguePriceRow } from '../shopping/catalogue-core';
 import { groundHouseholdShop } from '../shopping/household-shop';
 import { compareBasketStores } from '../shopping/compare';
+import { getCurrentPairReviews } from '../comparison-reviews';
 import { findDietaryViolations } from '../list-validation';
 import { getSubstitutes as getEpicureSubstitutes } from '../epicure-client';
 // Reuse the Eve runtime's shopping helpers directly — these are the SAME
@@ -180,7 +181,9 @@ function presentHouseholdShopTool() {
         })) satisfies CataloguePriceRow[],
       );
 
+      const reviews = await getCurrentPairReviews();
       const shop = groundHouseholdShop({
+        pair_reviews: reviews,
         proposal: resolvedProposal,
         catalogue_products: catalogueProducts,
         latest_prices: priceRows.map(offer => ({
@@ -211,12 +214,13 @@ function presentHouseholdShopTool() {
 // ---------------------------------------------------------------------------
 // compare_shop_stores — wraps compareBasketStores (read-only prices)
 // ---------------------------------------------------------------------------
-type ComparePriceRow = { canonical_name: string; store: string; price: number; on_promotion: boolean | null };
+type ComparePriceRow = { canonical_name: string; store: string; price: number; on_promotion: boolean | null;
+  store_product_id: string | null; store_product_name: string | null; relationship_type: string | null; freshness_state: string | null };
 
 function compareShopStoresTool() {
   return tool({
     description:
-      'Compare a basket of exact catalogue products across supermarkets using current catalogue prices. Returns coverage and comparable basket totals by store. Use for questions like “would it be worth doing this all in Dunnes?”. A store missing any product is never presented as a complete basket total.',
+      'Compare a basket of catalogue products across supermarkets using current retailer prices. Returns, per store, each retailer’s own product title, price, unit price and a comparison label (Exact match, Similar product, Unverified, Different product), plus coverage. A cheapest store is returned ONLY in cheapest_verified_store, when every item is an independently verified exact match at complete stores. Otherwise totals are indicative: never call a store cheapest, never say products are the same, and say which items differ or are unverified. A store missing any product is never presented as a complete basket total.',
     inputSchema: z.object({
       items: z
         .array(
@@ -232,10 +236,13 @@ function compareShopStoresTool() {
     }),
     async execute({ items, store }) {
       const names = [...new Set(items.map(item => item.canonical_name).filter(Boolean))];
-      const { data, error } = await catalogueSupabase
-        .from('latest_prices')
-        .select('canonical_name, store, price, on_promotion')
-        .in('canonical_name', names);
+      const [{ data, error }, reviews] = await Promise.all([
+        catalogueSupabase
+          .from('latest_prices')
+          .select('canonical_name, store, price, on_promotion, store_product_id, store_product_name, relationship_type, freshness_state')
+          .in('canonical_name', names),
+        getCurrentPairReviews(),
+      ]);
       if (error) throw new Error(`Unable to compare current supermarket prices: ${error.message}`);
       const comparison = compareBasketStores(
         items.map(item => ({
@@ -243,18 +250,25 @@ function compareShopStoresTool() {
           quantity: item.quantity ?? 1,
           current_price: item.current_price ?? null,
         })),
-        ((data ?? []) as ComparePriceRow[]).map(row => ({
-          canonical_name: row.canonical_name,
-          store: row.store,
-          price: Number(row.price),
-        })),
+        ((data ?? []) as ComparePriceRow[])
+          .filter(row => row.relationship_type === 'exact' && row.freshness_state === 'fresh')
+          .map(row => ({
+            canonical_name: row.canonical_name,
+            store: row.store,
+            price: Number(row.price),
+            store_product_id: row.store_product_id,
+            store_product_name: row.store_product_name,
+          })),
         store,
+        reviews,
       );
       return {
         ok: true as const,
         current_mixed_total: comparison.current_total,
+        comparison_basis: comparison.comparison_basis,
+        cheapest_verified_store: comparison.cheapest_verified_store,
         comparisons: comparison.comparisons,
-        note: 'Only exact catalogue products are compared. A store with missing products is not presented as a complete basket total.',
+        note: comparison.explanation,
       };
     },
   });

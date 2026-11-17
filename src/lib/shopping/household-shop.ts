@@ -9,8 +9,13 @@ import {
   type TrustedHouseholdShopOfferRow,
 } from './household-shop-contract';
 import { hasConfirmedRequestedPack, hasProductIdentityConflict } from './product-identity';
+import { COMPARISON_EXPLANATIONS, compareBasket, normalizedUnitPrice, type PairReview } from '../comparison-policy';
+const RETAILER_NAMES: Record<string, string> = { tesco: 'Tesco', dunnes: 'Dunnes Stores', supervalu: 'SuperValu' };
+const retailerName = (store: string) => RETAILER_NAMES[store.toLowerCase()] ?? store;
 
 export type GroundHouseholdShopInput = {
+  /** Current independently reviewed pair edges. Without them no cross-store equivalence is claimed. */
+  pair_reviews?: PairReview[];
   proposal: unknown;
   catalogue_products: TrustedCatalogueProduct[];
   latest_prices: TrustedHouseholdShopOfferRow[];
@@ -145,44 +150,63 @@ export function groundHouseholdShop(input: GroundHouseholdShopInput): HouseholdS
     selectedByRetailer.set(retailer, row);
   }
 
-  const storeCoverage = comparisonRetailers.map(retailer => {
-    let total = 0;
-    const missing: string[] = [];
-    for (const item of items) {
-      const offer = item.candidate_offers.find(candidate => candidate.retailer.toLowerCase() === retailer.toLowerCase());
-      if (!offer) missing.push(item.line_id);
-      else total += offer.current_price * item.quantity;
-    }
-    const complete = missing.length === 0;
+  // Cross-store coverage and any "cheapest" claim come from the shared comparison rule: a store's basket
+  // total exists only when every line has a comparable offer there, and a store is recommended as the
+  // cheapest only when its basket is made of independently verified exact matches.
+  const comparison = compareBasket(items.map(item => ({ id: item.line_id, quantity: item.quantity,
+    offers: item.candidate_offers.map(o => ({ store: o.retailer.toLowerCase(), storeProductId: o.retailer_product_id, name: o.retailer_product_name, price: o.current_price })) })),
+  comparisonRetailers.map(r => r.toLowerCase()), input.pair_reviews ?? []);
+  for (const item of items) for (const offer of item.candidate_offers) {
+    const line = comparison.stores.find(s => s.store === offer.retailer.toLowerCase())?.lines.find(l => l.id === item.line_id);
+    offer.comparison_status = line && line.status !== 'missing' ? line.status : 'unverified';
+    offer.unit_price = normalizedUnitPrice(offer.retailer_product_name, offer.current_price);
+  }
+  const storeCoverage = comparison.stores.map(s => {
+    const retailer = comparisonRetailers.find(r => r.toLowerCase() === s.store) ?? s.store;
+    const lineIds = (status: string) => s.lines.filter(l => l.status === status).map(l => l.id);
     return {
       retailer,
-      covered_lines: items.length - missing.length,
-      total_lines: items.length,
-      complete,
-      basket_total: complete ? money(total) : null,
-      missing_line_ids: missing,
+      covered_lines: s.comparableLines,
+      total_lines: s.totalLines,
+      complete: s.completeTotal !== null,
+      basket_total: s.completeTotal === null ? null : money(s.completeTotal),
+      comparison_basis: s.verifiedExactTotal !== null ? 'verified_exact' as const : 'indicative' as const,
+      verified_exact_total: s.verifiedExactTotal === null ? null : money(s.verifiedExactTotal),
+      missing_line_ids: lineIds('missing'),
+      different_product_line_ids: lineIds('not_comparable'),
+      unverified_line_ids: lineIds('unverified'),
     };
-  }).sort((a, b) => Number(b.complete) - Number(a.complete) || (a.basket_total ?? Infinity) - (b.basket_total ?? Infinity));
+  });
 
-  const bestCompleteStore = storeCoverage.find(store => store.complete);
   const pricedLines = items.filter(item => item.selected_offer).length;
-  const strategy = bestCompleteStore
+  const cheapest = comparison.cheapestVerified;
+  const firstComplete = storeCoverage.find(store => store.complete);
+  const differs = storeCoverage.some(store => store.different_product_line_ids.length > 0);
+  const strategy = cheapest
     ? {
         kind: 'single_retailer' as const,
-        retailer: bestCompleteStore.retailer,
-        rationale: `${bestCompleteStore.retailer} has trusted current offers for every shop line.`,
+        retailer: storeCoverage.find(s => s.retailer.toLowerCase() === cheapest.store)!.retailer,
+        rationale: `${retailerName(cheapest.store)} is the cheapest complete basket of verified exact matches (${COMPARISON_EXPLANATIONS.verified})`,
       }
-    : pricedLines === items.length
+    : firstComplete
       ? {
-          kind: 'mixed_retailer' as const,
+          kind: 'indicative_single_retailer' as const,
           retailer: null,
-          rationale: 'No single retailer has trusted current coverage for every line; selected offers span retailers.',
+          rationale: `${storeCoverage.filter(s => s.complete).map(s => retailerName(s.retailer)).join(', ')} ${storeCoverage.filter(s => s.complete).length === 1 ? 'has' : 'have'} a current offer for every line. ${COMPARISON_EXPLANATIONS.indicative}`,
         }
-      : {
-          kind: 'insufficient_coverage' as const,
-          retailer: null,
-          rationale: 'One or more shop lines are unresolved or lack a trusted current offer.',
-        };
+      : pricedLines === items.length
+        ? {
+            kind: 'mixed_retailer' as const,
+            retailer: null,
+            rationale: differs
+              ? 'Retailers sell different products for some lines (different pack, variant or own-label), so no single-store total is comparable. Each selected offer shows its own retailer product.'
+              : 'No single retailer has trusted current coverage for every line; selected offers span retailers.',
+          }
+        : {
+            kind: 'insufficient_coverage' as const,
+            retailer: null,
+            rationale: 'One or more shop lines are unresolved or lack a trusted current offer.',
+          };
 
   return {
     schema_version: proposal.schema_version,

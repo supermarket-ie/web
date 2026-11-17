@@ -5,6 +5,8 @@ import { parseMarkdownList } from '@/lib/parse-planner-markdown';
 import { householdShopToolOutputSchema, type HouseholdShopContract } from '@/lib/shopping/household-shop-contract';
 import { groundHouseholdShop } from '@/lib/shopping/household-shop';
 import { isContinuationId } from '@/lib/registration-continuation';
+import { sanitizeStoreTotals } from '@/lib/saved-list-sanitize';
+import { getCurrentPairReviews } from '@/lib/comparison-reviews';
 
 function sessionToken(request: NextRequest, explicit?: string) {
   return request.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
@@ -29,7 +31,10 @@ async function repriceStructuredShop(input: unknown): Promise<HouseholdShopContr
     supabaseAdmin.from('latest_prices').select('canonical_product_id, canonical_name, category, store_product_id, store, store_product_name, store_sku, store_url, price, was_price, on_promotion, observed_at, source, relationship_type, freshness_state').in('canonical_product_id', ids),
   ]) : [{ data: [], error: null }, { data: [], error: null }];
   if (catalogue.error || prices.error) throw new Error('Unable to reprice structured household shop.');
+  // The same pair-review evidence the in-chat shop used, so a saved shop keeps verified totals.
+  const pairReviews = await getCurrentPairReviews();
   return groundHouseholdShop({
+    pair_reviews: pairReviews,
     proposal,
     catalogue_products: (catalogue.data ?? []).map(row => ({ canonical_product_id: String(row.id), canonical_name: row.canonical_name, category: row.category ?? null })),
     latest_prices: (prices.data ?? []).map(row => ({ ...row, canonical_product_id: String(row.canonical_product_id), store_product_id: String(row.store_product_id), price: Number(row.price), was_price: row.was_price == null ? null : Number(row.was_price), on_promotion: row.on_promotion === true, relationship_type: row.relationship_type as 'exact', freshness_state: row.freshness_state as 'fresh' })),
@@ -74,8 +79,11 @@ export async function POST(request: NextRequest) {
       on_promotion: item.selected_offer?.promotion.retailer_marked ?? false,
     })) : legacy!.items;
     const storeTotals = structured
-      ? structured.store_coverage.map(row => ({ store: row.retailer, total: row.basket_total, item_count: row.covered_lines, complete: row.complete }))
-      : legacy!.storeTotals;
+      // Persist only verified-exact basket totals; indicative store totals are not a like-for-like basis.
+      ? sanitizeStoreTotals(structured.store_coverage.map(row => ({ store: row.retailer, total: row.verified_exact_total ?? null,
+        item_count: row.covered_lines, basis: row.comparison_basis })), new Date())
+      // Legacy markdown totals are client text, never re-verified: none are persisted.
+      : [];
 
     const name = body.name ?? (structured ? `${structured.household.planning_period.label} household shop` : body.markdown!.split('\n').find(line => line.startsWith('# '))?.slice(2).trim()) ?? 'Weekly grocery list';
     const { data: saved, error } = await supabaseAdmin.from('saved_lists').insert({
