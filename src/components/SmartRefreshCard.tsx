@@ -30,7 +30,8 @@ interface SmartRefreshCardProps {
 
 export function SmartRefreshCard({ data, onSameAgain, onModify }: SmartRefreshCardProps) {
   const { lastList, priceDiff, thisWeekTotal, daysSince } = data;
-  const saving = priceDiff.netChange > 0;
+  // A saving is only claimed against a complete like-for-like total.
+  const saving = thisWeekTotal !== null && priceDiff.netChange > 0;
   const stale = daysSince >= 14;
 
   return (

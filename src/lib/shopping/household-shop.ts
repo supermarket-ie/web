@@ -10,6 +10,8 @@ import {
 } from './household-shop-contract';
 import { hasConfirmedRequestedPack, hasProductIdentityConflict } from './product-identity';
 import { COMPARISON_EXPLANATIONS, compareBasket, normalizedUnitPrice, type PairReview } from '../comparison-policy';
+const RETAILER_NAMES: Record<string, string> = { tesco: 'Tesco', dunnes: 'Dunnes Stores', supervalu: 'SuperValu' };
+const retailerName = (store: string) => RETAILER_NAMES[store.toLowerCase()] ?? store;
 
 export type GroundHouseholdShopInput = {
   /** Current independently reviewed pair edges. Without them no cross-store equivalence is claimed. */
@@ -184,13 +186,13 @@ export function groundHouseholdShop(input: GroundHouseholdShopInput): HouseholdS
     ? {
         kind: 'single_retailer' as const,
         retailer: storeCoverage.find(s => s.retailer.toLowerCase() === cheapest.store)!.retailer,
-        rationale: `${cheapest.store} is the cheapest complete basket of verified exact matches (${COMPARISON_EXPLANATIONS.verified})`,
+        rationale: `${retailerName(cheapest.store)} is the cheapest complete basket of verified exact matches (${COMPARISON_EXPLANATIONS.verified})`,
       }
     : firstComplete
       ? {
           kind: 'indicative_single_retailer' as const,
           retailer: null,
-          rationale: `${storeCoverage.filter(s => s.complete).map(s => s.retailer).join(', ')} ${storeCoverage.filter(s => s.complete).length === 1 ? 'has' : 'have'} a current offer for every line. ${COMPARISON_EXPLANATIONS.indicative}`,
+          rationale: `${storeCoverage.filter(s => s.complete).map(s => retailerName(s.retailer)).join(', ')} ${storeCoverage.filter(s => s.complete).length === 1 ? 'has' : 'have'} a current offer for every line. ${COMPARISON_EXPLANATIONS.indicative}`,
         }
       : pricedLines === items.length
         ? {

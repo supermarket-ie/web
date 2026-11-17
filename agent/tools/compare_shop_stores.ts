@@ -17,7 +17,7 @@ export default defineDynamic({
     'turn.started': (_event, ctx) =>
       ctx.session.auth.current?.principalType === 'user'
         ? defineTool({
-            description: 'Compare the household’s current exact shop across supermarkets using current catalogue prices. Returns coverage and comparable basket totals by store. Use for questions like “would it be worth doing this all in Dunnes?” or “which one store best fits this shop?”.',
+            description: 'Compare the household’s current shop across supermarkets using current catalogue prices. Returns coverage and INDICATIVE basket totals by store: the stores’ products are not verified as the same items, so never call a store cheapest or say the products are identical. Use for questions like “would it be worth doing this all in Dunnes?”.',
             inputSchema: z.object({
               store: z.string().min(2).max(60).optional().describe('Optional specific supermarket to compare against the current mixed-store shop.'),
             }),
@@ -33,7 +33,10 @@ export default defineDynamic({
                 ((data ?? []) as PriceRow[]).map(row => ({ canonical_name: row.canonical_name, store: row.store, price: Number(row.price) })),
                 input.store,
               );
-              return { ok: true, list_id: shop.id, current_mixed_total: comparison.current_total, comparisons: comparison.comparisons, note: 'Only exact catalogue products are compared. A store with missing products is not presented as a complete basket total.' };
+              // No retailer offer identities or pair reviews here, so totals are always indicative: never name a
+              // cheapest store or say the stores' products are the same.
+              return { ok: true, list_id: shop.id, current_mixed_total: comparison.current_total, comparison_basis: comparison.comparison_basis,
+                cheapest_verified_store: comparison.cheapest_verified_store, comparisons: comparison.comparisons, note: comparison.explanation };
             },
           })
         : null,

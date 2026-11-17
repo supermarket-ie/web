@@ -25,6 +25,10 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
   const unresolvedCount = shop.missing_or_uncertain_items.filter(item =>
     item.status === 'unresolved' || item.status === 'unavailable',
   ).length;
+  // A "cheapest verified" headline needs the recommended retailer's own coverage row to be verified_exact.
+  const verifiedRecommendation = shop.store_coverage.some(coverage =>
+    coverage.retailer.toLowerCase() === (shop.recommended_retailer_strategy.retailer ?? '').toLowerCase()
+    && coverage.comparison_basis === 'verified_exact' && coverage.verified_exact_total != null);
 
   return (
     <section className="w-full overflow-hidden rounded-[1.4rem] border border-[#dce6df] bg-white text-[#243128] shadow-[0_12px_35px_rgba(31,64,43,0.08)]">
@@ -103,6 +107,17 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
                           {item.selected_offer.comparison_status && item.candidate_offers.length > 1 && (
                             <p className="text-[10px] font-medium text-[#82591a]">{COMPARISON_LABELS[item.selected_offer.comparison_status]}</p>
                           )}
+                          {item.candidate_offers.filter(o => o.retailer !== item.selected_offer!.retailer).length > 0 && (
+                            <ul className="mt-1 max-w-[11rem] space-y-0.5 text-[10px] leading-4 text-[#7f8982]" aria-label={`Other retailers for ${item.display_label}`}>
+                              {item.candidate_offers.filter(o => o.retailer !== item.selected_offer!.retailer).map(o => (
+                                <li key={o.retailer_product_id}>
+                                  {storeName(o.retailer)} {euro(o.current_price)} · {o.retailer_product_name}
+                                  {o.unit_price ? ` · ${euro(o.unit_price.price)}/${o.unit_price.per}` : ''}
+                                  {o.comparison_status ? ` · ${COMPARISON_LABELS[o.comparison_status]}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                           {item.selected_offer.promotion.confirmed_monetary_saving ? (
                             <p className="text-[10px] font-medium text-[#08783b]">Save {euro(item.selected_offer.promotion.saving ?? 0)} each</p>
                           ) : item.selected_offer.promotion.retailer_marked ? (
@@ -145,8 +160,11 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
 
         <div className="mt-3 rounded-xl bg-[#edf7f0] px-3.5 py-3 text-xs leading-5 text-[#385443]">
           <strong className="text-[#21452e]">
-            {shop.recommended_retailer_strategy.kind === 'single_retailer'
+            {shop.recommended_retailer_strategy.kind === 'single_retailer' && verifiedRecommendation
               ? `${storeName(shop.recommended_retailer_strategy.retailer ?? '')} is the cheapest verified one-store basket.`
+              : shop.recommended_retailer_strategy.kind === 'single_retailer'
+                // Legacy output (older image or saved chat): "single_retailer" then meant full coverage only.
+                ? `${storeName(shop.recommended_retailer_strategy.retailer ?? '')} has a current offer for every line. Store totals are indicative.`
               : shop.recommended_retailer_strategy.kind === 'indicative_single_retailer'
                 ? 'Store totals are indicative.'
                 : shop.recommended_retailer_strategy.kind === 'mixed_retailer'

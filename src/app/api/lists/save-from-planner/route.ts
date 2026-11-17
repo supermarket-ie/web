@@ -6,6 +6,7 @@ import { householdShopToolOutputSchema, type HouseholdShopContract } from '@/lib
 import { groundHouseholdShop } from '@/lib/shopping/household-shop';
 import { isContinuationId } from '@/lib/registration-continuation';
 import { sanitizeStoreTotals } from '@/lib/saved-list-sanitize';
+import { getCurrentPairReviews } from '@/lib/comparison-reviews';
 
 function sessionToken(request: NextRequest, explicit?: string) {
   return request.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
@@ -30,7 +31,10 @@ async function repriceStructuredShop(input: unknown): Promise<HouseholdShopContr
     supabaseAdmin.from('latest_prices').select('canonical_product_id, canonical_name, category, store_product_id, store, store_product_name, store_sku, store_url, price, was_price, on_promotion, observed_at, source, relationship_type, freshness_state').in('canonical_product_id', ids),
   ]) : [{ data: [], error: null }, { data: [], error: null }];
   if (catalogue.error || prices.error) throw new Error('Unable to reprice structured household shop.');
+  // The same pair-review evidence the in-chat shop used, so a saved shop keeps verified totals.
+  const pairReviews = await getCurrentPairReviews();
   return groundHouseholdShop({
+    pair_reviews: pairReviews,
     proposal,
     catalogue_products: (catalogue.data ?? []).map(row => ({ canonical_product_id: String(row.id), canonical_name: row.canonical_name, category: row.category ?? null })),
     latest_prices: (prices.data ?? []).map(row => ({ ...row, canonical_product_id: String(row.canonical_product_id), store_product_id: String(row.store_product_id), price: Number(row.price), was_price: row.was_price == null ? null : Number(row.was_price), on_promotion: row.on_promotion === true, relationship_type: row.relationship_type as 'exact', freshness_state: row.freshness_state as 'fresh' })),

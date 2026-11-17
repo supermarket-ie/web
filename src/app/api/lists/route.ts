@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { token: explicitToken, name, meals_prompt, family_size, items, store_totals, is_default } = body;
+  const { token: explicitToken, name, meals_prompt, family_size, items, is_default } = body;
 
   const subscriberId = getSubscriberId(sessionToken(req, explicitToken));
   if (!subscriberId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -53,7 +53,9 @@ export async function POST(req: NextRequest) {
       meals_prompt: meals_prompt ?? null,
       family_size: family_size ?? '2',
       items: items ?? [],
-      store_totals: sanitizeStoreTotals(store_totals),
+      // Client-supplied totals cannot be verified server-side (a client could claim basis:'verified_exact'),
+      // so none are persisted from this route. Server-computed totals come from save-from-planner.
+      store_totals: [],
       is_default: is_default ?? false,
       generated_at: new Date().toISOString(),
     })

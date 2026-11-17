@@ -31,7 +31,7 @@ describe('agent compare_shop_stores (compareBasketStores)', () => {
     expect(r.cheapest_verified_store).toBeNull();
     for (const c of r.comparisons) {
       expect(c).toMatchObject({ complete: false, total: null, verified_exact_total: null, different_products: ['Muesli'] });
-      expect(c.lines.find(l => l.canonical_name === 'Muesli')).toMatchObject({ comparison: 'Different product' });
+      expect(c.lines.find(l => l.canonical_name === 'Muesli')).toMatchObject({ comparison: 'Different product or pack' });
     }
     // each retailer's own product title is carried through
     expect(r.comparisons.flatMap(c => c.lines.map(l => l.retailer_product_name))).toContain('Lifeforce Muesli (750 g)');

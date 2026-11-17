@@ -71,7 +71,9 @@ export function compareBasketStores(
       unverified_products: s.unverifiedLines,
       similar_products: s.similarLines,
       difference_vs_current: verified && result.cheapestVerified ? Number((s.verifiedExactTotal! - currentTotal).toFixed(2)) : null,
-      lines: s.lines.map(l => ({ canonical_name: l.id, retailer_product_name: l.name, price: l.price, unit_price: l.unitPrice,
+      // The retailer's own title, or null when unknown (never the canonical name presented as a retailer title).
+      lines: s.lines.map(l => ({ canonical_name: l.id, retailer_product_name: byLine.get(l.id)?.get(s.store)?.store_product_name ?? null,
+        price: l.price, unit_price: byLine.get(l.id)?.get(s.store)?.store_product_name ? l.unitPrice : null,
         comparison: l.status === 'missing' ? 'not_available' : COMPARISON_LABELS[l.status] })),
       utility_score: null,
     };

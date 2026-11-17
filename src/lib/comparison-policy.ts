@@ -9,7 +9,7 @@ export type ComparisonType = 'exact_product' | 'comparable_alternative' | 'not_c
 export const COMPARISON_LABELS: Record<ComparisonType, string> = {
   exact_product: 'Exact match',
   comparable_alternative: 'Similar product',
-  not_comparable: 'Different product',
+  not_comparable: 'Different product or pack',
   unverified: 'Unverified',
 };
 /** Short customer explanation shown beside a total or ranking. */
@@ -126,24 +126,32 @@ export function validPairReview(row: PairReview, now = Date.now()): boolean {
 export function readPack(name: string): PackUnit | null {
   if (typeof name !== 'string' || !name.trim()) return null;
   const text = name.toLowerCase().replace(/,/g, '');
-  const multi = text.match(/\b(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(kg|g|litres?|l|ml)\b/i);
+  // Explicit multipacks in either order: "4 x 125g" or "125g x 4". Both are labelled with an "x".
+  const lead = text.match(/\b(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(kg|g|litres?|l|ml)\b/i);
+  const trail = lead ? null : text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|litres?|l|ml)\s*[x×]\s*(\d+)\b/i);
+  const multi = lead ? { count: lead[1], qty: lead[2], unit: lead[3], label: lead[0] }
+    : trail ? { count: trail[3], qty: trail[1], unit: trail[2], label: trail[0] } : null;
   const single = multi ? null : text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|litres?|l|ml)\b/i);
   const countPack = text.match(/\b(\d+)\s*(?:pack|pk)\b|\bpack\s*of\s*(\d+)\b/i);
-  const n = multi ? Number(multi[1]) : countPack ? Number(countPack[1] || countPack[2]) : 1;
-  const quantity = multi ? Number(multi[2]) : single ? Number(single[1]) : null;
-  const rawUnit = multi ? multi[3] : single ? single[2] : null;
+  const n = multi ? Number(multi.count) : countPack ? Number(countPack[1] || countPack[2]) : 1;
+  const quantity = multi ? Number(multi.qty) : single ? Number(single[1]) : null;
+  const rawUnit = multi ? multi.unit : single ? single[2] : null;
   if (quantity !== null && rawUnit) {
     const unit = /^(?:kg)$/.test(rawUnit) ? 'g' : /^(?:l|litre|litres)$/.test(rawUnit) ? 'ml' : rawUnit as 'g' | 'ml';
     const factor = rawUnit === 'kg' || /^(?:l|litre|litres)$/.test(rawUnit) ? 1000 : 1;
     const total = quantity * n * factor;
-    return Number.isFinite(total) && total > 0 ? { total, unit, count: n, label: multi?.[0] ?? single?.[0] ?? '' } : null;
+    return Number.isFinite(total) && total > 0 ? { total, unit, count: n, label: multi?.label ?? single?.[0] ?? '' } : null;
   }
   return countPack && n > 0 ? { total: n, unit: 'each', count: n, label: countPack[0] } : null;
 }
 
+/** A pack total that can be trusted: one measured unit, an explicit "N x M" multipack, or a plain count. */
+export function unambiguousPack(p: PackUnit) { return p.unit === 'each' || p.count === 1 || /[x×]/i.test(p.label); }
+
 export function normalizedUnitPrice(name: string, price: number): { price: number; per: 'kg' | 'l' | 'each' } | null {
   const pack = readPack(name);
-  if (!pack || !Number.isFinite(price) || price <= 0) return null;
+  // "8 Pack 454g" does not say whether 454g is per item or the total, so no unit price is shown.
+  if (!pack || !unambiguousPack(pack) || !Number.isFinite(price) || price <= 0) return null;
   return { price: price * (pack.unit === 'each' ? 1 : 1000) / pack.total,
     per: pack.unit === 'g' ? 'kg' : pack.unit === 'ml' ? 'l' : 'each' };
 }
@@ -161,7 +169,9 @@ function variantWordsConflict(a: string, b: string): boolean {
   return left.length > 0 && right.length > 0 && left.some(word => !right.includes(word));
 }
 
-const OWN_LABEL = /^\s*(?:dunnes(?:\s+stores)?|supervalu|tesco|aldi|lidl|simply\s+better|signature\s+tastes|specially\s+selected|deluxe)\b/i;
+// Own-label ranges of the retailers compared (Dunnes Stores, SuperValu, Tesco). Brand words shared with
+// manufacturers ("Deluxe" etc.) are deliberately excluded; a miss only leaves a pair Unverified.
+const OWN_LABEL = /^\s*(?:dunnes(?:\s+stores)?|supervalu|tesco|simply\s+better|signature\s+tastes)\b/i;
 /** A retailer own-label title. Own-label products of different retailers are never the same commercial product. */
 export function isOwnLabel(name: string) { return OWN_LABEL.test(name ?? ''); }
 
@@ -174,8 +184,9 @@ export function deterministicDifference(a: string, b: string): string | null {
   const x = readPack(a), y = readPack(b);
   // Only unambiguous packs: one measured unit, or an explicit "N x M" multipack. "6 Pack (270 g)" is
   // ambiguous (per item or total?) and can never prove a difference.
-  const unambiguous = (p: PackUnit) => p.unit !== 'each' && (p.count === 1 || /[x×]/i.test(p.label));
-  if (x && y && unambiguous(x) && unambiguous(y) && (x.unit !== y.unit || x.total !== y.total || x.count !== y.count)) return 'different_pack';
+  // A multipack and a single pack of equal weight are different retail packs (2 x 150g is not one 300g pack).
+  const measured = (p: PackUnit) => p.unit !== 'each' && unambiguousPack(p);
+  if (x && y && measured(x) && measured(y) && (x.unit !== y.unit || x.total !== y.total || x.count !== y.count)) return 'different_pack';
   if (isOwnLabel(a) || isOwnLabel(b)) return 'own_label';
   if (hasProductIdentityConflict(a, b) || variantWordsConflict(a, b)) return 'different_variant';
   return null;
@@ -206,10 +217,9 @@ export function classifyOfferGroup(offers: OfferIdentity[], reviews: PairReview[
       const a = offers[i], b = offers[j];
       if (!a.storeProductId || !b.storeProductId) { missingIds = true; markDifferent(a, b); pairs.push('unverified'); continue; }
       const reviewed = latest.get(pairKey(a.storeProductId, b.storeProductId))?.classification ?? 'unverified';
-      const conflictingVariant = hasProductIdentityConflict(a.name, b.name);
-      const strictExactConflict = reviewed === 'exact_product' &&
-        (differentPack(a.name, b.name) || conflictingVariant ||
-          variantWordsConflict(a.name, b.name));
+      // An approved exact review is vetoed only by a STATED contradiction (differing unambiguous packs, a
+      // variant conflict or own-label). An absent or ambiguous pack in a title does not override a review.
+      const strictExactConflict = reviewed === 'exact_product' && deterministicDifference(a.name, b.name) !== null;
       if (reviewed === 'unverified') markDifferent(a, b);
       pairs.push(strictExactConflict ? 'not_comparable' : reviewed);
     }
@@ -226,9 +236,14 @@ export function classifyOfferGroup(offers: OfferIdentity[], reviews: PairReview[
   const preferred = ['tesco', 'supervalu', 'dunnes'];
   const anchor = [...offers].sort((a, b) => preferred.indexOf(a.store) - preferred.indexOf(b.store))[0];
   for (const offer of offers) {
-    if (offer === anchor) { result[offer.store] = 'exact_product'; continue; }
+    if (offer === anchor) continue;
     result[offer.store] = latest.get(pairKey(anchor.storeProductId!, offer.storeProductId!))!.classification;
   }
+  // A Tesco offer whose only counterparts are Similar products is itself shown as Similar, not Exact.
+  if (!anchor) return result;
+  const others = offers.filter(o => o !== anchor).map(o => result[o.store]);
+  // Exact only if at least one counterpart is exact to it; Similar stays beside the retailer that differs.
+  result[anchor.store] = others.some(s => s === 'exact_product') ? 'exact_product' : 'comparable_alternative';
   return result;
 }
 

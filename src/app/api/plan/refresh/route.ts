@@ -53,10 +53,21 @@ export async function GET(req: NextRequest) {
     .eq('subscriber_id', subscriberId);
   const paid = (lastItems ?? []) as Array<{ canonical_name: string; store: string; price_paid: number; quantity: number | null }>;
   const lastTotal = paid.reduce((sum, item) => sum + Number(item.price_paid) * (item.quantity ?? 1), 0);
-  const { data: currentRows } = paid.length
-    ? await supabaseAdmin.from('latest_prices').select('canonical_name, store, price').in('canonical_name', [...new Set(paid.map(i => i.canonical_name))])
-    : { data: [] };
-  const current = (currentRows ?? []) as Array<{ canonical_name: string; store: string; price: number }>;
+  // Only fresh, exact store offers count as a current price; page past the 1,000-row default.
+  const current: Array<{ canonical_name: string; store: string; price: number }> = [];
+  const names = [...new Set(paid.map(i => i.canonical_name))];
+  for (let from = 0; names.length; from += 1000) {
+    const { data: page, error } = await supabaseAdmin.from('latest_prices')
+      .select('canonical_name, store, price')
+      .in('canonical_name', names)
+      .eq('relationship_type', 'exact')
+      .eq('freshness_state', 'fresh')
+      .order('store_product_id')
+      .range(from, from + 999);
+    if (error) return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 });
+    current.push(...((page ?? []) as typeof current));
+    if (!page || page.length < 1000) break;
+  }
   const sameStorePrice = (item: (typeof paid)[number]) => current
     .filter(r => r.canonical_name === item.canonical_name && String(r.store).toLowerCase() === String(item.store).toLowerCase())
     .reduce<number | null>((min, r) => (min === null || Number(r.price) < min ? Number(r.price) : min), null);

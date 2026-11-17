@@ -97,11 +97,29 @@ Customer-facing change, pending review. Not merged or deployed.
     is the lowest price, not proof of the same product.
 - Effect today: the ledger has 0 approved edges, so NO cross-store cheapest claim
   appears anywhere. Individual retailer prices and indicative totals remain visible.
+- Review fixes (semantic review 2026-11-17):
+  - Own-label detection limited to Dunnes/SuperValu/Tesco/Simply Better/
+    Signature Tastes (Aldi/Lidl/Deluxe/Specially Selected removed: brand false
+    positives). `readPack` reads trailing "125g x 4"; `unambiguousPack` makes
+    unit price null for ambiguous "8 Pack 454g". "2 x 150g" ≠ "300g" (policy).
+  - An APPROVED exact review is vetoed only by a deterministic difference, not by
+    an unparseable pack.
+  - `getCurrentPairReviews`: reviews ≤ 14 days (SQL filter), 60 s cache.
+  - `/api/lists` POST and `/api/share` persist `store_totals: []`: client totals
+    are forgeable, so a client `verified_exact` flag is never trusted.
+    `save-from-planner` passes pair reviews to `compareBasket`.
+  - The Eve tool `agent/tools/compare_shop_stores.ts` DID change: honest text,
+    per-line labels, no cheapest claim unless verified.
+  - `compare.ts`: `retailer_product_name` null when unknown (no canonical
+    fallback). HouseholdShopCard verified headline needs a `verified_exact` row.
+  - Watchdog email "Best split for maximum savings" replaced with
+    lowest-listed wording plus a not-verified note; suggestion detail
+    "Currently from" → "Listed at". SmartRefreshCard shows a saving only with a
+    complete total. `/api/plan/refresh` uses exact, fresh offers and pages.
+- Flagged to owner (NOT changed): hardcoded price claims in `src/lib/blog.ts`;
+  `/api/plan/weekly` `store_assignment` per-item lowest store.
 - NOT changed:
-  - The Eve rollback image (`agent/` tools other than `agent/lib/catalogue.ts`
-    and `capability-instructions.ts`).
   - The unused `src/components/ProductPrices.tsx`.
-  - Watchdog emails, which inherit the same-store change via `queryPriceChanges`.
 - Tests: `comparison-safety.test.ts` and `comparison-safety-paths.test.ts`
   (Flahavan's/Lifeforce, incomplete baskets, different packs, own-label, verified
   cheapest), plus updated household-shop, product-catalogue and sanitize tests.

@@ -159,7 +159,7 @@ function dietaryRequirement(input: string): string {
 function productSuggestions(product: CatalogueSuggestionProduct, intent: SuggestionIntent): PredictiveSuggestion[] {
   const price = euro(product.best_price);
   const priceDetail = price && product.best_store
-    ? `Currently from ${price} at ${product.best_store}`
+    ? `Listed at ${price} at ${product.best_store}`
     : 'Check current Irish supermarket availability';
   const offerDetail = product.on_promotion
     ? 'A current promotion is available'

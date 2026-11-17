@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyOfferGroup, compareBasket, deterministicDifference, type BasketLine, type PairReview } from './comparison-policy';
+import { classifyOfferGroup, compareBasket, deterministicDifference, isOwnLabel, normalizedUnitPrice, readPack, type BasketLine, type PairReview } from './comparison-policy';
 
 // Regression fixtures for the comparison-safety rule. Real production titles (16 Nov 2026).
 const now = Date.parse('2026-11-17T12:00:00Z');
@@ -95,5 +95,38 @@ describe('different packs and misleading canonical associations', () => {
   it('one odd offer among three is marked different without condemning the other two', () => {
     const three = [...milk.offers, { store: 'tesco', storeProductId: 't-milk', name: 'Avonmore Low Fat Super Milk 2L', price: 3 }];
     expect(classifyOfferGroup(three, [], now)).toEqual({ dunnes: 'unverified', supervalu: 'unverified', tesco: 'not_comparable' });
+  });
+});
+
+describe('review fixes: packs, unit prices and own-label scope', () => {
+  it('reads a trailing multipack "125g x 4" the same as "4 x 125g"', () => {
+    expect(readPack('Muller Corner 125g x 4')).toMatchObject({ total: 500, unit: 'g', count: 4 });
+    expect(deterministicDifference('Muller Corner 125g x 4', 'Muller Corner 4 x 125g')).toBeNull();
+  });
+  it('gives a unit price for an explicit N x M multipack and none for an ambiguous "8 Pack 454g"', () => {
+    expect(normalizedUnitPrice('Muller Corner 4 x 125g', 2)).toEqual({ price: 4, per: 'kg' });
+    expect(normalizedUnitPrice('Brennans 8 Pack 454g', 2)).toBeNull();
+    expect(normalizedUnitPrice('Avonmore Milk 2L', 3)).toEqual({ price: 1.5, per: 'l' });
+  });
+  it('a multipack and a single pack of equal weight stay different packs', () => {
+    expect(deterministicDifference('Yoplait 2 x 150g', 'Yoplait (300 g)')).toBe('different_pack');
+  });
+  it('an approved exact review stands when one title states no pack', () => {
+    const offers = [
+      { store: 'tesco', storeProductId: 't-beanz', name: 'Heinz Beanz', price: 1.2 },
+      { store: 'supervalu', storeProductId: 's-beanz', name: 'Heinz Beanz (415 g)', price: 1.2 },
+    ];
+    expect(classifyOfferGroup(offers, [review('t-beanz', 's-beanz')], now)).toEqual({ tesco: 'exact_product', supervalu: 'exact_product' });
+  });
+  it('manufacturer brands sharing a range word are not own-label', () => {
+    expect(isOwnLabel('Deluxe Biscuits Selection 400g')).toBe(false);
+    expect(isOwnLabel('Specially Selected Pasta 500g')).toBe(false);
+    expect(isOwnLabel('Tesco Finest Pasta 500g')).toBe(true);
+    expect(deterministicDifference('Deluxe Biscuits Selection 400g', 'Deluxe Biscuits Selection (400 g)')).toBeNull();
+  });
+  it('an expired review (older than 14 days) no longer verifies a pair', () => {
+    const old = '2026-10-30T10:00:00Z';
+    const stale = { ...review('d-chilli', 's-chilli'), left_captured_at: old, right_captured_at: old, reviewed_at: old };
+    expect(classifyOfferGroup(chilli.offers, [stale], now)).toEqual({ dunnes: 'unverified', supervalu: 'unverified' });
   });
 });
