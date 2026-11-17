@@ -91,6 +91,17 @@ export function gateInference(a:Evidence,b:Evidence,raw:unknown,rules:BrandRule[
   return {decision:confirmed.decision,accepted:confirmed.decision==='exact_match',
     reasons:confirmed.decision==='exact_match'?['llm_proposal_independently_barcode_corroborated']:confirmed.reasons,result};
 }
+type CandidatePair={id:string;left:string;right:string;result:{missing:string[]}};
+/** Pairs eligible for bounded inference: real retailer SKUs on both sides and ONLY wording left to resolve.
+ *  Any other missing fact (pack, variant, evidence age, duplicate records) keeps a pair out, so a model can never
+ *  be asked to paper over a deterministic gap. An optional priority list orders eligible pairs; it cannot add any. */
+export function selectInferenceCandidates(candidates:CandidatePair[],records:Map<string,Pick<Evidence,'sku'|'canonicalIds'>>,priority:string[]=[]){
+  const realSku=(id:string)=>/^\d{5,14}$/.test(records.get(id)?.sku??'');
+  const rank=new Map(priority.map((id,i)=>[id,i]));
+  const impact=(p:CandidatePair)=>new Set([...(records.get(p.left)?.canonicalIds??[]),...(records.get(p.right)?.canonicalIds??[])]).size===1?1:0;
+  return candidates.filter(p=>realSku(p.left)&&realSku(p.right)&&p.result.missing.every(m=>m==='wording_requires_inference_or_corroboration'))
+    .sort((a,b)=>(rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity)||impact(b)-impact(a)||a.id.localeCompare(b.id));
+}
 export type Budget={maxCalls:number;maxUsd:number;inputUsdPerMillion:number;outputUsdPerMillion:number;rateSource:string;ratesCheckedAt:string};
 export type Usage={inputTokens:number;outputTokens:number};
 export type LedgerEntry={id:string;status:'reserved'|'completed'|'failed_unknown_spend';reservedUsd:number;usage?:Usage;usageCostEstimateUsd?:number;result?:InferenceResult};
