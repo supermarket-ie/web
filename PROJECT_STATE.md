@@ -1,5 +1,42 @@
 # Supermarket.ie — Canonical Project State
 
+## 17 November 2026 (later) — First $10 bounded inference campaign: 100 Dunnes/SuperValu wording-only pairs
+
+Owner-authorised campaign `dunnes-supervalu-wording-20261117`: cap $10, 100 calls.
+Bedrock `eu.anthropic.claude-sonnet-4-6` from the local AWS SSO session; no
+infrastructure or deployment.
+- Rates were verified on the AWS Price List API (eu-west-1 Regional CRIS):
+  $3.30/M input, $16.50/M output.
+- The pairs were the top 100 wording-only candidates, all with fresh prices at
+  both stores and one-to-one.
+
+Results, as CANDIDATES only (gate accepted 0; no ledger approvals, no mapping writes):
+- 100 calls: 97 valid verdicts. 3 answers failed the response schema
+  (AI_NoObjectGeneratedError); they were reconciled and not retried.
+- Model exact_match: 77 (all on the same canonical record). 76 state no
+  contradiction; Kellogg's Fruit 'n Fibre flags Dunnes brand metadata "All-Bran".
+  Every one names missing evidence, chiefly GTINs (94 mentions), ingredients and
+  images, so the gate holds them.
+- Model not_exact_match: 15.
+  - All 12 cross-canonical pairs: sibling products (Dr. Oetker chips vs chunks,
+    Blue Dragon oyster vs fish sauce, Odlums scone vs bread mix, Flahavan's
+    Vitamin vs Barista oat drink). This confirms the existing separation is right.
+  - 3 same-canonical pairs suggest association errors: Ben's Mild Curry "Creamy",
+    Heinz Ketchup vs "Top Down", Ella's Mango Brekkie "with Peach".
+- Model insufficient_evidence: 5 (Colgate x3, Pringles Texas BBQ vs BBQ, Felix
+  Original Mix vs Original with Chicken).
+- Cost: $5.95 reserved of the $10 cap. Token-estimated actual is $1.52 for the 97
+  completed calls, plus at most $0.18 for the 3 failed calls (≤ $1.70; about
+  $0.016 per pair). The superseded v2 trial ($0.29 estimated) ran under its own $1
+  campaign.
+- Code (PR #412):
+  - Authorised per-campaign budgets with a $100 / 5,000-call code backstop.
+  - Configurable `batchSize` and `maxOutputTokens`.
+  - Errors recorded in the ledger, plus an explicit `--reconcile-failed` step.
+  - The cache spans campaigns.
+  - Prompt v3: cite only retailer record ids (9 of 17 v2 answers cited canonical
+    ids and were refused).
+
 ## 17 November 2026 — Dunnes↔SuperValu: evidence route, capture pilot, comparison gaps, catalogue cases
 
 No production writes, mapping repairs or pair-review approvals. No retailer
