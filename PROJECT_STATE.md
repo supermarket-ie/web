@@ -1,5 +1,62 @@
 # Supermarket.ie — Canonical Project State
 
+## 17 November 2026 — Direct-capture diagnostics (2 authorised requests) + SuperValu capture fix (PR, NOT deployed)
+
+DIAGNOSTICS: exactly 1 SuperValu + 1 Dunnes GET for pilot pair #1 (Schwartz Mild
+Chilli Powder 38g).
+- How they ran: a one-off ECS task on the existing `smie-prod-scheduled` task
+  definition (worker image b9b1a92-prod, AWS egress), each request through
+  `withRetailerRequestSlot`. Command override only; no new image, task def or infra.
+  A dry run loaded the modules first with 0 requests.
+- Writes: only the governor's slot bookkeeping. No price, receipt, mapping or
+  evidence row. Script: `scripts/diagnostics/direct-capture-diagnostic.mjs`
+  (+ `run-direct-capture-diagnostic.sh`).
+- SuperValu 1020898000:
+  - Fetch: 200, no redirect, final URL equals store_url, 1.47 MB HTML.
+  - The production parser read sku "1020898000" (a string) and the title, yet
+    `captureIdentityResponse` returned null.
+  - ROOT CAUSE: the JSON-LD block is an Organization with no SKU, and
+    `sources()` in `retailer-identity-response.ts` sliced `__PRELOADED_STATE__`
+    to the script's LAST "}", while more script follows the assignment, so
+    JSON.parse failed. The price parser uses a balanced scan and succeeds.
+  - DB inserts are NOT failing: 0 "Retailer identity retention" warnings in 14
+    days of sqs-consumer logs. Capture is null before any insert. This explains
+    why all 41 direct-page runs retained nothing.
+- Dunnes 100111838 (www product URL): 403 from Cloudflare, `cf-mitigated:
+  challenge` and challenge page markers. NOT retrievable through our
+  infrastructure. No workaround attempted or proposed. The governor recorded 1
+  Dunnes denial, which the normal gateway successes clear.
+- CONSEQUENCE: no Dunnes `captured_product` is possible under current evidence
+  rules, so 0 Dunnes↔SuperValu pairs can be independently verified, including
+  the 93 deterministic and 77 AI-supported candidates (disjoint sets, 170 distinct
+  pairs). Options are owner/policy decisions, not engineering workarounds.
+
+FIX (branch fix/supervalu-direct-capture):
+- `sources()` now uses a string-aware balanced-brace extraction (parser v3;
+  v1/v2 still verify; JSON bodies unchanged). Every evidence check is unchanged.
+- Storage guard: pages are about 1.5 MB, so fixing capture would add about
+  2.7 GB/day to the immutable table on the daily run. Direct-page evidence is now
+  retained only for products flagged `captureEvidence`, set only by
+  `supervalu-scrape-trigger?evidence=1`. That requires scope=targeted_validation,
+  a q or failure_run filter, and limit ≤ 25. Daily refresh storage is unchanged.
+- Live confirmation on the real page is pending deploy plus one evidence run. The
+  fix was verified on a fixture reproducing the observed structure.
+- Review nits adopted:
+  - every `__PRELOADED_STATE__` assignment form is tried, never `===`
+  - `evidence` must be 0/1, otherwise 400
+  - a route test proves the scheduled run never flags evidence
+- ROLLBACK CAVEAT: an image older than this rejects parser-v3 rows on
+  re-verification. Keep ledger readers on this or a newer image once evidence
+  runs have happened.
+
+NEXT VERIFICATION ROUTE: SuperValu↔Tesco.
+- Tesco has 4,415 ledger-qualifying ok/200 supervised pages in 13 days (1,407
+  SKUs).
+- There are 1,119 Tesco↔SuperValu same-canonical pairs; about 90 have identical
+  normalised titles.
+- With SuperValu evidence runs, both sides can satisfy the ledger. No Dunnes
+  involvement.
+
 ## 15 November 2026 15:20Z — Apify limit raised; renewals restored; barcode provenance enforced; enrichment proposal
 
 - Owner raised the Apify account limit to $80 (used $19.05). Renewal on rev16

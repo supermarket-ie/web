@@ -30,6 +30,46 @@ describe('original retailer response retention', () => {
     const r = captureIdentityResponse({ ...args, body, requestedUrl:url, finalUrl:url })!;
     expect(r.body_text).toBe(body); expect(r.source_kind).toBe('captured_product'); expect(r.body_sha256).toBe(responseHash(body));
   });
+  // Regression for the 17 Nov 2026 production diagnostic: SuperValu product pages assign __PRELOADED_STATE__ and
+  // then run more script, so slicing to the script's last "}" never parsed and NO direct capture was ever made.
+  describe('SuperValu direct product page (__PRELOADED_STATE__ followed by more script)', () => {
+    const svSku = '1020898000', svTitle = 'Schwartz Chilli Powder Mild  (38 g)';
+    const svUrl = `https://shop.supervalu.ie/sm/delivery/rsid/5550/product/schwartz-chilli-powder-mild-38-g-id-${svSku}`;
+    const state = { product: { sku: svSku, name: svTitle, brand: 'Schwartz', price: { amount: 3.4 }, description: 'Mild {chilli} blend "38g"' },
+      search: { productCardDictionary: { a: { sku: svSku, name: svTitle, brand: 'Schwartz' } } } };
+    const page = (extra = 'window.__ENV__ = {"region":"ie"}; window.__FLAGS__ = { a: 1 };') =>
+      `<html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SuperValu"}</script>`
+      + `<script>window.__PRELOADED_STATE__ = ${JSON.stringify(state)}; ${extra}</script></head><body>${svTitle}</body></html>`;
+    const sv = { store: 'supervalu' as const, sku: svSku, title: svTitle, productUrl: svUrl, requestedUrl: svUrl, finalUrl: svUrl, contentType: 'text/html' };
+    it('captures a direct page as captured_product, bound to the SKU and title in the original body', () => {
+      const r = captureIdentityResponse({ ...sv, body: page() })!;
+      expect(r).toMatchObject({ source_kind: 'captured_product', parser_version: 'retailer-identity-response-v3' });
+      expect(r.source_path).toContain('__PRELOADED_STATE__');
+      expect(r.body_sha256).toBe(responseHash(page()));
+      expect(evidenceFromResponse({ ...r, id: 'x' })?.source.kind).toBe('captured_product');
+    });
+    it('keeps every evidence check: wrong SKU, wrong title, redirect, conflicting copies', () => {
+      expect(captureIdentityResponse({ ...sv, sku: '1020898001', body: page() })).toBeNull();
+      expect(captureIdentityResponse({ ...sv, title: 'Schwartz Chilli Powder Hot (38 g)', body: page() })).toBeNull();
+      expect(captureIdentityResponse({ ...sv, finalUrl: 'https://shop.supervalu.ie/sm/delivery/rsid/5550/search', body: page() })?.source_kind).toBe('captured_listing');
+      const conflicting = page().replace('"brand":"Schwartz"}}}', '"brand":"Other"}}}');
+      expect(captureIdentityResponse({ ...sv, body: conflicting })).toBeNull();
+    });
+    it('ignores a comparison guard before the assignment and accepts bracket assignment', () => {
+      const guarded = `<script>if (window.__PRELOADED_STATE__ === undefined) { var x = {}; } window.__PRELOADED_STATE__ = ${JSON.stringify(state)}; window.__X__ = {};</script>`;
+      expect(captureIdentityResponse({ ...sv, body: guarded })?.source_kind).toBe('captured_product');
+      const bracket = `<script>window["__PRELOADED_STATE__"] = ${JSON.stringify(state)};</script>`;
+      expect(captureIdentityResponse({ ...sv, body: bracket })?.source_kind).toBe('captured_product');
+    });
+    it('an unterminated state object is not parsed', () => {
+      expect(captureIdentityResponse({ ...sv, body: `<script>window.__PRELOADED_STATE__ = {"product":{"sku":"${svSku}","name":"${svTitle}"</script>` })).toBeNull();
+    });
+  });
+  it('earlier parser versions (JSON listing bodies) still verify', () => {
+    const r = captureIdentityResponse(args)!;
+    expect(evidenceFromResponse({ ...r, id: 'old', parser_version: 'retailer-identity-response-v2' })?.source.kind).toBe('captured_listing');
+    expect(evidenceFromResponse({ ...r, id: 'bad', parser_version: 'unknown-parser' })).toBeNull();
+  });
   it('does not retry price finalization when evidence persistence fails', async () => {
     const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
     rpc.mockResolvedValueOnce({ error: { code: '42P01' } }).mockRejectedValueOnce(Error('offline'));

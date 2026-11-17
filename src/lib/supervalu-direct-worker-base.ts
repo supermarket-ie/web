@@ -31,7 +31,20 @@ export type SupervaluQueueProduct = {
   storeUrl: string;
   storeSku: string | null;
   previousPrice: number | null;
+  /**
+   * Retain the original direct product-page response as captured_product evidence. Set ONLY by an explicit,
+   * small evidence run (see supervalu-scrape-trigger `evidence=1`): pages are ~1.5 MB, so the daily refresh
+   * must not append one per product to the immutable evidence table.
+   */
+  captureEvidence?: boolean;
 };
+
+/** Direct-page evidence for one fetched page, or null when the run did not request evidence or it fails a check. */
+export function directPageEvidence(product: SupervaluQueueProduct, candidate: Candidate, args: { finalUrl: string; contentType: string; body: string }) {
+  if (product.captureEvidence !== true) return null;
+  return captureIdentityResponse({ store: STORE, sku: candidate.sku, title: candidate.name, productUrl: candidate.url ?? product.storeUrl,
+    requestedUrl: product.storeUrl, finalUrl: args.finalUrl, contentType: args.contentType, body: args.body });
+}
 
 export type SupervaluBatchMessage = {
   runUuid: string;
@@ -465,10 +478,8 @@ export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Pro
       }
       const body = await response.text();
       const result = classifySupervaluProductPage(body);
-      if (result.candidate) result.candidate.identityResponse = captureIdentityResponse({ store: STORE,
-        sku: result.candidate.sku, title: result.candidate.name, productUrl: result.candidate.url ?? product.storeUrl,
-        requestedUrl: product.storeUrl, finalUrl: response.url || product.storeUrl,
-        contentType: response.headers.get('content-type') ?? '', body });
+      if (result.candidate) result.candidate.identityResponse = directPageEvidence(product, result.candidate,
+        { finalUrl: response.url || product.storeUrl, contentType: response.headers.get('content-type') ?? '', body });
       return result;
     } catch (error) {
       if (error instanceof TransientSupervaluError) throw error;

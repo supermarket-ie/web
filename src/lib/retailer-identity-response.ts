@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { normalise, safeProductUrl, type Evidence } from './branded-product-identity';
 
-export const RESPONSE_PARSER_VERSION = 'retailer-identity-response-v2';
+/** v3: balanced extraction of `__PRELOADED_STATE__` (HTML only; JSON bodies parse exactly as in v2). */
+export const RESPONSE_PARSER_VERSION = 'retailer-identity-response-v3';
+const ACCEPTED_PARSER_VERSIONS = ['retailer-identity-response-v1', 'retailer-identity-response-v2', RESPONSE_PARSER_VERSION];
 export type IdentityResponse = {
   store: 'supervalu' | 'dunnes'; sku: string; product_url: string;
   requested_url: string; final_url: string; retrieved_at: string;
@@ -16,16 +18,36 @@ function label(v: unknown): string | null {
   const o = object(v); return typeof o?.name === 'string' ? o.name : null;
 }
 export const responseHash = (body: string) => createHash('sha256').update(body, 'utf8').digest('hex');
+/**
+ * The complete JSON object that starts at `start`, found by a string-aware balanced-brace scan (the same
+ * approach as the SuperValu price parser). Slicing to the script's LAST "}" fails whenever other code
+ * follows the assignment, e.g. `window.__PRELOADED_STATE__ = {...}; window.__OTHER__ = {...};`.
+ */
+function balancedObject(text: string, start: number): string | null {
+  if (start < 0 || text[start] !== '{') return null;
+  let depth = 0, quote = '', escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) { if (escaped) escaped = false; else if (ch === '\\') escaped = true; else if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) return text.slice(start, i + 1);
+  }
+  return null;
+}
 function sources(body: string): { value: unknown; path: string }[] {
   try { return [{ value: JSON.parse(body), path: '$' }]; } catch { /* HTML */ }
   const result: { value: unknown; path: string }[] = [];
   for (const [i, match] of [...body.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].entries()) {
     const raw = match[1].trim();
     try { result.push({ value: JSON.parse(raw), path: `script[${i}]` }); continue; } catch { /* assigned state */ }
-    const start = raw.indexOf('__PRELOADED_STATE__');
-    if (start < 0) continue;
-    const jsonStart = raw.indexOf('{', start), jsonEnd = raw.lastIndexOf('}');
-    try { result.push({ value: JSON.parse(raw.slice(jsonStart, jsonEnd + 1)), path: `script[${i}].__PRELOADED_STATE__` }); } catch { /* not a complete JSON state */ }
+    // Every assignment form (`window.__PRELOADED_STATE__ =`, `window["__PRELOADED_STATE__"] =`, bare name), never
+    // a comparison (`===` / `==`). The first marker that yields a complete JSON object is used.
+    for (const marker of raw.matchAll(/(?:window\s*(?:\.\s*__PRELOADED_STATE__|\[\s*["']__PRELOADED_STATE__["']\s*\])|\b__PRELOADED_STATE__)\s*=(?!=)/g)) {
+      const json = balancedObject(raw, raw.indexOf('{', marker.index + marker[0].length));
+      if (!json) continue;
+      try { result.push({ value: JSON.parse(json), path: `script[${i}].__PRELOADED_STATE__` }); break; } catch { /* not a complete JSON state */ }
+    }
   }
   return result;
 }
@@ -72,7 +94,7 @@ export function captureIdentityResponse(args: {
     source_kind: direct ? 'captured_product' : 'captured_listing', source_path: found.map(x=>x.path).join('|'), identity: merged };
 }
 export function evidenceFromResponse(row: IdentityResponse & { id: string }): Omit<Evidence, 'id' | 'mappingIds' | 'canonicalIds' | 'conflicts'> | null {
-  if (row.body_sha256 !== responseHash(row.body_text) || !['retailer-identity-response-v1',RESPONSE_PARSER_VERSION].includes(row.parser_version)) return null;
+  if (row.body_sha256 !== responseHash(row.body_text) || !ACCEPTED_PARSER_VERSIONS.includes(row.parser_version)) return null;
   const parsed = captureIdentityResponse({ store: row.store, sku: row.sku, title: String(row.identity.title ?? ''), productUrl: row.product_url,
     requestedUrl: row.requested_url, finalUrl: row.final_url, contentType: row.content_type, body: row.body_text, retrievedAt: row.retrieved_at });
   if (parsed && row.parser_version === 'retailer-identity-response-v1') { delete parsed.identity.manufacturerProductCode; parsed.source_path = parsed.source_path.split('|')[0]; }

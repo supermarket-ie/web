@@ -5,6 +5,8 @@ import { resolveRetailerRunScope } from '@/lib/scrape-run-scope';
 import { retailerCollectionBlocked, RETAILER_COLLECTION_BLOCKED_REASON } from '@/lib/preview-guard';
 
 const TOPIC = 'supervalu-scrape-batches';
+/** Maximum products in an evidence-retaining verification run. */
+const EVIDENCE_RUN_MAX = 25;
 
 function authorized(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -48,7 +50,19 @@ export async function GET(request: Request): Promise<Response> {
   const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit, query: query ?? failureRunId });
   if (!resolvedScope.scope) return Response.json({ error: resolvedScope.error }, { status: 400 });
 
-  const products = await selectSupervaluProducts(limit, query, failureRunId);
+  // Direct-page evidence retention (~1.5 MB per page, immutable table) only for small, explicitly filtered
+  // verification runs; never for the scheduled full refresh.
+  const evidenceParam = url.searchParams.get('evidence');
+  if (evidenceParam !== null && evidenceParam !== '0' && evidenceParam !== '1') {
+    return Response.json({ error: 'evidence must be 0 or 1' }, { status: 400 });
+  }
+  const evidence = evidenceParam === '1';
+  if (evidence && (resolvedScope.scope !== 'targeted_validation' || limit > EVIDENCE_RUN_MAX || (!query && !failureRunId))) {
+    return Response.json({ error: `evidence=1 requires scope=targeted_validation, a q or failure_run filter and limit <= ${EVIDENCE_RUN_MAX}` }, { status: 400 });
+  }
+
+  const products = (await selectSupervaluProducts(limit, query, failureRunId))
+    .map(product => (evidence ? { ...product, captureEvidence: true } : product));
   if (products.length === 0) return Response.json({ status: 'no_products', queued: 0 });
 
   const runId = `vercel_supervalu_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
@@ -97,6 +111,7 @@ export async function GET(request: Request): Promise<Response> {
     filter: query ?? null,
     failure_run: failureRunId ?? null,
     run_scope: resolvedScope.scope,
+    evidence_capture: evidence,
   });
 }
 
