@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 import { SiteFooter } from '@/components/SiteFooter';
+import { sanitizeStoreTotals } from '@/lib/saved-list-sanitize';
 
 function fmt(price: number) { return `€${price.toFixed(2)}`; }
 
@@ -49,6 +50,7 @@ interface SharedItem {
   best_store: string;
   best_price: number;
   all_prices: StorePrice[];
+  price_comparison?: string;
 }
 interface StoreTotal { store: string; total: number; }
 
@@ -57,8 +59,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { data } = await supabaseAdmin.from('shared_lists').select('store_totals,family_size').eq('id', id).single();
   if (!data) return { title: 'Shopping List | supermarket.ie' };
 
-  const totals = data.store_totals as StoreTotal[];
-  const cheapest = totals?.[0];
+  // Only verified-exact basket totals support a "best price" claim (legacy totals compared unverified products).
+  const totals: StoreTotal[] = sanitizeStoreTotals(data.store_totals);
+  const cheapest = totals[0];
   const desc = cheapest
     ? `Weekly shop for ${familySizeLabel(data.family_size)} — best price ${fmt(cheapest.total)} at ${storeDisplayName(cheapest.store)}`
     : 'Weekly grocery list with live prices from Irish supermarkets';
@@ -91,7 +94,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
   if (error || !data) notFound();
 
   const items = data.items as SharedItem[];
-  const storeTotals = data.store_totals as StoreTotal[];
+  const storeTotals: StoreTotal[] = sanitizeStoreTotals(data.store_totals);
   const cheapest = storeTotals[0];
   const priciest = storeTotals[storeTotals.length - 1];
   const saving = cheapest && priciest ? Math.round((priciest.total - cheapest.total) * 100) / 100 : 0;
@@ -186,11 +189,14 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-[#1D2324] truncate">{item.canonical_name}</div>
                       <div className="text-xs text-[#636E72] mt-0.5">
-                        Best: {storeDisplayName(item.best_store)}
+                        {item.price_comparison === 'verified_exact' ? 'Best' : 'Lowest price'}: {storeDisplayName(item.best_store)}
                         {item.all_prices?.length > 1 && (
                           <span className="ml-2 text-[#B2BEC3]">
-                            {item.all_prices.map(p => `${storeDisplayName(p.store)} ${fmt(p.price)}`).join(' · ')}
+                            {item.all_prices.map(p => `${storeDisplayName(p.store)} ${p.store_product_name ? `${p.store_product_name} ` : ''}${fmt(p.price)}`).join(' · ')}
                           </span>
+                        )}
+                        {item.all_prices?.length > 1 && item.price_comparison !== 'verified_exact' && (
+                          <span className="block text-[10px] text-[#82591a]">Indicative — these stores’ products are not verified as the same item.</span>
                         )}
                       </div>
                     </div>

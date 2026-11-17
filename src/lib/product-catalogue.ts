@@ -1,5 +1,6 @@
 import type { ProductPrice } from './price-data';
 import { buildShopCatalogue } from './shop-builder-catalogue';
+import type { PairReview } from './comparison-policy';
 import type { ShopProduct } from './shop-builder';
 import { WEEKLY_STORES, WEEKLY_STORE_NAMES, type WeeklyStore } from './weekly-shop';
 
@@ -36,8 +37,8 @@ function httpUrl(value: string | null): string | null {
   } catch { return null; }
 }
 
-export function buildProductCatalogue(records: CatalogueRecord[], prices: ProductPrice[], now = Date.now()): CatalogueProduct[] {
-  const trusted = new Map(buildShopCatalogue(prices, now).map(product => [product.id, product]));
+export function buildProductCatalogue(records: CatalogueRecord[], prices: ProductPrice[], now = Date.now(), reviews: PairReview[] = []): CatalogueProduct[] {
+  const trusted = new Map(buildShopCatalogue(prices, now, reviews).map(product => [product.id, product]));
   const priceRows = new Map(prices.map(row => [`${row.canonical_product_id}:${row.store}:${row.observed_at}`, row]));
   const seenSlugs = new Set<string>();
   // Stable URLs do not depend on retailer coverage. Resolve any future name collision by identity.
@@ -71,8 +72,16 @@ export function catalogueOffers(product: CatalogueProduct) {
     .sort((a, b) => a.price - b.price);
 }
 
+/** True only when every listed offer is an independently verified exact match of the others. */
+export function offersAreVerifiedExact(product: CatalogueProduct) {
+  const offers = catalogueOffers(product);
+  return offers.length <= 1 || offers.every(offer => offer.comparisonType === 'exact_product');
+}
+
 export function productStructuredData(product: CatalogueProduct, baseUrl: string) {
-  const prices = catalogueOffers(product);
+  // A low/high AggregateOffer asserts the stores sell ONE product. Without verified exact matches the
+  // retailers may sell different packs or variants, so no cross-store price range is published.
+  const prices = offersAreVerifiedExact(product) ? catalogueOffers(product) : [];
   const offers = prices.map(offer => ({
     '@type': 'Offer', price: offer.price.toFixed(2), priceCurrency: 'EUR',
     seller: { '@type': 'Organization', name: WEEKLY_STORE_NAMES[offer.store] },

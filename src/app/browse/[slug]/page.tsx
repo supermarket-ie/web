@@ -7,7 +7,8 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { AddProductToShop } from '@/components/AddProductToShop';
 import { ProductCatalogueList } from '@/components/ProductCatalogueList';
 import { getProductCatalogue } from '@/lib/product-catalogue-data';
-import { catalogueOffers, productStructuredData } from '@/lib/product-catalogue';
+import { catalogueOffers, offersAreVerifiedExact, productStructuredData } from '@/lib/product-catalogue';
+import { COMPARISON_LABELS } from '@/lib/comparison-policy';
 import { catalogueCategory } from '@/lib/catalogue-categories';
 import { WEEKLY_STORES, WEEKLY_STORE_NAMES } from '@/lib/weekly-shop';
 import { supabaseAdmin } from '@/lib/supabase';
@@ -26,7 +27,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const prices = catalogueOffers(product);
   const title = `${product.name} Price Ireland`;
   const description = prices.length
-    ? `${product.name} from €${prices[0].price.toFixed(2)} at ${WEEKLY_STORE_NAMES[prices[0].store]}. See ${prices.length} matched supermarket price${prices.length === 1 ? '' : 's'}, pack details and check dates. Add it to your household shop.`
+    ? offersAreVerifiedExact(product)
+      ? `${product.name} from €${prices[0].price.toFixed(2)} at ${WEEKLY_STORE_NAMES[prices[0].store]}. See ${prices.length} matched supermarket price${prices.length === 1 ? '' : 's'}, pack details and check dates. Add it to your household shop.`
+      : `${product.name}: current prices from ${prices.length} Irish supermarkets with each retailer’s own product, pack size and check date. Add it to your household shop.`
     : `Explore ${product.name} for your household shop. A current matched price is unavailable; browse related products or add it to a list for your agent to review.`;
   return { title, description, alternates: { canonical: `${BASE_URL}/browse/${slug}` },
     openGraph: { title, description, url: `${BASE_URL}/browse/${slug}`, ...(product.imageUrl ? { images: [{ url: product.imageUrl }] } : {}) } };
@@ -114,12 +117,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
                 {offer ? <>
                   <p className="mt-1 text-sm leading-5 text-[#526c5b]">{offer.name}</p>
+                  {(offer.unitPrice || prices.length > 1) && <p className="mt-1 text-xs text-[#607065]">
+                    {offer.unitPrice ? `€${offer.unitPrice.price.toFixed(2)} per ${offer.unitPrice.per}` : ''}
+                    {offer.unitPrice && prices.length > 1 ? ' · ' : ''}
+                    {prices.length > 1 ? <span className="font-semibold text-[#82591a]">{COMPARISON_LABELS[offer.comparisonType ?? 'unverified']}</span> : null}
+                  </p>}
                   <p className="mt-2 text-xs text-[#607065]">Checked <time dateTime={offer.observedAt}>{date(offer.observedAt)}</time>{offer.wasPrice ? ` · Was €${offer.wasPrice.toFixed(2)}` : ''}</p>
                   {offer.storeUrl && <a href={offer.storeUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-xs font-semibold text-[#21603b] underline underline-offset-2">View at {WEEKLY_STORE_NAMES[store]} ↗</a>}
                 </> : <p className="mt-1 text-xs leading-5 text-[#607065]">We don’t have a fresh matched price for this product.</p>}
               </div>;
             })}
           </div>
+          {prices.length > 1 && !offersAreVerifiedExact(product) && <p className="mt-3 text-xs leading-5 text-[#82591a]">These retailers’ products have not all been verified as the same item. Compare titles, pack sizes and unit prices; the lowest price is not necessarily the same product.</p>}
           <p className="mt-3 text-xs leading-5 text-[#607065]">Prices are per pack or item as named and were checked within the last seven days. A missing price does not mean a product is out of stock. Check the retailer for current availability, loyalty conditions and delivery charges.</p>
         </section>
         <AddProductToShop id={product.id} name={product.name} slug={product.slug} />

@@ -27,16 +27,29 @@ export async function queryPriceChanges(subscriberId: string) {
     .in('canonical_name', names);
   if (!data) return [];
 
-  const bestByName = new Map<string, { store: string; price: number }>();
-  for (const row of data as Array<{ canonical_name: string; store: string; price: number }>) {
-    const existing = bestByName.get(row.canonical_name);
-    if (!existing || Number(row.price) < existing.price) bestByName.set(row.canonical_name, { store: row.store, price: Number(row.price) });
+  return priceChangesAtSameStore(history.slice(0, 30), data as Array<{ canonical_name: string; store: string; price: number }>);
+}
+
+/**
+ * A price change is only reported for the SAME retailer the shopper bought from: another store's offer on
+ * the same canonical record is not verified to be the same product, so it can never be presented as
+ * "cheaper now at X". best_store_now is therefore always the store last bought from.
+ */
+export function priceChangesAtSameStore(
+  history: Array<{ canonical_name: string; store: string; price_paid: number }>,
+  current: Array<{ canonical_name: string; store: string; price: number }>,
+) {
+  const now = new Map<string, number>();
+  for (const row of current) {
+    const key = `${row.canonical_name}\u0000${String(row.store).toLowerCase()}`;
+    const price = Number(row.price);
+    if (Number.isFinite(price) && price > 0 && (!now.has(key) || price < now.get(key)!)) now.set(key, price);
   }
-  return history.slice(0, 30).flatMap(item => {
-    const best = bestByName.get(item.canonical_name);
-    if (!best) return [];
-    const change = Number((best.price - Number(item.price_paid)).toFixed(2));
+  return history.flatMap(item => {
+    const price = now.get(`${item.canonical_name}\u0000${String(item.store).toLowerCase()}`);
+    if (price === undefined) return [];
+    const change = Number((price - Number(item.price_paid)).toFixed(2));
     if (Math.abs(change) < 0.05) return [];
-    return [{ canonical_name: item.canonical_name, last_store: item.store, last_price: item.price_paid, best_store_now: best.store, best_price_now: best.price, change, direction: change < 0 ? 'cheaper' as const : 'dearer' as const }];
+    return [{ canonical_name: item.canonical_name, last_store: item.store, last_price: item.price_paid, best_store_now: item.store, best_price_now: price, change, direction: change < 0 ? 'cheaper' as const : 'dearer' as const }];
   });
 }

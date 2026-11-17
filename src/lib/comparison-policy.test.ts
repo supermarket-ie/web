@@ -34,11 +34,14 @@ describe('pairwise offer classification', () => {
     expect(classifyOfferGroup(offers, alternatives, now)).toEqual({
       tesco: 'exact_product', supervalu: 'exact_product', dunnes: 'comparable_alternative',
     });
-    expect(COMPARISON_LABELS.comparable_alternative).toBe('Comparable alternative');
+    expect(COMPARISON_LABELS.comparable_alternative).toBe('Similar product');
+    expect(COMPARISON_LABELS.exact_product).toBe('Exact match');
+    expect(COMPARISON_LABELS.unverified).toBe('Unverified');
   });
   it('rejects confirmed incompatibility and does not auto-promote unverified names', () => {
     expect(classifyOfferGroup(offers, [review('t','d','not_comparable'),...exact], now).tesco).toBe('not_comparable');
-    expect(classifyOfferGroup(offers, [], now).dunnes).toBe('unverified');
+    // Dunnes Whole Milk is retailer own-label: a different product from Avonmore, never just "unverified".
+    expect(classifyOfferGroup(offers, [], now)).toEqual({ tesco: 'unverified', supervalu: 'unverified', dunnes: 'not_comparable' });
     expect(classifyOfferGroup(offers, [review('t','s','exact_product')], now).tesco).toBe('unverified');
   });
   it('vetoes contradictory pack or variant even if an exact review is asserted', () => {

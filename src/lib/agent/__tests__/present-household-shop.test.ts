@@ -56,6 +56,9 @@ function queryResult(table: string) {
   return builder;
 }
 
+// No independently reviewed pair edges exist in this fixture (as in production today).
+vi.mock('../../comparison-reviews', () => ({ getCurrentPairReviews: async () => [] }));
+
 vi.mock('../supabase', () => ({
   catalogueSupabase: { from: (table: string) => queryResult(table) },
 }));
@@ -100,11 +103,11 @@ describe('present_household_shop tool output', () => {
     const parsed = householdShopToolOutputSchema.safeParse(output);
     expect(parsed.success).toBe(true);
 
-    // Price truth preserved: the butter line is priced from the trusted offers
-    // and the cheapest complete retailer basket is recommended.
+    // Price truth preserved: the butter line is priced from the trusted offers. With no independently
+    // reviewed pair edge, store totals are indicative and no retailer is named the cheapest.
     expect(output.shop.totals.total_lines).toBe(1);
     expect(output.shop.items[0].selected_offer?.current_price).toBe(3.29);
-    expect(output.shop.recommended_retailer_strategy.kind).toBe('single_retailer');
+    expect(output.shop.recommended_retailer_strategy.kind).toBe('indicative_single_retailer');
     expect(output.shop.provenance.price_boundary).toBe('latest_prices');
   });
 });

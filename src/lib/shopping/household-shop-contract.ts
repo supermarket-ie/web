@@ -83,6 +83,9 @@ export type TrustedHouseholdShopOfferRow = {
 };
 
 export type HouseholdShopOffer = {
+  /** Cross-store relationship of this offer within its line (pair-review ledger + deterministic differences). */
+  comparison_status?: 'exact_product' | 'comparable_alternative' | 'not_comparable' | 'unverified';
+  unit_price?: { price: number; per: 'kg' | 'l' | 'each' } | null;
   retailer: string;
   retailer_product_id: string;
   retailer_sku: string;
@@ -127,8 +130,13 @@ export type HouseholdShopContract = {
     covered_lines: number;
     total_lines: number;
     complete: boolean;
+    /** Indicative total of this retailer's comparable offers; null unless every line is covered. Never a ranking basis on its own. */
     basket_total: number | null;
+    comparison_basis?: 'verified_exact' | 'indicative';
+    verified_exact_total?: number | null;
     missing_line_ids: string[];
+    different_product_line_ids?: string[];
+    unverified_line_ids?: string[];
   }>;
   missing_or_uncertain_items: Array<{
     line_id: string;
@@ -137,7 +145,8 @@ export type HouseholdShopContract = {
     reason: string;
   }>;
   recommended_retailer_strategy: {
-    kind: 'single_retailer' | 'mixed_retailer' | 'insufficient_coverage';
+    /** single_retailer = cheapest verified exact basket. indicative_single_retailer = full coverage, not verified identical. */
+    kind: 'single_retailer' | 'indicative_single_retailer' | 'mixed_retailer' | 'insufficient_coverage';
     retailer: string | null;
     rationale: string;
   };

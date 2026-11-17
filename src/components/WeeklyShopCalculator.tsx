@@ -100,8 +100,8 @@ export function WeeklyShopCalculator({ items }: { items: WeeklyItem[] }) {
             <div key={total.store} className="rounded-2xl border border-[#dce3dd] bg-white p-5">
               <h3 className="text-sm font-semibold text-[#354a3b]">{WEEKLY_STORE_NAMES[total.store]}</h3>
               <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-[#173525]">{total.subtotal === null ? '—' : money(total.subtotal)}</p>
-              <p className="mt-1 text-xs font-semibold text-[#52665a]">{total.verifiedComparableTotal !== null ? 'Verified comparable total' : total.pricedCount ? 'Indicative subtotal' : 'No priced items selected'}</p>
-              <p className="mt-3 text-xs leading-5 text-[#6d7c71]">{total.pricedCount} of {total.selectedCount} selected products priced{total.missingCount > 0 ? ` · ${total.missingCount} missing/incompatible` : ''}{total.alternativeCount > 0 ? ` · ${total.alternativeCount} comparable alternatives` : ''}{total.unverifiedCount > 0 ? ` · ${total.unverifiedCount} unverified` : ''}</p>
+              <p className="mt-1 text-xs font-semibold text-[#52665a]">{total.verifiedExactTotal !== null ? 'Verified exact total' : total.verifiedComparableTotal !== null ? 'Verified total incl. similar products' : total.pricedCount ? 'Indicative subtotal' : 'No priced items selected'}</p>
+              <p className="mt-3 text-xs leading-5 text-[#6d7c71]">{total.pricedCount} of {total.selectedCount} selected products priced{total.missingCount > 0 ? ` · ${total.missingCount} missing or different product` : ''}{total.alternativeCount > 0 ? ` · ${total.alternativeCount} similar products` : ''}{total.unverifiedCount > 0 ? ` · ${total.unverifiedCount} unverified` : ''}</p>
             </div>
           ))}
         </div>
@@ -137,7 +137,7 @@ export function WeeklyShopCalculator({ items }: { items: WeeklyItem[] }) {
           </table>
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="max-w-2xl text-xs leading-5 text-[#607065]">Retailer brands, variants and pack sizes can differ. Only independently approved relationships are labelled Exact product or Comparable alternative. Review retailer names and normalized unit prices; delivery, vouchers and unverified loyalty discounts are excluded.</p>
+          <p className="max-w-2xl text-xs leading-5 text-[#607065]">Retailer brands, variants and pack sizes can differ. Only independently approved relationships are labelled Exact match or Similar product; everything else is Unverified or a Different product. Review retailer names and normalized unit prices; delivery, vouchers and unverified loyalty discounts are excluded.</p>
           <a href="#personalise" className="rounded-xl bg-[#173525] px-5 py-3 text-sm font-semibold text-white hover:bg-[#28553a]">Use this to plan my week ↑</a>
         </div>
       </section>

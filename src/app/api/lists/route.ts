@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
+import { sanitizeStoreTotals } from '@/lib/saved-list-sanitize';
 
 function sessionToken(req: NextRequest, explicit?: string | null) {
   return req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
@@ -18,7 +19,8 @@ export async function GET(req: NextRequest) {
     .limit(10);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ lists: data ?? [] });
+  // Only verified-exact basket totals leave the server (legacy totals compared unverified products).
+  return NextResponse.json({ lists: (data ?? []).map(list => ({ ...list, store_totals: sanitizeStoreTotals(list.store_totals) })) });
 }
 
 export async function POST(req: NextRequest) {
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
       meals_prompt: meals_prompt ?? null,
       family_size: family_size ?? '2',
       items: items ?? [],
-      store_totals: store_totals ?? [],
+      store_totals: sanitizeStoreTotals(store_totals),
       is_default: is_default ?? false,
       generated_at: new Date().toISOString(),
     })

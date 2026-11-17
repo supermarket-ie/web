@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, ShoppingBasket, Store } from 'lucide-react';
 import {
   type HouseholdShopContract,
 } from '@/lib/shopping/household-shop-contract';
+import { COMPARISON_LABELS } from '@/lib/comparison-policy';
 
 const STORE_NAMES: Record<string, string> = {
   tesco: 'Tesco',
@@ -95,6 +96,13 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
                         <>
                           <p className="text-sm font-semibold text-[#26342b]">{euro(item.line_total)}</p>
                           <p className="text-[10px] text-[#7f8982]">{storeName(item.selected_offer.retailer)}</p>
+                          <p className="max-w-[11rem] text-[10px] leading-4 text-[#7f8982]">
+                            {item.selected_offer.retailer_product_name}
+                            {item.selected_offer.unit_price ? ` · ${euro(item.selected_offer.unit_price.price)}/${item.selected_offer.unit_price.per}` : ''}
+                          </p>
+                          {item.selected_offer.comparison_status && item.candidate_offers.length > 1 && (
+                            <p className="text-[10px] font-medium text-[#82591a]">{COMPARISON_LABELS[item.selected_offer.comparison_status]}</p>
+                          )}
                           {item.selected_offer.promotion.confirmed_monetary_saving ? (
                             <p className="text-[10px] font-medium text-[#08783b]">Save {euro(item.selected_offer.promotion.saving ?? 0)} each</p>
                           ) : item.selected_offer.promotion.retailer_marked ? (
@@ -125,6 +133,12 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
               <p className="mt-0.5 text-sm font-semibold text-[#26342b]">
                 {coverage.complete && coverage.basket_total != null ? euro(coverage.basket_total) : 'Partial coverage'}
               </p>
+              {coverage.complete && coverage.basket_total != null && (
+                <p className="text-[10px] text-[#82591a]">{coverage.comparison_basis === 'verified_exact' ? 'Verified exact matches' : 'Indicative total'}</p>
+              )}
+              {(coverage.different_product_line_ids?.length ?? 0) > 0 && (
+                <p className="text-[10px] text-[#82591a]">{coverage.different_product_line_ids!.length} different product(s) excluded</p>
+              )}
             </div>
           ))}
         </div>
@@ -132,10 +146,12 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
         <div className="mt-3 rounded-xl bg-[#edf7f0] px-3.5 py-3 text-xs leading-5 text-[#385443]">
           <strong className="text-[#21452e]">
             {shop.recommended_retailer_strategy.kind === 'single_retailer'
-              ? `${storeName(shop.recommended_retailer_strategy.retailer ?? '')} is the strongest one-store option.`
-              : shop.recommended_retailer_strategy.kind === 'mixed_retailer'
-                ? 'No single retailer currently covers the full shop.'
-                : 'Some items still need to be matched.'}
+              ? `${storeName(shop.recommended_retailer_strategy.retailer ?? '')} is the cheapest verified one-store basket.`
+              : shop.recommended_retailer_strategy.kind === 'indicative_single_retailer'
+                ? 'Store totals are indicative.'
+                : shop.recommended_retailer_strategy.kind === 'mixed_retailer'
+                  ? 'No single retailer has a comparable offer for every line.'
+                  : 'Some items still need to be matched.'}
           </strong>{' '}
           {shop.recommended_retailer_strategy.rationale}
         </div>

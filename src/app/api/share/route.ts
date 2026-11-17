@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { sanitizeStoreTotals } from '@/lib/saved-list-sanitize';
 
 // 16 chars × 5 bits (32-char alphabet) = 80 bits of entropy
 function randomId(len = 16) {
@@ -28,7 +29,8 @@ export async function POST(req: Request) {
         id,
         family_size,
         items,
-        store_totals,
+        // Persist only verified-exact basket totals (the share page publicly labels the first as "best value").
+        store_totals: sanitizeStoreTotals(store_totals),
         generated_at: generated_at ?? new Date().toISOString(),
       });
 

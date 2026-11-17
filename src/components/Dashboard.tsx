@@ -77,9 +77,9 @@ function AgentNoticeCard({ data, token }: { data: RefreshData; token: string }) 
           </span>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold" style={{ color: 'var(--on-background)' }}>
-              €{thisWeekTotal.toFixed(2)}
+              {thisWeekTotal === null ? '—' : `€${thisWeekTotal.toFixed(2)}`}
             </span>
-            {priceDiff.netChange !== 0 && (
+            {thisWeekTotal !== null && priceDiff.netChange !== 0 && (
               <span className="text-sm font-semibold"
                 style={{ color: saving ? '#16a34a' : '#dc2626' }}>
                 {saving ? `−€${priceDiff.netChange.toFixed(2)}` : `+€${Math.abs(priceDiff.netChange).toFixed(2)}`}

@@ -57,6 +57,55 @@ NEXT VERIFICATION ROUTE: SuperValu↔Tesco.
 - With SuperValu evidence runs, both sides can satisfy the ledger. No Dunnes
   involvement.
 
+## 17 November 2026 — Comparison safety: unverified canonical associations are no longer treated as the same product (PR, NOT deployed)
+
+Customer-facing change, pending review. Not merged or deployed.
+
+- ONE RULE (`src/lib/comparison-policy.ts`):
+  - `classifyOfferGroup` (pair-review ledger) now also marks an unreviewed pair
+    Different product when stated facts contradict:
+    - two unambiguous packs differ (single unit or explicit N x M; "6 Pack (270 g)" is ambiguous and ignored)
+    - an identity/variant conflict
+    - retailer own-label on either side
+  - `compareBasket` is the only source of cross-store totals and cheapest claims.
+    A cheapest store needs ≥ 2 complete baskets in which every line is an approved
+    Exact match among those stores. Otherwise stores are listed by coverage, never
+    by price, and totals are indicative.
+  - Labels: Exact match / Similar product / Unverified / Different product.
+- Paths fixed:
+  - Lightweight-agent `compare_shop_stores`: per-line retailer title, price, unit
+    price and label; `cheapest_verified_store` only when verified; the tool
+    description forbids other cheapest claims.
+  - `present_household_shop` / `groundHouseholdShop`: per-offer
+    `comparison_status` and `unit_price`. `single_retailer` only for a verified
+    cheapest basket, else the new `indicative_single_retailer`. Different-product
+    lines are listed and excluded from store totals.
+  - `generateList`: store totals and `recommended_store` only for verified
+    baskets. Items carry `price_comparison`, and the list card shows each
+    retailer's title and unit price with an indicative or different-products note.
+  - `/api/plan/reprice`: current prices only. Missing items are never filled with
+    historical paid prices. No cheapest store or saving without a verified basket.
+  - `/api/plan/refresh` and price-change notices: the same store and same items
+    only. No "promotion at a different store" count.
+  - Persisted `store_totals` (saved lists, share pages, `/api/lists`, agent
+    context, the public products API): `sanitizeStoreTotals` shows only totals
+    marked `verified_exact`. Legacy totals are hidden, not migrated.
+  - Product-page JSON-LD: no cross-store AggregateOffer unless verified. The page
+    shows labels and unit prices.
+  - Weekly-shop: a separate `verifiedExactTotal` (excludes Similar products).
+  - Agent catalogue lookups label each store's offer and state that `best_price`
+    is the lowest price, not proof of the same product.
+- Effect today: the ledger has 0 approved edges, so NO cross-store cheapest claim
+  appears anywhere. Individual retailer prices and indicative totals remain visible.
+- NOT changed:
+  - The Eve rollback image (`agent/` tools other than `agent/lib/catalogue.ts`
+    and `capability-instructions.ts`).
+  - The unused `src/components/ProductPrices.tsx`.
+  - Watchdog emails, which inherit the same-store change via `queryPriceChanges`.
+- Tests: `comparison-safety.test.ts` and `comparison-safety-paths.test.ts`
+  (Flahavan's/Lifeforce, incomplete baskets, different packs, own-label, verified
+  cheapest), plus updated household-shop, product-catalogue and sanitize tests.
+
 ## 15 November 2026 15:20Z — Apify limit raised; renewals restored; barcode provenance enforced; enrichment proposal
 
 - Owner raised the Apify account limit to $80 (used $19.05). Renewal on rev16

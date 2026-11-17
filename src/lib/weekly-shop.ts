@@ -91,6 +91,9 @@ export function weeklyShopTotals(items: WeeklyItem[], quantities: Record<string,
       total: selected.length > 0 && priced.length === selected.length ? subtotalCents / 100 : null,
       verifiedComparableTotal: selected.length > 0 && priced.length === selected.length && unverified.length === 0
         ? subtotalCents / 100 : null,
+      /** Every selected item is an independently verified Exact match (no Similar products, nothing unverified). */
+      verifiedExactTotal: selected.length > 0 && priced.length === selected.length && unverified.length === 0 && alternatives.length === 0
+        ? subtotalCents / 100 : null,
     };
   });
 }

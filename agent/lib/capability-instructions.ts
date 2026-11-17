@@ -41,6 +41,7 @@ const CAPABILITY_INSTRUCTIONS: Record<EveCapability, string> = {
 - If nothing material changed, say so. Never manufacture activity.`,
   retailer: `RETAILER AND BASKET COMPARISON
 - Use compare_shop_stores for whole-shop one-store comparisons when exposed. Coverage is part of the answer; a partial basket has no complete total.
+- Name a store as cheapest ONLY when the tool returns cheapest_verified_store (every item an independently verified Exact match). Otherwise say totals are indicative, show each retailer's own product title and pack, and never say unverified or different products are the same. A catalogue best_price is the lowest current price, not proof the stores sell the same product.
 - Avoid rewriting store assignments automatically. Recommend multiple trips only for a material fulfilment or savings improvement. “Shop this basket” may imply trolley population only after a proven handoff tool succeeds with explicit shopper approval.`,
 };
 

@@ -5,6 +5,7 @@ import { parseMarkdownList } from '@/lib/parse-planner-markdown';
 import { householdShopToolOutputSchema, type HouseholdShopContract } from '@/lib/shopping/household-shop-contract';
 import { groundHouseholdShop } from '@/lib/shopping/household-shop';
 import { isContinuationId } from '@/lib/registration-continuation';
+import { sanitizeStoreTotals } from '@/lib/saved-list-sanitize';
 
 function sessionToken(request: NextRequest, explicit?: string) {
   return request.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
@@ -74,8 +75,10 @@ export async function POST(request: NextRequest) {
       on_promotion: item.selected_offer?.promotion.retailer_marked ?? false,
     })) : legacy!.items;
     const storeTotals = structured
-      ? structured.store_coverage.map(row => ({ store: row.retailer, total: row.basket_total, item_count: row.covered_lines, complete: row.complete }))
-      : legacy!.storeTotals;
+      // Persist only verified-exact basket totals; indicative store totals are not a like-for-like basis.
+      ? sanitizeStoreTotals(structured.store_coverage.map(row => ({ store: row.retailer, total: row.verified_exact_total ?? null,
+        item_count: row.covered_lines, basis: row.comparison_basis })))
+      : sanitizeStoreTotals(legacy!.storeTotals);
 
     const name = body.name ?? (structured ? `${structured.household.planning_period.label} household shop` : body.markdown!.split('\n').find(line => line.startsWith('# '))?.slice(2).trim()) ?? 'Weekly grocery list';
     const { data: saved, error } = await supabaseAdmin.from('saved_lists').insert({

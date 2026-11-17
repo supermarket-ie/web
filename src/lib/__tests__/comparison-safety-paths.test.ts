@@ -1,0 +1,102 @@
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('server-only', () => ({}));
+vi.mock('@/lib/supabase', () => ({ supabaseAdmin: {} }));
+vi.mock('../supabase', () => ({ supabaseAdmin: {} }));
+
+import { compareBasketStores } from '../shopping/compare';
+import { repriceBasket } from '../shopping/reprice';
+import { priceChangesAtSameStore } from '../shopping/price-history';
+import { buildSmartList } from '../list-generator';
+import type { PairReview } from '../comparison-policy';
+
+// Regression coverage for every customer path that used to treat a shared canonical record as the same product.
+const at = new Date(Date.now() - 3600_000).toISOString();
+const review = (a: string, b: string): PairReview => ({ left_offer_id: a, right_offer_id: b, classification: 'exact_product',
+  left_source_hash: 'a'.repeat(64), right_source_hash: 'b'.repeat(64), left_captured_at: at, right_captured_at: at, reviewed_at: at,
+  rationale: 'Independent direct-capture review.', reviewer: 'test' });
+
+const muesliRows = [
+  { canonical_name: 'Muesli', store: 'dunnes', price: 5.5, store_product_id: 'd-flahavans', store_product_name: "Flahavan's Hi8 Muesli Original 1kg" },
+  { canonical_name: 'Muesli', store: 'supervalu', price: 5.19, store_product_id: 's-lifeforce', store_product_name: 'Lifeforce Muesli (750 g)' },
+];
+const chilliRows = [
+  { canonical_name: 'Chilli Powder 38g', store: 'dunnes', price: 3.4, store_product_id: 'd-chilli', store_product_name: 'Schwartz Mild Chilli Powder 38g' },
+  { canonical_name: 'Chilli Powder 38g', store: 'supervalu', price: 3.35, store_product_id: 's-chilli', store_product_name: 'Schwartz Chilli Powder Mild (38 g)' },
+];
+
+describe('agent compare_shop_stores (compareBasketStores)', () => {
+  it('Flahavan\'s vs Lifeforce: no complete total, no cheapest store, the different product is named', () => {
+    const r = compareBasketStores([{ canonical_name: 'Muesli' }, { canonical_name: 'Chilli Powder 38g' }], [...muesliRows, ...chilliRows], undefined, [review('d-chilli', 's-chilli')]);
+    expect(r.cheapest_verified_store).toBeNull();
+    for (const c of r.comparisons) {
+      expect(c).toMatchObject({ complete: false, total: null, verified_exact_total: null, different_products: ['Muesli'] });
+      expect(c.lines.find(l => l.canonical_name === 'Muesli')).toMatchObject({ comparison: 'Different product' });
+    }
+    // each retailer's own product title is carried through
+    expect(r.comparisons.flatMap(c => c.lines.map(l => l.retailer_product_name))).toContain('Lifeforce Muesli (750 g)');
+  });
+  it('identical-looking unreviewed products are indicative: totals shown, no cheapest store, no saving vs current', () => {
+    const r = compareBasketStores([{ canonical_name: 'Chilli Powder 38g', current_price: 3.4 }], chilliRows);
+    expect(r.comparison_basis).toBe('indicative');
+    expect(r.cheapest_verified_store).toBeNull();
+    expect(r.comparisons.every(c => c.total !== null && c.verified_exact_total === null && c.difference_vs_current === null)).toBe(true);
+  });
+  it('a verified complete basket names the cheapest store', () => {
+    const r = compareBasketStores([{ canonical_name: 'Chilli Powder 38g', current_price: 3.4 }], chilliRows, undefined, [review('d-chilli', 's-chilli')]);
+    expect(r.cheapest_verified_store).toEqual({ store: 'supervalu', total: 3.35 });
+    expect(r.comparisons[0]).toMatchObject({ store: 'supervalu', comparison_basis: 'verified_exact', difference_vs_current: -0.05 });
+  });
+});
+
+describe('list generator (buildSmartList)', () => {
+  const offers = [...muesliRows, ...chilliRows].map(r => ({ ...r, canonical_product_id: r.canonical_name, category: null, store_url: null }));
+  it('publishes no store totals or recommended store without verified exact matches, and labels each item', () => {
+    const list = buildSmartList(offers, [], '2', undefined);
+    expect(list.store_totals).toEqual([]);
+    expect(list.recommended_store).toBe('');
+    expect(list.items.find(i => i.canonical_name === 'Muesli')?.price_comparison).toBe('different_products');
+    expect(list.items.find(i => i.canonical_name === 'Chilli Powder 38g')?.price_comparison).toBe('indicative');
+  });
+  it('a different product on one line blocks any verified basket total even when the other line is verified', () => {
+    const list = buildSmartList(offers, [review('d-chilli', 's-chilli')], '2', undefined);
+    expect(list.store_totals).toEqual([]);
+    expect(list.items.find(i => i.canonical_name === 'Chilli Powder 38g')?.price_comparison).toBe('verified_exact');
+  });
+  it('verified complete baskets produce marked totals and a recommended store', () => {
+    const list = buildSmartList(chilliRows.map(r => ({ ...r, canonical_product_id: 'c', category: null, store_url: null })), [review('d-chilli', 's-chilli')], '2', undefined);
+    expect(list.recommended_store).toBe('supervalu');
+    expect(list.store_totals.every(t => t.basis === 'verified_exact')).toBe(true);
+  });
+});
+
+describe('plan reprice (repriceBasket)', () => {
+  const items = [
+    { canonical_name: 'Muesli', store: 'supervalu', price_paid: 4.0, quantity: 1 },
+    { canonical_name: 'Chilli Powder 38g', store: 'dunnes', price_paid: 3.0, quantity: 1 },
+  ];
+  it('never fills a store\'s missing item with a historical paid price, and names no cheapest store', () => {
+    const r = repriceBasket(items, chilliRows, ['dunnes', 'supervalu']);
+    expect(r.singleStoreTotals.every(s => s.total === 3.4 || s.total === 3.35)).toBe(true); // current prices only
+    expect(r.singleStoreTotals.every(s => !s.complete)).toBe(true);
+    expect(r.bestSingleStore).toBeNull();
+    expect(r.savings).toBeNull();
+    expect(r.bestSplitTotal).toBeNull(); // Muesli is no longer priced at the store bought from in this fixture
+  });
+  it('Flahavan\'s vs Lifeforce: no single store is complete or cheapest', () => {
+    const r = repriceBasket(items, [...muesliRows, ...chilliRows], ['dunnes', 'supervalu'], [review('d-chilli', 's-chilli')]);
+    expect(r.bestSingleStore).toBeNull();
+    expect(r.savings).toBeNull();
+    expect(r.bestSplitTotal).toBe(8.59); // today's prices at the shopper's chosen stores (5.19 + 3.40)
+  });
+});
+
+describe('price-change notices', () => {
+  it('compare the last paid price with the SAME store only, never another store\'s product', () => {
+    const changes = priceChangesAtSameStore(
+      [{ canonical_name: 'Muesli', store: 'dunnes', price_paid: 6.0 }],
+      muesliRows,
+    );
+    expect(changes).toEqual([expect.objectContaining({ last_store: 'dunnes', best_store_now: 'dunnes', best_price_now: 5.5, change: -0.5 })]);
+  });
+});

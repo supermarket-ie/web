@@ -77,7 +77,9 @@ export function ProductCard({
                 }}
                 className="text-[10px] font-bold px-1.5 py-0.5 rounded transition hover:opacity-80 active:scale-95"
                 style={{ background: style.bg, color: style.text }}
-                title={item.store_overridden ? 'Your choice (tap to change)' : 'Cheapest store (tap to change)'}>
+                title={item.store_overridden ? 'Your choice (tap to change)'
+                  : item.price_comparison === 'verified_exact' ? 'Cheapest store for this verified exact product (tap to change)'
+                  : 'Lowest current price — the stores’ products are not verified as the same item (tap to change)'}>
                 {storeDisplayName(item.best_store)}{item.store_overridden ? ' ✎' : ''}
               </button>
               <span className="font-extrabold text-sm price" style={{ color: 'var(--on-background)' }}>
@@ -87,6 +89,13 @@ export function ProductCard({
           </div>
 
           {/* Cross-store price comparison */}
+          {item.all_prices.length > 1 && item.price_comparison !== 'verified_exact' && (
+            <p className="mt-1 text-[10px] leading-snug" style={{ color: '#82591a' }}>
+              {item.price_comparison === 'different_products'
+                ? 'Different products at each store (pack, variant or own-label) — compare titles and unit prices.'
+                : 'Indicative — these stores’ products are not verified as the same item.'}
+            </p>
+          )}
           {item.all_prices.length > 1 && (
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
               {item.all_prices.map(sp => {
@@ -99,8 +108,10 @@ export function ProductCard({
                     <span className="font-semibold" style={{ color: spStyle.bg }}>{abbr}</span>
                     {sp.store_url
                       ? <a href={sp.store_url} target="_blank" rel="noopener noreferrer" className="hover:underline" title={sp.store_product_name}>{fmt(sp.price)}</a>
-                      : <span>{fmt(sp.price)}</span>}
-                    {isBest && <span style={{ color: 'var(--primary)' }}>✓</span>}
+                      : <span title={sp.store_product_name}>{fmt(sp.price)}</span>}
+                    {sp.unit_price && <span className="opacity-70">({fmt(sp.unit_price.price)}/{sp.unit_price.per})</span>}
+                    {isBest && item.price_comparison === 'verified_exact' && <span style={{ color: 'var(--primary)' }}>✓</span>}
+                    <span className={item.price_comparison === 'verified_exact' ? 'sr-only' : 'max-w-[12rem] truncate opacity-70'}>{sp.store_product_name}</span>
                   </span>
                 );
               })}
