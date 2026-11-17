@@ -41,11 +41,13 @@ function sources(body: string): { value: unknown; path: string }[] {
   for (const [i, match] of [...body.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].entries()) {
     const raw = match[1].trim();
     try { result.push({ value: JSON.parse(raw), path: `script[${i}]` }); continue; } catch { /* assigned state */ }
-    const marker = /(?:window\.)?__PRELOADED_STATE__\s*=/.exec(raw);
-    if (!marker) continue;
-    const json = balancedObject(raw, raw.indexOf('{', marker.index + marker[0].length));
-    if (!json) continue;
-    try { result.push({ value: JSON.parse(json), path: `script[${i}].__PRELOADED_STATE__` }); } catch { /* not a complete JSON state */ }
+    // Every assignment form (`window.__PRELOADED_STATE__ =`, `window["__PRELOADED_STATE__"] =`, bare name), never
+    // a comparison (`===` / `==`). The first marker that yields a complete JSON object is used.
+    for (const marker of raw.matchAll(/(?:window\s*(?:\.\s*__PRELOADED_STATE__|\[\s*["']__PRELOADED_STATE__["']\s*\])|\b__PRELOADED_STATE__)\s*=(?!=)/g)) {
+      const json = balancedObject(raw, raw.indexOf('{', marker.index + marker[0].length));
+      if (!json) continue;
+      try { result.push({ value: JSON.parse(json), path: `script[${i}].__PRELOADED_STATE__` }); break; } catch { /* not a complete JSON state */ }
+    }
   }
   return result;
 }

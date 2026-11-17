@@ -41,6 +41,13 @@ FIX (branch fix/supervalu-direct-capture):
   a q or failure_run filter, and limit ≤ 25. Daily refresh storage is unchanged.
 - Live confirmation on the real page is pending deploy plus one evidence run. The
   fix was verified on a fixture reproducing the observed structure.
+- Review nits adopted:
+  - every `__PRELOADED_STATE__` assignment form is tried, never `===`
+  - `evidence` must be 0/1, otherwise 400
+  - a route test proves the scheduled run never flags evidence
+- ROLLBACK CAVEAT: an image older than this rejects parser-v3 rows on
+  re-verification. Keep ledger readers on this or a newer image once evidence
+  runs have happened.
 
 NEXT VERIFICATION ROUTE: SuperValu↔Tesco.
 - Tesco has 4,415 ledger-qualifying ok/200 supervised pages in 13 days (1,407

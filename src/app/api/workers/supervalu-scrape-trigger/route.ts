@@ -52,7 +52,11 @@ export async function GET(request: Request): Promise<Response> {
 
   // Direct-page evidence retention (~1.5 MB per page, immutable table) only for small, explicitly filtered
   // verification runs; never for the scheduled full refresh.
-  const evidence = url.searchParams.get('evidence') === '1';
+  const evidenceParam = url.searchParams.get('evidence');
+  if (evidenceParam !== null && evidenceParam !== '0' && evidenceParam !== '1') {
+    return Response.json({ error: 'evidence must be 0 or 1' }, { status: 400 });
+  }
+  const evidence = evidenceParam === '1';
   if (evidence && (resolvedScope.scope !== 'targeted_validation' || limit > EVIDENCE_RUN_MAX || (!query && !failureRunId))) {
     return Response.json({ error: `evidence=1 requires scope=targeted_validation, a q or failure_run filter and limit <= ${EVIDENCE_RUN_MAX}` }, { status: 400 });
   }

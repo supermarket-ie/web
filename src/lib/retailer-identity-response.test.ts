@@ -55,6 +55,12 @@ describe('original retailer response retention', () => {
       const conflicting = page().replace('"brand":"Schwartz"}}}', '"brand":"Other"}}}');
       expect(captureIdentityResponse({ ...sv, body: conflicting })).toBeNull();
     });
+    it('ignores a comparison guard before the assignment and accepts bracket assignment', () => {
+      const guarded = `<script>if (window.__PRELOADED_STATE__ === undefined) { var x = {}; } window.__PRELOADED_STATE__ = ${JSON.stringify(state)}; window.__X__ = {};</script>`;
+      expect(captureIdentityResponse({ ...sv, body: guarded })?.source_kind).toBe('captured_product');
+      const bracket = `<script>window["__PRELOADED_STATE__"] = ${JSON.stringify(state)};</script>`;
+      expect(captureIdentityResponse({ ...sv, body: bracket })?.source_kind).toBe('captured_product');
+    });
     it('an unterminated state object is not parsed', () => {
       expect(captureIdentityResponse({ ...sv, body: `<script>window.__PRELOADED_STATE__ = {"product":{"sku":"${svSku}","name":"${svTitle}"</script>` })).toBeNull();
     });
