@@ -74,7 +74,8 @@ Customer-facing change, pending review. Not merged or deployed.
   - Labels: Exact match / Similar product / Unverified / Different product or pack.
   - A verified cheapest claim needs EVERY pair among the compared stores to be
     an approved exact match (`allPairsExact`); exactness is not transitive
-    through the Tesco anchor.
+    through the Tesco anchor. Per-offer labels: the largest pairwise-exact set
+    is Exact match, every other reviewed offer is Similar product.
 - Paths fixed:
   - Lightweight-agent `compare_shop_stores`: per-line retailer title, price, unit
     price and label; `cheapest_verified_store` only when verified; the tool
@@ -133,7 +134,13 @@ Customer-facing change, pending review. Not merged or deployed.
     retailer title, unit price, label).
 - Flagged to owner (NOT changed): hardcoded price claims in `src/lib/blog.ts`;
   `/api/plan/weekly` persists a client `store_assignment`; `/api/plan/reprice`
-  still includes Aldi (no own-label prefix rule for Aldi ranges).
+  still includes Aldi (no own-label prefix rule for Aldi ranges);
+  `TestimonialsSection.tsx` quotes ("€2 cheaper at Dunnes", "from the
+  cheapest stores") are attributed testimonials, left for the owner.
+- Known limits: saved-total expiry runs from save time, not evidence time (a
+  total saved on a review's day 13 stays visible ~14 more days).
+  `/api/plan/refresh` returns 500 (uncached) if current prices cannot be read;
+  price-change notices log and send nothing.
 - NOT changed:
   - The unused `src/components/ProductPrices.tsx`.
 - Tests: `comparison-safety.test.ts` and `comparison-safety-paths.test.ts`

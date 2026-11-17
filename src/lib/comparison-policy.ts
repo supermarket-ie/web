@@ -232,17 +232,23 @@ export function classifyOfferGroup(offers: OfferIdentity[], reviews: PairReview[
     for (const offer of offers) if ((differences.get(offer.store) ?? 0) === offers.length - 1) result[offer.store] = 'not_comparable';
     return result;
   }
+  // Every pair is reviewed and none is a different product. The largest set of offers that are PAIRWISE
+  // exact (ties: Tesco, SuperValu, Dunnes first) is labelled Exact match; every other offer is a Similar
+  // product. Exactness is never inferred through a third offer, and a two-offer Similar pair is Similar.
   const preferred = ['tesco', 'supervalu', 'dunnes'];
-  const anchor = [...offers].sort((a, b) => preferred.indexOf(a.store) - preferred.indexOf(b.store))[0];
-  for (const offer of offers) {
-    if (offer === anchor) continue;
-    result[offer.store] = latest.get(pairKey(anchor.storeProductId!, offer.storeProductId!))!.classification;
+  const rank = (o: OfferIdentity) => { const i = preferred.indexOf(o.store); return i === -1 ? preferred.length : i; };
+  const ordered = [...offers].sort((a, b) => rank(a) - rank(b) || a.store.localeCompare(b.store));
+  const exactPair = (a: OfferIdentity, b: OfferIdentity) => latest.get(pairKey(a.storeProductId!, b.storeProductId!))?.classification === 'exact_product';
+  let best: OfferIdentity[] = [];
+  // Offer groups are one offer per retailer (a handful), so subset enumeration is cheap.
+  for (let mask = 1; mask < 1 << ordered.length; mask++) {
+    const set = ordered.filter((_, i) => mask & (1 << i));
+    if (set.length < 2 || set.length < best.length) continue;
+    if (!set.every((a, i) => set.slice(i + 1).every(b => exactPair(a, b)))) continue;
+    // Prefer the larger set; on a tie keep the earlier (lower-mask = more preferred retailers) one.
+    if (set.length > best.length) best = set;
   }
-  // A Tesco offer whose only counterparts are Similar products is itself shown as Similar, not Exact.
-  if (!anchor) return result;
-  const others = offers.filter(o => o !== anchor).map(o => result[o.store]);
-  // Exact only if at least one counterpart is exact to it; Similar stays beside the retailer that differs.
-  result[anchor.store] = others.some(s => s === 'exact_product') ? 'exact_product' : 'comparable_alternative';
+  for (const offer of offers) result[offer.store] = best.includes(offer) ? 'exact_product' : 'comparable_alternative';
   return result;
 }
 

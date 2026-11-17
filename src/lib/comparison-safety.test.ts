@@ -149,6 +149,15 @@ describe('three-store verified baskets', () => {
     const c = compareBasket([three], ['tesco', 'supervalu', 'dunnes'], [review('t', 's'), review('t', 'd'), review('s', 'd')], now);
     expect(c.cheapestVerified).toEqual({ store: 'dunnes', total: 1.3 });
   });
+  it('labels only a pairwise-exact set as Exact match; the offer that is Similar to one of them is Similar', () => {
+    const reviews = [review('t', 's'), review('t', 'd'), review('s', 'd', 'comparable_alternative')];
+    expect(classifyOfferGroup(three.offers, reviews, now)).toEqual({ tesco: 'exact_product', supervalu: 'exact_product', dunnes: 'comparable_alternative' });
+    expect(classifyOfferGroup(three.offers, [review('t', 's'), review('t', 'd'), review('s', 'd')], now))
+      .toEqual({ tesco: 'exact_product', supervalu: 'exact_product', dunnes: 'exact_product' });
+    // Only SuperValu = Dunnes is exact: Tesco is the odd one out.
+    expect(classifyOfferGroup(three.offers, [review('t', 's', 'comparable_alternative'), review('t', 'd', 'comparable_alternative'), review('s', 'd')], now))
+      .toEqual({ tesco: 'comparable_alternative', supervalu: 'exact_product', dunnes: 'exact_product' });
+  });
   it('a two-store Similar pair labels both sides Similar product', () => {
     expect(classifyOfferGroup(three.offers.slice(0, 2), [review('t', 's', 'comparable_alternative')], now))
       .toEqual({ tesco: 'comparable_alternative', supervalu: 'comparable_alternative' });

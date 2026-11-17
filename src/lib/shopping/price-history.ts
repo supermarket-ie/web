@@ -18,18 +18,23 @@ export async function queryUserHistory(subscriberId: string) {
   return [...map.entries()].map(([canonical_name, value]) => ({ canonical_name, ...value }));
 }
 
-export async function queryPriceChanges(subscriberId: string) {
+/** Same-store price changes; throws if current prices cannot be read (use when a result will be cached). */
+export async function queryPriceChangesStrict(subscriberId: string) {
   const history = await queryUserHistory(subscriberId);
   if (!history.length) return [];
   const names = history.slice(0, 30).map(item => item.canonical_name);
-  let data: Array<{ canonical_name: string; store: string; price: number }>;
-  try {
-    data = await fetchCurrentExactOffers(names, 'canonical_name, store, price, was_price, on_promotion');
-  } catch {
-    return []; // no notice rather than a notice built on partial or untrusted prices
-  }
-
+  const data = await fetchCurrentExactOffers<{ canonical_name: string; store: string; price: number }>(names, 'canonical_name, store, price, was_price, on_promotion');
   return priceChangesAtSameStore(history.slice(0, 30), data);
+}
+
+/** Lenient variant for notices: a read failure yields no notice (never one built on partial prices), logged. */
+export async function queryPriceChanges(subscriberId: string) {
+  try {
+    return await queryPriceChangesStrict(subscriberId);
+  } catch (error) {
+    console.warn('[price-history] current prices unavailable; no price-change notice', { message: error instanceof Error ? error.message : 'unknown' });
+    return [];
+  }
 }
 
 /**

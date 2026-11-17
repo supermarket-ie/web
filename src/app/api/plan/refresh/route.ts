@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { queryPriceChanges } from '@/lib/shopping/price-history';
+import { queryPriceChangesStrict } from '@/lib/shopping/price-history';
 import { getSubscriberId } from '@/lib/auth';
 import { fetchCurrentExactOffers } from '@/lib/shopping/current-offers';
 
@@ -70,7 +70,13 @@ export async function GET(req: NextRequest) {
   const thisWeekTotal = paid.length && unpriced === 0
     ? repriced.reduce((sum, r) => sum + r.now! * (r.item.quantity ?? 1), 0)
     : null;
-  const priceChanges = await queryPriceChanges(subscriberId);
+  let priceChanges: Awaited<ReturnType<typeof queryPriceChangesStrict>>;
+  try {
+    priceChanges = await queryPriceChangesStrict(subscriberId);
+  } catch {
+    // Not cached: a transient read failure must not be served for an hour as "no price changes".
+    return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 });
+  }
 
   const cheaper = priceChanges.filter(c => c.direction === 'cheaper');
   const dearer = priceChanges.filter(c => c.direction === 'dearer');
