@@ -127,7 +127,11 @@ export function WeeklyShopCalculator({ items }: { items: WeeklyItem[] }) {
                     {offer ? <>
                       <span className="block font-semibold tabular-nums text-[#173525]">{quantities[item.id] > 0 ? money(Math.round(offer.price * 100) * quantities[item.id] / 100) : 'Not included'}</span>
                       <span className="mt-1 block text-xs leading-5 text-[#607065]">{offer.name}</span>
-                      <span className="mt-1 block text-[11px] font-semibold text-[#82591a]">{comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => item.offers[s]).length)}{offer.differentPack ? ' · different/unknown pack, excluded from equivalent total' : ''}</span>
+                      {(() => {
+                        const label = comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => item.offers[s]).length);
+                        const note = [label, offer.differentPack ? 'different/unknown pack, excluded from equivalent total' : null].filter(Boolean).join(' · ');
+                        return note ? <span className="mt-1 block text-[11px] font-semibold text-[#82591a]">{note}</span> : null;
+                      })()}
                       <span className="mt-1 block text-[11px] leading-4 text-[#718076]">{money(offer.price)} per retailer pack · checked {date(offer.observedAt)}{offer.unitPrice ? ` · ${money(offer.unitPrice.price)} per ${offer.unitPrice.per}` : ''}</span>
                     </> : <span className="text-xs text-[#718076]">Price unavailable</span>}
                   </td>;

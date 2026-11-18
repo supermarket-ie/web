@@ -168,7 +168,7 @@ export default async function ComparePage() {
                 {activeStores.map(store => (
                   <span key={store} className="rounded-full bg-[#f2f5f2] px-2.5 py-1 text-[11px] text-[#59645c]">
                     {STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#253128]">{fmt(product.prices[store])}</strong>
-                    {comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length) && <span className="ml-1 text-[10px]">{comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length)}</span>}
+                    {(label => label && <span className="ml-1 text-[10px]">{label}</span>)(comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length))}
                   </span>
                 ))}
               </div>
@@ -202,7 +202,7 @@ export default async function ComparePage() {
                   </div>
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667169]">
                     {activeStores.map(store => (
-                      <span key={store}>{STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#354139]">{fmt(product.prices[store])}</strong> {comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length) ? ` · ${comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length)}` : ''} · {product.offers[store].name}</span>
+                      <span key={store}>{STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#354139]">{fmt(product.prices[store])}</strong>{(label => label ? ` · ${label}` : '')(comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length))} · {product.offers[store].name}</span>
                     ))}
                   </div>
                 </div>

@@ -31,8 +31,9 @@ function ProductOption({ product, selected, full, onAdd }: { product: ShopProduc
     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[#607065]">
       {WEEKLY_STORES.map(store => {
         const offer = product.offers[store];
+        const label = comparisonLabel(offer?.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length);
         return <span key={store}>{WEEKLY_STORE_NAMES[store].split(' ')[0]} <strong className="text-[#263e2e]">{offer ? money(offer.price) : '—'}</strong>
-          {offer && comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length) && <span className="ml-1 rounded bg-[#f0f7f2] px-1 py-0.5 text-[10px]">{comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length)}</span>}
+          {offer && label && <span className="ml-1 rounded bg-[#f0f7f2] px-1 py-0.5 text-[10px]">{label}</span>}
         </span>;
       })}
     </div>
@@ -41,8 +42,9 @@ function ProductOption({ product, selected, full, onAdd }: { product: ShopProduc
       <ul className="mt-2 space-y-2">
         {WEEKLY_STORES.map(store => {
           const offer = product.offers[store];
+          const label = comparisonLabel(offer?.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length);
           return <li key={store}><strong>{WEEKLY_STORE_NAMES[store]}:</strong> {offer ? <>
-            {offer.name} · {money(offer.price)} per retailer pack{comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length) ? ` · ${comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length)}` : ''}
+            {offer.name} · {money(offer.price)} per retailer pack{label ? ` · ${label}` : ''}
             {offer.unitPrice ? ` · ${money(offer.unitPrice.price)} per ${offer.unitPrice.per}` : ''}
             {offer.differentPack ? ' · different/unknown pack, excluded from same-pack basket total' : ''}
             {' · checked '}{new Date(offer.observedAt).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' })}

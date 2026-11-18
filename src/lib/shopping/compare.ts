@@ -1,4 +1,4 @@
-import { COMPARISON_EXPLANATIONS, COMPARISON_LABELS, compareBasket, type BasketLine, type PairReview } from '../comparison-policy';
+import { COMPARISON_EXPLANATIONS, comparisonLabel, compareBasket, type BasketLine, type PairReview } from '../comparison-policy';
 
 export type ComparableBasketItem = {
   canonical_name: string;
@@ -74,7 +74,8 @@ export function compareBasketStores(
       // The retailer's own title, or null when unknown (never the canonical name presented as a retailer title).
       lines: s.lines.map(l => ({ canonical_name: l.id, retailer_product_name: byLine.get(l.id)?.get(s.store)?.store_product_name ?? null,
         price: l.price, unit_price: byLine.get(l.id)?.get(s.store)?.store_product_name ? l.unitPrice : null,
-        comparison: l.status === 'missing' ? 'not_available' : COMPARISON_LABELS[l.status] })),
+        // A line only this store sells is not compared with anything: 'single_store', never "Exact match".
+        comparison: l.status === 'missing' ? 'not_available' : comparisonLabel(l.status, byLine.get(l.id)?.size ?? 0) ?? 'single_store' })),
       utility_score: null,
     };
   });

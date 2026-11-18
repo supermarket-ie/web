@@ -169,6 +169,17 @@ describe('groundHouseholdShop', () => {
     expect(result.recommended_retailer_strategy.rationale).toMatch(/different products/);
   });
 
+  it('a lone retailer offer carries no cross-store comparison status', () => {
+    const result = groundHouseholdShop({
+      proposal: { ...proposal, items: [proposal.items[0]] },
+      catalogue_products: catalogue,
+      latest_prices: [row('milk-id', 'dunnes', 2.5)],
+      comparison_retailers: ['dunnes', 'supervalu'],
+    });
+    expect(result.items[0].candidate_offers).toHaveLength(1);
+    expect(result.items[0].candidate_offers[0].comparison_status).toBeUndefined();
+    expect(householdShopToolOutputSchema.safeParse({ kind: 'household_shop', shop: result }).success).toBe(true);
+  });
   it('downgrades an invalid canonical product id to an unresolved need', () => {
     const result = groundHouseholdShop({
       proposal: {
