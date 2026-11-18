@@ -28,7 +28,8 @@ describe('pairwise offer classification', () => {
     const samePack = offers.map(o => ({ ...o, name: 'Avonmore Whole Milk 1L' }));
     expect(isVerifiedExactThree(samePack, exact, now)).toBe(true);
     expect(isVerifiedExactThree(samePack, exact.slice(0,2), now)).toBe(false);
-    expect(Object.values(classifyOfferGroup(samePack, exact.slice(0,2), now))).toEqual(['unverified','unverified','unverified']);
+    // Subset rule: Tesco = SuperValu is approved; Dunnes (approved only against Tesco) is not part of that set.
+    expect(classifyOfferGroup(samePack, exact.slice(0,2), now)).toEqual({ tesco: 'exact_product', supervalu: 'exact_product', dunnes: 'unverified' });
   });
   it('labels an alternative next to the affected retailer, never by canonical association', () => {
     expect(classifyOfferGroup(offers, alternatives, now)).toEqual({
@@ -42,7 +43,10 @@ describe('pairwise offer classification', () => {
     expect(classifyOfferGroup(offers, [review('t','d','not_comparable'),...exact], now).tesco).toBe('not_comparable');
     // Dunnes Whole Milk is retailer own-label: a different product from Avonmore, never just "unverified".
     expect(classifyOfferGroup(offers, [], now)).toEqual({ tesco: 'unverified', supervalu: 'unverified', dunnes: 'not_comparable' });
-    expect(classifyOfferGroup(offers, [review('t','s','exact_product')], now).tesco).toBe('unverified');
+    // An approved Tesco = SuperValu pair stands; the own-label Dunnes offer is a different product beside it.
+    expect(classifyOfferGroup(offers, [review('t','s','exact_product')], now)).toEqual({ tesco: 'exact_product', supervalu: 'exact_product', dunnes: 'not_comparable' });
+    // A reviewed incompatibility does not block an approved pair elsewhere in the group.
+    expect(classifyOfferGroup(offers, [review('t','s','exact_product'), review('t','d','not_comparable')], now).supervalu).toBe('exact_product');
   });
   it('vetoes contradictory pack or variant even if an exact review is asserted', () => {
     const sameBrand = offers.map(o => ({ ...o, name: 'Avonmore Whole Milk 1L' }));

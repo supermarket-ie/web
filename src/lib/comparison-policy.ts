@@ -20,9 +20,26 @@ export const COMPARISON_LABELS: Record<ComparisonType, string> = {
 export function comparisonLabel(type: ComparisonType | null | undefined, offerCount: number): string | null {
   return offerCount >= 2 ? COMPARISON_LABELS[type ?? 'unverified'] : null;
 }
+const RETAILER_NAMES: Record<string, string> = { tesco: 'Tesco', dunnes: 'Dunnes Stores', supervalu: 'SuperValu', aldi: 'Aldi', lidl: 'Lidl' };
+export const retailerDisplayName = (store: string) => RETAILER_NAMES[String(store).toLowerCase()] ?? store;
+const listNames = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+/**
+ * The ONE wording for a verified basket claim. It always names the stores it covers, and names any other
+ * complete store as indicative, so a claim between Tesco and SuperValu is never read as "cheapest of all".
+ */
+export function verifiedClaimText(cheapest: string, verifiedStores: string[], indicativeStores: string[] = []): string {
+  const names = verifiedStores.map(retailerDisplayName);
+  const others = verifiedStores.filter(s => s.toLowerCase() !== cheapest.toLowerCase()).map(retailerDisplayName);
+  const head = verifiedStores.length === 2
+    ? `${retailerDisplayName(cheapest)} is cheaper than ${others[0]} for this basket (verified exact matches).`
+    : `${retailerDisplayName(cheapest)} is the cheapest of ${listNames(names)} for this basket (verified exact matches).`;
+  const tail = indicativeStores.length
+    ? ` ${listNames(indicativeStores.map(retailerDisplayName))}: indicative total only, not verified as the same products.` : '';
+  return head + tail;
+}
 /** Short customer explanation shown beside a total or ranking. */
 export const COMPARISON_EXPLANATIONS = {
-  verified: 'Every item is an independently verified exact match at each store compared.',
+  verified: 'Every item is an independently verified exact match at the stores named.',
   indicative: 'Indicative only: these stores’ products have not all been verified as the same item, so this is not a like-for-like comparison.',
   incomplete: 'Not every item is available at each store, so store totals are not comparable.',
 } as const;
@@ -50,8 +67,12 @@ export type StoreBasket = {
 export type BasketComparison = {
   basis: 'verified_exact' | 'indicative' | 'incomplete';
   stores: StoreBasket[];
-  /** Set only when at least two stores have complete, verified exact baskets. */
+  /** Set only when at least two stores have complete, verified exact baskets; cheapest AMONG verifiedStores. */
   cheapestVerified: { store: string; total: number } | null;
+  /** The stores the verified claim covers (>= 2), or []. A claim is always scoped to these stores. */
+  verifiedStores: string[];
+  /** Complete baskets outside the verified claim: shown as indicative totals only. */
+  indicativeCompleteStores: string[];
 };
 
 const cents = (n: number) => Math.round(n * 100);
@@ -80,23 +101,26 @@ export function compareBasket(lines: BasketLine[], stores: string[], reviews: Pa
       subtotal: any ? sub / 100 : null, completeTotal: complete ? sub / 100 : null, verifiedExactTotal: null, lines: out };
   };
   const baskets = stores.map(build);
-  // Re-check equivalence ONLY among the complete stores, so an unrelated store's offer cannot block or create a claim.
   const complete = baskets.filter(b => b.completeTotal !== null);
-  if (complete.length >= 2) {
-    const names = new Set(complete.map(b => b.store));
-    const allExact = lines.every(line => {
-      const subset = line.offers.filter(o => names.has(o.store));
-      return subset.length === names.size && allPairsExact(subset, reviews, now);
-    });
-    if (allExact) for (const b of complete) b.verifiedExactTotal = b.completeTotal;
-  }
+  // Verified SUBSET: complete stores whose every line is labelled Exact match. Per line, every Exact-labelled
+  // offer belongs to one pairwise-exact set, so any two such stores are approved exact matches on every line.
+  // Other complete stores stay indicative and never block or create the claim.
+  const exactEverywhere = complete.filter(b => b.lines.every(l => l.status === 'exact_product'));
+  // Re-assert pairwise exactness explicitly (defence in depth; never relies on the labelling alone).
+  const sound = exactEverywhere.length >= 2 && lines.every(line => {
+    const subset = line.offers.filter(o => exactEverywhere.some(b => b.store === o.store));
+    return subset.length === exactEverywhere.length && allPairsExact(subset, reviews, now);
+  });
+  if (sound) for (const b of exactEverywhere) b.verifiedExactTotal = b.completeTotal;
   const verified = baskets.filter(b => b.verifiedExactTotal !== null);
   const cheapest = verified.length >= 2 ? [...verified].sort((a, b) => a.verifiedExactTotal! - b.verifiedExactTotal! || a.store.localeCompare(b.store))[0] : null;
   const ordered = [...baskets].sort((a, b) => (verified.length >= 2 && a.verifiedExactTotal !== null && b.verifiedExactTotal !== null
     ? a.verifiedExactTotal - b.verifiedExactTotal
     : Number(b.verifiedExactTotal !== null) - Number(a.verifiedExactTotal !== null) || b.comparableLines - a.comparableLines) || a.store.localeCompare(b.store));
   return { basis: cheapest ? 'verified_exact' : complete.length >= 2 ? 'indicative' : 'incomplete', stores: ordered,
-    cheapestVerified: cheapest ? { store: cheapest.store, total: cheapest.verifiedExactTotal! } : null };
+    cheapestVerified: cheapest ? { store: cheapest.store, total: cheapest.verifiedExactTotal! } : null,
+    verifiedStores: cheapest ? verified.map(b => b.store) : [],
+    indicativeCompleteStores: complete.filter(b => !cheapest || b.verifiedExactTotal === null).map(b => b.store) };
 }
 
 export type PairReview = {
@@ -200,9 +224,7 @@ export function deterministicDifference(a: string, b: string): string | null {
 }
 
 export function classifyOfferGroup(offers: OfferIdentity[], reviews: PairReview[], now = Date.now()): Record<string, ComparisonType> {
-  const result: Record<string, ComparisonType> = {};
   if (offers.length === 1) return { [offers[0].store]: 'exact_product' };
-  for (const offer of offers) result[offer.store] = 'unverified';
   const latest = new Map<string, PairReview>();
   for (const review of reviews) {
     if (!validPairReview(review, now)) continue;
@@ -210,53 +232,61 @@ export function classifyOfferGroup(offers: OfferIdentity[], reviews: PairReview[
     const old = latest.get(key);
     if (!old || Date.parse(old.reviewed_at) < Date.parse(review.reviewed_at)) latest.set(key, review);
   }
-  const pairs: ComparisonType[] = [];
-  // Unreviewed pairs with deterministic evidence of a DIFFERENT product (stated pack, variant, own-label).
-  const differences = new Map<string, number>();
-  const markDifferent = (a: OfferIdentity, b: OfferIdentity) => {
-    if (!deterministicDifference(a.name, b.name)) return;
-    differences.set(a.store, (differences.get(a.store) ?? 0) + 1);
-    differences.set(b.store, (differences.get(b.store) ?? 0) + 1);
+  // Pairwise relation. An approved exact review is vetoed only by a STATED contradiction (differing
+  // unambiguous packs, a variant conflict or own-label); an absent or ambiguous pack never overrides it.
+  // 'vetoed' = an approved exact review contradicted by stated facts: the review itself is wrong, so every
+  // approval connected to either offer is suspended (see below), not only this pair.
+  type Rel = 'exact' | 'similar' | 'different' | 'vetoed' | 'unknown';
+  const relation = (a: OfferIdentity, b: OfferIdentity): Rel => {
+    const stated = deterministicDifference(a.name, b.name) !== null;
+    const reviewed = a.storeProductId && b.storeProductId ? latest.get(pairKey(a.storeProductId, b.storeProductId))?.classification : undefined;
+    if (reviewed === 'exact_product') return stated ? 'vetoed' : 'exact';
+    if (reviewed === 'comparable_alternative') return 'similar';
+    if (reviewed === 'not_comparable') return 'different';
+    return stated ? 'different' : 'unknown';
   };
-  let missingIds = false;
-  for (let i = 0; i < offers.length; i++) {
-    for (let j = i + 1; j < offers.length; j++) {
-      const a = offers[i], b = offers[j];
-      if (!a.storeProductId || !b.storeProductId) { missingIds = true; markDifferent(a, b); pairs.push('unverified'); continue; }
-      const reviewed = latest.get(pairKey(a.storeProductId, b.storeProductId))?.classification ?? 'unverified';
-      // An approved exact review is vetoed only by a STATED contradiction (differing unambiguous packs, a
-      // variant conflict or own-label). An absent or ambiguous pack in a title does not override a review.
-      const strictExactConflict = reviewed === 'exact_product' && deterministicDifference(a.name, b.name) !== null;
-      if (reviewed === 'unverified') markDifferent(a, b);
-      pairs.push(strictExactConflict ? 'not_comparable' : reviewed);
-    }
+  const n = offers.length;
+  const rel: Rel[][] = offers.map((a, i) => offers.map((b, j) => (i === j ? 'exact' : relation(a, b))));
+  // Contradictory evidence: offers joined by exact edges but with a "different" pair among them (A = B, B = C,
+  // A != C). Nothing in that component is trusted, and all of it is a different product.
+  const parent = offers.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (rel[i][j] === 'exact') parent[find(i)] = find(j);
+  const contradicted = new Set<number>();
+  const taint = (i: number) => { for (let k = 0; k < n; k++) if (find(k) === find(i)) contradicted.add(k); };
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    if (rel[i][j] === 'vetoed') { taint(i); taint(j); }
+    else if (find(i) === find(j) && rel[i][j] === 'different') taint(i);
   }
-  if (!missingIds && pairs.includes('not_comparable')) {
-    return Object.fromEntries(offers.map(offer => [offer.store, 'not_comparable']));
-  }
-  if (missingIds || pairs.includes('unverified')) {
-    // An offer that is deterministically different from EVERY other offer is a different product;
-    // the rest stay unverified (never promoted). Two offers that differ are both different products.
-    for (const offer of offers) if ((differences.get(offer.store) ?? 0) === offers.length - 1) result[offer.store] = 'not_comparable';
-    return result;
-  }
-  // Every pair is reviewed and none is a different product. The largest set of offers that are PAIRWISE
-  // exact (ties: Tesco, SuperValu, Dunnes first) is labelled Exact match; every other offer is a Similar
-  // product. Exactness is never inferred through a third offer, and a two-offer Similar pair is Similar.
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (rel[i][j] === 'vetoed') rel[i][j] = 'different';
+  // The largest set of uncontradicted offers that are PAIRWISE approved exact matches (>= 2). Ties keep the
+  // preferred retailers (Tesco, SuperValu, Dunnes). Other retailers' offers never block it: they are labelled
+  // by their own relation to that set.
   const preferred = ['tesco', 'supervalu', 'dunnes'];
-  const rank = (o: OfferIdentity) => { const i = preferred.indexOf(o.store); return i === -1 ? preferred.length : i; };
-  const ordered = [...offers].sort((a, b) => rank(a) - rank(b) || a.store.localeCompare(b.store));
-  const exactPair = (a: OfferIdentity, b: OfferIdentity) => latest.get(pairKey(a.storeProductId!, b.storeProductId!))?.classification === 'exact_product';
-  let best: OfferIdentity[] = [];
-  // Offer groups are one offer per retailer (a handful), so subset enumeration is cheap.
-  for (let mask = 1; mask < 1 << ordered.length; mask++) {
-    const set = ordered.filter((_, i) => mask & (1 << i));
-    if (set.length < 2 || set.length < best.length) continue;
-    if (!set.every((a, i) => set.slice(i + 1).every(b => exactPair(a, b)))) continue;
-    // Prefer the larger set; on a tie keep the earlier (lower-mask = more preferred retailers) one.
-    if (set.length > best.length) best = set;
+  const rank = (i: number) => { const r = preferred.indexOf(offers[i].store); return r === -1 ? preferred.length : r; };
+  const order = offers.map((_, i) => i).filter(i => !contradicted.has(i)).sort((a, b) => rank(a) - rank(b) || offers[a].store.localeCompare(offers[b].store));
+  let clique: number[] = [];
+  // One offer per retailer in a group (a handful), so subset enumeration is cheap.
+  for (let mask = 1; mask < 1 << order.length; mask++) {
+    const set = order.filter((_, k) => mask & (1 << k));
+    if (set.length < 2 || set.length <= clique.length) continue;
+    if (set.every((a, x) => set.slice(x + 1).every(b => rel[a][b] === 'exact'))) clique = set;
   }
-  for (const offer of offers) result[offer.store] = best.includes(offer) ? 'exact_product' : 'comparable_alternative';
+  const result: Record<string, ComparisonType> = {};
+  offers.forEach((offer, i) => {
+    const others = offers.map((_, j) => j).filter(j => j !== i);
+    if (contradicted.has(i)) result[offer.store] = 'not_comparable';
+    else if (clique.includes(i)) result[offer.store] = 'exact_product';
+    else if (clique.length) {
+      const toSet = clique.map(j => rel[i][j]);
+      result[offer.store] = toSet.includes('different') ? 'not_comparable' : toSet.includes('similar') ? 'comparable_alternative' : 'unverified';
+    } else {
+      // No verified set: an offer stated or reviewed as different from EVERY other offer is a different product;
+      // one reviewed as Similar to another is a Similar product; everything else stays Unverified (never promoted).
+      const rs = others.map(j => rel[i][j]);
+      result[offer.store] = rs.every(r => r === 'different') ? 'not_comparable' : rs.includes('similar') ? 'comparable_alternative' : 'unverified';
+    }
+  });
   return result;
 }
 

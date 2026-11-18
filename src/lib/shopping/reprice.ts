@@ -1,4 +1,4 @@
-import { COMPARISON_EXPLANATIONS, compareBasket, type PairReview } from '../comparison-policy';
+import { COMPARISON_EXPLANATIONS, compareBasket, verifiedClaimText, type PairReview } from '../comparison-policy';
 
 export interface StoreTotal {
   store: string;
@@ -22,6 +22,8 @@ export interface RepriceResult {
   savings: number | null;
   itemCount: number;
   basis: 'verified_exact' | 'indicative' | 'incomplete';
+  /** The stores a cheapest/saving statement covers (>= 2), or []. */
+  verifiedStores: string[];
   explanation: string;
 }
 
@@ -76,6 +78,9 @@ export function repriceBasket(items: RepriceItem[], prices: RepricePrice[], stor
     savings,
     itemCount: items.length,
     basis: comparison.basis,
-    explanation: COMPARISON_EXPLANATIONS[comparison.basis === 'verified_exact' ? 'verified' : comparison.basis],
+    verifiedStores: comparison.verifiedStores,
+    explanation: cheapest
+      ? `${verifiedClaimText(cheapest.store, comparison.verifiedStores, comparison.indicativeCompleteStores)} ${COMPARISON_EXPLANATIONS.verified}`
+      : COMPARISON_EXPLANATIONS[comparison.basis === 'verified_exact' ? 'verified' : comparison.basis],
   };
 }

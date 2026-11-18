@@ -220,7 +220,7 @@ type ComparePriceRow = { canonical_name: string; store: string; price: number; o
 function compareShopStoresTool() {
   return tool({
     description:
-      'Compare a basket of catalogue products across supermarkets using current retailer prices. Returns, per store, each retailer’s own product title, price, unit price and a comparison label (Exact match, Similar product, Unverified, Different product), plus coverage. A cheapest store is returned ONLY in cheapest_verified_store, when every item is an independently verified exact match at complete stores. Otherwise totals are indicative: never call a store cheapest, never say products are the same, and say which items differ or are unverified. A store missing any product is never presented as a complete basket total.',
+      'Compare a basket of catalogue products across supermarkets using current retailer prices. Returns, per store, each retailer’s own product title, price, unit price and a comparison label (Exact match, Similar product, Unverified, Different product), plus coverage. A cheaper/cheapest store is returned ONLY in cheapest_verified_store, and it applies ONLY among verified_stores (stores where every item is an independently verified exact match). Always name those stores (e.g. "SuperValu is cheaper than Tesco for these verified exact matches") and describe any store in indicative_complete_stores as an indicative total that is not verified as the same products; never call a store cheapest overall. With no cheapest_verified_store, totals are indicative: never call a store cheapest, never say products are the same, and say which items differ or are unverified. A line labelled single_store is sold by one store only and is not a comparison. A store missing any product is never presented as a complete basket total.',
     inputSchema: z.object({
       items: z
         .array(
@@ -267,6 +267,8 @@ function compareShopStoresTool() {
         current_mixed_total: comparison.current_total,
         comparison_basis: comparison.comparison_basis,
         cheapest_verified_store: comparison.cheapest_verified_store,
+        verified_stores: comparison.verified_stores,
+        indicative_complete_stores: comparison.indicative_complete_stores,
         comparisons: comparison.comparisons,
         note: comparison.explanation,
       };

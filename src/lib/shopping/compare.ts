@@ -1,4 +1,4 @@
-import { COMPARISON_EXPLANATIONS, comparisonLabel, compareBasket, type BasketLine, type PairReview } from '../comparison-policy';
+import { COMPARISON_EXPLANATIONS, comparisonLabel, compareBasket, verifiedClaimText, type BasketLine, type PairReview } from '../comparison-policy';
 
 export type ComparableBasketItem = {
   canonical_name: string;
@@ -84,7 +84,12 @@ export function compareBasketStores(
     current_total: Number(currentTotal.toFixed(2)),
     comparison_basis: result.basis,
     cheapest_verified_store: result.cheapestVerified,
-    explanation: COMPARISON_EXPLANATIONS[result.basis === 'verified_exact' ? 'verified' : result.basis],
+    /** The only stores a cheaper/cheapest statement may cover. Any other store's total is indicative. */
+    verified_stores: result.verifiedStores,
+    indicative_complete_stores: result.indicativeCompleteStores,
+    explanation: result.cheapestVerified
+      ? `${verifiedClaimText(result.cheapestVerified.store, result.verifiedStores, result.indicativeCompleteStores)} ${COMPARISON_EXPLANATIONS.verified}`
+      : COMPARISON_EXPLANATIONS[result.basis === 'verified_exact' ? 'verified' : result.basis],
     comparisons,
   };
 }

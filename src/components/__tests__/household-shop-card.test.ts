@@ -27,20 +27,20 @@ const MUESLI = [offer('muesli', 'tesco', "Flahavan's Hi8 Muesli Original 1kg", 5
 
 const line = (id: string, label: string) => ({ line_id: id, section_id: 'food', canonical_product_id: id, display_label: label, quantity: 1,
   unit_or_pack_expectation: 'one pack', reason: 'Weekly shop', purpose: 'cupboard' });
-const shop = (ids: string[], rows: ReturnType<typeof offer>[], reviews: PairReview[]) => groundHouseholdShop({
+const shop = (ids: string[], rows: ReturnType<typeof offer>[], reviews: PairReview[], retailers = ['tesco', 'supervalu']) => groundHouseholdShop({
   pair_reviews: reviews,
   proposal: { schema_version: HOUSEHOLD_SHOP_SCHEMA_VERSION,
     household: { adults: 2, children: 0, dietary_requirements: [], budget: null, planning_period: { days: 7, label: 'one week' }, assumptions_made: [] },
     sections: [{ id: 'food', label: 'Food and drink', kind: 'food' as const }],
     items: ids.map(id => line(id, catalogue.find(c => c.canonical_product_id === id)!.canonical_name)) },
-  catalogue_products: catalogue, latest_prices: rows, comparison_retailers: ['tesco', 'supervalu'] });
+  catalogue_products: catalogue, latest_prices: rows, comparison_retailers: retailers });
 const text = (s: HouseholdShopContract) => renderToStaticMarkup(createElement(HouseholdShopCard, { shop: s }))
   .replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
 describe('HouseholdShopCard customer-facing comparison states', () => {
   it('verified exact match: names the cheapest verified basket and labels it', () => {
     const out = text(shop(['chilli', 'beans'], [...CHILLI, ...BEANS], [review('tesco-chilli', 'supervalu-chilli'), review('tesco-beans', 'supervalu-beans')]));
-    expect(out).toContain('SuperValu is the cheapest verified one-store basket.');
+    expect(out).toContain('SuperValu is cheaper than Tesco for this basket (verified exact matches).');
     expect(out).toContain('Verified exact matches');
     expect(out).toContain('Schwartz Chilli Powder Mild (38 g)');
     expect(out).toMatch(/Tesco €3\.50 · Schwartz Mild Chilli Powder 38G · €92\.11\/kg · Exact match/);
@@ -73,6 +73,19 @@ describe('HouseholdShopCard customer-facing comparison states', () => {
     expect(out).toContain('Partial coverage');
     expect(out).not.toMatch(/cheapest/i);
     expect(out).toContain('Heinz Beanz In Tomato Sauce 415G');
+  });
+  it('subset: Tesco and SuperValu verified, Dunnes complete but unreviewed is named as indicative', () => {
+    const DUNNES = [offer('chilli', 'dunnes', 'Schwartz Mild Chilli Powder 38g', 2.99), offer('beans', 'dunnes', 'Heinz Beanz 415g', 1.1)];
+    const s = shop(['chilli', 'beans'], [...CHILLI, ...BEANS, ...DUNNES], [review('tesco-chilli', 'supervalu-chilli'), review('tesco-beans', 'supervalu-beans')], ['tesco', 'supervalu', 'dunnes']);
+    const out = text(s);
+    expect(out).toContain('SuperValu is cheaper than Tesco for this basket (verified exact matches). Dunnes Stores: indicative total only, not verified as the same products.');
+    // Dunnes is cheaper but unverified: it is shown, labelled, and never ranked.
+    expect(out).toMatch(/€2\.99 Dunnes Stores Schwartz Mild Chilli Powder 38g · €78\.68\/kg Unverified/);
+    expect(out).toMatch(/Dunnes Stores 2\/2 items €4\.09 Indicative total/);
+    expect(out).toMatch(/Tesco €3\.50 · Schwartz Mild Chilli Powder 38G · €92\.11\/kg · Exact match/);
+    expect(out).not.toMatch(/cheapest/i);
+    const dunnes = s.store_coverage.find(c => c.retailer === 'dunnes')!;
+    expect(dunnes).toMatchObject({ complete: true, comparison_basis: 'indicative', verified_exact_total: null });
   });
   it('legacy single_retailer output (no verified coverage row) gets neutral wording', () => {
     const s = shop(['chilli'], CHILLI, []);

@@ -138,12 +138,36 @@ describe('three-store verified baskets', () => {
     { store: 'supervalu', storeProductId: 's', name: 'Heinz Beanz (415 g)', price: 1.35 },
     { store: 'dunnes', storeProductId: 'd', name: 'Heinz Beanz 415g', price: 1.3 },
   ] };
-  it('exactness is not transitive through the anchor: no verified claim unless every pair is exact', () => {
+  it('exactness is not transitive: Dunnes (Similar to SuperValu) is outside the verified Tesco/SuperValu claim', () => {
     const reviews = [review('t', 's'), review('t', 'd'), review('s', 'd', 'comparable_alternative')];
     const c = compareBasket([three], ['tesco', 'supervalu', 'dunnes'], reviews, now);
-    expect(c.cheapestVerified).toBeNull();
-    expect(c.basis).toBe('indicative');
+    expect(c.verifiedStores).toEqual(['tesco', 'supervalu']);
+    expect(c.cheapestVerified).toEqual({ store: 'supervalu', total: 1.35 });
+    expect(c.indicativeCompleteStores).toEqual(['dunnes']);
+    expect(c.stores.find(s => s.store === 'dunnes')).toMatchObject({ verifiedExactTotal: null, completeTotal: 1.3 });
     expect(isVerifiedExactThree(three.offers, reviews, now)).toBe(false);
+  });
+  it('an unreviewed third retailer never blocks a verified two-store comparison, and stays indicative', () => {
+    const c = compareBasket([three], ['tesco', 'supervalu', 'dunnes'], [review('t', 's')], now);
+    expect(c.basis).toBe('verified_exact');
+    expect(c.verifiedStores).toEqual(['tesco', 'supervalu']);
+    expect(classifyOfferGroup(three.offers, [review('t', 's')], now)).toEqual({ tesco: 'exact_product', supervalu: 'exact_product', dunnes: 'unverified' });
+  });
+  it('a verified claim needs the SAME stores verified on every line', () => {
+    const second: BasketLine = { id: 'peas', quantity: 1, offers: [
+      { store: 'tesco', storeProductId: 't2', name: 'Batchelors Peas 420g', price: 1 },
+      { store: 'supervalu', storeProductId: 's2', name: 'Batchelors Peas (420 g)', price: 1 },
+      { store: 'dunnes', storeProductId: 'd2', name: 'Batchelors Peas 420g', price: 1 },
+    ] };
+    // Line 1 verified Tesco = SuperValu; line 2 verified only SuperValu = Dunnes: no store pair is verified on both.
+    const c = compareBasket([three, second], ['tesco', 'supervalu', 'dunnes'], [review('t', 's'), review('s2', 'd2')], now);
+    expect(c.cheapestVerified).toBeNull();
+    expect(c.verifiedStores).toEqual([]);
+  });
+  it('an approved review contradicted by stated facts suspends every approval connected to it', () => {
+    const ownLabel: BasketLine = { id: 'x', quantity: 1, offers: [three.offers[0], three.offers[1], { store: 'dunnes', storeProductId: 'd', name: 'Dunnes Stores Baked Beans 415g', price: 0.9 }] };
+    expect(classifyOfferGroup(ownLabel.offers, [review('t', 's'), review('s', 'd')], now))
+      .toEqual({ tesco: 'not_comparable', supervalu: 'not_comparable', dunnes: 'not_comparable' });
   });
   it('all three pairs approved exact gives a verified cheapest store', () => {
     const c = compareBasket([three], ['tesco', 'supervalu', 'dunnes'], [review('t', 's'), review('t', 'd'), review('s', 'd')], now);
@@ -171,5 +195,16 @@ describe('customer labels for single-retailer products', () => {
     expect(comparisonLabel('exact_product', 1)).toBeNull();
     expect(comparisonLabel('exact_product', 2)).toBe('Exact match');
     expect(comparisonLabel(undefined, 3)).toBe('Unverified');
+  });
+});
+
+describe('weekly totals', () => {
+  it('a store whose items are only sold there never gets a verified total', async () => {
+    const { weeklyShopTotals } = await import('./weekly-shop');
+    const items = [{ id: 'a', name: 'X 1L', quantity: 1, offers: { tesco: { name: 'X 1L', price: 1, observedAt: at, comparisonType: 'exact_product' as const } } }];
+    const t = weeklyShopTotals(items as never, { a: 1 }).find(r => r.store === 'tesco')!;
+    expect(t.total).toBe(1);
+    expect(t.verifiedExactTotal).toBeNull();
+    expect(t.verifiedComparableTotal).toBeNull();
   });
 });

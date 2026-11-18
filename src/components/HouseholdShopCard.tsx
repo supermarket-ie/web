@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2, ShoppingBasket, Store } from 'lucide-react';
 import {
   type HouseholdShopContract,
 } from '@/lib/shopping/household-shop-contract';
-import { COMPARISON_LABELS } from '@/lib/comparison-policy';
+import { COMPARISON_EXPLANATIONS, COMPARISON_LABELS, verifiedClaimText } from '@/lib/comparison-policy';
 
 const STORE_NAMES: Record<string, string> = {
   tesco: 'Tesco',
@@ -26,9 +26,12 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
     item.status === 'unresolved' || item.status === 'unavailable',
   ).length;
   // A "cheapest verified" headline needs the recommended retailer's own coverage row to be verified_exact.
-  const verifiedRecommendation = shop.store_coverage.some(coverage =>
-    coverage.retailer.toLowerCase() === (shop.recommended_retailer_strategy.retailer ?? '').toLowerCase()
-    && coverage.comparison_basis === 'verified_exact' && coverage.verified_exact_total != null);
+  const verifiedRows = shop.store_coverage.filter(c => c.comparison_basis === 'verified_exact' && c.verified_exact_total != null);
+  const verifiedRecommendation = verifiedRows.length >= 2 && verifiedRows.some(coverage =>
+    coverage.retailer.toLowerCase() === (shop.recommended_retailer_strategy.retailer ?? '').toLowerCase());
+  // The claim names the verified stores; other complete stores are named as indicative.
+  const verifiedClaim = verifiedRecommendation ? verifiedClaimText(shop.recommended_retailer_strategy.retailer ?? '',
+    verifiedRows.map(c => c.retailer), shop.store_coverage.filter(c => c.complete && !verifiedRows.includes(c)).map(c => c.retailer)) : null;
 
   return (
     <section className="w-full overflow-hidden rounded-[1.4rem] border border-[#dce6df] bg-white text-[#243128] shadow-[0_12px_35px_rgba(31,64,43,0.08)]">
@@ -160,8 +163,8 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
 
         <div className="mt-3 rounded-xl bg-[#edf7f0] px-3.5 py-3 text-xs leading-5 text-[#385443]">
           <strong className="text-[#21452e]">
-            {shop.recommended_retailer_strategy.kind === 'single_retailer' && verifiedRecommendation
-              ? `${storeName(shop.recommended_retailer_strategy.retailer ?? '')} is the cheapest verified one-store basket.`
+            {verifiedClaim
+              ? verifiedClaim
               : shop.recommended_retailer_strategy.kind === 'single_retailer'
                 // Legacy output (older image or saved chat): "single_retailer" then meant full coverage only.
                 ? `${storeName(shop.recommended_retailer_strategy.retailer ?? '')} has a current offer for every line. Store totals are indicative.`
@@ -171,7 +174,7 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
                   ? 'No single retailer has a comparable offer for every line.'
                   : 'Some items still need to be matched.'}
           </strong>{' '}
-          {shop.recommended_retailer_strategy.rationale}
+          {verifiedClaim ? COMPARISON_EXPLANATIONS.verified : shop.recommended_retailer_strategy.rationale}
         </div>
 
         {(unresolvedCount > 0 || shop.totals.priced_lines < shop.totals.total_lines) && (

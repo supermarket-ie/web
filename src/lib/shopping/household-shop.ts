@@ -9,7 +9,7 @@ import {
   type TrustedHouseholdShopOfferRow,
 } from './household-shop-contract';
 import { hasConfirmedRequestedPack, hasProductIdentityConflict } from './product-identity';
-import { COMPARISON_EXPLANATIONS, compareBasket, normalizedUnitPrice, type PairReview } from '../comparison-policy';
+import { COMPARISON_EXPLANATIONS, compareBasket, normalizedUnitPrice, verifiedClaimText, type PairReview } from '../comparison-policy';
 const RETAILER_NAMES: Record<string, string> = { tesco: 'Tesco', dunnes: 'Dunnes Stores', supervalu: 'SuperValu' };
 const retailerName = (store: string) => RETAILER_NAMES[store.toLowerCase()] ?? store;
 
@@ -187,7 +187,7 @@ export function groundHouseholdShop(input: GroundHouseholdShopInput): HouseholdS
     ? {
         kind: 'single_retailer' as const,
         retailer: storeCoverage.find(s => s.retailer.toLowerCase() === cheapest.store)!.retailer,
-        rationale: `${retailerName(cheapest.store)} is the cheapest complete basket of verified exact matches (${COMPARISON_EXPLANATIONS.verified})`,
+        rationale: `${verifiedClaimText(cheapest.store, comparison.verifiedStores, comparison.indicativeCompleteStores)} ${COMPARISON_EXPLANATIONS.verified}`,
       }
     : firstComplete
       ? {

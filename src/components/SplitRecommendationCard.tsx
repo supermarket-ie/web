@@ -65,6 +65,8 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
   if (!result) return null;
 
   const { bestSplitTotal, splitBreakdown, bestSingleStore, savings } = result;
+  // Every cheapest/saving statement below is scoped to these verified stores; others are indicative.
+  const scope = (result.verifiedStores ?? []).map(storeDisplayName).join(' & ');
 
   // No verified like-for-like basket: show each store's coverage, never a cheapest store or a saving.
   if (!bestSingleStore || savings === null || bestSplitTotal === null) {
@@ -100,7 +102,7 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
       <div className="flex items-center gap-2 mb-3">
         <span className="text-base">🏪</span>
         <span className="text-sm font-semibold" style={{ color: 'var(--on-surface)' }}>
-          {worthSplitting ? 'Split shop saves you money' : 'Best store for your shop'}
+          {worthSplitting ? `Split shop saves you money (verified: ${scope})` : `Cheapest of ${scope} (verified exact matches)`}
         </span>
         {worthSplitting && (
           <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
@@ -127,7 +129,7 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold" style={{ color: 'var(--on-surface)' }}>Total: €{bestSplitTotal.toFixed(2)}</span>
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Best value</span>
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Lowest verified total</span>
             </div>
           </div>
 
@@ -154,14 +156,15 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
                 {storeDisplayName(bestSingleStore.store)}
               </span>
               <span className="font-bold text-lg" style={{ color: 'var(--on-surface)' }}>€{bestSingleStore.total.toFixed(2)}</span>
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Cheapest</span>
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Cheapest verified</span>
             </div>
           )}
           <p className="text-xs" style={{ color: 'var(--on-surface-variant)', opacity: 0.75 }}>
             {savings > 0 && savings < 3
               ? `Splitting saves less than €3 — not worth the extra trip`
-              : `Items already at their cheapest stores`}
+              : `Your chosen stores are already the cheapest verified option`}
           </p>
+          <p className="text-xs mt-1" style={{ color: 'var(--on-surface-variant)', opacity: 0.75 }}>{result.explanation}</p>
         </>
       )}
     </div>
