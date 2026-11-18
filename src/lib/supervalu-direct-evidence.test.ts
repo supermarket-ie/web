@@ -26,3 +26,26 @@ describe('SuperValu direct-page evidence retention guard', () => {
     expect(redirected?.source_kind).toBe('captured_listing');
   });
 });
+
+describe('SuperValu identity observations (durable pair approvals)', () => {
+  it('every direct product page yields a lightweight observation, even on the daily refresh', async () => {
+    const { directPageObservation } = await import('./supervalu-direct-worker-base');
+    expect(directPageObservation(product, candidate, args)).toMatchObject({ source_kind: 'captured_product', sku, store: 'supervalu', product_url: storeUrl });
+  });
+  it('a redirected page is not an observation', async () => {
+    const { directPageObservation } = await import('./supervalu-direct-worker-base');
+    expect(directPageObservation(product, candidate, { ...args, finalUrl: 'https://shop.supervalu.ie/sm/delivery/rsid/5550/home' })).toBeNull();
+  });
+  it('the observation row carries the hash and identity but never the page body', async () => {
+    const insert = vi.fn(async (row: Record<string, unknown>) => { void row; return { error: null }; });
+    vi.resetModules();
+    vi.doMock('./supabase', () => ({ supabaseAdmin: { from: () => ({ insert }) } }));
+    const { recordIdentityObservation } = await import('./retailer-identity-retention');
+    const { directPageObservation } = await import('./supervalu-direct-worker-base');
+    await recordIdentityObservation(directPageObservation(product, candidate, args), 'run', 'sp');
+    const row = insert.mock.calls[0][0];
+    expect(row).toMatchObject({ store_product_id: 'sp', sku, source_kind: 'captured_product', body_sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(row).not.toHaveProperty('body_text');
+    vi.doUnmock('./supabase');
+  });
+});

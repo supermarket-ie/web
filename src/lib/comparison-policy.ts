@@ -145,12 +145,19 @@ export type PairReview = {
   reviewed_at: string;
   rationale: string;
   reviewer: string;
+  /**
+   * Durable approval (migration 20261118120000): the database confirmed this pair is ACTIVE (same SKUs, same
+   * identity fingerprints, monitoring evidence <= 14 days). Captured times are then the latest monitoring
+   * evidence, and the review itself may be up to 365 days old.
+   */
+  monitored?: boolean;
 };
 export type OfferIdentity = { store: string; storeProductId?: string; name: string; price: number };
 export type PackUnit = { total: number; unit: 'g' | 'ml' | 'each'; count: number; label: string };
 
 const HASH = /^[a-f0-9]{64}$/;
 const HORIZON_MS = 14 * 86400000;
+const DURABLE_REVIEW_MS = 365 * 86400000;
 export function pairKey(a: string, b: string) { return [a, b].sort().join(':'); }
 
 export function validPairReview(row: PairReview, now = Date.now()): boolean {
@@ -158,10 +165,10 @@ export function validPairReview(row: PairReview, now = Date.now()): boolean {
       !HASH.test(row.left_source_hash) || !HASH.test(row.right_source_hash) ||
       !row.reviewer?.trim() || !row.rationale?.trim() ||
       !['exact_product', 'comparable_alternative', 'not_comparable', 'unverified'].includes(row.classification)) return false;
-  return [row.left_captured_at, row.right_captured_at, row.reviewed_at].every(value => {
-    const at = Date.parse(value);
-    return Number.isFinite(at) && at <= now && at >= now - HORIZON_MS;
-  });
+  const within = (value: string, horizon: number) => { const at = Date.parse(value); return Number.isFinite(at) && at <= now && at >= now - horizon; };
+  // Evidence must always be <= 14 days old. A monitored (durable) review may be older; an unmonitored one may not.
+  return within(row.left_captured_at, HORIZON_MS) && within(row.right_captured_at, HORIZON_MS)
+    && within(row.reviewed_at, row.monitored === true ? DURABLE_REVIEW_MS : HORIZON_MS);
 }
 
 /** Conservative parser for clearly stated pack totals; never infers absent pack facts. */

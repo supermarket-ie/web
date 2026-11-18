@@ -243,3 +243,13 @@ describe('ties and scope', () => {
     expect(c.cheapestVerified).toBeNull();
   });
 });
+
+describe('durable (monitored) reviews', () => {
+  it('a monitored review may be older than 14 days, but its evidence may not; an unmonitored one may not be either', () => {
+    const old = '2026-09-01T10:00:00Z';
+    const monitored = { ...review('d-chilli', 's-chilli'), reviewed_at: old, monitored: true };
+    expect(classifyOfferGroup(chilli.offers, [monitored], now)).toEqual({ dunnes: 'exact_product', supervalu: 'exact_product' });
+    expect(classifyOfferGroup(chilli.offers, [{ ...monitored, monitored: false }], now)).toEqual({ dunnes: 'unverified', supervalu: 'unverified' });
+    expect(classifyOfferGroup(chilli.offers, [{ ...monitored, left_captured_at: old }], now)).toEqual({ dunnes: 'unverified', supervalu: 'unverified' });
+  });
+});

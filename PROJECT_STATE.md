@@ -1,5 +1,92 @@
 # Supermarket.ie — Canonical Project State
 
+## 18 November 2026 — Durable pair approvals (PR #418, migration 20261118120000 NOT applied, NOT deployed)
+
+Owner priority before scaling matching. Once independently verified, a pair
+approval persists while both identities stay unchanged. Daily price refreshes
+need no manual re-review. An identity change, SKU reassignment or reuse, or
+stale monitoring evidence suspends the match until a human re-reviews it.
+
+- Approval (unchanged): a human decision with full, fresh, offer-bound
+  evidence, checked by `validate_offer_pair_review`. A new `zz_` trigger
+  stamps each side's SKU and a database-computed identity PROJECTION:
+  - included: normalised title, brand, manufacturer, mpn, GTIN, structured
+    pack, variant, flavour, formulation, ingredients
+  - excluded: description, price
+  A positive approval whose evidence has no usable identity (title and brand)
+  is REJECTED at insert.
+- Monitoring evidence:
+  - SuperValu/Dunnes: immutable `retailer_identity_observations` (hash plus
+    parsed identity, no body, parser v3, title required). The SuperValu worker
+    offers one per successful daily direct page with no extra request.
+  - The database stores it only for offers in a positive pair decision, and
+    only when the identity changed or after 3 days (otherwise silently
+    skipped).
+  - It binds to the offer AS IT IS NOW (store, store_sku, store_url, direct
+    URL), accepts live times only, and computes the projection.
+  - Trust root: the price worker (service role), as for prices.
+  - Tesco: existing ok/200 `tesco_direct_collection_pages` for the EXACT
+    product URL (no SKU substring match). A new index on
+    (requested_url, created_at).
+- `current_pair_review_status(p_now, p_active_only)` covers the latest positive
+  decision per pair. ACTIVE only when, per side:
+  - the current store_sku equals the approved SKU and no other offer reuses it
+  - NO observation since the approval evidence differs on any attribute stated
+    in both (STICKY: a change that later reverts stays suspended until a new
+    review of fresh evidence; an attribute missing from one source is not a
+    change)
+  - the latest usable observation is ≤ 14 days old
+  - the review is ≤ 365 days old
+  Otherwise it returns `suspended_sku_changed`, `suspended_identity_changed`,
+  `suspended_no_recent_evidence`, `suspended_unmonitorable` or
+  `expired_needs_review`. Automation can only keep or suspend.
+- App: `getCurrentPairReviews` pages the ACTIVE rows (`monitored: true`,
+  evidence time = latest observation). If the function is absent (PGRST202 /
+  42883) it falls back to the 14-day ledger. Other errors fail closed, and the
+  failure is cached for 60 s. `validPairReview` allows a monitored review up
+  to 365 days old; evidence is still ≤ 14 days.
+- Deploy order: migration, then worker image, then web. Any order is safe
+  (fallback; old workers write nothing). Do not approve pairs before the
+  migration (no stamps). Let the worker run at least a day before relying on
+  monitoring.
+- Tested: 14 PGlite tests on the REAL ledger, identity-response and new
+  migrations:
+  - stamping and rejecting an unmonitorable approval
+  - staying active beyond 14 days; stale suspension
+  - cosmetic vs material title change; sticky after revert
+  - a re-review of fresh evidence clears it; stale re-review does not
+  - ingredients change; Tesco page change; SKU-substring page ignored;
+    missing GTIN is not a change
+  - SKU reassignment and reuse; 365-day expiry
+  - gating and dedupe; binding and immutability; the service role cannot
+    write approvals
+- Second-review fixes:
+  - A contradicting observation is checked even without a brand (usability
+    only gates freshness).
+  - Numeric casts are guarded (`identity_num`): malformed data never breaks
+    the status read.
+  - Pack amounts are rounded.
+  - A SKU change seen in observations is sticky even if reverted.
+  - Tesco is matched on the exact requested_url (index usable).
+  - Paging runs until an empty page.
+  - Recent NEGATIVE (not_comparable) decisions still come from the 14-day
+    ledger beside durable positives, so "different product" safeguards are
+    unchanged.
+- Known limits:
+  - The Tesco projection has no ingredients on Apify pages.
+  - A Tesco SKU reassignment that is reverted between pages is not detectable
+    (no store_products history).
+  - Changing a projection function needs a re-stamping migration, otherwise
+    affected pairs suspend (fails closed).
+  - Tesco pairs need a Tesco page ≤ 14 days old.
+  - There is NO Dunnes observation writer yet, so Dunnes-side approvals keep a
+    14-day life until the product-by-SKU route is approved.
+  - Observation `identity` and `body_sha256` come from the worker (trust root),
+    as do prices.
+  - `identity_norm` treats "&"/"and" and "/"/space as different, and drops
+    ø/æ/ß: these over-suspend (fail closed). Follow-up.
+- A ledger negative is used only when it is the latest review of its pair.
+
 ## 18 November 2026 — Verified comparisons between a SUBSET of retailers (PR #417, NOT deployed)
 
 Owner-agreed policy. A verified comparison may cover a subset of retailers;
