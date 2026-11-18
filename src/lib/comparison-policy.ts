@@ -12,6 +12,14 @@ export const COMPARISON_LABELS: Record<ComparisonType, string> = {
   not_comparable: 'Different product or pack',
   unverified: 'Unverified',
 };
+/**
+ * The customer label for one offer. A product sold by only ONE retailer is not compared with anything, so it
+ * gets no label: classifyOfferGroup treats a lone offer as trivially exact for basket maths, and showing that
+ * as "Exact match" would imply a cross-store verification that never happened.
+ */
+export function comparisonLabel(type: ComparisonType | null | undefined, offerCount: number): string | null {
+  return offerCount >= 2 ? COMPARISON_LABELS[type ?? 'unverified'] : null;
+}
 /** Short customer explanation shown beside a total or ranking. */
 export const COMPARISON_EXPLANATIONS = {
   verified: 'Every item is an independently verified exact match at each store compared.',

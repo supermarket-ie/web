@@ -5,7 +5,7 @@ import { SiteFooter } from '@/components/SiteFooter';
 import { ShopBuilder } from '@/components/ShopBuilder';
 import { getAllLatestPrices } from '@/lib/price-data';
 import { getCurrentPairReviews } from '@/lib/comparison-reviews';
-import { COMPARISON_LABELS } from '@/lib/comparison-policy';
+import { comparisonLabel, type ComparisonType } from '@/lib/comparison-policy';
 import { buildShopCatalogue } from '@/lib/shop-builder-catalogue';
 import { EXAMPLE_WEEKLY_ITEMS } from '@/lib/weekly-shop';
 
@@ -46,7 +46,7 @@ type EvidenceProduct = {
   name: string;
   category: string;
   prices: Record<string, number>;
-  offers: Record<string, { name: string; comparisonType: keyof typeof COMPARISON_LABELS; unitPrice: { price: number; per: 'kg' | 'l' | 'each' } | null; differentPack: boolean }>;
+  offers: Record<string, { name: string; comparisonType: ComparisonType; unitPrice: { price: number; per: 'kg' | 'l' | 'each' } | null; differentPack: boolean }>;
 };
 
 async function getComparisonData() {
@@ -168,7 +168,7 @@ export default async function ComparePage() {
                 {activeStores.map(store => (
                   <span key={store} className="rounded-full bg-[#f2f5f2] px-2.5 py-1 text-[11px] text-[#59645c]">
                     {STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#253128]">{fmt(product.prices[store])}</strong>
-                    <span className="ml-1 text-[10px]">{COMPARISON_LABELS[product.offers[store].comparisonType]}</span>
+                    {comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length) && <span className="ml-1 text-[10px]">{comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length)}</span>}
                   </span>
                 ))}
               </div>
@@ -202,7 +202,7 @@ export default async function ComparePage() {
                   </div>
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667169]">
                     {activeStores.map(store => (
-                      <span key={store}>{STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#354139]">{fmt(product.prices[store])}</strong> · {COMPARISON_LABELS[product.offers[store].comparisonType]} · {product.offers[store].name}</span>
+                      <span key={store}>{STORE_INFO[store].name.split(' ')[0]} <strong className="text-[#354139]">{fmt(product.prices[store])}</strong> {comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length) ? ` · ${comparisonLabel(product.offers[store].comparisonType, Object.keys(product.offers).length)}` : ''} · {product.offers[store].name}</span>
                     ))}
                   </div>
                 </div>

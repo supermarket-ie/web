@@ -6,7 +6,7 @@ import { trackEvent } from '@/lib/analytics';
 import { saveAgentLandingHandoff } from '@/lib/agent-landing-handoff';
 import { readShopDraft, shopBuilderPrompt, SHOP_BUILDER_LIMIT, SHOP_BUILDER_PATH, SHOP_DRAFT_KEY, type ShopDraft, type ShopProduct } from '@/lib/shop-builder';
 import { weeklyShopTotals, WEEKLY_STORES, WEEKLY_STORE_NAMES } from '@/lib/weekly-shop';
-import { COMPARISON_LABELS } from '@/lib/comparison-policy';
+import { comparisonLabel } from '@/lib/comparison-policy';
 
 const money = (value: number) => `€${value.toFixed(2)}`;
 const field = 'w-full rounded-xl border border-[#d9e3db] bg-white px-3 py-2.5 text-base text-[#173525] focus:outline-2 focus:outline-offset-2 focus:outline-[#287246]';
@@ -32,7 +32,7 @@ function ProductOption({ product, selected, full, onAdd }: { product: ShopProduc
       {WEEKLY_STORES.map(store => {
         const offer = product.offers[store];
         return <span key={store}>{WEEKLY_STORE_NAMES[store].split(' ')[0]} <strong className="text-[#263e2e]">{offer ? money(offer.price) : '—'}</strong>
-          {offer && <span className="ml-1 rounded bg-[#f0f7f2] px-1 py-0.5 text-[10px]">{COMPARISON_LABELS[offer.comparisonType ?? 'unverified']}</span>}
+          {offer && comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length) && <span className="ml-1 rounded bg-[#f0f7f2] px-1 py-0.5 text-[10px]">{comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length)}</span>}
         </span>;
       })}
     </div>
@@ -42,7 +42,7 @@ function ProductOption({ product, selected, full, onAdd }: { product: ShopProduc
         {WEEKLY_STORES.map(store => {
           const offer = product.offers[store];
           return <li key={store}><strong>{WEEKLY_STORE_NAMES[store]}:</strong> {offer ? <>
-            {offer.name} · {money(offer.price)} per retailer pack · {COMPARISON_LABELS[offer.comparisonType ?? 'unverified']}
+            {offer.name} · {money(offer.price)} per retailer pack{comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length) ? ` · ${comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => product.offers[s]).length)}` : ''}
             {offer.unitPrice ? ` · ${money(offer.unitPrice.price)} per ${offer.unitPrice.per}` : ''}
             {offer.differentPack ? ' · different/unknown pack, excluded from same-pack basket total' : ''}
             {' · checked '}{new Date(offer.observedAt).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
