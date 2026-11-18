@@ -8,7 +8,7 @@ const TSKU = '258147391', SSKU = '1017371000';
 const TURL = `https://www.tesco.ie/shop/en-IE/products/${TSKU}`;
 const SURL = `https://shop.supervalu.ie/sm/delivery/rsid/5550/product/heinz-cream-of-tomato-soup-400-g-id-${SSKU}`;
 const tescoParsed = (name = 'Heinz Cream Of Tomato Soup 400G') => JSON.stringify({ listing: null, products: [{ sku: TSKU, name, brand: 'HEINZ', gtin: '05000157062673', quantity: { grams: 400 }, identityDetails: { packSize: [{ units: 'G', value: 400 }] } }] });
-const svIdentity = (title = 'Heinz Cream Of Tomato Soup (400 g)', ingredients = 'Tomatoes (89%), Water') => JSON.stringify({ title, brand: 'Heinz', manufacturer: null, manufacturerProductCode: null, gtin: null, description: 'A timeless classic', ingredients, quantity: 0, packSize: null, packCount: null, variant: null, flavour: null, formulation: null });
+const svIdentity = (title = 'Heinz Cream Of Tomato Soup (400 g)', ingredients = 'Tomatoes (89%), Water', brand: string | null = 'Heinz') => JSON.stringify({ title, brand, manufacturer: null, manufacturerProductCode: null, gtin: null, description: 'A timeless classic', ingredients, quantity: 0, packSize: null, packCount: null, variant: null, flavour: null, formulation: null });
 
 let db: PGlite;
 const status = async (offsetDays = 0) => (await db.query<{ status: string; left_evidence_at: string; right_evidence_at: string }>(
@@ -33,10 +33,10 @@ async function approve(classification = 'exact_product', tescoParsedOverride?: s
     values ($1, $2, $3, 'tesco_page', $4, $5, $6, 'retailer_response', $7, $8, $9, 'Same brand, product, variant and pack.', 'owner', '["brand","product_name","pack_size"]'::jsonb)`,
     [T, S, classification, t.id, 'c'.repeat(64), t.created_at, s.id, s.body_sha256, s.retrieved_at]);
 }
-const observe = (over: { title?: string; ingredients?: string; sku?: string; url?: string; at?: string } = {}) => db.query(`insert into public.retailer_identity_observations(store_product_id, store, sku, source_kind,
+const observe = (over: { title?: string; ingredients?: string; sku?: string; url?: string; at?: string; brand?: string | null } = {}) => db.query(`insert into public.retailer_identity_observations(store_product_id, store, sku, source_kind,
     product_url, requested_url, final_url, body_sha256, parser_version, identity, observed_at)
     values ($1, 'supervalu', $2, 'captured_product', $3, $3, $3, $4, 'retailer-identity-response-v3', $5::jsonb, ${over.at ?? 'now()'})`,
-  [S, over.sku ?? SSKU, over.url ?? SURL, 'd'.repeat(64), svIdentity(over.title, over.ingredients)]);
+  [S, over.sku ?? SSKU, over.url ?? SURL, 'd'.repeat(64), svIdentity(over.title, over.ingredients, over.brand === undefined ? 'Heinz' : over.brand)]);
 
 beforeEach(async () => {
   db = await PGlite.create();
@@ -168,4 +168,29 @@ describe('durable pair approvals (real migrations)', () => {
     expect(t.id).toBeTruthy();
     expect(await status()).toEqual([]);
   });
+  it('a contradicting observation that also lost its brand still suspends (usable-ness only gates freshness)', async () => {
+    await approve();
+    await observe({ title: 'Heinz Cream Of Tomato Soup Reduced Salt (400 g)', brand: null });
+    expect((await status())[0].status).toBe('suspended_identity_changed');
+  });
+  it('malformed numeric retailer data never breaks the status read', async () => {
+    await approve();
+    await tescoPage(undefined, 'now()', TURL, JSON.stringify({ products: [{ sku: TSKU, name: 'Heinz Cream Of Tomato Soup 400G', brand: 'HEINZ',
+      quantity: { grams: 'approx 400' }, identityDetails: { packSize: [{ units: 'G', value: 'n/a' }, 'junk'] } }] }));
+    expect((await status())[0].status).toBe('active');
+  });
+  it('pack amounts are rounded: 1.1 kg and 1100 g are the same pack', async () => {
+    const r = (await db.query<{ a: string; b: string }>(`select public.identity_pack('{}'::jsonb, '[{"units":"KG","value":1.1}]'::jsonb) a,
+      public.identity_pack('{"grams":1100}'::jsonb, null) b`)).rows[0];
+    expect(r.a).toBe('1100g');
+    expect(r.b).toBe('1100g');
+  });
+  it('a SKU reassignment that is later reverted stays suspended (sticky)', async () => {
+    await approve();
+    await db.exec(`update public.store_products set store_sku = '1017371999' where id = '${S}'`);
+    await observe({ sku: '1017371999' });
+    await db.exec(`update public.store_products set store_sku = '${SSKU}' where id = '${S}'`);
+    expect((await status())[0].status).toBe('suspended_sku_changed');
+  });
 });
+

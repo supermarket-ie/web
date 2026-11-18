@@ -60,11 +60,29 @@ stale monitoring evidence suspends the match until a human re-reviews it.
   - SKU reassignment and reuse; 365-day expiry
   - gating and dedupe; binding and immutability; the service role cannot
     write approvals
+- Second-review fixes:
+  - A contradicting observation is checked even without a brand (usability
+    only gates freshness).
+  - Numeric casts are guarded (`identity_num`): malformed data never breaks
+    the status read.
+  - Pack amounts are rounded.
+  - A SKU change seen in observations is sticky even if reverted.
+  - Tesco is matched on the exact requested_url (index usable).
+  - Paging runs until an empty page.
+  - Recent NEGATIVE (not_comparable) decisions still come from the 14-day
+    ledger beside durable positives, so "different product" safeguards are
+    unchanged.
 - Known limits:
   - The Tesco projection has no ingredients on Apify pages.
-  - Identity-shape changes in a parser version suspend pairs (fails closed).
+  - A Tesco SKU reassignment that is reverted between pages is not detectable
+    (no store_products history).
+  - Changing a projection function needs a re-stamping migration, otherwise
+    affected pairs suspend (fails closed).
   - Tesco pairs need a Tesco page ≤ 14 days old.
-  - Dunnes needs the product-by-SKU route.
+  - There is NO Dunnes observation writer yet, so Dunnes-side approvals keep a
+    14-day life until the product-by-SKU route is approved.
+  - Observation `identity` and `body_sha256` come from the worker (trust root),
+    as do prices.
 
 ## 18 November 2026 — Verified comparisons between a SUBSET of retailers (PR #417, NOT deployed)
 

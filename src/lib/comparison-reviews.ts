@@ -25,13 +25,15 @@ const isMissingFunction = (error: { code?: string } | null) => !!error && (error
 /** Durable approvals: only pairs the database reports ACTIVE (unchanged SKU + identity, evidence <= 14 days). */
 async function readDurable(): Promise<PairReview[] | null> {
   // ACTIVE rows only, paged past PostgREST's row cap so no approval is silently dropped.
+  // Pages until an empty page, so a server row cap below the page size can never silently truncate.
   const rows: DurableStatusRow[] = [];
-  for (let from = 0; ; from += 1000) {
+  for (let from = 0; ;) {
     const { data, error } = await supabaseAdmin.rpc('current_pair_review_status', { p_active_only: true }).range(from, from + 999);
     if (isMissingFunction(error)) return null; // migration not applied yet: use the 14-day ledger read
     if (error) throw error;
-    rows.push(...((data ?? []) as DurableStatusRow[]));
-    if (!data || data.length < 1000) break;
+    if (!data?.length) break;
+    rows.push(...(data as DurableStatusRow[]));
+    from += data.length;
   }
   return rows
     .filter(row => row.status === 'active' && row.left_evidence_at && row.right_evidence_at)
@@ -44,15 +46,15 @@ async function readDurable(): Promise<PairReview[] | null> {
 async function readLedger(now: number): Promise<PairReview[]> {
   const all: PairReview[] = [];
   const since = new Date(now - HORIZON_MS).toISOString();
-  for (let from = 0; ; from += 500) {
+  for (let from = 0; ;) {
     const { data, error } = await supabaseAdmin.from('retailer_offer_pair_reviews')
       .select('left_offer_id,right_offer_id,classification,left_source_hash,right_source_hash,left_captured_at,right_captured_at,reviewed_at,rationale,reviewer')
       .gte('reviewed_at', since)
-      .order('reviewed_at', { ascending: false }).range(from, from + 499);
+      .order('reviewed_at', { ascending: false }).order('left_offer_id').order('right_offer_id').range(from, from + 499);
     if (error) throw error;
     if (!data?.length) break;
     all.push(...data as PairReview[]);
-    if (data.length < 500) break;
+    from += data.length;
   }
   return all;
 }
@@ -66,7 +68,12 @@ async function readLedger(now: number): Promise<PairReview[]> {
 export async function getCurrentPairReviews(now = Date.now()): Promise<PairReview[]> {
   if (cached && now - cached.at < CACHE_TTL_MS) return cached.reviews.filter(review => validPairReview(review, now));
   try {
-    const reviews = (await readDurable()) ?? await readLedger(now);
+    const durable = await readDurable();
+    // Durable positives (monitored) PLUS recent negative decisions from the ledger exactly as before, so a
+    // "different product" review still blocks and taints groups. Without the migration: the ledger alone.
+    const reviews = durable
+      ? [...durable, ...(await readLedger(now)).filter(r => r.classification === 'not_comparable')]
+      : await readLedger(now);
     cached = { at: now, reviews };
     warned = false;
     return reviews.filter(review => validPairReview(review, now));

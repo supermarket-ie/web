@@ -18,22 +18,36 @@
 
 -- 1. Identity projections, computed in the database from stored evidence (never supplied by a caller).
 --    Attributes are compared one by one: an attribute absent from one source is not a change.
+-- NOTE: changing any projection function changes live-recomputed projections; it must ship with a migration that
+-- re-stamps approvals, or every affected pair suspends (fails closed).
 create function public.identity_norm(t text) returns text
 language sql immutable set search_path = '' as $$
-  select nullif(btrim(regexp_replace(lower(coalesce(t, '')), '[^a-z0-9]+', ' ', 'g')), '')
+  select nullif(btrim(regexp_replace(
+    translate(replace(replace(replace(lower(coalesce(t, '')), '½', ' 1/2 '), '¼', ' 1/4 '), '¾', ' 3/4 '),
+      'àáâãäåçèéêëìíîïñòóôõöùúûüýÿ', 'aaaaaaceeeeiiiinooooouuuuyy'),
+    '[^a-z0-9/]+', ' ', 'g')), '')
+$$;
+
+-- A numeric value or null (never raises on malformed retailer data).
+create function public.identity_num(t text) returns numeric
+language sql immutable set search_path = '' as $$
+  select case when btrim(coalesce(t, '')) ~ '^[0-9]+(\.[0-9]+)?$' then btrim(t)::numeric end
 $$;
 
 -- Structured pack as "<amount><g|ml|each>" from Tesco quantity / packSize, or null.
 create function public.identity_pack(quantity jsonb, pack_size jsonb) returns text
 language sql immutable set search_path = '' as $$
   select coalesce(
-    case when quantity ? 'grams' then trim_scale((quantity->>'grams')::numeric)::text || 'g'
-         when quantity ? 'millilitres' then trim_scale((quantity->>'millilitres')::numeric)::text || 'ml' end,
+    case when public.identity_num(quantity->>'grams') is not null then trim_scale(round(public.identity_num(quantity->>'grams'), 3))::text || 'g'
+         when public.identity_num(quantity->>'millilitres') is not null then trim_scale(round(public.identity_num(quantity->>'millilitres'), 3))::text || 'ml' end,
     (select case upper(p->>'units')
-        when 'G' then trim_scale((p->>'value')::numeric)::text || 'g' when 'KG' then trim_scale((p->>'value')::numeric * 1000)::text || 'g'
-        when 'ML' then trim_scale((p->>'value')::numeric)::text || 'ml' when 'L' then trim_scale((p->>'value')::numeric * 1000)::text || 'ml'
-        when 'CL' then trim_scale((p->>'value')::numeric * 10)::text || 'ml' else null end
-     from jsonb_array_elements(case when jsonb_typeof(pack_size) = 'array' then pack_size else '[]'::jsonb end) p limit 1))
+        when 'G' then trim_scale(round(public.identity_num(p->>'value'), 3))::text || 'g'
+        when 'KG' then trim_scale(round(public.identity_num(p->>'value') * 1000, 3))::text || 'g'
+        when 'ML' then trim_scale(round(public.identity_num(p->>'value'), 3))::text || 'ml'
+        when 'L' then trim_scale(round(public.identity_num(p->>'value') * 1000, 3))::text || 'ml'
+        when 'CL' then trim_scale(round(public.identity_num(p->>'value') * 10, 3))::text || 'ml' else null end
+     from jsonb_array_elements(case when jsonb_typeof(pack_size) = 'array' then pack_size else '[]'::jsonb end) p
+     where jsonb_typeof(p) = 'object' limit 1))
 $$;
 
 -- SuperValu / Dunnes parsed identity (retailer_identity_responses.identity / observations.identity).
@@ -77,7 +91,7 @@ language sql immutable set search_path = '' as $$
   select exists (select 1 from jsonb_each_text(approved) a join jsonb_each_text(observed) o on o.key = a.key where o.value <> a.value)
 $$;
 
-revoke all on function public.identity_norm(text), public.identity_pack(jsonb, jsonb), public.retailer_identity_projection(jsonb),
+revoke all on function public.identity_norm(text), public.identity_num(text), public.identity_pack(jsonb, jsonb), public.retailer_identity_projection(jsonb),
   public.tesco_page_projection(jsonb, text), public.identity_usable(jsonb), public.identity_changed(jsonb, jsonb)
   from public, anon, authenticated;
 
@@ -211,42 +225,47 @@ language sql stable security invoker set search_path = '' as $$
   ),
   observed as (
     -- Every usable observation of each side since its approval evidence (the approval's own evidence included).
-    select x.l_id, x.r_id, x.which, v.at, v.projection
+    select x.l_id, x.r_id, x.which, v.at, v.projection, v.sku
     from sides x
     join public.store_products sp on sp.id = x.offer_id
     cross join lateral (
-      select x.src_at as at, x.approved as projection
+      select x.src_at as at, x.approved as projection, x.sku as sku
       union all
-      select p.created_at, public.tesco_page_projection(p.parsed, sp.store_sku)
+      select p.created_at, public.tesco_page_projection(p.parsed, sp.store_sku), sp.store_sku
       from public.tesco_direct_collection_pages p
       where sp.store = 'tesco' and p.outcome = 'ok' and p.http_status = 200 and p.body_sha256 is not null
         and p.created_at >= x.src_at and p.created_at <= p_now
-        and (p.requested_url = 'https://www.tesco.ie/shop/en-IE/products/' || sp.store_sku
-             or p.final_url = 'https://www.tesco.ie/shop/en-IE/products/' || sp.store_sku)
+        and p.requested_url = 'https://www.tesco.ie/shop/en-IE/products/' || sp.store_sku
       union all
-      select e.retrieved_at, public.retailer_identity_projection(e.identity)
+      select e.retrieved_at, public.retailer_identity_projection(e.identity), e.sku
       from public.retailer_identity_responses e
-      where e.store_product_id = sp.id and e.source_kind = 'captured_product' and e.sku = sp.store_sku
+      where e.store_product_id = sp.id and e.source_kind = 'captured_product'
         and e.retrieved_at >= x.src_at and e.retrieved_at <= p_now
       union all
-      select o.observed_at, o.identity_projection
+      -- every observation of this offer, whatever SKU it carried (a SKU change, even reverted, is sticky)
+      select o.observed_at, o.identity_projection, o.sku
       from public.retailer_identity_observations o
-      where o.store_product_id = sp.id and o.sku = sp.store_sku and o.observed_at >= x.src_at and o.observed_at <= p_now
+      where o.store_product_id = sp.id and o.observed_at >= x.src_at and o.observed_at <= p_now
     ) v
-    where public.identity_usable(v.projection)
+    where v.projection ? 'title'
   ),
   per_side as (
     select x.l_id, x.r_id, x.which,
-      (select max(o.at) from observed o where o.l_id = x.l_id and o.r_id = x.r_id and o.which = x.which) as evidence_at,
+      (select max(o.at) from observed o where o.l_id = x.l_id and o.r_id = x.r_id and o.which = x.which
+         and o.sku = x.sku and public.identity_usable(o.projection)) as evidence_at,
       case
         when x.sku is null or x.approved is null then 'suspended_unmonitorable'
         when sp.store_sku is distinct from x.sku
           or (select count(*) from public.store_products d where d.store = sp.store and d.store_sku = sp.store_sku) <> 1
+          -- STICKY: an observation under a different SKU since approval (reassigned, even if reverted)
+          or exists (select 1 from observed o where o.l_id = x.l_id and o.r_id = x.r_id and o.which = x.which and o.sku is distinct from x.sku)
           then 'suspended_sku_changed'
-        -- STICKY: any contradicting observation since approval, even if a later one reverts.
+        -- STICKY: any title-bearing observation since approval that contradicts a stated attribute, even if a
+        -- later one reverts or the contradicting one lacks a brand.
         when exists (select 1 from observed o where o.l_id = x.l_id and o.r_id = x.r_id and o.which = x.which
                      and public.identity_changed(x.approved, o.projection)) then 'suspended_identity_changed'
-        when coalesce((select max(o.at) from observed o where o.l_id = x.l_id and o.r_id = x.r_id and o.which = x.which), '-infinity')
+        when coalesce((select max(o.at) from observed o where o.l_id = x.l_id and o.r_id = x.r_id and o.which = x.which
+                         and o.sku = x.sku and public.identity_usable(o.projection)), '-infinity')
           < p_now - interval '14 days' then 'suspended_no_recent_evidence'
         else 'active'
       end as side_status
