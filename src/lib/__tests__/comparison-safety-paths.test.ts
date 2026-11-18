@@ -132,3 +132,26 @@ describe('verified subset of retailers (Tesco + SuperValu verified, Dunnes indic
     expect(r.explanation).toContain('Dunnes Stores: indicative total only');
   });
 });
+
+describe('partially verified list lines and client-supplied labels', () => {
+  it('a line verified between two of three stores is partially_verified with per-store labels', () => {
+    const rows = [
+      { canonical_name: 'Soup 400g', store: 'tesco', price: 2.49, store_product_id: 't-soup', store_product_name: 'Heinz Cream Of Tomato Soup 400G' },
+      { canonical_name: 'Soup 400g', store: 'supervalu', price: 2.5, store_product_id: 's-soup', store_product_name: 'Heinz Cream Of Tomato Soup (400 g)' },
+      { canonical_name: 'Soup 400g', store: 'dunnes', price: 2.0, store_product_id: 'd-soup', store_product_name: 'Heinz Cream of Tomato Soup 400g' },
+    ].map(r => ({ ...r, canonical_product_id: 'soup', category: null, store_url: null }));
+    const item = buildSmartList(rows, [review('t-soup', 's-soup')], '2', undefined).items[0];
+    expect(item.price_comparison).toBe('partially_verified');
+    expect(Object.fromEntries(item.all_prices.map(p => [p.store, p.comparison]))).toEqual({ tesco: 'exact_product', supervalu: 'exact_product', dunnes: 'unverified' });
+  });
+  it('client-supplied item labels are never stored as verification', async () => {
+    const { downgradeClientItemLabels } = await import('../saved-list-sanitize');
+    expect(downgradeClientItemLabels([
+      { price_comparison: 'partially_verified', all_prices: [{ store: 'tesco', comparison: 'exact_product' }, { store: 'dunnes', comparison: 'unverified' }] },
+      { price_comparison: 'different_products' },
+    ])).toEqual([
+      { price_comparison: 'indicative', all_prices: [{ store: 'tesco', comparison: 'unverified' }, { store: 'dunnes', comparison: 'unverified' }] },
+      { price_comparison: 'different_products' },
+    ]);
+  });
+});

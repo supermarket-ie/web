@@ -90,7 +90,9 @@ function analyseStoreTotals(storeTotals: StoreTotal[], totalItems: number) {
   const partialMatches = annotated.filter(s => !s.isFullMatch);
 
   // Only crown a best when we have real item_count data
-  const best = hasItemCounts ? (fullMatches[0] ?? null) : null;
+  // A tie for the lowest total crowns no store.
+  const tied = fullMatches.length >= 2 && Math.round(fullMatches[0].total * 100) === Math.round(fullMatches[1].total * 100);
+  const best = hasItemCounts && !tied ? (fullMatches[0] ?? null) : null;
 
   // In the display strip: show full matches always; only show partial matches
   // when we have item_count data (so we can label them clearly). Without
@@ -225,7 +227,7 @@ function HeroCard({
         <div className="flex flex-wrap" style={{ borderTop: '1px solid var(--surface-container)' }}>
           {sorted.map((st, i) => {
             const s = storeStyle(st.store);
-            const isBest = st.isFullMatch && i === sorted.findIndex(s => s.isFullMatch);
+            const isBest = !!best && st.store === best.store;
             return (
               <div key={st.store} className="flex-1 px-3 py-2.5 text-center min-w-0"
                 style={{ borderRight: i < sorted.length - 1 ? '1px solid var(--surface-container)' : 'none', minWidth: '33%' }}>

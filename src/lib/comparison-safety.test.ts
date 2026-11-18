@@ -208,3 +208,38 @@ describe('weekly totals', () => {
     expect(t.verifiedComparableTotal).toBeNull();
   });
 });
+
+describe('veto is independent of offer order', () => {
+  it('a variant conflict vetoes an approved review whichever retailer is listed first', () => {
+    const t = { store: 'tesco', storeProductId: 't', name: 'Robinsons Orange 1L', price: 2 };
+    const s = { store: 'supervalu', storeProductId: 's', name: 'Robinsons Orange Lemon 1L', price: 2 };
+    expect(deterministicDifference(t.name, s.name)).not.toBeNull();
+    expect(deterministicDifference(s.name, t.name)).toBe(deterministicDifference(t.name, s.name));
+    for (const group of [[t, s], [s, t]]) {
+      expect(classifyOfferGroup(group, [review('t', 's')], now)).toEqual({ tesco: 'not_comparable', supervalu: 'not_comparable' });
+      expect(compareBasket([{ id: 'x', quantity: 1, offers: group }], ['tesco', 'supervalu'], [review('t', 's')], now).cheapestVerified).toBeNull();
+    }
+  });
+});
+
+describe('ties and scope', () => {
+  const pair: BasketLine = { id: 'beans', quantity: 1, offers: [
+    { store: 'tesco', storeProductId: 't', name: 'Heinz Beanz 415g', price: 2 },
+    { store: 'supervalu', storeProductId: 's', name: 'Heinz Beanz (415 g)', price: 2 },
+  ] };
+  it('equal verified totals are a tie: never "cheaper than"', async () => {
+    const { verifiedClaimText } = await import('./comparison-policy');
+    const c = compareBasket([pair], ['tesco', 'supervalu'], [review('t', 's')], now);
+    expect(c.basis).toBe('verified_exact');
+    expect(c.cheapestTied).toBe(true);
+    expect(verifiedClaimText([{ store: 'tesco', total: 2 }, { store: 'supervalu', total: 2 }])).toBe('Tesco and SuperValu cost the same for this basket (verified exact matches).');
+    expect(verifiedClaimText([{ store: 'tesco', total: 2 }, { store: 'supervalu', total: 2 }, { store: 'dunnes', total: 3 }]))
+      .toBe('Tesco and SuperValu are jointly cheapest of Tesco, SuperValu and Dunnes Stores for this basket (verified exact matches).');
+  });
+  it('a contradiction from a retailer outside the compared stores still voids the claim (the review is suspect)', () => {
+    const withDunnes: BasketLine = { ...pair, offers: [...pair.offers, { store: 'dunnes', storeProductId: 'd', name: 'Dunnes Stores Baked Beans 415g', price: 1 }] };
+    // Approved SuperValu = Dunnes is contradicted by stated facts (own-label), so every connected approval is suspended.
+    const c = compareBasket([withDunnes], ['tesco', 'supervalu'], [review('t', 's'), review('s', 'd')], now);
+    expect(c.cheapestVerified).toBeNull();
+  });
+});

@@ -129,7 +129,7 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold" style={{ color: 'var(--on-surface)' }}>Total: €{bestSplitTotal.toFixed(2)}</span>
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Lowest verified total</span>
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Your stores, today’s prices</span>
             </div>
           </div>
 
@@ -161,8 +161,10 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
           )}
           <p className="text-xs" style={{ color: 'var(--on-surface-variant)', opacity: 0.75 }}>
             {savings > 0 && savings < 3
-              ? `Splitting saves less than €3 — not worth the extra trip`
-              : `Your chosen stores are already the cheapest verified option`}
+              ? `Your split saves €${savings.toFixed(2)} vs one stop at ${storeDisplayName(bestSingleStore!.store)}: less than €3, so probably not worth the extra trip`
+              : savings < 0
+                ? `One stop at ${storeDisplayName(bestSingleStore!.store)} is €${Math.abs(savings).toFixed(2)} cheaper than your current stores`
+                : `Same total as your current stores`}
           </p>
           <p className="text-xs mt-1" style={{ color: 'var(--on-surface-variant)', opacity: 0.75 }}>{result.explanation}</p>
         </>

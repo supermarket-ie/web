@@ -91,7 +91,9 @@ export function ProductCard({
           {/* Cross-store price comparison */}
           {item.all_prices.length > 1 && item.price_comparison !== 'verified_exact' && (
             <p className="mt-1 text-[10px] leading-snug" style={{ color: '#82591a' }}>
-              {item.price_comparison === 'different_products'
+              {item.price_comparison === 'partially_verified'
+                ? `Verified exact match at ${item.all_prices.filter(p => p.comparison === 'exact_product').map(p => storeDisplayName(p.store)).join(' & ')}. ${item.all_prices.filter(p => p.comparison !== 'exact_product').map(p => storeDisplayName(p.store)).join(' & ')}: not verified as the same item.`
+                : item.price_comparison === 'different_products'
                 ? 'Different products at each store (pack, variant or own-label) — compare titles and unit prices.'
                 : 'Indicative — these stores’ products are not verified as the same item.'}
             </p>
@@ -110,7 +112,8 @@ export function ProductCard({
                       ? <a href={sp.store_url} target="_blank" rel="noopener noreferrer" className="hover:underline" title={sp.store_product_name}>{fmt(sp.price)}</a>
                       : <span title={sp.store_product_name}>{fmt(sp.price)}</span>}
                     {sp.unit_price && <span className="opacity-70">({fmt(sp.unit_price.price)}/{sp.unit_price.per})</span>}
-                    {isBest && item.price_comparison === 'verified_exact' && <span style={{ color: 'var(--primary)' }}>✓</span>}
+                    {(item.price_comparison === 'verified_exact' ? isBest : item.price_comparison === 'partially_verified' && sp.comparison === 'exact_product')
+                      && <span style={{ color: 'var(--primary)' }} aria-label="verified exact match">✓</span>}
                     <span className={item.price_comparison === 'verified_exact' ? 'sr-only' : 'max-w-[12rem] truncate opacity-70'}>{sp.store_product_name}</span>
                   </span>
                 );

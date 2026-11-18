@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSubscriberId } from '@/lib/auth';
-import { sanitizeStoreTotals } from '@/lib/saved-list-sanitize';
+import { downgradeClientItemLabels, sanitizeStoreTotals } from '@/lib/saved-list-sanitize';
 
 function sessionToken(req: NextRequest, explicit?: string | null) {
   return req.cookies.get('sm_session')?.value ?? (explicit && explicit !== '__cookie__' ? explicit : null);
@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
       name: name || meals_prompt?.slice(0, 60) || 'My list',
       meals_prompt: meals_prompt ?? null,
       family_size: family_size ?? '2',
-      items: items ?? [],
+      // Client-supplied item labels are never trusted as verification (see downgradeClientItemLabels).
+      items: downgradeClientItemLabels(items ?? []),
       // Client-supplied totals cannot be verified server-side (a client could claim basis:'verified_exact'),
       // so none are persisted from this route. Server-computed totals come from save-from-planner.
       store_totals: [],

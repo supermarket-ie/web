@@ -1,6 +1,7 @@
 import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getCurrentProductSnapshot } from '@/lib/catalogue-resolution';
+import { retailerDisplayName } from '@/lib/comparison-policy';
 import { resend } from '@/lib/resend';
 
 export type AgentProactivity = 'important_only' | 'useful_updates' | 'quiet';
@@ -17,6 +18,7 @@ export type HouseholdRelevanceResult = {
 type PurchaseRow = {
   subscriber_id: string;
   list_id: string | null;
+  store: string | null;
   price_paid: number;
   observed_at: string;
 };
@@ -25,6 +27,8 @@ type HouseholdPurchaseProfile = {
   subscriberId: string;
   purchaseCount: number;
   lastPrice: number;
+  /** The store the last price was paid at: the only store a "cheaper now" notice may compare against. */
+  lastStore: string | null;
   lastBoughtAt: string;
   cadenceDays: number | null;
 };
@@ -78,6 +82,7 @@ function buildProfiles(rows: PurchaseRow[]): HouseholdPurchaseProfile[] {
       subscriberId,
       purchaseCount: unique.length,
       lastPrice: Number(unique[0].price_paid),
+      lastStore: unique[0].store ? String(unique[0].store).toLowerCase() : null,
       lastBoughtAt: unique[0].observed_at,
       cadenceDays: median(gaps),
     });
@@ -100,7 +105,10 @@ function notificationHtml(title: string, body: string, shopUrl: string, unsubscr
 }
 
 function scoreProfile(profile: HouseholdPurchaseProfile, current: NonNullable<Awaited<ReturnType<typeof getCurrentProductSnapshot>>>) {
-  const saving = Number((profile.lastPrice - current.best_price).toFixed(2));
+  // Same store only: another store's offer on this canonical record is not verified to be the same product,
+  // so it can never be presented as a saving against what the household paid.
+  const sameStore = profile.lastStore ? current.stores.find(s => s.store.toLowerCase() === profile.lastStore) ?? null : null;
+  const saving = sameStore ? Number((profile.lastPrice - sameStore.price).toFixed(2)) : 0;
   const savingPct = profile.lastPrice > 0 ? saving / profile.lastPrice : 0;
   const daysSinceLast = dayDiff(new Date(), profile.lastBoughtAt);
   const dueRatio = profile.cadenceDays && profile.cadenceDays > 0 ? daysSinceLast / profile.cadenceDays : 0;
@@ -109,11 +117,11 @@ function scoreProfile(profile: HouseholdPurchaseProfile, current: NonNullable<Aw
   priority += daysSinceLast <= 90 ? 8 : 0;
   if (saving >= 0.5) priority += Math.min(28, saving * 6);
   if (savingPct >= 0.15) priority += 10;
-  if (current.any_promotion) priority += 12;
+  if (sameStore?.on_promotion) priority += 12;
   if (dueRatio >= 0.65) priority += Math.min(18, 8 + (dueRatio - 0.65) * 20);
 
   const isMeaningfulPriceDrop = saving >= 0.5 || savingPct >= 0.15;
-  const isUsefulPromotion = current.any_promotion && saving >= 0.25;
+  const isUsefulPromotion = Boolean(sameStore?.on_promotion) && saving >= 0.25;
   const isDue = Boolean(profile.cadenceDays && dueRatio >= 0.75);
 
   return {
@@ -125,6 +133,7 @@ function scoreProfile(profile: HouseholdPurchaseProfile, current: NonNullable<Aw
     isMeaningfulPriceDrop,
     isUsefulPromotion,
     isDue,
+    sameStore,
   };
 }
 
@@ -138,7 +147,7 @@ export async function evaluateHouseholdRelevanceForProduct(canonicalName: string
   const [{ data: purchaseRows, error: purchaseError }, current] = await Promise.all([
     supabaseAdmin
       .from('list_items')
-      .select('subscriber_id, list_id, price_paid, observed_at')
+      .select('subscriber_id, list_id, store, price_paid, observed_at')
       .eq('canonical_name', canonicalName)
       .gte('observed_at', cutoff)
       .order('observed_at', { ascending: false })
@@ -180,8 +189,9 @@ export async function evaluateHouseholdRelevanceForProduct(canonicalName: string
     const cadenceNote = scored.isDue
       ? ' This is also around when you usually buy it.'
       : '';
-    const body = `${canonicalName} is currently €${current.best_price.toFixed(2)} at ${current.best_store}, compared with €${profile.lastPrice.toFixed(2)} when you last had it in your shop.${cadenceNote}`;
-    const dedupeKey = `${profile.subscriberId}:${canonicalName}:${kind}:${current.best_price.toFixed(2)}:${weekKey}`;
+    const here = scored.sameStore!; // a meaningful drop or promotion implies a same-store price
+    const body = `${canonicalName} is currently €${here.price.toFixed(2)} at ${retailerDisplayName(here.store)}, compared with €${profile.lastPrice.toFixed(2)} when you last bought it there.${cadenceNote}`;
+    const dedupeKey = `${profile.subscriberId}:${canonicalName}:${kind}:${scored.sameStore!.price.toFixed(2)}:${weekKey}`;
 
     const { data: insight, error: insightError } = await supabaseAdmin
       .from('household_insights')
@@ -196,6 +206,8 @@ export async function evaluateHouseholdRelevanceForProduct(canonicalName: string
         payload: {
           best_price: current.best_price,
           best_store: current.best_store,
+          same_store_price: scored.sameStore?.price ?? null,
+          same_store: scored.sameStore?.store ?? null,
           last_price: profile.lastPrice,
           purchase_count: profile.purchaseCount,
           cadence_days: profile.cadenceDays,

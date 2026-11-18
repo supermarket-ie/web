@@ -27,11 +27,9 @@ export function HouseholdShopCard({ shop }: { shop: HouseholdShopContract }) {
   ).length;
   // A "cheapest verified" headline needs the recommended retailer's own coverage row to be verified_exact.
   const verifiedRows = shop.store_coverage.filter(c => c.comparison_basis === 'verified_exact' && c.verified_exact_total != null);
-  const verifiedRecommendation = verifiedRows.length >= 2 && verifiedRows.some(coverage =>
-    coverage.retailer.toLowerCase() === (shop.recommended_retailer_strategy.retailer ?? '').toLowerCase());
-  // The claim names the verified stores; other complete stores are named as indicative.
-  const verifiedClaim = verifiedRecommendation ? verifiedClaimText(shop.recommended_retailer_strategy.retailer ?? '',
-    verifiedRows.map(c => c.retailer), shop.store_coverage.filter(c => c.complete && !verifiedRows.includes(c)).map(c => c.retailer)) : null;
+  // The claim names the verified stores (and any tie); other complete stores are named as indicative.
+  const verifiedClaim = shop.recommended_retailer_strategy.kind === 'single_retailer' && verifiedRows.length >= 2 ? verifiedClaimText(verifiedRows.map(c => ({ store: c.retailer, total: c.verified_exact_total! })),
+    shop.store_coverage.filter(c => c.complete && !verifiedRows.includes(c)).map(c => c.retailer)) : null;
 
   return (
     <section className="w-full overflow-hidden rounded-[1.4rem] border border-[#dce6df] bg-white text-[#243128] shadow-[0_12px_35px_rgba(31,64,43,0.08)]">

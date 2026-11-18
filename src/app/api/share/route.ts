@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { downgradeClientItemLabels } from '@/lib/saved-list-sanitize';
 // 16 chars × 5 bits (32-char alphabet) = 80 bits of entropy
 function randomId(len = 16) {
   const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -26,9 +27,8 @@ export async function POST(req: Request) {
       .insert({
         id,
         family_size,
-        // A client-claimed "verified_exact" item label is not re-verified here, so it is stored as indicative.
-        items: (items as unknown[]).map(item => item && typeof item === 'object' && (item as { price_comparison?: unknown }).price_comparison === 'verified_exact'
-          ? { ...item, price_comparison: 'indicative' } : item),
+        // Client-claimed verification (item or per-store labels) is not re-verified here, so it is stored as indicative.
+        items: downgradeClientItemLabels(items),
         // This route is public and unauthenticated: client-supplied totals cannot be trusted, and the share page
         // labels the first one "best value". No totals are persisted from client input.
         store_totals: [],

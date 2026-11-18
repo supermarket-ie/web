@@ -50,7 +50,7 @@ export function evaluateTaskCondition(
       return {
         triggered: true,
         title: `${name} is now ${euro(current.best_price)}`,
-        body: `${name} is ${euro(Math.abs(delta))} ${direction} than when you asked me to watch it. The current best price is ${euro(current.best_price)} at ${current.best_store}.`,
+        body: `The lowest listed price for ${name} is ${euro(Math.abs(delta))} ${direction} than when you asked me to watch it. The lowest listed price is now ${euro(current.best_price)} at ${current.best_store} (lowest across stores; products at different stores are not verified as identical).`,
         dedupeValue: `price:${current.best_price.toFixed(2)}:${current.best_store}`,
       };
     }
@@ -74,7 +74,7 @@ export function evaluateTaskCondition(
       return {
         triggered: true,
         title: `${name} is on promotion`,
-        body: `${name} has gone on promotion. The current best price is ${euro(current.best_price)} at ${current.best_store}.`,
+        body: `${name} has gone on promotion. The lowest listed price is now ${euro(current.best_price)} at ${current.best_store} (lowest across stores; products at different stores are not verified as identical).`,
         dedupeValue: `promotion:${current.best_price.toFixed(2)}:${current.best_store}`,
       };
     }
@@ -85,7 +85,7 @@ export function evaluateTaskCondition(
       return {
         triggered: true,
         title: `${name} is available again`,
-        body: `${name} is available again. The current best price is ${euro(current.best_price)} at ${current.best_store}.`,
+        body: `${name} is available again. The lowest listed price is now ${euro(current.best_price)} at ${current.best_store} (lowest across stores; products at different stores are not verified as identical).`,
         dedupeValue: `available:${current.best_price.toFixed(2)}:${current.best_store}`,
         completeAfterTrigger: true,
       };

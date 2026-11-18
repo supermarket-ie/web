@@ -88,7 +88,7 @@ export function compareBasketStores(
     verified_stores: result.verifiedStores,
     indicative_complete_stores: result.indicativeCompleteStores,
     explanation: result.cheapestVerified
-      ? `${verifiedClaimText(result.cheapestVerified.store, result.verifiedStores, result.indicativeCompleteStores)} ${COMPARISON_EXPLANATIONS.verified}`
+      ? `${verifiedClaimText(result.stores.filter(x => x.verifiedExactTotal !== null).map(x => ({ store: x.store, total: x.verifiedExactTotal! })), result.indicativeCompleteStores)} ${COMPARISON_EXPLANATIONS.verified}`
       : COMPARISON_EXPLANATIONS[result.basis === 'verified_exact' ? 'verified' : result.basis],
     comparisons,
   };

@@ -186,8 +186,9 @@ export function groundHouseholdShop(input: GroundHouseholdShopInput): HouseholdS
   const strategy = cheapest
     ? {
         kind: 'single_retailer' as const,
-        retailer: storeCoverage.find(s => s.retailer.toLowerCase() === cheapest.store)!.retailer,
-        rationale: `${verifiedClaimText(cheapest.store, comparison.verifiedStores, comparison.indicativeCompleteStores)} ${COMPARISON_EXPLANATIONS.verified}`,
+        // A tie for the lowest verified total names no single retailer.
+        retailer: comparison.cheapestTied ? null : storeCoverage.find(s => s.retailer.toLowerCase() === cheapest.store)!.retailer,
+        rationale: `${verifiedClaimText(comparison.stores.filter(x => x.verifiedExactTotal !== null).map(x => ({ store: x.store, total: x.verifiedExactTotal! })), comparison.indicativeCompleteStores)} ${COMPARISON_EXPLANATIONS.verified}`,
       }
     : firstComplete
       ? {

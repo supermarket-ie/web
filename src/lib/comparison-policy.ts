@@ -27,12 +27,20 @@ const listNames = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(
  * The ONE wording for a verified basket claim. It always names the stores it covers, and names any other
  * complete store as indicative, so a claim between Tesco and SuperValu is never read as "cheapest of all".
  */
-export function verifiedClaimText(cheapest: string, verifiedStores: string[], indicativeStores: string[] = []): string {
-  const names = verifiedStores.map(retailerDisplayName);
-  const others = verifiedStores.filter(s => s.toLowerCase() !== cheapest.toLowerCase()).map(retailerDisplayName);
-  const head = verifiedStores.length === 2
-    ? `${retailerDisplayName(cheapest)} is cheaper than ${others[0]} for this basket (verified exact matches).`
-    : `${retailerDisplayName(cheapest)} is the cheapest of ${listNames(names)} for this basket (verified exact matches).`;
+export function verifiedClaimText(verified: Array<{ store: string; total: number }>, indicativeStores: string[] = []): string {
+  const cents = (n: number) => Math.round(n * 100);
+  const min = Math.min(...verified.map(v => cents(v.total)));
+  const lowest = verified.filter(v => cents(v.total) === min).map(v => retailerDisplayName(v.store));
+  const all = verified.map(v => retailerDisplayName(v.store));
+  const others = verified.filter(v => cents(v.total) !== min).map(v => retailerDisplayName(v.store));
+  // Equal totals are never described as one store being cheaper.
+  const head = lowest.length === all.length
+    ? `${listNames(all)} cost the same for this basket (verified exact matches).`
+    : lowest.length > 1
+      ? `${listNames(lowest)} are jointly cheapest of ${listNames(all)} for this basket (verified exact matches).`
+      : all.length === 2
+        ? `${lowest[0]} is cheaper than ${others[0]} for this basket (verified exact matches).`
+        : `${lowest[0]} is the cheapest of ${listNames(all)} for this basket (verified exact matches).`;
   const tail = indicativeStores.length
     ? ` ${listNames(indicativeStores.map(retailerDisplayName))}: indicative total only, not verified as the same products.` : '';
   return head + tail;
@@ -71,6 +79,8 @@ export type BasketComparison = {
   cheapestVerified: { store: string; total: number } | null;
   /** The stores the verified claim covers (>= 2), or []. A claim is always scoped to these stores. */
   verifiedStores: string[];
+  /** True when two or more verified stores share the lowest total: no single store may be called cheapest. */
+  cheapestTied: boolean;
   /** Complete baskets outside the verified claim: shown as indicative totals only. */
   indicativeCompleteStores: string[];
 };
@@ -120,6 +130,7 @@ export function compareBasket(lines: BasketLine[], stores: string[], reviews: Pa
   return { basis: cheapest ? 'verified_exact' : complete.length >= 2 ? 'indicative' : 'incomplete', stores: ordered,
     cheapestVerified: cheapest ? { store: cheapest.store, total: cheapest.verifiedExactTotal! } : null,
     verifiedStores: cheapest ? verified.map(b => b.store) : [],
+    cheapestTied: !!cheapest && verified.filter(b => cents(b.verifiedExactTotal!) === cents(cheapest.verifiedExactTotal!)).length > 1,
     indicativeCompleteStores: complete.filter(b => !cheapest || b.verifiedExactTotal === null).map(b => b.store) };
 }
 
@@ -212,6 +223,11 @@ export function isOwnLabel(name: string) { return OWN_LABEL.test(name ?? ''); }
  * either side. Absence of a fact is never a contradiction, and this can never establish equivalence.
  */
 export function deterministicDifference(a: string, b: string): string | null {
+  // Symmetric by construction: a difference found in either direction is a difference (the identity and
+  // variant checks compare one title's words against the other's, so they are not symmetric on their own).
+  return statedDifference(a, b) ?? statedDifference(b, a);
+}
+function statedDifference(a: string, b: string): string | null {
   const x = readPack(a), y = readPack(b);
   // Only unambiguous packs: one measured unit, or an explicit "N x M" multipack. "6 Pack (270 g)" is
   // ambiguous (per item or total?) and can never prove a difference.

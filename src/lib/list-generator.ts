@@ -29,7 +29,8 @@ export interface ListItem {
   nutrition: NutritionData | null;
   store_overridden?: boolean;
   /** Whether best_price is for the same product as the other stores' prices. Absent on legacy lists = indicative. */
-  price_comparison?: 'verified_exact' | 'indicative' | 'different_products' | 'single_store';
+  /** partially_verified: some stores' offers are verified exact matches of each other (see all_prices[].comparison). */
+  price_comparison?: 'verified_exact' | 'partially_verified' | 'indicative' | 'different_products' | 'single_store';
 }
 
 export interface SmartList {
@@ -151,6 +152,7 @@ export function buildSmartList(
     const statuses = Object.values(status);
     const priceComparison: ListItem['price_comparison'] = stores.size < 2 ? 'single_store'
       : statuses.every(s => s === 'exact_product') ? 'verified_exact'
+      : statuses.filter(s => s === 'exact_product').length >= 2 ? 'partially_verified'
       : statuses.some(s => s === 'not_comparable') ? 'different_products' : 'indicative';
 
     const allPrices: StorePrice[] = Array.from(stores.entries())
@@ -197,7 +199,7 @@ export function buildSmartList(
 
   return {
     family_size: familySize,
-    recommended_store: comparison.cheapestVerified?.store ?? '',
+    recommended_store: comparison.cheapestTied ? '' : comparison.cheapestVerified?.store ?? '',
     store_totals: verifiedTotals,
     comparison_basis: comparison.basis,
     items,
