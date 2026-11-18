@@ -43,6 +43,17 @@ async function readDurable(): Promise<PairReview[] | null> {
       reviewed_at: row.reviewed_at, rationale: row.rationale, reviewer: row.reviewer, monitored: true }));
 }
 
+/** A negative decision counts only when it is the LATEST review of its pair (a newer review supersedes it). */
+function latestNegatives(rows: PairReview[]): PairReview[] {
+  const latest = new Map<string, PairReview>();
+  for (const r of rows) {
+    const key = [r.left_offer_id, r.right_offer_id].sort().join(':');
+    const old = latest.get(key);
+    if (!old || Date.parse(r.reviewed_at) > Date.parse(old.reviewed_at)) latest.set(key, r);
+  }
+  return [...latest.values()].filter(r => r.classification === 'not_comparable');
+}
+
 async function readLedger(now: number): Promise<PairReview[]> {
   const all: PairReview[] = [];
   const since = new Date(now - HORIZON_MS).toISOString();
@@ -71,9 +82,7 @@ export async function getCurrentPairReviews(now = Date.now()): Promise<PairRevie
     const durable = await readDurable();
     // Durable positives (monitored) PLUS recent negative decisions from the ledger exactly as before, so a
     // "different product" review still blocks and taints groups. Without the migration: the ledger alone.
-    const reviews = durable
-      ? [...durable, ...(await readLedger(now)).filter(r => r.classification === 'not_comparable')]
-      : await readLedger(now);
+    const reviews = durable ? [...durable, ...latestNegatives(await readLedger(now))] : await readLedger(now);
     cached = { at: now, reviews };
     warned = false;
     return reviews.filter(review => validPairReview(review, now));

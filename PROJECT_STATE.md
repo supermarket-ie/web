@@ -83,6 +83,9 @@ stale monitoring evidence suspends the match until a human re-reviews it.
     14-day life until the product-by-SKU route is approved.
   - Observation `identity` and `body_sha256` come from the worker (trust root),
     as do prices.
+  - `identity_norm` treats "&"/"and" and "/"/space as different, and drops
+    ø/æ/ß: these over-suspend (fail closed). Follow-up.
+- A ledger negative is used only when it is the latest review of its pair.
 
 ## 18 November 2026 — Verified comparisons between a SUBSET of retailers (PR #417, NOT deployed)
 

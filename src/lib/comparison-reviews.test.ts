@@ -87,5 +87,11 @@ describe('getCurrentPairReviews', () => {
     calls.result = { data: [], error: null };
     expect(await getCurrentPairReviews(now)).toHaveLength(5);
   });
+  it('a negative superseded by a newer (e.g. suspended) positive review does not resurface', async () => {
+    calls.rpc = { data: [], error: null };
+    const later = '2026-11-17T11:00:00Z';
+    calls.result = { data: [{ ...row, classification: 'not_comparable' }, { ...row, reviewed_at: later, left_captured_at: later, right_captured_at: later }], error: null };
+    expect(await getCurrentPairReviews(now)).toEqual([]);
+  });
 });
 
