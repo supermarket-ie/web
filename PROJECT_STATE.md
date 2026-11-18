@@ -1,5 +1,100 @@
 # Supermarket.ie — Canonical Project State
 
+## 18 November 2026 — #414 workers + #413 website DEPLOYED; SuperValu capture verified; 10-pair SuperValu↔Tesco pilot evidenced (awaiting owner review)
+
+DEPLOYED (owner-authorised approval of exactly runs 44184097031 and 44197599269
+with the supermarket-ie reviewer account; protections, environment and IAM unchanged):
+- Images in ECR: `31b1f5b-prod` (digest sha256:5b12da8b…) and `a9f7ace-prod`.
+- Workers (#414): `smie-prod-sqs-consumer:7` and `smie-prod-scheduled:7` on
+  `31b1f5b-prod`. Applied by local `tofu` from main with `image_tag_worker`
+  updated in the gitignored `terraform.tfvars` (tfvars wins over -var at apply).
+  The plan was inspected: workers, 10 cron schedules and the scheduler IAM
+  policy only; website and Tesco schedule untouched.
+  Rollback: `image_tag_worker = "b9b1a92-prod"`.
+- Website (#413): `smie-prod:17` on `a9f7ace-prod`, 2/2 tasks, rollout
+  COMPLETED, circuit breaker with rollback on. The plan touched only
+  `aws_ecs_service.app` and its task definition.
+  Rollback: `image_tag = "d81d019-prod"`.
+- Post-deploy checks (200): `/`, `/terms`, `/compare/supermarket-prices-ireland`,
+  `/deals`, `/browse`, `/browse/<pilot products>`, `/api/agent/suggestions`.
+  Apex 301 → www.
+  - Product pages show each retailer's price and check date, labelled
+    "Unverified", with the not-verified note and no cross-store
+    AggregateOffer.
+  - "cheapest" appears only in SEO keywords.
+- Finding: single-retailer products showed "Exact match", because a lone offer
+  is trivially exact for basket maths. No claim or total depended on it. Fix
+  PR #416 (`comparisonLabel`); not deployed, needs review and a separately
+  authorised build.
+
+SUPERVALU CAPTURE (fix verified in production): one targeted evidence run for
+1020898000 produced `retailer_identity_responses` 196a07fd…:
+- `captured_product` (parser v3)
+- sku and all three URLs equal the mapping
+- title "Schwartz Chilli Powder Mild (38 g)", brand Schwartz
+- body 1.47 MB, sha256 5dc25552…, recomputed locally and matching
+- retrieved 2026-11-18T09:00:40Z, source_path `script[4].__PRELOADED_STATE__.product`
+
+PILOT: 10/10 SuperValu captures valid (same checks), 2026-11-18 09:02Z, via the
+existing trigger route (limit=1, evidence=1, targeted_validation), paced by the
+consumer governor.
+- All 10 Tesco pages still bind (ok/200, hash and created_at match, SKU in URL),
+  captured 2026-11-17 04:29Z.
+- Every SKU on both sides is mapped exactly once; each pair shares a canonical
+  record.
+- Evidence gaps on all 10:
+  - Tesco pages carry GTIN and structured pack but no ingredients or
+    description.
+  - SuperValu captures carry description and ingredients but no GTIN or
+    structured pack (pack read from the title).
+- Ledger `retailer_offer_pair_reviews` exists, is empty, and the service role
+  is denied writes (403).
+- Insertion route: the owner's protected operator path (ChatGPT-connected
+  Supabase / dashboard). Deadline: before 2026-12-01 04:29Z (Tesco evidence
+  age).
+- Nothing approved; no mappings changed.
+- Known blocker for basket claims: `compareBasket` needs every pair among ALL
+  complete stores to be exact. A three-store basket where Dunnes is complete but
+  unverified gets no verified cheapest claim even after Tesco↔SuperValu
+  approvals. Product pages will show Exact match per offer.
+
+DUNNES gateway `/api/stores/258/products/{sku}`:
+- 5/5 probes returned 200 JSON with no challenge (`cf-cache-status: DYNAMIC`,
+  `no-store`).
+- Structured sku, name, brand, `unitsOfSize`, `attributes.OwnBrand`,
+  description and category.
+- `ingredients` null in 4/4; no GTIN.
+- Response name equals the mapping title 5/5.
+- Strict-prefilter ceiling: 411 Dunnes offers (388 vs SuperValu, 253 vs Tesco,
+  230 both, 172 with a fresh Tesco page), out of 930 unique-SKU and 739
+  branded offers.
+- Excluded: 56 duplicate-SKU groups and 1,406 offers with no SKU.
+- Policy unchanged; assessment and the durable-approval design are with the
+  owner.
+- 18 Nov follow-up:
+  - #416 (single-retailer labels), #417 (verified subsets) and #418 (durable
+    approvals) are merged. ONE image build, run 44410422414 (`bf00c5f`), is
+    WAITING for the owner's aws-prod approval. The superseded builds
+    44353168947 and 44397961070 were cancelled unapproved.
+  - The rollout after approval is worker + web from `bf00c5f`, then the owner
+    applies migration 20261118120000 BEFORE any pilot pair is approved, so
+    approvals get identity stamps.
+- Pilot decisions:
+  - Owner HOLD on pair 09 (Flahavan's Organic Oat Drink: chilled vs
+    long-life unclear).
+  - Pair 04 (Frontier Foods): the SV↔Tesco pair itself is clean. Its
+    canonical record has three separate defects for reviewed repair (NOT
+    repaired):
+    - Dunnes own-label "Dunnes Stores 100% Sunflower Spray Oil 200ml" with
+      brand metadata "Frontier Foods"
+    - Dunnes SKU 100325367 on 3 canonical records (incl. 2 Frylight 190 ml)
+    - an Aldi SOLESTA own-label offer
+    The Dunnes offer is correctly labelled "Different product or pack".
+  - Proposed SQL for 9 pairs (01–08, 10) is in the private pilot dir. Nothing
+    is inserted.
+- Tesco cadence: the pilot SKUs are re-collected about every 4–5 days. One
+  16-day gap (12→28 Oct) would have suspended pairs for staleness.
+
 ## 18 November 2026 — Durable pair approvals (PR #418, migration 20261118120000 NOT applied, NOT deployed)
 
 Owner priority before scaling matching. Once independently verified, a pair
