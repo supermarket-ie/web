@@ -163,3 +163,13 @@ describe('three-store verified baskets', () => {
       .toEqual({ tesco: 'comparable_alternative', supervalu: 'comparable_alternative' });
   });
 });
+
+describe('customer labels for single-retailer products', () => {
+  it('a product sold by one retailer gets no comparison label (it is not compared with anything)', async () => {
+    const { comparisonLabel } = await import('./comparison-policy');
+    expect(classifyOfferGroup([chilli.offers[0]], [], now)).toEqual({ dunnes: 'exact_product' }); // basket maths only
+    expect(comparisonLabel('exact_product', 1)).toBeNull();
+    expect(comparisonLabel('exact_product', 2)).toBe('Exact match');
+    expect(comparisonLabel(undefined, 3)).toBe('Unverified');
+  });
+});

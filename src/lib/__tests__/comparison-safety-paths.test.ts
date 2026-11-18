@@ -42,6 +42,11 @@ describe('agent compare_shop_stores (compareBasketStores)', () => {
     expect(r.cheapest_verified_store).toBeNull();
     expect(r.comparisons.every(c => c.total !== null && c.verified_exact_total === null && c.difference_vs_current === null)).toBe(true);
   });
+  it('a line only one store sells is labelled single_store, never Exact match', () => {
+    const r = compareBasketStores([{ canonical_name: 'Chilli Powder 38g' }, { canonical_name: 'Muesli' }], [chilliRows[0], muesliRows[0]]);
+    const dunnes = r.comparisons.find(c => c.store === 'dunnes')!;
+    expect(dunnes.lines.map(l => l.comparison)).toEqual(['single_store', 'single_store']);
+  });
   it('a verified complete basket names the cheapest store', () => {
     const r = compareBasketStores([{ canonical_name: 'Chilli Powder 38g', current_price: 3.4 }], chilliRows, undefined, [review('d-chilli', 's-chilli')]);
     expect(r.cheapest_verified_store).toEqual({ store: 'supervalu', total: 3.35 });

@@ -158,7 +158,8 @@ export function groundHouseholdShop(input: GroundHouseholdShopInput): HouseholdS
   comparisonRetailers.map(r => r.toLowerCase()), input.pair_reviews ?? []);
   for (const item of items) for (const offer of item.candidate_offers) {
     const line = comparison.stores.find(s => s.store === offer.retailer.toLowerCase())?.lines.find(l => l.id === item.line_id);
-    offer.comparison_status = line && line.status !== 'missing' ? line.status : 'unverified';
+    // A lone retailer offer is not compared with anything, so it carries no cross-store relationship.
+    offer.comparison_status = item.candidate_offers.length < 2 ? undefined : line && line.status !== 'missing' ? line.status : 'unverified';
     offer.unit_price = normalizedUnitPrice(offer.retailer_product_name, offer.current_price);
   }
   const storeCoverage = comparison.stores.map(s => {

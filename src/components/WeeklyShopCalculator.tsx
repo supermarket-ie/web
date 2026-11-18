@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { ArrowRight, RotateCcw, ShoppingBasket } from 'lucide-react';
 import { trackEvent } from '@/lib/analytics';
 import { saveAgentLandingHandoff } from '@/lib/agent-landing-handoff';
-import { COMPARISON_LABELS } from '@/lib/comparison-policy';
+import { comparisonLabel } from '@/lib/comparison-policy';
 import {
   WEEKLY_SHOP_PATH, WEEKLY_STORES, WEEKLY_STORE_NAMES,
   weeklyShopPrompt, weeklyShopTotals, type WeeklyItem,
@@ -127,7 +127,11 @@ export function WeeklyShopCalculator({ items }: { items: WeeklyItem[] }) {
                     {offer ? <>
                       <span className="block font-semibold tabular-nums text-[#173525]">{quantities[item.id] > 0 ? money(Math.round(offer.price * 100) * quantities[item.id] / 100) : 'Not included'}</span>
                       <span className="mt-1 block text-xs leading-5 text-[#607065]">{offer.name}</span>
-                      <span className="mt-1 block text-[11px] font-semibold text-[#82591a]">{COMPARISON_LABELS[offer.comparisonType ?? 'unverified']}{offer.differentPack ? ' · different/unknown pack, excluded from equivalent total' : ''}</span>
+                      {(() => {
+                        const label = comparisonLabel(offer.comparisonType, WEEKLY_STORES.filter(s => item.offers[s]).length);
+                        const note = [label, offer.differentPack ? 'different/unknown pack, excluded from equivalent total' : null].filter(Boolean).join(' · ');
+                        return note ? <span className="mt-1 block text-[11px] font-semibold text-[#82591a]">{note}</span> : null;
+                      })()}
                       <span className="mt-1 block text-[11px] leading-4 text-[#718076]">{money(offer.price)} per retailer pack · checked {date(offer.observedAt)}{offer.unitPrice ? ` · ${money(offer.unitPrice.price)} per ${offer.unitPrice.per}` : ''}</span>
                     </> : <span className="text-xs text-[#718076]">Price unavailable</span>}
                   </td>;
