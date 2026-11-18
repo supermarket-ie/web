@@ -53,6 +53,12 @@ nothing to customers.
   unverified prices. It ranks ONLY products whose two offers are both Exact match
   (`buildMatchup`) and lists every other shared product with each retailer's
   title, price and label, unranked. Its title is no longer "Which is Cheaper?".
+  Products now only need to be sold at the two stores (the old page needed all
+  three main stores), so the shared-product count rises. Known limits: offers
+  are classified against every retailer's offer (an approved pair can stay
+  unranked if a third retailer's review conflicts); a review-ledger read
+  failure renders "none verified" and is cached by ISR for up to 12 h (fails
+  closed); the unverified list shows the first 60 by category.
 - Still unscoped and flagged: the unused `src/components/ProductPrices.tsx`
   "Cheapest" badge, and `src/lib/blog.ts` copy.
 - Eve (`agent/`, rollback-only) is unchanged and always indicative.

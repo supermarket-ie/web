@@ -30,7 +30,8 @@ export function buildMatchup(prices: MatchupPriceRow[], storeA: string, storeB: 
     if (!Number.isFinite(row.price) || row.price <= 0) continue;
     const entry = byProduct.get(row.canonical_name) ?? { category: row.category, offers: new Map() };
     const existing = entry.offers.get(row.store);
-    if (!existing || row.price < existing.price) entry.offers.set(row.store, row);
+    // Lowest offer per store; equal prices break on the offer id so the page is deterministic.
+    if (!existing || row.price < existing.price || (row.price === existing.price && String(row.store_product_id ?? '') < String(existing.store_product_id ?? ''))) entry.offers.set(row.store, row);
     byProduct.set(row.canonical_name, entry);
   }
   const verified: MatchupProduct[] = [], unverified: MatchupProduct[] = [];

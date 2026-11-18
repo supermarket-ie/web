@@ -40,7 +40,7 @@ export async function generateMetadata({ params }: { params: Promise<{ matchup: 
   return {
     title: `${nameA} vs ${nameB} Prices Ireland — Product-by-Product | supermarket.ie`,
     description: `Live prices at ${nameA} and ${nameB} in Ireland, product by product. Stores are only ranked on products independently verified as identical at both.`,
-    keywords: [`${nameA} vs ${nameB}`, `${nameA} vs ${nameB} prices Ireland`, `${nameA} or ${nameB} cheaper`, `supermarket comparison Ireland`],
+    keywords: [`${nameA} vs ${nameB}`, `${nameA} vs ${nameB} prices Ireland`, `supermarket comparison Ireland`],
     alternates: { canonical: `${BASE_URL}/compare/${slug}` },
     openGraph: {
       title: `${nameA} vs ${nameB} — live prices in Ireland`,
@@ -122,7 +122,7 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
 
         {verifiedCount > 0 && overallWinner && saving > 0.01 && (
           <div className="rounded-xl p-4 mb-8 text-center text-sm" style={{ background: '#E8F5E9', color: '#1B5E20' }}>
-            <strong>{overallWinner ? STORE_INFO[overallWinner].name : 'Either store'}</strong> is <strong>{fmt(saving)}</strong> cheaper across the {verifiedCount} verified identical products
+            <strong>{STORE_INFO[overallWinner].name}</strong> is <strong>{fmt(saving)}</strong> cheaper across the {verifiedCount} verified identical products
           </div>
         )}
 
