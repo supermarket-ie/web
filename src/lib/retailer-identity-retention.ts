@@ -11,7 +11,12 @@ export async function retainIdentityResponse(response: IdentityResponse | null |
   } catch { console.warn('Retailer identity retention unavailable', { store: response.store, sku: response.sku }); }
 }
 
-let observationWarned = false;
+let observationFailures = 0;
+/** Failures are counted and logged at the 1st, 10th, 100th, ... occurrence, so an outage stays visible. */
+function noteObservationFailure(store: string, code: string | undefined) {
+  observationFailures += 1;
+  if (Math.log10(observationFailures) % 1 === 0) console.warn('Identity observation not recorded', { store, code, failures: observationFailures });
+}
 /**
  * Lightweight identity observation for durable pair approvals: the body hash and parsed identity of a direct
  * product capture, WITHOUT the body. The database binds it to the offer as it is now and computes the identity
@@ -26,8 +31,8 @@ export async function recordIdentityObservation(response: IdentityResponse | nul
       body_sha256: response.body_sha256, parser_version: response.parser_version, identity: response.identity,
       observed_at: response.retrieved_at, run_uuid: runUuid,
     });
-    if (error && !observationWarned) { observationWarned = true; console.warn('Identity observation not recorded', { store: response.store, code: error.code }); }
+    if (error) noteObservationFailure(response.store, error.code);
   } catch {
-    if (!observationWarned) { observationWarned = true; console.warn('Identity observation unavailable', { store: response.store }); }
+    noteObservationFailure(response.store, 'exception');
   }
 }

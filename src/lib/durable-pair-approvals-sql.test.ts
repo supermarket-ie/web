@@ -12,20 +12,20 @@ const svIdentity = (title = 'Heinz Cream Of Tomato Soup (400 g)', ingredients = 
 
 let db: PGlite;
 const status = async (offsetDays = 0) => (await db.query<{ status: string; left_evidence_at: string; right_evidence_at: string }>(
-  `select status, left_evidence_at, right_evidence_at from public.current_pair_review_status(now() + make_interval(days => $1))`, [offsetDays])).rows;
+  `select status, left_evidence_at, right_evidence_at from public.current_pair_review_status(now() + make_interval(secs => $1::float8 * 86400))`, [offsetDays])).rows;
 
-async function tescoPage(name?: string, at = `now() - interval '1 hour'`) {
+async function tescoPage(name?: string, at = `now() - interval '1 hour'`, url = TURL, parsed?: string) {
   return (await db.query<{ id: string; created_at: string }>(`insert into public.tesco_direct_collection_pages(requested_url, final_url, outcome, http_status, body_sha256, parsed, created_at)
-    values ($1, $1, 'ok', 200, $2, $3::jsonb, ${at}) returning id, created_at::text`, [TURL, 'c'.repeat(64), tescoParsed(name)])).rows[0];
+    values ($1, $1, 'ok', 200, $2, $3::jsonb, ${at}) returning id, created_at::text`, [url, 'c'.repeat(64), parsed ?? tescoParsed(name)])).rows[0];
 }
-async function svResponse() {
+async function svResponse(title?: string, at = `now() - interval '1 hour'`) {
   return (await db.query<{ id: string; body_sha256: string; retrieved_at: string }>(`insert into public.retailer_identity_responses(store, sku, product_url, requested_url, final_url, retrieved_at,
     content_type, body_text, parser_version, source_kind, source_path, identity, run_uuid, store_product_id)
-    values ('supervalu', $1, $2, $2, $2, now() - interval '1 hour', 'text/html', '<html>page</html>', 'retailer-identity-response-v3', 'captured_product', 'script[4].__PRELOADED_STATE__.product', $3::jsonb, gen_random_uuid(), $4)
-    returning id, body_sha256, retrieved_at::text`, [SSKU, SURL, svIdentity(), S])).rows[0];
+    values ('supervalu', $1, $2, $2, $2, ${at}, 'text/html', '<html>page</html>', 'retailer-identity-response-v3', 'captured_product', 'script[4].__PRELOADED_STATE__.product', $3::jsonb, gen_random_uuid(), $4)
+    returning id, body_sha256, retrieved_at::text`, [SSKU, SURL, svIdentity(title), S])).rows[0];
 }
-async function approve(classification = 'exact_product') {
-  const t = await tescoPage(), s = await svResponse();
+async function approve(classification = 'exact_product', tescoParsedOverride?: string, sv?: { title: string; at: string }) {
+  const t = await tescoPage(undefined, `now() - interval '1 hour'`, TURL, tescoParsedOverride), s = await svResponse(sv?.title, sv?.at);
   // pair_order: left_offer_id::text < right_offer_id::text (T < S here)
   await db.query(`insert into public.retailer_offer_pair_reviews(left_offer_id, right_offer_id, classification,
     left_source_kind, left_source_id, left_source_hash, left_captured_at, right_source_kind, right_source_id, right_source_hash, right_captured_at,
@@ -58,13 +58,18 @@ beforeEach(async () => {
 afterEach(async () => { await db.close(); });
 
 describe('durable pair approvals (real migrations)', () => {
-  it('stamps approval-time SKUs and identity fingerprints in the database', async () => {
+  it('stamps approval-time SKUs and identity projections in the database', async () => {
     await approve();
-    const r = (await db.query<Record<string, string>>(`select left_sku, right_sku, left_identity_fingerprint, right_identity_fingerprint from public.retailer_offer_pair_reviews`)).rows[0];
+    const r = (await db.query<{ left_sku: string; right_sku: string; left_identity: Record<string, string>; right_identity: Record<string, string> }>(
+      `select left_sku, right_sku, left_identity, right_identity from public.retailer_offer_pair_reviews`)).rows[0];
     expect(r.left_sku).toBe(TSKU);
     expect(r.right_sku).toBe(SSKU);
-    expect(r.left_identity_fingerprint).toMatch(/^[a-f0-9]{64}$/);
-    expect(r.right_identity_fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(r.left_identity).toEqual({ title: 'heinz cream of tomato soup 400g', brand: 'heinz', gtin: '5000157062673', pack: '400g' });
+    expect(r.right_identity).toMatchObject({ title: 'heinz cream of tomato soup 400 g', brand: 'heinz', ingredients: 'tomatoes 89 water' });
+  });
+  it('refuses a positive approval whose evidence has no monitorable identity (never a silently dead approval)', async () => {
+    await expect(approve('exact_product', JSON.stringify({ listing: null, products: [{ sku: '999999999', name: 'Other', brand: 'X' }] })))
+      .rejects.toThrow(/no monitorable identity/);
   });
   it('stays active beyond 14 days without re-review while monitoring evidence keeps confirming the same identity', async () => {
     await approve();
@@ -77,22 +82,42 @@ describe('durable pair approvals (real migrations)', () => {
       values ('${TURL}', '${TURL}', 'ok', 200, '${'e'.repeat(64)}', '${tescoParsed()}'::jsonb, now())`);
     expect((await status(10))[0].status).toBe('active');
   });
-  it('cosmetic title formatting does not suspend; a material identity change does', async () => {
+  it('cosmetic title formatting does not suspend; a material identity change does, and STAYS suspended if it reverts', async () => {
     await approve();
     await observe({ title: 'Heinz  Cream of Tomato Soup (400 g)' });
     expect((await status())[0].status).toBe('active');
     await observe({ title: 'Heinz Cream Of Tomato Soup Reduced Salt (400 g)' });
     expect((await status())[0].status).toBe('suspended_identity_changed');
+    await observe({ title: 'Heinz Cream Of Tomato Soup (400 g)', at: `now() + interval '1 minute'` });
+    expect((await status(0.01))[0].status).toBe('suspended_identity_changed');
+  });
+  it('a new human review of FRESH evidence clears a suspension; re-approving the old evidence does not', async () => {
+    await approve();
+    await observe({ title: 'Heinz Cream Of Tomato Soup Reduced Salt (400 g)' });
+    expect((await status())[0].status).toBe('suspended_identity_changed');
+    await approve(); // stale evidence, older than the observed change
+    expect((await status())[0].status).toBe('suspended_identity_changed');
+    await approve('comparable_alternative', undefined, { title: 'Heinz Cream Of Tomato Soup Reduced Salt (400 g)', at: 'now()' });
+    expect((await status())[0]).toMatchObject({ status: 'active' });
   });
   it('a formulation (ingredients) change suspends the pair', async () => {
     await approve();
     await observe({ ingredients: 'Tomatoes (75%), Water, Sugar' });
     expect((await status())[0].status).toBe('suspended_identity_changed');
   });
-  it('a changed Tesco page identity suspends the pair', async () => {
+  it('a changed Tesco page identity suspends the pair; another product whose SKU merely contains ours does not', async () => {
     await approve();
+    const longer = `${TSKU}7`;
+    await tescoPage(undefined, 'now()', `https://www.tesco.ie/shop/en-IE/products/${longer}`,
+      JSON.stringify({ products: [{ sku: longer, name: 'Something Else 1kg', brand: 'OTHER' }] }));
+    expect((await status())[0].status).toBe('active');
     await tescoPage('Heinz Cream Of Tomato Soup 300G', 'now()');
     expect((await status())[0].status).toBe('suspended_identity_changed');
+  });
+  it('a Tesco page omitting an attribute (e.g. GTIN) is not a change', async () => {
+    await approve();
+    await tescoPage(undefined, 'now()', TURL, JSON.stringify({ products: [{ sku: TSKU, name: 'Heinz Cream Of Tomato Soup 400G', brand: 'HEINZ', identityDetails: { packSize: [{ units: 'KG', value: 0.4 }] } }] }));
+    expect((await status())[0].status).toBe('active');
   });
   it('SKU reassignment or SKU reuse suspends the pair', async () => {
     await approve();
@@ -106,7 +131,17 @@ describe('durable pair approvals (real migrations)', () => {
     await approve();
     expect((await status(366))[0].status).toBe('expired_needs_review');
   });
+  it('observations are stored only for offers in a pair decision, and deduplicated when unchanged', async () => {
+    await observe();
+    expect((await db.query(`select 1 from public.retailer_identity_observations`)).rows).toHaveLength(0);
+    await approve();
+    await observe(); await observe();
+    expect((await db.query(`select 1 from public.retailer_identity_observations`)).rows).toHaveLength(1);
+    await observe({ title: 'Heinz Cream Of Tomato Soup Reduced Salt (400 g)' });
+    expect((await db.query(`select 1 from public.retailer_identity_observations`)).rows).toHaveLength(2);
+  });
   it('observations must bind to the offer as it is now, be live, and are immutable', async () => {
+    await approve();
     await expect(observe({ sku: '1017371999' })).rejects.toThrow(/does not bind/);
     await expect(observe({ url: 'https://shop.supervalu.ie/other' })).rejects.toThrow(/does not bind/);
     await expect(observe({ at: `now() - interval '3 days'` })).rejects.toThrow(/time invalid/);
@@ -121,7 +156,7 @@ describe('durable pair approvals (real migrations)', () => {
     await observe();
     await expect(db.exec(`insert into public.retailer_offer_pair_reviews(left_offer_id, right_offer_id, classification, rationale, reviewer)
       values ('${T}', '${S}', 'unverified', 'attempted service write', 'svc')`)).rejects.toThrow(/permission denied/);
-    await expect(db.exec(`update public.retailer_identity_observations set identity_fingerprint = 'x'`)).rejects.toThrow();
+    await expect(db.exec(`update public.retailer_identity_observations set identity_projection = '{}'`)).rejects.toThrow();
     await db.exec(`reset role`);
   });
   it('negative or unverified decisions are not returned as approvals', async () => {

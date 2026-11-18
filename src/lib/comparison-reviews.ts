@@ -19,15 +19,21 @@ type DurableStatusRow = {
   left_source_hash: string; right_source_hash: string; left_evidence_at: string | null; right_evidence_at: string | null;
   reviewed_at: string; rationale: string; reviewer: string; status: string;
 };
-const isMissingFunction = (error: { code?: string; message?: string } | null) =>
-  !!error && (error.code === 'PGRST202' || error.code === '42883' || /current_pair_review_status/.test(error.message ?? ''));
+// Only "function does not exist" means the migration is not applied; every other error fails closed.
+const isMissingFunction = (error: { code?: string } | null) => !!error && (error.code === 'PGRST202' || error.code === '42883');
 
 /** Durable approvals: only pairs the database reports ACTIVE (unchanged SKU + identity, evidence <= 14 days). */
 async function readDurable(): Promise<PairReview[] | null> {
-  const { data, error } = await supabaseAdmin.rpc('current_pair_review_status');
-  if (isMissingFunction(error)) return null; // migration not applied yet: use the 14-day ledger read
-  if (error) throw error;
-  return ((data ?? []) as DurableStatusRow[])
+  // ACTIVE rows only, paged past PostgREST's row cap so no approval is silently dropped.
+  const rows: DurableStatusRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin.rpc('current_pair_review_status', { p_active_only: true }).range(from, from + 999);
+    if (isMissingFunction(error)) return null; // migration not applied yet: use the 14-day ledger read
+    if (error) throw error;
+    rows.push(...((data ?? []) as DurableStatusRow[]));
+    if (!data || data.length < 1000) break;
+  }
+  return rows
     .filter(row => row.status === 'active' && row.left_evidence_at && row.right_evidence_at)
     .map(row => ({ left_offer_id: row.left_offer_id, right_offer_id: row.right_offer_id, classification: row.classification,
       left_source_hash: row.left_source_hash, right_source_hash: row.right_source_hash,
@@ -67,6 +73,8 @@ export async function getCurrentPairReviews(now = Date.now()): Promise<PairRevie
   } catch (error) {
     // Price availability is separate from pairwise equivalence. Failure must
     // not invent approved edges, and must never downgrade latest_prices.
+    // The failure is cached for the same 60s, so a failing read is not retried on every request.
+    cached = { at: now, reviews: [] };
     if (!warned) {
       warned = true;
       console.warn('[comparison] review ledger unavailable; comparisons unverified', {

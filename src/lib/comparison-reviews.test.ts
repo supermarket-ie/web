@@ -11,7 +11,7 @@ vi.mock('@/lib/supabase', () => {
     order: () => builder,
     range: async () => calls.result,
   };
-  return { supabaseAdmin: { from: () => builder, rpc: async () => calls.rpc } };
+  return { supabaseAdmin: { from: () => builder, rpc: () => ({ range: async () => calls.rpc }) } };
 });
 import { getCurrentPairReviews, resetPairReviewCache } from './comparison-reviews';
 
@@ -48,19 +48,24 @@ describe('getCurrentPairReviews', () => {
     expect(await getCurrentPairReviews(now)).toEqual([]);
     expect(await getCurrentPairReviews(now + 61_000)).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
+    // The failure itself is cached for 60s: no new read within the window.
+    const before = calls.since.length;
+    await getCurrentPairReviews(now + 62_000);
+    expect(calls.since.length).toBe(before);
     warn.mockRestore();
   });
   it('durable approvals: only ACTIVE pairs are used, monitored, and may be older than 14 days', async () => {
     const old = '2026-08-01T10:00:00Z';
     const base = { left_offer_id: 'a', right_offer_id: 'b', classification: 'exact_product', left_source_hash: 'a'.repeat(64), right_source_hash: 'b'.repeat(64),
       left_evidence_at: at, right_evidence_at: at, reviewed_at: old, rationale: 'r', reviewer: 'owner' };
+    // The function is called with p_active_only, but a suspended row is still never trusted if returned.
     calls.rpc = { data: [{ ...base, status: 'active' }, { ...base, left_offer_id: 'c', status: 'suspended_identity_changed' }], error: null };
     const reviews = await getCurrentPairReviews(now);
     expect(reviews).toEqual([expect.objectContaining({ left_offer_id: 'a', monitored: true, left_captured_at: at, reviewed_at: old })]);
     expect(calls.since).toHaveLength(0); // no fallback ledger read
   });
   it('durable read errors other than a missing function fail closed', async () => {
-    calls.rpc = { data: null, error: { code: '57014', message: 'statement timeout' } };
+    calls.rpc = { data: null, error: { code: '57014', message: 'statement timeout in current_pair_review_status' } };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(await getCurrentPairReviews(now)).toEqual([]);
     warn.mockRestore();
