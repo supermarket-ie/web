@@ -69,7 +69,7 @@ export function StoreComparisonCard({ token, listId }: StoreComparisonCardProps)
   const scope = (result.verifiedStores ?? []).map(storeDisplayName).join(' & ');
 
   // No verified like-for-like basket: show each store's coverage, never a cheapest store or a saving.
-  if (!bestSingleStore || savings === null || bestSplitTotal === null) {
+  if (!bestSingleStore || savings === null || bestSplitTotal === null || !(result.verifiedStores?.length >= 2)) {
     return (
       <div className="rounded-xl p-4 mb-4 border" style={{ background: 'var(--surface-container-low)', borderColor: 'var(--outline-variant)' }}>
         <div className="flex items-center gap-2 mb-2">

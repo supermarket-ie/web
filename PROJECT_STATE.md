@@ -31,8 +31,10 @@ nothing to customers.
 - `verifiedClaimText` is the ONE wording: it always names the verified stores
   and names other complete stores as indicative. Used by:
   - household shop rationale and card
-  - lightweight agent `compare_basket_stores` (outputs `verified_stores` and
-    `indicative_complete_stores`; description updated)
+  - lightweight agent `compare_shop_stores` (outputs `verified_stores`,
+    `indicative_complete_stores` and `verified_tie`; no store named on a tie;
+    description updated). `get_current_price` matches now carry
+    `best_price_basis`.
   - reprice and SplitRecommendationCard (false "already cheapest" and "best
     value" texts fixed)
   - share page and SavedListView, whose claims are scoped with a note that only
@@ -47,6 +49,12 @@ nothing to customers.
     SAME store only (it was any store's lowest price).
   - Task-watch notices now say "lowest listed price … not verified as
     identical".
+- `/compare/[matchup]` (e.g. tesco-vs-dunnes) no longer crowns a winner from
+  unverified prices. It ranks ONLY products whose two offers are both Exact match
+  (`buildMatchup`) and lists every other shared product with each retailer's
+  title, price and label, unranked. Its title is no longer "Which is Cheaper?".
+- Still unscoped and flagged: the unused `src/components/ProductPrices.tsx`
+  "Cheapest" badge, and `src/lib/blog.ts` copy.
 - Eve (`agent/`, rollback-only) is unchanged and always indicative.
 
 ## 17 November 2026 — Direct-capture diagnostics (2 authorised requests) + SuperValu capture fix (PR, NOT deployed)

@@ -83,7 +83,9 @@ export function compareBasketStores(
   return {
     current_total: Number(currentTotal.toFixed(2)),
     comparison_basis: result.basis,
-    cheapest_verified_store: result.cheapestVerified,
+    // Never names one store on a tie for the lowest verified total (the explanation says they cost the same).
+    cheapest_verified_store: result.cheapestTied ? null : result.cheapestVerified,
+    verified_tie: result.cheapestTied,
     /** The only stores a cheaper/cheapest statement may cover. Any other store's total is indicative. */
     verified_stores: result.verifiedStores,
     indicative_complete_stores: result.indicativeCompleteStores,
