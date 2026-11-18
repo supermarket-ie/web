@@ -1,5 +1,5 @@
 import { captureIdentityResponse, type IdentityResponse } from './retailer-identity-response';
-import { retainIdentityResponse } from './retailer-identity-retention';
+import { recordIdentityObservation, retainIdentityResponse } from './retailer-identity-retention';
 import { supabaseAdmin } from '@/lib/supabase';
 import { parseRetryAfterMs, withRetailerRequestSlot } from '@/lib/retailer-request-governor';
 
@@ -11,6 +11,8 @@ const GATEWAY_BASE = 'https://storefrontgateway.supervalu.ie/api';
 
 export type Candidate = {
   identityResponse?: IdentityResponse | null;
+  /** Lightweight identity observation (hash + parsed identity, no body) from every direct product page. */
+  identityObservation?: IdentityResponse | null;
   name: string;
   sku: string | null;
   price: number;
@@ -46,6 +48,12 @@ export function directPageEvidence(product: SupervaluQueueProduct, candidate: Ca
     requestedUrl: product.storeUrl, finalUrl: args.finalUrl, contentType: args.contentType, body: args.body });
 }
 
+/** Identity observation for every direct page (not only evidence runs): only a direct product capture qualifies. */
+export function directPageObservation(product: SupervaluQueueProduct, candidate: Candidate, args: { finalUrl: string; contentType: string; body: string }) {
+  const response = captureIdentityResponse({ store: STORE, sku: candidate.sku, title: candidate.name, productUrl: candidate.url ?? product.storeUrl,
+    requestedUrl: product.storeUrl, finalUrl: args.finalUrl, contentType: args.contentType, body: args.body });
+  return response?.source_kind === 'captured_product' ? response : null;
+}
 export type SupervaluBatchMessage = {
   runUuid: string;
   runId: string;
@@ -478,8 +486,12 @@ export async function fetchSupervaluProduct(product: SupervaluQueueProduct): Pro
       }
       const body = await response.text();
       const result = classifySupervaluProductPage(body);
-      if (result.candidate) result.candidate.identityResponse = directPageEvidence(product, result.candidate,
-        { finalUrl: response.url || product.storeUrl, contentType: response.headers.get('content-type') ?? '', body });
+      if (result.candidate) {
+        const page = { finalUrl: response.url || product.storeUrl, contentType: response.headers.get('content-type') ?? '', body };
+        result.candidate.identityResponse = directPageEvidence(product, result.candidate, page);
+        // Monitoring for durable pair approvals: the page already fetched for the price, no extra request.
+        result.candidate.identityObservation = directPageObservation(product, result.candidate, page);
+      }
       return result;
     } catch (error) {
       if (error instanceof TransientSupervaluError) throw error;
@@ -669,7 +681,10 @@ async function finalize(
     p_is_retryable: false,
   });
   if (error) throw new Error(`Failed finalizing SuperValu product: ${error.message}`);
-  if (params.success) await retainIdentityResponse(candidate?.identityResponse, message.runUuid, product.storeProductId);
+  if (params.success) {
+    await retainIdentityResponse(candidate?.identityResponse, message.runUuid, product.storeProductId);
+    await recordIdentityObservation(candidate?.identityObservation, message.runUuid, product.storeProductId);
+  }
 }
 
 export async function finalizeSupervaluPermanentFailure(

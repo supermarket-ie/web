@@ -1,5 +1,53 @@
 # Supermarket.ie — Canonical Project State
 
+## 18 November 2026 — Durable pair approvals (PR, migration 20261118120000 NOT applied, NOT deployed)
+
+Owner priority before scaling matching. Once independently verified, a pair
+approval persists while both identities stay unchanged. Daily price refreshes
+need no manual re-review. Identity change, SKU reassignment or reuse, or stale
+monitoring evidence suspends the match and puts it in the re-review queue.
+
+- Approval (unchanged): a human decision with full, fresh, offer-bound
+  evidence, checked by `validate_offer_pair_review` at insert. A new `zz_`
+  trigger stamps each side's SKU and a DATABASE-computed identity fingerprint
+  (`retailer_identity_fingerprint` / `tesco_page_fingerprint`):
+  - included: normalised title, brand, manufacturer, GTIN, structured
+    quantity/pack/variant/flavour/formulation, and normalised ingredients
+  - excluded: marketing description, price, promotion
+- Monitoring evidence:
+  - SuperValu/Dunnes: new immutable `retailer_identity_observations` (hash plus
+    parsed identity, NO body, the same strength as Tesco collection pages).
+    The SuperValu worker writes one per successful daily direct product page
+    (`directPageObservation`, `recordIdentityObservation`) with no extra
+    request. A trigger binds it to the offer AS IT IS NOW (store, store_sku,
+    store_url, direct URL), accepts live times only, and computes the
+    fingerprint. The service role may insert/select only.
+  - Tesco: derived from existing ok/200 `tesco_direct_collection_pages`.
+- `current_pair_review_status(p_now)` covers the latest positive decision per
+  pair. ACTIVE only when, per side:
+  - the current store_sku equals the approved SKU and no other offer reuses it
+  - the latest observation (or the approval's own evidence) is ≤ 14 days old
+  - its fingerprint equals the approved one
+  - the review is ≤ 365 days old
+  Otherwise it returns `suspended_sku_changed`, `suspended_identity_changed`,
+  `suspended_no_recent_evidence`, `suspended_unmonitorable` or
+  `expired_needs_review`. Automation can only keep or suspend.
+- App: `getCurrentPairReviews` uses the function's ACTIVE rows (`monitored:
+  true`, evidence time = latest observation). `validPairReview` allows a
+  monitored review up to 365 days old; evidence is still ≤ 14 days. Before the
+  migration is applied the function is absent, so the app falls back to the
+  14-day ledger read. Any other error fails closed.
+- Tested: `durable-pair-approvals-sql.test.ts`, 10 PGlite tests on the REAL
+  ledger, identity-response and new migrations (stamping; active beyond 14
+  days; stale, identity, ingredient, Tesco page, SKU and reuse suspensions;
+  365-day expiry; binding, immutability; service role cannot write
+  approvals).
+- Known limits:
+  - A parser-version change to the identity shape suspends pairs (fails
+    closed).
+  - Tesco pairs need a Tesco page ≤ 14 days old (collection cadence).
+  - Dunnes needs the product-by-SKU evidence route before it can be monitored.
+
 ## 18 November 2026 — Verified comparisons between a SUBSET of retailers (PR #417, NOT deployed)
 
 Owner-agreed policy. A verified comparison may cover a subset of retailers;
