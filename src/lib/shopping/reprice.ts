@@ -1,4 +1,4 @@
-import { COMPARISON_EXPLANATIONS, compareBasket, type PairReview } from '../comparison-policy';
+import { COMPARISON_EXPLANATIONS, compareBasket, verifiedClaimText, type PairReview } from '../comparison-policy';
 
 export interface StoreTotal {
   store: string;
@@ -22,6 +22,8 @@ export interface RepriceResult {
   savings: number | null;
   itemCount: number;
   basis: 'verified_exact' | 'indicative' | 'incomplete';
+  /** The stores a cheapest/saving statement covers (>= 2), or []. */
+  verifiedStores: string[];
   explanation: string;
 }
 
@@ -50,7 +52,8 @@ export function repriceBasket(items: RepriceItem[], prices: RepricePrice[], stor
   const singleStoreTotals: StoreTotal[] = comparison.stores.map(s => ({ store: s.store, total: Math.round((s.subtotal ?? 0) * 100) / 100,
     itemsCovered: s.comparableLines, itemsMissing: s.totalLines - s.comparableLines, complete: s.completeTotal !== null, verified: s.verifiedExactTotal !== null }));
   const cheapest = comparison.cheapestVerified;
-  const bestSingleStore = cheapest ? singleStoreTotals.find(s => s.store === cheapest.store) ?? null : null;
+  // A tie for the lowest verified total names no single store (and so states no saving against one).
+  const bestSingleStore = cheapest && !comparison.cheapestTied ? singleStoreTotals.find(s => s.store === cheapest.store) ?? null : null;
 
   // The shopper's chosen stores at TODAY's prices for the same items (same store, same canonical mapping).
   const split = new Map<string, { total: number; items: number }>();
@@ -76,6 +79,9 @@ export function repriceBasket(items: RepriceItem[], prices: RepricePrice[], stor
     savings,
     itemCount: items.length,
     basis: comparison.basis,
-    explanation: COMPARISON_EXPLANATIONS[comparison.basis === 'verified_exact' ? 'verified' : comparison.basis],
+    verifiedStores: comparison.verifiedStores,
+    explanation: cheapest
+      ? `${verifiedClaimText(comparison.stores.filter(x => x.verifiedExactTotal !== null).map(x => ({ store: x.store, total: x.verifiedExactTotal! })), comparison.indicativeCompleteStores)} ${COMPARISON_EXPLANATIONS.verified}`
+      : COMPARISON_EXPLANATIONS[comparison.basis === 'verified_exact' ? 'verified' : comparison.basis],
   };
 }

@@ -105,3 +105,53 @@ describe('price-change notices', () => {
     expect(changes).toEqual([expect.objectContaining({ last_store: 'dunnes', best_store_now: 'dunnes', best_price_now: 5.5, change: -0.5 })]);
   });
 });
+
+describe('verified subset of retailers (Tesco + SuperValu verified, Dunnes indicative)', () => {
+  const three = [
+    { canonical_name: 'Soup 400g', store: 'tesco', price: 2.49, store_product_id: 't-soup', store_product_name: 'Heinz Cream Of Tomato Soup 400G' },
+    { canonical_name: 'Soup 400g', store: 'supervalu', price: 2.5, store_product_id: 's-soup', store_product_name: 'Heinz Cream Of Tomato Soup (400 g)' },
+    { canonical_name: 'Soup 400g', store: 'dunnes', price: 2.0, store_product_id: 'd-soup', store_product_name: 'Heinz Cream of Tomato Soup 400g' },
+  ];
+  it('agent comparison names the verified stores and calls Dunnes indicative', () => {
+    const r = compareBasketStores([{ canonical_name: 'Soup 400g' }], three, undefined, [review('t-soup', 's-soup')]);
+    expect(r.cheapest_verified_store).toEqual({ store: 'tesco', total: 2.49 });
+    expect(r.verified_stores).toEqual(['tesco', 'supervalu']);
+    expect(r.indicative_complete_stores).toEqual(['dunnes']);
+    expect(r.explanation).toContain('Tesco is cheaper than SuperValu for this basket (verified exact matches). Dunnes Stores: indicative total only');
+    expect(r.comparisons.find(c => c.store === 'dunnes')).toMatchObject({ comparison_basis: 'indicative', verified_exact_total: null, total: 2 });
+  });
+  it('list generator persists totals ONLY for the verified stores', () => {
+    const list = buildSmartList(three.map(r => ({ ...r, canonical_product_id: 'soup', category: null, store_url: null })), [review('t-soup', 's-soup')], '2', undefined);
+    expect(list.store_totals.map(t => t.store)).toEqual(['tesco', 'supervalu']);
+    expect(list.recommended_store).toBe('tesco');
+  });
+  it('reprice scopes the cheapest store to the verified stores', () => {
+    const r = repriceBasket([{ canonical_name: 'Soup 400g', store: 'supervalu', price_paid: 2.5, quantity: 1 }], three, ['tesco', 'supervalu', 'dunnes'], [review('t-soup', 's-soup')]);
+    expect(r.verifiedStores).toEqual(['tesco', 'supervalu']);
+    expect(r.bestSingleStore?.store).toBe('tesco');
+    expect(r.explanation).toContain('Dunnes Stores: indicative total only');
+  });
+});
+
+describe('partially verified list lines and client-supplied labels', () => {
+  it('a line verified between two of three stores is partially_verified with per-store labels', () => {
+    const rows = [
+      { canonical_name: 'Soup 400g', store: 'tesco', price: 2.49, store_product_id: 't-soup', store_product_name: 'Heinz Cream Of Tomato Soup 400G' },
+      { canonical_name: 'Soup 400g', store: 'supervalu', price: 2.5, store_product_id: 's-soup', store_product_name: 'Heinz Cream Of Tomato Soup (400 g)' },
+      { canonical_name: 'Soup 400g', store: 'dunnes', price: 2.0, store_product_id: 'd-soup', store_product_name: 'Heinz Cream of Tomato Soup 400g' },
+    ].map(r => ({ ...r, canonical_product_id: 'soup', category: null, store_url: null }));
+    const item = buildSmartList(rows, [review('t-soup', 's-soup')], '2', undefined).items[0];
+    expect(item.price_comparison).toBe('partially_verified');
+    expect(Object.fromEntries(item.all_prices.map(p => [p.store, p.comparison]))).toEqual({ tesco: 'exact_product', supervalu: 'exact_product', dunnes: 'unverified' });
+  });
+  it('client-supplied item labels are never stored as verification', async () => {
+    const { downgradeClientItemLabels } = await import('../saved-list-sanitize');
+    expect(downgradeClientItemLabels([
+      { price_comparison: 'partially_verified', all_prices: [{ store: 'tesco', comparison: 'exact_product' }, { store: 'dunnes', comparison: 'unverified' }] },
+      { price_comparison: 'different_products' },
+    ])).toEqual([
+      { price_comparison: 'indicative', all_prices: [{ store: 'tesco', comparison: 'unverified' }, { store: 'dunnes', comparison: 'unverified' }] },
+      { price_comparison: 'different_products' },
+    ]);
+  });
+});

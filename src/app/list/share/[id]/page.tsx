@@ -61,9 +61,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   // Only verified-exact basket totals support a "best price" claim (legacy totals compared unverified products).
   const totals: StoreTotal[] = sanitizeStoreTotals(data.store_totals, data.generated_at);
-  const cheapest = totals[0];
+  const cheapest = totals.length >= 2 && Math.round(totals[0].total * 100) !== Math.round(totals[1].total * 100) ? totals[0] : undefined;
   const desc = cheapest
-    ? `Weekly shop for ${familySizeLabel(data.family_size)} — best price ${fmt(cheapest.total)} at ${storeDisplayName(cheapest.store)}`
+    ? `Weekly shop for ${familySizeLabel(data.family_size)} — ${storeDisplayName(cheapest.store)} ${fmt(cheapest.total)}, cheapest of ${totals.map(t => storeDisplayName(t.store)).join(' & ')} (verified exact matches)`
     : 'Weekly grocery list with live prices from Irish supermarkets';
 
   return {
@@ -95,7 +95,9 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
 
   const items = data.items as SharedItem[];
   const storeTotals: StoreTotal[] = sanitizeStoreTotals(data.store_totals, data.generated_at);
-  const cheapest = storeTotals[0];
+  // Equal lowest totals are a tie: no store is called cheapest.
+  const tied = storeTotals.length >= 2 && Math.round(storeTotals[0].total * 100) === Math.round(storeTotals[1].total * 100);
+  const cheapest = tied ? undefined : storeTotals[0];
   const priciest = storeTotals[storeTotals.length - 1];
   const saving = cheapest && priciest ? Math.round((priciest.total - cheapest.total) * 100) / 100 : 0;
   const grouped = groupByCategory(items);
@@ -132,7 +134,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
             className="rounded-2xl p-5 mb-5 text-white"
             style={{ background: storeStyle(cheapest.store).bg }}
           >
-            <p className="text-sm font-medium opacity-80 mb-1">Best value this week</p>
+            <p className="text-sm font-medium opacity-90 mb-1">Cheapest of {storeTotals.map(t => storeDisplayName(t.store)).join(' & ')} · verified exact matches</p>
             <h2 className="text-2xl font-bold mb-1">Shop at {storeDisplayName(cheapest.store)}</h2>
             <div className="flex items-end gap-4 mt-2">
               <div>
@@ -142,7 +144,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
               {saving > 0 && (
                 <div className="bg-white/20 rounded-xl px-3 py-2">
                   <div className="text-lg font-bold">{fmt(saving)} cheaper</div>
-                  <div className="text-xs opacity-90">vs most expensive option</div>
+                  <div className="text-xs opacity-90">vs {storeDisplayName(storeTotals[storeTotals.length - 1].store)}</div>
                 </div>
               )}
             </div>
@@ -154,7 +156,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
           <div className="grid grid-cols-3 gap-2 mb-6">
             {storeTotals.map((st, i) => {
               const style = storeStyle(st.store);
-              const isCheapest = i === 0;
+              const isCheapest = i === 0 && !tied;
               return (
                 <div
                   key={st.store}
@@ -169,13 +171,19 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
                   </div>
                   {isCheapest && (
                     <div className="text-[10px] font-semibold mt-1 rounded-full px-2 py-0.5 inline-block text-white" style={{ background: style.bg }}>
-                      Cheapest
+                      Cheapest verified
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
+        )}
+        {tied && (
+          <p className="mb-3 text-sm font-semibold text-[#1D2324]">Same lowest total at {storeTotals.filter(t => Math.round(t.total * 100) === Math.round(storeTotals[0].total * 100)).map(t => storeDisplayName(t.store)).join(' & ')} (verified exact matches)</p>
+        )}
+        {storeTotals.length > 0 && (
+          <p className="-mt-4 mb-6 text-xs text-[#5c675f]">Only these stores are compared: every item is an independently verified exact match at each of them. Other stores’ prices are not verified as the same products.</p>
         )}
 
         {/* Shopping list */}

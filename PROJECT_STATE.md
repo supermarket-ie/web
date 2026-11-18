@@ -1,5 +1,68 @@
 # Supermarket.ie — Canonical Project State
 
+## 18 November 2026 — Verified comparisons between a SUBSET of retailers (PR #417, NOT deployed)
+
+Owner-agreed policy. A verified comparison may cover a subset of retailers;
+every other retailer's price is identified as indicative. This SUPERSEDES the
+17 Nov rule that a claim needs every pair among ALL compared stores.
+
+Why: under the old rule ONE unreviewed offer (e.g. Dunnes) made every offer in
+the group Unverified, so approving the SuperValu↔Tesco pilot would have shown
+nothing to customers.
+
+- `classifyOfferGroup`:
+  - The largest PAIRWISE approved-exact set is labelled Exact match.
+  - Other offers are labelled by their own relation to it: Different, Similar
+    or Unverified.
+  - Contradictions fail closed. An approved review contradicted by stated facts
+    (own-label, differing pack, variant), or exact-linked offers with a
+    difference between them, suspends EVERY connected approval, including via
+    retailers outside the compared stores.
+  - `deterministicDifference` is now symmetric. It was order-dependent, a
+    pre-existing gap.
+- `compareBasket`:
+  - Verified stores are the complete stores Exact on every line, re-asserted
+    with `allPairsExact`, so the same stores are verified on every line.
+  - Returns `verifiedStores`, `indicativeCompleteStores` and `cheapestTied`.
+- Ties:
+  - The wording never says "cheaper" on equal totals.
+  - `recommended_store`, the reprice `bestSingleStore` and share/saved-list
+    crowns are withheld on a tie.
+- `verifiedClaimText` is the ONE wording: it always names the verified stores
+  and names other complete stores as indicative. Used by:
+  - household shop rationale and card
+  - lightweight agent `compare_shop_stores` (outputs `verified_stores`,
+    `indicative_complete_stores` and `verified_tie`; no store named on a tie;
+    description updated). `get_current_price` matches now carry
+    `best_price_basis`.
+  - reprice and SplitRecommendationCard (false "already cheapest" and "best
+    value" texts fixed)
+  - share page and SavedListView, whose claims are scoped with a note that only
+    those stores are compared
+- List lines: new `partially_verified` state with per-store labels. ProductCard
+  names the verified stores and marks the rest unverified.
+- Client-supplied item labels are downgraded on `/api/lists` POST and
+  `/api/share` (`downgradeClientItemLabels`).
+- Weekly totals: products sold by one store never support a "Verified" total.
+- Also fixed (pre-existing):
+  - The household-relevance notice now compares the last paid price with the
+    SAME store only (it was any store's lowest price).
+  - Task-watch notices now say "lowest listed price … not verified as
+    identical".
+- `/compare/[matchup]` (e.g. tesco-vs-dunnes) no longer crowns a winner from
+  unverified prices. It ranks ONLY products whose two offers are both Exact match
+  (`buildMatchup`) and lists every other shared product with each retailer's
+  title, price and label, unranked. Its title is no longer "Which is Cheaper?".
+  Products now only need to be sold at the two stores (the old page needed all
+  three main stores), so the shared-product count rises. Known limits: offers
+  are classified against every retailer's offer (an approved pair can stay
+  unranked if a third retailer's review conflicts); a review-ledger read
+  failure renders "none verified" and is cached by ISR for up to 12 h (fails
+  closed); the unverified list shows the first 60 by category.
+- Still unscoped and flagged: the unused `src/components/ProductPrices.tsx`
+  "Cheapest" badge, and `src/lib/blog.ts` copy.
+- Eve (`agent/`, rollback-only) is unchanged and always indicative.
+
 ## 17 November 2026 — Direct-capture diagnostics (2 authorised requests) + SuperValu capture fix (PR, NOT deployed)
 
 DIAGNOSTICS: exactly 1 SuperValu + 1 Dunnes GET for pilot pair #1 (Schwartz Mild

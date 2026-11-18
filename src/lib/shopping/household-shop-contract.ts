@@ -145,7 +145,7 @@ export type HouseholdShopContract = {
     reason: string;
   }>;
   recommended_retailer_strategy: {
-    /** single_retailer = cheapest verified exact basket. indicative_single_retailer = full coverage, not verified identical. */
+    /** single_retailer = verified exact comparison (retailer = the strictly cheapest verified store, or null on a tie). indicative_single_retailer = full coverage, not verified identical. */
     kind: 'single_retailer' | 'indicative_single_retailer' | 'mixed_retailer' | 'insufficient_coverage';
     retailer: string | null;
     rationale: string;

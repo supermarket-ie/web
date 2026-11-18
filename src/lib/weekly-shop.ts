@@ -73,7 +73,9 @@ export function weeklyShopTotals(items: WeeklyItem[], quantities: Record<string,
   return WEEKLY_STORES.map(store => {
     const offers = selected.flatMap(item => item.offers[store] ? [{ item, offer: item.offers[store]! }] : []);
     const alternatives = offers.filter(({ offer }) => offer.comparisonType === 'comparable_alternative');
-    const unverified = offers.filter(({ offer }) => (offer.comparisonType ?? 'unverified') === 'unverified');
+    // A product only this store sells is not compared with anything, so it can never support a VERIFIED total.
+    const soldElsewhere = (item: WeeklyItem) => WEEKLY_STORES.filter(s => item.offers[s]).length >= 2;
+    const unverified = offers.filter(({ item, offer }) => (offer.comparisonType ?? 'unverified') === 'unverified' || !soldElsewhere(item));
     const incompatible = offers.filter(({ offer }) => offer.comparisonType === 'not_comparable' || offer.differentPack);
     // A different pack is a genuine offer but cannot be multiplied as the
     // selected exact pack in a basket total.

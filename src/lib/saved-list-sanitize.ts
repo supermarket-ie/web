@@ -79,3 +79,19 @@ export function sanitizeStoreTotals(totals: unknown, computedAt: unknown, now = 
   });
   return safe.length >= 2 ? safe.sort((a, b) => a.total - b.total || a.store.localeCompare(b.store)) : [];
 }
+
+/**
+ * Client-supplied list items cannot carry verification: their item labels and per-store comparison labels are
+ * stored as indicative/unverified. Only server-computed lists keep verified labels.
+ */
+export function downgradeClientItemLabels(items: unknown): unknown[] {
+  if (!Array.isArray(items)) return [];
+  return items.map(raw => {
+    if (!raw || typeof raw !== 'object') return raw;
+    const item = { ...(raw as Record<string, unknown>) };
+    if (item.price_comparison === 'verified_exact' || item.price_comparison === 'partially_verified') item.price_comparison = 'indicative';
+    if (Array.isArray(item.all_prices)) item.all_prices = item.all_prices.map(p => p && typeof p === 'object' && (p as { comparison?: unknown }).comparison === 'exact_product'
+      ? { ...(p as Record<string, unknown>), comparison: 'unverified' } : p);
+    return item;
+  });
+}

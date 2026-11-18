@@ -4,7 +4,9 @@ import { notFound } from 'next/navigation';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
-import { getAllLatestPrices, groupByProduct, filterToMain3, STORE_INFO, ALL_STORES, fmt, type StoreKey } from '@/lib/price-data';
+import { getAllLatestPrices, STORE_INFO, fmt, type StoreKey } from '@/lib/price-data';
+import { buildMatchup } from '@/lib/matchup-comparison';
+import { getCurrentPairReviews } from '@/lib/comparison-reviews';
 
 export const revalidate = 43200; // 12h
 
@@ -36,22 +38,17 @@ export async function generateMetadata({ params }: { params: Promise<{ matchup: 
   const nameA = STORE_INFO[a].name;
   const nameB = STORE_INFO[b].name;
   return {
-    title: `${nameA} vs ${nameB} Prices Ireland — Which is Cheaper? | supermarket.ie`,
-    description: `Live price comparison between ${nameA} and ${nameB} in Ireland. See which supermarket is cheaper across ${CATEGORIES.length}+ categories with real, updated prices.`,
-    keywords: [`${nameA} vs ${nameB}`, `${nameA} vs ${nameB} prices Ireland`, `${nameA} or ${nameB} cheaper`, `supermarket comparison Ireland`],
+    title: `${nameA} vs ${nameB} Prices Ireland — Product-by-Product | supermarket.ie`,
+    description: `Live prices at ${nameA} and ${nameB} in Ireland, product by product. Stores are only ranked on products independently verified as identical at both.`,
+    keywords: [`${nameA} vs ${nameB}`, `${nameA} vs ${nameB} prices Ireland`, `supermarket comparison Ireland`],
     alternates: { canonical: `${BASE_URL}/compare/${slug}` },
     openGraph: {
-      title: `${nameA} vs ${nameB} — Which is Cheaper in Ireland?`,
-      description: `Head-to-head grocery price comparison with live data. Updated twice weekly.`,
+      title: `${nameA} vs ${nameB} — live prices in Ireland`,
+      description: `Product-by-product prices; ranked only on independently verified identical products.`,
     },
   };
 }
 
-const CATEGORIES = [
-  'Dairy', 'Bakery', 'Meat', 'Fruit', 'Vegetables', 'Breakfast',
-  'Pasta & Rice', 'Tinned', 'Beverages', 'Snacks', 'Condiments',
-  'Fish', 'Baking', 'Frozen', 'Household', 'Personal Care',
-];
 
 export default async function MatchupPage({ params }: { params: Promise<{ matchup: string }> }) {
   const { matchup: slug } = await params;
@@ -62,55 +59,16 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
   const infoA = STORE_INFO[storeA];
   const infoB = STORE_INFO[storeB];
 
-  const allPrices = await getAllLatestPrices();
-  const byProduct = filterToMain3(groupByProduct(allPrices));
-
-  // Only products available in BOTH stores being compared
-  const shared: { name: string; category: string; priceA: number; priceB: number }[] = [];
-  for (const [name, { category, stores }] of byProduct) {
-    const pA = stores.get(storeA);
-    const pB = stores.get(storeB);
-    if (!pA || !pB) continue;
-    shared.push({ name, category, priceA: pA.price, priceB: pB.price });
-  }
-
-  // Overall: who wins more products
-  let winsA = 0, winsB = 0, ties = 0;
-  let totalA = 0, totalB = 0;
-  for (const p of shared) {
-    totalA += p.priceA;
-    totalB += p.priceB;
-    if (p.priceA < p.priceB) winsA++;
-    else if (p.priceB < p.priceA) winsB++;
-    else ties++;
-  }
-
-  const overallWinner: StoreKey | null = totalA < totalB ? storeA : totalB < totalA ? storeB : null;
-  const saving = Math.abs(totalA - totalB);
-
-  // Category breakdown
-  const catData: { category: string; totalA: number; totalB: number; count: number; winner: StoreKey | null }[] = [];
-  for (const cat of CATEGORIES) {
-    const items = shared.filter(p => p.category === cat);
-    if (items.length < 2) continue;
-    const cTotalA = items.reduce((s, p) => s + p.priceA, 0);
-    const cTotalB = items.reduce((s, p) => s + p.priceB, 0);
-    catData.push({
-      category: cat,
-      totalA: cTotalA,
-      totalB: cTotalB,
-      count: items.length,
-      winner: cTotalA < cTotalB ? storeA : cTotalB < cTotalA ? storeB : null,
-    });
-  }
-
-  // Biggest price differences
-  const diffs = shared
-    .map(p => ({ ...p, diff: Math.abs(p.priceA - p.priceB), cheaper: p.priceA < p.priceB ? storeA : storeB }))
-    .filter(p => p.diff > 0.10)
-    .sort((a, b) => b.diff - a.diff)
-    .slice(0, 15);
-
+  const [allPrices, reviews] = await Promise.all([getAllLatestPrices(), getCurrentPairReviews()]);
+  // Only products verified as identical at BOTH stores are ranked (shared comparison rule); the rest are listed.
+  const mx = buildMatchup(allPrices, storeA, storeB, reviews);
+  const verifiedCount = mx.verified.length;
+  const sideStore = (side: 'a' | 'b' | null): StoreKey | null => (side === 'a' ? storeA : side === 'b' ? storeB : null);
+  const overallWinner = sideStore(mx.overallWinner);
+  const { winsA, winsB, totalA, totalB, saving } = mx;
+  const catData = mx.categories.map(c => ({ ...c, winner: sideStore(c.winner) }));
+  const diffs = mx.diffs.map(d => ({ name: d.name, category: d.category, priceA: d.a.price, priceB: d.b.price, diff: d.diff, cheaper: sideStore(d.cheaper)! }));
+  const shared = [...mx.verified, ...mx.unverified];
   const updatedLabel = new Date().toLocaleDateString('en-IE', { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
@@ -125,15 +83,19 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
         {/* Hero */}
         <div className="pt-4 pb-8">
           <h1 className="text-3xl font-bold text-[#2F2F2E] mb-2">
-            {infoA.name} vs {infoB.name} — Which is Cheaper?
+            {infoA.name} vs {infoB.name} — live prices
           </h1>
           <p className="text-[#5c5b5b] max-w-2xl">
-            Head-to-head price comparison across {shared.length} products available in both stores.
-            Based on live data, updated {updatedLabel}.
+            {shared.length} products are sold at both stores. {verifiedCount > 0
+              ? `${verifiedCount} of them are independently verified as the identical product at both, and only those are used to compare the stores.`
+              : 'None is yet independently verified as the identical product at both stores, so we don’t say which store is cheaper.'}{' '}
+            Updated {updatedLabel}.
           </p>
         </div>
 
-        {/* Scoreboard */}
+        {verifiedCount > 0 && <>
+        {/* Scoreboard: verified identical products only */}
+        <h2 className="text-xl font-bold text-[#2F2F2E] mb-3">On {verifiedCount} verified identical products</h2>
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className="rounded-2xl p-5 border-2 text-center" style={{ borderColor: overallWinner === storeA ? infoA.color : 'rgba(175,173,172,0.2)', background: overallWinner === storeA ? infoA.light : '#fff' }}>
             <div className="text-sm font-bold mb-1" style={{ color: infoA.color }}>{infoA.name}</div>
@@ -141,7 +103,7 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
             <div className="text-sm text-[#5c5b5b]">Cheaper on <strong>{winsA}</strong> products</div>
             {overallWinner === storeA && (
               <div className="mt-2 text-[10px] font-bold uppercase rounded-full px-2 py-0.5 inline-block text-white" style={{ background: infoA.color }}>
-                Cheaper overall ✓
+                Cheaper on verified products ✓
               </div>
             )}
           </div>
@@ -151,20 +113,21 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
             <div className="text-sm text-[#5c5b5b]">Cheaper on <strong>{winsB}</strong> products</div>
             {overallWinner === storeB && (
               <div className="mt-2 text-[10px] font-bold uppercase rounded-full px-2 py-0.5 inline-block text-white" style={{ background: infoB.color }}>
-                Cheaper overall ✓
+                Cheaper on verified products ✓
               </div>
             )}
           </div>
         </div>
+        </>}
 
-        {saving > 0.01 && (
+        {verifiedCount > 0 && overallWinner && saving > 0.01 && (
           <div className="rounded-xl p-4 mb-8 text-center text-sm" style={{ background: '#E8F5E9', color: '#1B5E20' }}>
-            Shopping at <strong>{overallWinner ? STORE_INFO[overallWinner].name : 'either'}</strong> saves you <strong>{fmt(saving)}</strong> across {shared.length} comparable products
+            <strong>{STORE_INFO[overallWinner].name}</strong> is <strong>{fmt(saving)}</strong> cheaper across the {verifiedCount} verified identical products
           </div>
         )}
 
         {/* Category breakdown */}
-        <h2 className="text-xl font-bold text-[#2F2F2E] mb-4">By Category</h2>
+        {catData.length > 0 && <h2 className="text-xl font-bold text-[#2F2F2E] mb-4">By category (verified products)</h2>}
         <div className="space-y-3 mb-10">
           {catData.map(({ category, totalA: cA, totalB: cB, count, winner }) => {
             const winnerInfo = winner ? STORE_INFO[winner] : null;
@@ -196,7 +159,7 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
         {/* Biggest price differences */}
         {diffs.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-xl font-bold text-[#2F2F2E] mb-4">Biggest Price Differences</h2>
+            <h2 className="text-xl font-bold text-[#2F2F2E] mb-4">Biggest differences on verified products</h2>
             <div className="bg-white rounded-2xl divide-y divide-[#F3F0EF]" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
               {diffs.map((d, i) => {
                 const cheaperInfo = STORE_INFO[d.cheaper as StoreKey];
@@ -221,6 +184,23 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
           </section>
         )}
 
+        {/* Not verified as identical: individual prices only, never ranked */}
+        {mx.unverified.length > 0 && (
+          <section className="mb-10" aria-labelledby="unverified-heading">
+            <h2 id="unverified-heading" className="text-xl font-bold text-[#2F2F2E] mb-1">Other products at both stores</h2>
+            <p className="text-sm text-[#5c5b5b] mb-4">Each store’s own product and current price. These are not verified as the identical product (or are a different product or pack), so they are not used to say which store is cheaper.</p>
+            <div className="bg-white rounded-2xl divide-y divide-[#F3F0EF]" style={{ border: '1px solid rgba(175,173,172,0.2)' }}>
+              {mx.unverified.slice(0, 60).map(p => (
+                <div key={p.name} className="px-4 py-3 grid gap-1 sm:grid-cols-[1fr_1fr_1fr] sm:items-center text-sm">
+                  <div><div className="font-medium text-[#2F2F2E]">{p.name}</div><div className="text-xs text-[#5c675f]">{p.category}</div></div>
+                  <div className="text-xs text-[#455049]"><strong style={{ color: infoA.color }}>{infoA.name.split(' ')[0]} {fmt(p.a.price)}</strong> · {p.a.title}{p.a.label ? ` · ${p.a.label}` : ''}</div>
+                  <div className="text-xs text-[#455049]"><strong style={{ color: infoB.color }}>{infoB.name.split(' ')[0]} {fmt(p.b.price)}</strong> · {p.b.title}{p.b.label ? ` · ${p.b.label}` : ''}</div>
+                </div>
+              ))}
+            </div>
+            {mx.unverified.length > 60 && <p className="mt-2 text-xs text-[#5c675f]">Showing 60 of {mx.unverified.length}.</p>}
+          </section>
+        )}
         {/* Other comparisons */}
         <h2 className="text-lg font-bold text-[#2F2F2E] mb-4">More comparisons</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-10">
@@ -260,7 +240,7 @@ export default async function MatchupPage({ params }: { params: Promise<{ matchu
           '@context': 'https://schema.org',
           '@type': 'WebPage',
           name: `${infoA.name} vs ${infoB.name} Price Comparison Ireland`,
-          description: `Comparing ${shared.length} grocery products between ${infoA.name} and ${infoB.name} in Ireland.`,
+          description: `Live prices for ${shared.length} grocery products at ${infoA.name} and ${infoB.name} in Ireland; ${verifiedCount} verified as identical at both.`,
           url: `${BASE_URL}/compare/${slug}`,
         }) }} />
       </main>

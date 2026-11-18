@@ -90,7 +90,9 @@ function analyseStoreTotals(storeTotals: StoreTotal[], totalItems: number) {
   const partialMatches = annotated.filter(s => !s.isFullMatch);
 
   // Only crown a best when we have real item_count data
-  const best = hasItemCounts ? (fullMatches[0] ?? null) : null;
+  // A tie for the lowest total crowns no store.
+  const tied = fullMatches.length >= 2 && Math.round(fullMatches[0].total * 100) === Math.round(fullMatches[1].total * 100);
+  const best = hasItemCounts && !tied ? (fullMatches[0] ?? null) : null;
 
   // In the display strip: show full matches always; only show partial matches
   // when we have item_count data (so we can label them clearly). Without
@@ -225,7 +227,7 @@ function HeroCard({
         <div className="flex flex-wrap" style={{ borderTop: '1px solid var(--surface-container)' }}>
           {sorted.map((st, i) => {
             const s = storeStyle(st.store);
-            const isBest = st.isFullMatch && i === sorted.findIndex(s => s.isFullMatch);
+            const isBest = !!best && st.store === best.store;
             return (
               <div key={st.store} className="flex-1 px-3 py-2.5 text-center min-w-0"
                 style={{ borderRight: i < sorted.length - 1 ? '1px solid var(--surface-container)' : 'none', minWidth: '33%' }}>
@@ -238,7 +240,7 @@ function HeroCard({
                 {hasItemCounts && (
                   <div className="text-[10px] mt-0.5" style={{ color: 'var(--on-surface-variant)' }}>
                     {st.itemCount}/{totalItems > 0 ? totalItems : '?'} items
-                    {isBest && <span className="ml-1 font-bold" style={{ color: '#16a34a' }}> Best</span>}
+                    {isBest && <span className="ml-1 font-bold" style={{ color: '#16a34a' }}> Cheapest verified</span>}
                     {!st.isFullMatch && <span className="ml-1 font-bold" style={{ color: '#e85d04' }}> Partial</span>}
                   </div>
                 )}
@@ -248,6 +250,11 @@ function HeroCard({
         </div>
       )}
 
+      {sorted.length > 0 && (
+        <p className="px-4 py-2 text-[11px] leading-4" style={{ color: 'var(--on-surface-variant)', borderTop: '1px solid var(--surface-container)' }}>
+          Compared only between {sorted.map(st => storeDisplayName(st.store)).join(' & ')}: every item is an independently verified exact match there. Other stores’ prices are not verified as the same products.
+        </p>
+      )}
       {/* Actions */}
       <div className="flex gap-2 px-4 py-3" style={{ borderTop: '1px solid var(--surface-container)' }}>
         <button onClick={onUpdateList}
