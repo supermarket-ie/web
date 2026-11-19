@@ -29,7 +29,7 @@ import {
   IDENTITY_ASSESSMENT_RULE_VERSION,
   type AssessOptions,
 } from './tesco-identity-assessment';
-import { firstPriceCorroboration, reviewedCanonicalEvidenceGap, type ReentryEvidence } from './tesco-hold-reentry';
+import { firstPriceCorroboration, reviewedCanonicalEvidenceGap, selfEvidenceFirstPriceReasons, type ReentryEvidence } from './tesco-hold-reentry';
 import type { ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
@@ -47,6 +47,10 @@ export type SelectionOptions = {
   priorityIds?: string[];
   // Evidence mode only: differing-SKU repair candidates to acquire evidence for.
   repairTargets?: RepairTarget[];
+  // APIFY_FIRST_PRICE_SELF_EVIDENCE: also admit unproven, never-observed,
+  // manufacturer-branded first-price candidates WITHOUT both fresh peers. They
+  // must then pass selfEvidenceFirstPriceReasons + the full gate + AI. Default off.
+  selfEvidence?: boolean;
 };
 
 export type ApifyMapping = {
@@ -134,6 +138,11 @@ export type ApifyCollectionDeps = {
   // single-use approval row (tesco_first_price_approvals) bound to the exact
   // mapping snapshot. Without an approval nothing is admitted. Default false.
   allowFirstPrice?: boolean;
+  // APIFY_FIRST_PRICE_SELF_EVIDENCE='1' (default false): a first price may rest
+  // on Tesco's own source (selfEvidenceFirstPriceReasons) instead of two fresh
+  // matching peers. Still requires a full deterministic pass (no canonical-gap
+  // route), the AI verified_exact verdict and a live single-use approval.
+  selfEvidenceFirstPrice?: boolean;
   // Priority queue + repair targets (see SelectionOptions).
   selection?: SelectionOptions;
   sleep?: (ms: number) => Promise<void>;
@@ -336,10 +345,15 @@ export async function selectApifyMappings(
     const observedAt = fresh.get(id) ?? null;
     const approval = !candidateMode && allowFirstPrice && mode === 'expansion' ? approvals.get(id) ?? null : null;
     const bothPeers = !observedAt && peerStoreCount(String(r.product_id)) >= 2;
+    // Flagged self-evidence cohort: never observed, manufacturer-branded
+    // canonical, not own-label. Peers optional; the identity bar is unchanged.
+    const selfEvidenceCandidate = opts.selfEvidence === true && !observedAt
+      && r.is_own_brand !== true && !!canonical(r)?.brand;
+    const peerBasis = bothPeers || selfEvidenceCandidate;
     const hasEvidence = apifyEvidence.has(`${id}|${url}`);
-    const firstPriceEligible = candidateMode ? !approvals.has(id) && bothPeers && hasEvidence
-      : evidenceMode ? !approvals.has(id) && bothPeers && !hasEvidence
-      : !!approval && bothPeers;
+    const firstPriceEligible = candidateMode ? !approvals.has(id) && peerBasis && hasEvidence
+      : evidenceMode ? !approvals.has(id) && peerBasis && !hasEvidence
+      : !!approval && peerBasis;
     // Evidence + approval candidates are the NO-receipt cohort only; proven
     // mappings use ordinary expansion.
     if ((evidenceMode || candidateMode) && proven.has(id)) continue;
@@ -555,7 +569,8 @@ export function snapshotMappingEvidence(s: SnapshotIdentity, isFresh: boolean): 
 // verifies Tesco identity only (never a cross-retailer price comparison), and
 // the AI never overrides a deterministic rejection.
 export function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha256: string, live: TescoCollectedProduct,
-  peers: ApifyPeer[] = [], proven = true, verifiedBarcode: string | null = null, canonicalEanIndependent = false): ReentryEvidence {
+  peers: ApifyPeer[] = [], proven = true, verifiedBarcode: string | null = null, canonicalEanIndependent = false,
+  selfEvidenceFirstPrice = false): ReentryEvidence {
   return {
     mapping: {
       id: s.storeProductId, product_id: s.productId, canonical_name: s.canonicalName,
@@ -565,6 +580,8 @@ export function assessmentEvidence(s: SnapshotIdentity, pageId: string, bodySha2
       url_status: 'resolved', gtin: s.gtin,
     },
     sameSkuCount: Math.max(s.sameSkuCanonicalNames.length, 1), proven, firstPriceOnboarding: !proven, verifiedBarcode, canonicalEanIndependent, freshTesco: false, pending: false, recentAttempt: false,
+    // Only ever set for an unproven first price with the flag on.
+    ...(selfEvidenceFirstPrice && !proven ? { selfEvidenceFirstPrice: true } : {}),
     page: {
       id: pageId, requested_url: s.storeUrl, final_url: s.storeUrl, outcome: 'ok', http_status: 200,
       body_sha256: bodySha256, mode: 'products', parsed: { products: [live], listing: null },
@@ -631,7 +648,8 @@ export async function collectTescoApify(
   let spentUsd = deps.spentUsd ?? 0;
 
   const mappings = await selectApifyMappings(sb, mode, limit, deps.allowFirstPrice === true,
-    { priorityIds: deps.selection?.priorityIds, repairTargets: deps.selection?.repairTargets });
+    { priorityIds: deps.selection?.priorityIds, repairTargets: deps.selection?.repairTargets,
+      selfEvidence: deps.selfEvidenceFirstPrice === true });
   const result: ApifyCollectionResult = {
     runId: '', mode, requested: 0, accepted: 0, held: 0, unavailable: 0, stopped: null, evidenceRecorded: 0, spentUsd, perProduct: [],
   };
@@ -651,7 +669,7 @@ export async function collectTescoApify(
   // scraped_at proves nothing). Freshness is the per-item best-available
   // precondition only, carried with its documented limitation.
   const staged: Array<{ ident: SnapshotIdentity; product: TescoCollectedProduct; previousPrice: number | null; adapterBody: string;
-    method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' | 'canonical_gap_plus_ai_peer'; rationale: string; model: string | null;
+    method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' | 'canonical_gap_plus_ai_peer' | 'self_evidence_plus_ai'; rationale: string; model: string | null;
     fingerprint: string; snapshot: Record<string, unknown> | null; approval: FirstPriceApproval | null }> = [];
 
   try {
@@ -806,7 +824,7 @@ export async function collectTescoApify(
       const perItemFreshOk = provider?.freshness.preconditionMet === true;
 
       let decision: 'accept_pending_finalise' | 'hold' = 'hold';
-      let method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' | 'canonical_gap_plus_ai_peer' = 'deterministic';
+      let method: 'deterministic' | 'deterministic_plus_ai' | 'deterministic_plus_ai_peer' | 'canonical_gap_plus_ai_peer' | 'self_evidence_plus_ai' = 'deterministic';
       let rationale = '';
       let model: string | null = null;
       let liveFingerprint = '';
@@ -838,7 +856,11 @@ export async function collectTescoApify(
       // The canonical EAN is independent only if provenance backs the EAN in the
       // BOUND snapshot (a changed canonical EAN loses it).
       const eanIndependent = m.canonicalEanIndependent === true && ident.canonicalEan === m.canonical_ean;
-      const ev = product ? assessmentEvidence(ident, runId, adapterBody, product, m.peers, !m.firstPrice, linkBarcode, eanIndependent) : null;
+      // Self-evidence applies only to a first price with the flag on AND a full
+      // deterministic pass (never the canonical-gap route).
+      const selfEvidenceRoute = deps.selfEvidenceFirstPrice === true && m.firstPrice && deterministicReasons.length === 0;
+      const ev = product ? assessmentEvidence(ident, runId, adapterBody, product, m.peers, !m.firstPrice, linkBarcode, eanIndependent,
+        selfEvidenceRoute) : null;
 
       // HELD-MAPPING RECOVERY (canonical-evidence gap): the ordinary gate
       // rejects a mapping when the ONLY problem is an incomplete/generic
@@ -862,10 +884,21 @@ export async function collectTescoApify(
       }
 
       // FIRST PRICE: both peers must independently match before the AI is asked.
+      // With the self-evidence flag, Tesco's own source may stand in for the
+      // peers ONLY when every positive self-evidence check passes.
       let firstPricePeerHold = false;
+      let selfEvidenceUsed = false;
       if (m.firstPrice && product && ev) {
         const corroboration = firstPriceCorroboration(ev, product);
-        if (!corroboration.ok) {
+        const selfReasons = !corroboration.ok && selfEvidenceRoute ? selfEvidenceFirstPriceReasons(ev, product) : null;
+        if (selfReasons && selfReasons.length === 0) {
+          selfEvidenceUsed = true;
+          deps.log?.({ event: 'first_price_self_evidence', sku: ident.storeSku, stores: corroboration.stores });
+        } else if (!corroboration.ok) {
+          if (selfReasons) {
+            reasons.push('first_price_self_evidence_hold');
+            deps.log?.({ event: 'first_price_self_evidence_hold', sku: ident.storeSku, reasons: selfReasons });
+          }
           firstPricePeerHold = true;
           reasons.push('first_price_peer_hold');
           deps.log?.({ event: 'first_price_peer_hold', sku: ident.storeSku, stores: corroboration.stores, perPeer: corroboration.perPeer });
@@ -925,10 +958,13 @@ export async function collectTescoApify(
               // (deterministic gate OR the reviewed canonical-evidence gap with
               // the stronger independentExactIdentity), never the peers alone.
               method = canonicalGapEligible ? 'canonical_gap_plus_ai_peer'
+                : selfEvidenceUsed ? 'self_evidence_plus_ai'
                 : m.peers.length > 0 ? 'deterministic_plus_ai_peer' : 'deterministic_plus_ai';
               rationale = canonicalGapEligible
                 ? `Held-mapping recovery: canonical description was incomplete (${deterministicReasons.join(', ')}); independentExactIdentity confirmed exact identity with fresh cross-retailer peer(s), and the independent AI returned verified_exact. ${verdict.machineAssessment.reason}`
-                : verdict.machineAssessment.reason;
+                : selfEvidenceUsed
+                  ? `Self-evidence first price: Tesco's own page established SKU, brand, barcode, pack and variant against the canonical record with no contradicting peer; the independent AI returned verified_exact. ${verdict.machineAssessment.reason}`
+                  : verdict.machineAssessment.reason;
               // On a recovery accept, the canonical-gap reasons are resolved by
               // the stronger gate + AI; don't surface them as hold reasons.
               if (canonicalGapEligible) reasons.length = 0;

@@ -1,5 +1,79 @@
 # Supermarket.ie — Canonical Project State
 
+## 19 November 2026 — Tesco self-evidence first price (flag-gated, default OFF, NOT deployed)
+
+Owner-approved principle (19 Nov): a Tesco first price may be accepted without
+fresh SuperValu and Dunnes prices, provided Tesco's own source establishes the
+SKU, identity, pack, variant and current price with no material
+contradictions. It is implemented as a separate, guarded path, and the
+existing identity checks are not disabled.
+
+- Flag `APIFY_FIRST_PRICE_SELF_EVIDENCE=1` on the collector, OFF by default.
+  It applies in the evidence, approve and expansion modes. With the flag off,
+  behaviour is unchanged: two fresh peers that each independently match are
+  still required.
+- `selfEvidenceFirstPriceReasons` (`tesco-hold-reentry.ts`) is a set of
+  positive checks only. Missing evidence is a reason to hold.
+  - The mapping is unproven, with a single SKU.
+  - Manufacturer brand only: no own-label mapping, canonical brand present,
+    and the source brand is not Tesco, Dunnes or SuperValu.
+  - The canonical, mapping and source brands agree.
+  - The Tesco SKU and the product's own URL are used.
+  - Tesco states a GTIN, and every recorded barcode (mapping GTIN, canonical
+    EAN) agrees with it.
+  - The canonical name STATES the same pack total as the page. The structured
+    measure is present and agrees. Stated counts agree. The original mapping's
+    pack and count agree.
+  - No variant or formulation conflict against the canonical or original
+    mapping title.
+  - Title support on both the canonical and original mapping titles.
+  - The item is available, priced in EUR, with price > 0.
+  - Every present fresh peer must not contradict: brand, pack, count, variant,
+    title or barcode. A peer that only omits its pack is tolerated.
+- `independentExactIdentity` accepts that in place of the two-peer floor only
+  when the evidence carries `selfEvidenceFirstPrice` and every check passes.
+  - The flag is never set for a proven envelope.
+  - The canonical-gap route ignores self-evidence and keeps its two-peer floor.
+  - Self-evidence needs a FULL deterministic pass.
+  - The AI `verified_exact` verdict, the single-use evidence-bound approval
+    and the live fingerprint recheck are unchanged.
+  - The route is labelled `self_evidence_plus_ai`, both on the approval
+    assessment (`self_evidence: true`) and on the collection method.
+- Code only: the DB approval and finalise RPCs never checked peers (migration
+  20261113090000). No migration is needed.
+- Comparison claims are unaffected. Sharing a canonical record is not identity
+  evidence, and "Exact match" still needs pairwise approved reviews (#417).
+- Scope: this path helps unproven Tesco mappings on canonicals that lack two
+  matching fresh peers. It does NOT unlock the 241 SV-led "missing only Tesco"
+  records. Those already have both peers fresh, and their holds are
+  deterministic (brand, measure or formulation conflicts, or generic
+  canonicals).
+- Tests: `src/lib/tesco-first-price-self-evidence.test.ts` (32), including
+  PGlite end-to-end runs on the REAL migrations:
+  - flag off: never requested or priced
+  - flag on: evidence, then approval, then price, with the approval consumed
+  - an AI that is not exact gives no approval
+  - a drifted live page holds and leaves the approval unconsumed
+- Deploying needs a collector image build (owner's aws-prod approval), a new
+  task-def revision, and then a deliberate flagged run.
+
+Tesco "proven but expired" cohort (99 of the 241), measured 19 Nov from each
+mapping's latest page: these are NOT idle renewals.
+- 10 are blocked by historical `pending` pages (1–9 Nov). These are preserved,
+  and closing them needs an owner-approved procedure.
+- 9 are unavailable or have no regular price.
+- About 80 are held by the CURRENT gate on their latest page:
+  - measureExactness 20
+  - ai_uncertain 12
+  - brandConflict 10 or more
+  - formulation 9
+  - measureConflict 7
+  - generic canonical 11 or more
+  These prices were accepted under older rules. They need SKU rediscovery or
+  reviewed canonical repair, not more requests.
+- A 19 Nov expansion run (task b21fdc7e) was stopped after 29 requests,
+  0 accepted. It followed the built-in recovery queue, not this cohort.
+
 ## 18 November 2026 — Durable pair approvals (PR #418, migration 20261118120000 NOT applied, NOT deployed)
 
 Owner priority before scaling matching. Once independently verified, a pair

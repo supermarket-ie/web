@@ -16,7 +16,7 @@ import {
   type TescoCollectedProduct,
 } from './tesco-direct-collection-core';
 import { assessAndCombine, type AssessOptions } from './tesco-identity-assessment';
-import { firstPriceCorroboration, reviewedCanonicalEvidenceGap } from './tesco-hold-reentry';
+import { firstPriceCorroboration, reviewedCanonicalEvidenceGap, selfEvidenceFirstPriceReasons } from './tesco-hold-reentry';
 import {
   assessmentEvidence, selectApifyMappings, snapshotIdentity, snapshotMappingEvidence,
   type ApifyPeer, type SelectionOptions,
@@ -43,7 +43,7 @@ export type FirstPriceApprovalArgs = {
 };
 
 export type ApprovalAssessment =
-  | { ok: true; args: FirstPriceApprovalArgs; route: 'deterministic_plus_ai' | 'canonical_gap_plus_ai' }
+  | { ok: true; args: FirstPriceApprovalArgs; route: 'deterministic_plus_ai' | 'canonical_gap_plus_ai' | 'self_evidence_plus_ai' }
   | { ok: false; reason: string };
 
 // Pure (apart from the injected model): decide whether a retained page supports
@@ -58,6 +58,11 @@ export async function assessFirstPriceCandidate(input: {
   sleep?: (ms: number) => Promise<void>;
   // DB-verified independent barcode from an active tesco_verified_links row.
   verifiedBarcode?: string | null;
+  // APIFY_FIRST_PRICE_SELF_EVIDENCE (default false): when both peers do not
+  // independently match, Tesco's own source may establish identity instead,
+  // ONLY with a full deterministic pass and every selfEvidenceFirstPriceReasons
+  // check passing. The AI verified_exact verdict is still mandatory.
+  selfEvidence?: boolean;
 }): Promise<ApprovalAssessment> {
   const { snapshot, page, peers } = input;
   const now = input.now ?? Date.now();
@@ -74,24 +79,37 @@ export async function assessFirstPriceCandidate(input: {
   const matches = (page.parsed?.products ?? []).filter(p => p.sku === ident.storeSku);
   if (matches.length !== 1) return { ok: false, reason: 'evidence_not_exactly_one_product' };
   const product = matches[0];
-  if (new Set(peers.map(p => p.store)).size < 2) return { ok: false, reason: 'both_fresh_peers_required' };
+  const selfEvidenceEnabled = input.selfEvidence === true;
+  if (!selfEvidenceEnabled && new Set(peers.map(p => p.store)).size < 2) return { ok: false, reason: 'both_fresh_peers_required' };
 
   // proven=false: the mapping has NO success receipt and the evidence says so
-  // (firstPriceOnboarding), which requires BOTH fresh peers in the stronger gate.
+  // (firstPriceOnboarding), which requires BOTH fresh peers in the stronger gate
+  // (or, flagged, the self-evidence checks after a full deterministic pass).
   const linkOk = !!input.verifiedBarcode && (product.gtin ?? '').replace(/^0+/, '') === input.verifiedBarcode.replace(/^0+/, '');
-  const ev = assessmentEvidence(ident, page.id, page.body_sha256, product, peers, false, linkOk ? input.verifiedBarcode! : null);
   // The deterministic gate must pass, or reject ONLY on an incomplete canonical
   // description that the reviewed gap route resolves (which for a first price
   // requires BOTH peers to match independently). The AI is still required.
   const reasons = validateTescoCollectedIdentity(snapshotMappingEvidence(ident, false), product);
+  // Self-evidence is never combined with the canonical-gap route.
+  const selfEvidenceRoute = selfEvidenceEnabled && reasons.length === 0;
+  const ev = assessmentEvidence(ident, page.id, page.body_sha256, product, peers, false, linkOk ? input.verifiedBarcode! : null,
+    false, selfEvidenceRoute);
   const gapRoute = reasons.length > 0 && reviewedCanonicalEvidenceGap(ev, product, reasons);
   if (reasons.length > 0 && !gapRoute) return { ok: false, reason: `deterministic_hold:${reasons.join(',')}` };
   // BOTH peers must independently match; one matching peer is never enough.
   const corroboration = firstPriceCorroboration(ev, product);
+  let selfEvidenceUsed = false;
   if (!corroboration.ok) {
-    const detail = corroboration.perPeer.filter(p => p.reasons.length).map(p => `${p.store}=${p.reasons.join('+')}`);
-    return { ok: false, reason: `first_price_peer_hold:${detail.join(';') || `stores=${corroboration.stores}`}` };
+    if (selfEvidenceRoute) {
+      const selfReasons = selfEvidenceFirstPriceReasons(ev, product);
+      if (selfReasons.length) return { ok: false, reason: `self_evidence_hold:${selfReasons.join(',')}` };
+      selfEvidenceUsed = true;
+    } else {
+      const detail = corroboration.perPeer.filter(p => p.reasons.length).map(p => `${p.store}=${p.reasons.join('+')}`);
+      return { ok: false, reason: `first_price_peer_hold:${detail.join(';') || `stores=${corroboration.stores}`}` };
+    }
   }
+  const route = gapRoute ? 'canonical_gap_plus_ai' : selfEvidenceUsed ? 'self_evidence_plus_ai' : 'deterministic_plus_ai';
 
   const retries = input.aiRetries ?? 2;
   const sleep = input.sleep ?? ((ms: number) => new Promise<void>(r => setTimeout(r, ms)));
@@ -107,7 +125,7 @@ export async function assessFirstPriceCandidate(input: {
   const m = verdict.machineAssessment;
   return {
     ok: true,
-    route: gapRoute ? 'canonical_gap_plus_ai' : 'deterministic_plus_ai',
+    route,
     args: {
       p_store_product_id: ident.storeProductId,
       p_evidence_page_id: page.id,
@@ -119,8 +137,10 @@ export async function assessFirstPriceCandidate(input: {
         mapping_id: m.mapping_id, source_page_id: m.source_page_id, source_body_sha256: m.source_body_sha256,
         identity_fingerprint: fingerprint,
         source: m.source, assessed_at: verdict.assessment.assessed_at,
-        route: gapRoute ? 'canonical_gap_plus_ai' : 'deterministic_plus_ai', first_price_onboarding: true,
+        route, first_price_onboarding: true,
         canonical_gap_reasons: gapRoute ? reasons : [],
+        // Audit: which present peers (if any) the self-evidence route saw.
+        ...(selfEvidenceUsed ? { self_evidence: true, peer_stores: corroboration.stores } : {}),
       },
       p_expected_snapshot: snapshot,
     },
@@ -138,7 +158,8 @@ export type ApprovalRunSummary = {
 export async function prepareFirstPriceApprovals(
   sb: SupabaseClient,
   opts: { limit: number; apply: boolean; assessOptions?: AssessOptions; ttlHours?: number;
-    log?: (e: Record<string, unknown>) => void; scan?: number; priorityIds?: SelectionOptions['priorityIds'] },
+    log?: (e: Record<string, unknown>) => void; scan?: number; priorityIds?: SelectionOptions['priorityIds'];
+    selfEvidence?: boolean },
 ): Promise<ApprovalRunSummary> {
   const summary: ApprovalRunSummary = { considered: 0, noEvidence: 0, assessed: 0, approved: 0, recorded: 0, rejected: {} };
   const reject = (reason: string) => { const k = reason.split(':')[0]; summary.rejected[k] = (summary.rejected[k] ?? 0) + 1; };
@@ -146,7 +167,7 @@ export async function prepareFirstPriceApprovals(
   // Candidates already HAVE recent Apify evidence (the selector requires it) and
   // are not excluded by the 24h request window: evidence minutes old is fine.
   const candidates = await selectApifyMappings(sb, 'expansion', opts.scan ?? 1000, false,
-    { approvalCandidates: true, priorityIds: opts.priorityIds });
+    { approvalCandidates: true, priorityIds: opts.priorityIds, selfEvidence: opts.selfEvidence === true });
 
   for (const m of candidates) {
     if (summary.approved >= opts.limit) break;
@@ -170,7 +191,7 @@ export async function prepareFirstPriceApprovals(
     if (!page || !m.snapshot) { summary.noEvidence += 1; continue; }
     summary.assessed += 1;
     const r = await assessFirstPriceCandidate({ snapshot: m.snapshot, page, peers: m.peers, assessOptions: opts.assessOptions,
-      verifiedBarcode: m.link?.gtin ?? null });
+      verifiedBarcode: m.link?.gtin ?? null, selfEvidence: opts.selfEvidence === true });
     if (!r.ok) { reject(r.reason); opts.log?.({ event: 'approval_rejected', sku: m.store_sku, reason: r.reason }); continue; }
     summary.approved += 1;
     if (!opts.apply) { opts.log?.({ event: 'approval_dry_run', sku: m.store_sku, route: r.route }); continue; }
