@@ -16,6 +16,7 @@
 //   APIFY_PER_REQUEST_USD = marginal cost per request    (default 0.002)
 //   APIFY_MAX_BATCHES   = batches this invocation        (default 1)
 //   APIFY_REQUIRE_FRESHNESS = '0' to RELAX freshness (default: enforced)
+//   APIFY_FIRST_PRICE_SELF_EVIDENCE = '1' to allow Tesco self-evidence first prices (default off)
 import { createClient } from '@supabase/supabase-js';
 import { collectTescoApify, type ApifyCollectionResult } from '../src/lib/tesco-apify-collection';
 import { readFileSync } from 'node:fs';
@@ -42,11 +43,17 @@ async function main() {
     try { plan = planRecoveryQueue(JSON.parse(readFileSync(queuePath, 'utf8'))); }
     catch (e) { console.log(JSON.stringify({ event: 'priority_queue_unavailable', path: queuePath, message: e instanceof Error ? e.message : 'error' })); }
   }
+  // APIFY_FIRST_PRICE_SELF_EVIDENCE='1' (owner-approved principle, 19 Nov 2026; default OFF): a first
+  // price may rest on Tesco's own source instead of two matching fresh peers. Applies to
+  // evidence, approve and expansion modes; the gate, AI and single-use approval still apply.
+  const selfEvidence = process.env.APIFY_FIRST_PRICE_SELF_EVIDENCE === '1';
+  if (selfEvidence) console.log(JSON.stringify({ event: 'first_price_self_evidence_enabled', mode }));
   if (mode === 'approve') {
     // No provider request and no price write: assess retained evidence only.
     const summary = await prepareFirstPriceApprovals(sb, {
       limit: Number(process.env.APPROVAL_LIMIT ?? 50), apply: process.env.APPROVAL_APPLY === '1',
       ttlHours: Number(process.env.APPROVAL_TTL_HOURS ?? 72), priorityIds: plan?.evidencePriority,
+      selfEvidence: selfEvidence,
       log: (e) => console.log(JSON.stringify(e)),
     });
     console.log(JSON.stringify({ event: 'approval_summary', apply: process.env.APPROVAL_APPLY === '1', ...summary }));
@@ -181,6 +188,7 @@ async function main() {
       // fresh peers to the first-price path (needs the 20261113090000 migration
       // + its reserve-RPC param, else reserve raises mapping_not_resolved_or_unproven).
       allowFirstPrice: process.env.APIFY_ALLOW_FIRST_PRICE === '1',
+      selfEvidenceFirstPrice: selfEvidence,
       selection: plan ? {
         priorityIds: mode === 'evidence' ? plan.evidencePriority : mode === 'expansion' ? plan.expansionPriority : undefined,
         repairTargets: mode === 'evidence' ? plan.repairEvidenceTargets : undefined,

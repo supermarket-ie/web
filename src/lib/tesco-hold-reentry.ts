@@ -24,6 +24,16 @@ export type ReentryEvidence = {
   // fresh peers (stricter than the proven path's <=2). Every other check is
   // unchanged, and the AI verified_exact verdict is still required on top.
   firstPriceOnboarding?: boolean;
+  // SELF-EVIDENCE first price (owner policy, 19 Nov 2026; flag
+  // APIFY_FIRST_PRICE_SELF_EVIDENCE, default off). A first-price mapping may
+  // stand on Tesco's OWN source instead of two fresh peers ONLY when
+  // selfEvidenceFirstPriceReasons() is empty: positive brand, barcode, stated
+  // pack, count, variant and title agreement between the canonical record, the
+  // original mapping and the Tesco page, and no present peer disagreeing.
+  // Every other independentExactIdentity check, the deterministic validator
+  // and the AI verified_exact verdict still apply. Sharing a canonical record
+  // is never treated as identity evidence, and this grants no comparison claim.
+  selfEvidenceFirstPrice?: boolean;
   // A GTIN the DATABASE verified as independent for this canonical product
   // (canonical EAN or a Dunnes/SuperValu peer GTIN) via an active
   // tesco_verified_links row for this mapping's SKU. Counts as independent
@@ -367,12 +377,114 @@ export function firstPriceCorroboration(e: ReentryEvidence, rawSource: TescoColl
   const ok = stores === 'dunnes,supervalu' && perPeer.every(p => p.reasons.length === 0);
   return { ok, stores, perPeer };
 }
+// SELF-EVIDENCE first price: the reasons Tesco's own source does NOT establish
+// the exact canonical product on its own ([] = it does). Every check is a
+// POSITIVE agreement; absence of evidence is a reason, never a pass.
+// Retailer names (spacing-insensitive) and known retailer own-label sub-brands.
+const RETAILER_BRAND = /^(?:tesco|dunnes|super ?valu|centra|aldi|lidl)(?: |$)/;
+const RETAILER_SUB_BRANDS = new Set([
+  'finest', 'stockwell', 'hearty food co', 'creamfields', 'eastmans', 'ms mollys', 'growers harvest',
+  'willow farms', 'boswell farms', 'woodside farms', 'rosedene farms', 'nightingale farms', 'redmere farms',
+  'suntrail farms', 'bay fishmongers', 'butchers choice', 'romano', 'h w nevills', 'fresh ideas', 'plant chef',
+  'wicked kitchen', 'simply better', 'my family favourites', 'st bernard', 'everyday essentials', 'daily basics',
+]);
+export const retailerOwnBrand = (brand: string) => {
+  const b = normalized(brand.replace(/([a-z])['’]([a-z])/gi, '$1$2'));
+  return RETAILER_BRAND.test(b) || RETAILER_SUB_BRANDS.has(b);
+};
+// Identity words of a title: no brand words, pack/measure tokens or connectives,
+// with a plural "s" folded. Used for exact word coverage (stricter than titleSupport).
+const IDENTITY_STOPWORDS = new Set(['and', 'with', 'of', 'the', 'in', 'a', 'for', 'from', 'pack', 'pk', 'x']);
+function identityWords(title: string, brand: string): Set<string> {
+  const b = normalized(brand.replace(/([a-z])['’]([a-z])/gi, '$1$2'));
+  let n = normalized(title.replace(/([a-z])['’]([a-z])/gi, '$1$2')
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:x\s*\d+(?:[.,]\d+)?\s*)?(?:kg|g|ml|cl|l|ltr|litres?)\b/gi, ' '));
+  // Remove ONE brand phrase (leading if present), never every brand word, so a
+  // repeated brand word used as a variant ("Paso Paso") still counts.
+  if (b) n = ` ${n} `.replace(` ${b} `, ' ').trim();
+  // Bare numbers are KEPT: "2% Fat" vs "0% Fat" and "5 Grain" vs "7 Grain" are
+  // identity (measures were stripped above and are checked separately).
+  return new Set(n.split(' ').filter(w => w && !IDENTITY_STOPWORDS.has(w))
+    .map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)
+    .map(w => w === 'yoghurt' ? 'yogurt' : w));
+}
+// A peer that simply omits its pack size is not a contradiction; every other
+// first-price peer reason (brand, variant, title, pack, count, barcode) is.
+const SELF_EVIDENCE_TOLERATED_PEER_REASONS = new Set(['peer_pack_missing']);
+export function selfEvidenceFirstPriceReasons(e: ReentryEvidence, rawSource: TescoCollectedProduct): string[] {
+  const m = e.mapping, source = normaliseNetPackQuantity(rawSource);
+  const reasons: string[] = [];
+  if (e.proven || e.firstPriceOnboarding !== true) reasons.push('not_first_price');
+  if (Number(e.sameSkuCount) !== 1) reasons.push('shared_sku');
+  // Manufacturer-branded canonical products only. Own-label and unbranded
+  // canonical records rely on cross-retailer judgement Tesco cannot supply.
+  if (m.is_own_brand) reasons.push('own_brand');
+  const brand = source.brand ?? '';
+  if (!m.canonical_brand) reasons.push('canonical_brand_missing');
+  if (!normalized(brand) || retailerOwnBrand(brand)
+    || (m.canonical_brand != null && retailerOwnBrand(m.canonical_brand))) reasons.push('source_brand_not_manufacturer');
+  else {
+    if (m.canonical_brand && !sameBrand(m.canonical_brand, brand)) reasons.push('canonical_brand_conflict');
+    const originalBrand = m.store_brand != null ? sameBrand(m.store_brand, brand)
+      : (` ${normalized(m.store_product_name)} `).includes(` ${normalized(brand)} `);
+    if (!originalBrand) reasons.push('mapping_brand_unsupported');
+  }
+  // SKU and the product's own URL.
+  if (source.sku !== m.store_sku || source.url !== m.store_url
+    || m.store_url !== `https://www.tesco.ie/shop/en-IE/products/${m.store_sku}`) reasons.push('sku_or_url_mismatch');
+  // Barcode: Tesco must state one, and every recorded barcode must agree.
+  if (!/^\d{8,14}$/.test(source.gtin ?? '')) reasons.push('source_barcode_missing');
+  else {
+    if (m.gtin != null && !sameBarcode(m.gtin, source.gtin)) reasons.push('mapping_barcode_conflict');
+    if (m.canonical_ean != null && !sameBarcode(m.canonical_ean, source.gtin)) reasons.push('canonical_barcode_conflict');
+  }
+  // Pack: the canonical record must STATE the same total the Tesco page states,
+  // the structured quantity must agree, and stated counts must agree.
+  const canonical = declaredPack(m.canonical_name), tesco = declaredPack(source.name);
+  const original = declaredPack(m.store_product_name), structured = structuredMeasure(source.quantity);
+  const sourceTotal = tesco.total ?? structured;
+  if (canonical.total == null) reasons.push('canonical_pack_missing');
+  else if (sourceTotal == null || canonical.total !== sourceTotal) reasons.push('pack_mismatch');
+  if (structured == null) reasons.push('source_structured_measure_missing');
+  if ((canonical.countExplicit || tesco.countExplicit) && canonical.units !== tesco.units) reasons.push('pack_count_conflict');
+  if (original.total != null && original.total !== sourceTotal) reasons.push('mapping_pack_conflict');
+  if (original.countExplicit && original.units !== tesco.units) reasons.push('mapping_pack_count_conflict');
+  if (independentPackConflict(e, source)) reasons.push('pack_conflict');
+  // Variant / formulation and product words, against canonical AND the original mapping.
+  if (canonicalVariantConflict(m.canonical_name, source.name)) reasons.push('canonical_variant_conflict');
+  if (canonicalVariantConflict(m.store_product_name, source.name)) reasons.push('mapping_variant_conflict');
+  if (!titleSupport(m.canonical_name, source.name)) reasons.push('canonical_title_unsupported');
+  if (!titleSupport(m.store_product_name, source.name)) reasons.push('mapping_title_unsupported');
+  // Exact word coverage (titleSupport alone tolerates an ADDED variant such as
+  // "No Added Sugar" or "Spicy"): every canonical identity word must appear on
+  // the Tesco page, and every Tesco identity word must appear in the canonical
+  // name or the original mapping title.
+  if (brand) {
+    const src = identityWords(source.name, brand), can = identityWords(m.canonical_name, brand);
+    const known = new Set([...can, ...identityWords(m.store_product_name, brand)]);
+    const missing = [...can].filter(w => !src.has(w)), extra = [...src].filter(w => !known.has(w));
+    if (missing.length) reasons.push(`canonical_words_missing:${missing.join('+')}`);
+    if (extra.length) reasons.push(`source_words_unexplained:${extra.join('+')}`);
+  }
+  // Current price on the page itself.
+  if (!source.available || source.currency !== 'EUR' || !(Number(source.price) > 0)) reasons.push('no_current_price');
+  // A present fresh peer may not CONTRADICT the identity (it is not required).
+  for (const p of e.peers ?? []) {
+    const r = firstPricePeerReasons(source, p).filter(x => !SELF_EVIDENCE_TOLERATED_PEER_REASONS.has(x));
+    if (r.length) reasons.push(`peer_disagrees:${p.store}=${r.join('+')}`);
+  }
+  return reasons;
+}
 export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollectedProduct): boolean {
   const m = e.mapping, rawSource = e.page?.parsed?.products?.[0];
   const source=rawSource?normaliseNetPackQuantity(rawSource):rawSource;
+  // Self-evidence stands in for the two-peer requirement ONLY when flagged on
+  // the evidence AND every positive self-evidence check passes.
+  const selfEvidence = !!m && !!source && e.selfEvidenceFirstPrice === true
+    && selfEvidenceFirstPriceReasons(e, source).length === 0;
   if (!m || !source || e.page.parsed.products.length !== 1 || e.page.parsed.listing != null
     || Number(e.sameSkuCount) !== 1
-    || !(e.proven || (e.firstPriceOnboarding === true && Array.isArray(e.peers) && e.peers.length === 2))
+    || !(e.proven || (e.firstPriceOnboarding === true && Array.isArray(e.peers) && e.peers.length === 2) || selfEvidence)
     || e.freshTesco || e.pending || e.recentAttempt
     || m.url_status !== 'resolved' || !/^\d{6,12}$/.test(m.store_sku)
     || m.store_url !== `https://www.tesco.ie/shop/en-IE/products/${m.store_sku}`
@@ -392,9 +504,10 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
     || (m.canonical_brand != null && !sameBrand(m.canonical_brand, source.brand))
     || independentPackConflict(e, source)
     || canonicalVariantConflict(m.canonical_name, source.name)
-    || !sufficientIndependentSupport(e,source)
-    // First price: BOTH peers must independently match (never one of two).
-    || (!e.proven && !firstPriceCorroboration(e, source).ok)) return false;
+    || !(selfEvidence || sufficientIndependentSupport(e,source))
+    // First price: BOTH peers must independently match (never one of two),
+    // unless the flagged self-evidence checks above all passed.
+    || (!e.proven && !(selfEvidence || firstPriceCorroboration(e, source).ok))) return false;
   // The source's exact brand, pack, barcode and variant become immutable
   // constraints on the NEW live page. A changed SKU/name/pack/brand/GTIN
   // cannot inherit the approval. New price is never taken from the source.
@@ -435,7 +548,8 @@ export function reviewedCanonicalEvidenceGap(
     && !independentPackConflict(evidence,live);
   return reasons.length > 0 && reasons.every(reason => REVIEWED_CANONICAL_EVIDENCE_GAPS.has(reason)
       || (reason==='packExactnessFailed' && inferredCountGap))
-    && independentExactIdentity(evidence, live);
+    // The gap route never uses self-evidence: it keeps its two-peer floor.
+    && independentExactIdentity({ ...evidence, selfEvidenceFirstPrice: false }, live);
 }
 
 // A human review still needs an authenticated reviewer; a collector decision
