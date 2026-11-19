@@ -232,12 +232,26 @@ export async function selectApifyMappings(
   // e.g. a run that recorded the pending page but never finalised/closed —
   // must stay excluded until that pending record is resolved, exactly as the
   // reserve RPC enforces. Without this, pending-older-than-24h mappings churn.
+  // A pending page with an append-only terminal disposition
+  // (tesco_pending_page_resolutions, migration 20261120090000) no longer blocks,
+  // mirroring the reserve RPC. Table absent (migration unapplied) = none resolved.
+  const resolvedPending = new Set<string>();
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await sb.from('tesco_pending_page_resolutions')
+      .select('page_id').order('page_id').range(offset, offset + 999);
+    if (error) break;
+    for (const r of data ?? []) resolvedPending.add(String(r.page_id));
+    if ((data ?? []).length < 1000) break;
+  }
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await sb.from('tesco_direct_collection_pages')
-      .select('requested_url,outcome').eq('outcome', 'pending')
+      .select('id,requested_url,outcome').eq('outcome', 'pending')
       .order('requested_url').range(offset, offset + 999);
     if (error) throw new Error(`Loading pending attempts: ${error.message}`);
-    for (const r of data ?? []) { recentUrls.add(String(r.requested_url)); pendingUrls.add(String(r.requested_url)); }
+    for (const r of data ?? []) {
+      if (resolvedPending.has(String(r.id))) continue;
+      recentUrls.add(String(r.requested_url)); pendingUrls.add(String(r.requested_url));
+    }
     if ((data ?? []).length < 1000) break;
   }
   // Recent Apify provider evidence (<= 14 days), keyed by mapping + URL. Evidence
