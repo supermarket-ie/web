@@ -1,5 +1,40 @@
 # Supermarket.ie — Canonical Project State
 
+## 20 November 2026 — Historical pending-page terminal resolution (migration 20261120090000 NOT applied)
+
+Ten of the 99 "proven but expired" Tesco offers are blocked forever by `pending` pages from
+orphaned 1–9 Nov runs. The reserve RPC and the Apify selector exclude a URL with a pending page
+of ANY age, and until now no procedure resolved one.
+- Migration `20261120090000_tesco_pending_page_resolutions.sql`:
+  - Adds an append-only ledger, `tesco_pending_page_resolutions`. It holds one row per page
+    with the page's FULL original row as `page_snapshot`. A trigger refuses UPDATE and
+    DELETE, and service_role has SELECT only.
+  - Adds `tesco_internal.resolve_historical_pending_page(page_id, expected_url,
+    expected_created_at, reason>=40)`, restricted to the postgres bridge. The page must be
+    pending, at least 7 days old, an exact match on URL and created_at, with no live lease
+    for its run and no active supervisor.
+  - Re-creates `apify_reserve_tesco_request` verbatim except that a RESOLVED pending page no
+    longer blocks. The 24h window is unchanged. The Apify selector mirrors this and tolerates
+    the table being absent.
+  - The page row is never touched, and no price, receipt, mapping, lease or budget changes.
+    The supervised collector still treats these URLs as held.
+- Operator handoff: `supabase/operator/README-20261120-handoff.md`, in order:
+  1. durable approvals `20261118120000`
+  2. this migration
+  3. `supabase/operator/20261120_resolve_9_historical_pending_tesco_pages.sql`, which
+     resolves 9 explicitly named pages in one transaction and verifies the result
+- The ledger FK is `on delete restrict`: deleting a `scrape_runs` row that owns a resolved page now fails (pages cascade from runs). Nothing deletes runs today; a future retention job must account for it.
+- Run the operator file as ONE script in ONE session (its assertion then rolls back any partial state).
+- Glade (253094431) is excluded because its SV and Dunnes offers are different products.
+  The other 9 have consistent SV, Dunnes and Tesco titles, and their last completed Tesco
+  page had no identity reasons. After step 3 they are re-fetched by a targeted run
+  (`APIFY_TARGET_IDS`) under every normal gate.
+- Tests: `src/lib/tesco-pending-resolution.test.ts` (7, PGlite, REAL migrations):
+  - the page stays byte-identical, and the ledger is append-only
+  - the mapping is selectable and the reserve succeeds only after resolution
+  - each refusal case is covered: not historical, expectation mismatch, not pending, short
+    reason, double resolution, live lease, and service_role
+
 ## 19 November 2026 (late) — PEER-FRESHNESS DEFECT found and fixed; 01:37Z first-price run DISABLED; targeted queue
 
 **Production finding.** The PostgREST embed `store_products?select=...,latest_prices(...)`
