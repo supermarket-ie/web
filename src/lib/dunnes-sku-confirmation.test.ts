@@ -39,6 +39,8 @@ describe('Dunnes SKU-bound confirmation', () => {
     expect(titleWordProblems('Heinz Cream of Tomato Soup 400g', 'Heinz Cream of Tomato Soup 400g')).toEqual([]);
     expect(titleWordProblems('Knorr Quick Soup Chicken 45g', 'Knorr Chicken Quick Soup 3 x 15g (45g)')).toEqual([]);
     expect(titleWordProblems('Avonmore Milk 1L', 'Avonmore Light Milk 1L')).toEqual(['variant_conflict:light']);
+    expect(titleWordProblems('Kerrygold Garlic & Herb Cream Cheese 150 g', 'Kerrygold Garlic and Herb Cream Cheese 150g')).toEqual([]);
+    expect(titleWordProblems('Kerrygold Garlic & Herb Cream Cheese 150 g', 'Kerrygold Light Garlic and Herb Cream Cheese 150g')).toEqual(['variant_conflict:light']);
     expect(titleWordProblems('Barry\'s Gold Blend Tea 80 Pack', 'Barry\'s Classic Blend Tea 80 Pack')).toEqual(['title_words_missing:gold']);
   });
   it('a multipack canonical is never confirmed by a single structured size', () => {

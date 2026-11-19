@@ -67,7 +67,10 @@ const QUALIFIERS = new Set(['light', 'lite', 'low', 'reduced', 'free', 'zero', '
 const PACK_TOKEN = /^(\d+(\.\d+)?(g|kg|ml|l|cl|ltr|x)?|x|pack|pk|portions?|g|kg|ml|l)$/;
 /** Every canonical word appears in the retailer title, and no qualifier is stated on one side only. */
 export function titleWordProblems(canonicalName: string, retailerTitle: string): string[] {
-  const c = words(canonicalName).filter(w => !PACK_TOKEN.test(w)), t = new Set(words(retailerTitle).filter(w => !PACK_TOKEN.test(w)));
+  // Connectives carry no identity ("Garlic & Herb" = "Garlic and Herb"); qualifier and pack checks are unaffected.
+  const CONNECTIVE = new Set(['and', 'with', 'of', 'the', 'in', 'a']);
+  const keep = (w: string) => !PACK_TOKEN.test(w) && !CONNECTIVE.has(w);
+  const c = words(canonicalName).filter(keep), t = new Set(words(retailerTitle).filter(keep));
   const problems: string[] = [];
   const missing = c.filter(w => !t.has(w));
   if (missing.length) problems.push(`title_words_missing:${missing.join('+')}`);

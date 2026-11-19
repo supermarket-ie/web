@@ -4,7 +4,7 @@
 // structured pack, own-label, ambiguity, SKU ownership) -> only then the existing finaliser writes the mapping
 // and the SKU-bound price; the product response body is retained as evidence. Dry run unless APPLY=1.
 // Env: LIMIT (<=50), OFFSET. The August search-only acceptance pipeline is NOT used.
-import { confirmDunnesSku, dunnesProductApiUrl, titleWordProblems, brandConfirmed, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
+import { confirmDunnesSku, dunnesProductApiUrl, titleWordProblems, brandConfirmed, multipackOf, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
 import { isDunnesPackCompatible, normaliseDunnesName } from '@/lib/dunnes-discovery';
 import { withRetailerRequestSlot } from '@/lib/retailer-request-governor';
 import { captureIdentityResponse } from '@/lib/retailer-identity-response';
@@ -30,23 +30,59 @@ async function governedGet(url: string) {
   });
 }
 const log = (o: Record<string, unknown>) => console.log(JSON.stringify(o));
+const chunks = <T,>(xs: T[], n = 100) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+// Pre-filter mirrors confirmDunnesSku: the same multipack (count + per-unit size) or a compatible single pack.
+const packCompatible = (ref: string, title: string) => {
+  const a = multipackOf(ref), b = multipackOf(title);
+  if (a || b) return !!a && !!b && a.count === b.count && a.unit === b.unit && a.unitAmount === b.unitAmount;
+  return isDunnesPackCompatible(ref, title);
+};
 
 async function main() {
   // SV_LED=1: SuperValu-led discovery. Reference identity = the SuperValu offer's OWN title + brand (a real retailer
   // title); only canonicals with NO SKU-bearing Dunnes offer (an existing Dunnes mapping is never overwritten).
-  let targets: Array<{ product_id: string; canonical_name: string; brand: string; category?: string }> | null;
+  let targets: Array<{ product_id: string; canonical_name: string; brand: string; category?: string; alt?: string }> | null;
   if (process.env.SV_LED === '1') {
     const { data: sv, error: se } = await sb.from('store_products').select('product_id,store_product_name,brand,is_own_brand')
       .eq('store', 'supervalu').not('store_sku', 'is', null).not('brand', 'is', null).not('product_id', 'is', null)
-      .order('id').range(OFFSET, OFFSET + LIMIT * 3 - 1);
+      .order('id').range(OFFSET, OFFSET + (process.env.FOCUS === 'need_dunnes' ? 999 : LIMIT * 3 - 1));
     if (se) throw se;
     const ids = (sv ?? []).map(r => r.product_id as string);
-    const { data: owned, error: oe } = await sb.from('store_products').select('product_id').eq('store', 'dunnes').not('store_sku', 'is', null).in('product_id', ids);
-    if (oe) throw oe;
-    const has = new Set((owned ?? []).map(o => o.product_id));
+    const has = new Set<string>();
+    for (const c of chunks(ids)) {
+      const { data: owned, error: oe } = await sb.from('store_products').select('product_id').eq('store', 'dunnes').not('store_sku', 'is', null).in('product_id', c);
+      if (oe) throw oe;
+      for (const o of owned ?? []) has.add(o.product_id as string);
+    }
+    // Records already decided by THIS process in the last 7 days are not re-requested (no repeat spend on the same miss).
+    const since = new Date(Date.now() - 7 * 864e5).toISOString();
+    for (const c of chunks(ids)) {
+      const { data: rec, error: re } = await sb.from('dunnes_discovery_receipts').select('product_id,reason').in('product_id', c).gte('created_at', since);
+      if (re) throw re;
+      for (const r of rec ?? []) if (String(r.reason ?? '').startsWith('SKU-confirmed discovery held')) has.add(r.product_id as string);
+    }
     targets = (sv ?? []).filter(r => !has.has(r.product_id) && r.is_own_brand !== true && !/^\s*(supervalu|signature tastes|daily basics)\b/i.test(String(r.store_product_name))
       && /\b\d+(?:\.\d+)?\s*(?:kg|g|ml|l|cl)\b/i.test(String(r.store_product_name)))
-      .slice(0, LIMIT).map(r => ({ product_id: r.product_id as string, canonical_name: String(r.store_product_name).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(), brand: String(r.brand) }));
+      .slice(0, process.env.FOCUS === 'need_dunnes' ? undefined : LIMIT).map(r => ({ product_id: r.product_id as string, canonical_name: String(r.store_product_name).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(), brand: String(r.brand) }));
+    if (process.env.FOCUS === 'need_dunnes') {
+      // Only records whose Tesco offer has a FRESH price and whose SuperValu and Tesco titles are identity-consistent
+      // (same brand, same pack, every word of each title present in the other, no one-sided qualifier). Sharing a
+      // canonical record is not proof; the two retailer titles must agree before either is used as a Dunnes reference.
+      const tesco = new Map<string, string>();
+      for (const c of chunks(targets.map(x => x.product_id))) {
+        const { data: tp, error: te } = await sb.from('latest_prices').select('canonical_product_id,store_product_name').eq('store', 'tesco').in('canonical_product_id', c);
+        if (te) throw te;
+        for (const r of tp ?? []) tesco.set(r.canonical_product_id as string, String(r.store_product_name));
+      }
+      targets = targets.flatMap(x => {
+        const tt = tesco.get(x.product_id);
+        if (!tt) return [];
+        const consistent = brandConfirmed(x.brand, tt) && packCompatible(x.canonical_name, tt)
+          && titleWordProblems(x.canonical_name, tt).length === 0 && titleWordProblems(tt, x.canonical_name).length === 0;
+        if (!consistent) { log({ event: 'sv_tesco_inconsistent', product_id: x.product_id, sv: x.canonical_name, tesco: tt }); return []; }
+        return [{ ...x, alt: tt }];
+      }).slice(0, LIMIT);
+    }
   } else {
     const { data, error } = await sb.rpc('select_dunnes_discovery_targets', { p_limit: LIMIT, p_offset: OFFSET });
     if (error) throw error;
@@ -61,7 +97,7 @@ async function main() {
     if (e) throw e; runUuid = run.id;
   }
   const tally: Record<string, number> = {};
-  for (const t of eligible as Array<{ product_id: string; canonical_name: string; brand: string }>) {
+  for (const t of eligible as Array<{ product_id: string; canonical_name: string; brand: string; alt?: string }>) {
     let outcome = 'rejected', reason = '';
     try {
       // Query variants (each one governed request): name without pack, brand + key words, full name. Candidates are
@@ -69,19 +105,20 @@ async function main() {
       const named = normaliseDunnesName(t.canonical_name).includes(normaliseDunnesName(t.brand)) ? t.canonical_name : `${t.brand} ${t.canonical_name}`;
       const noPack = named.replace(/\b\d+(?:\.\d+)?\s*(?:x\s*\d+(?:\.\d+)?\s*)?(?:kg|g|ml|l|ltr|litres?|cl|pack|pk)\b/gi, ' ').replace(/\s+/g, ' ').trim();
       const key = [t.brand, ...noPack.split(' ').filter(w => !normaliseDunnesName(t.brand).split(' ').includes(normaliseDunnesName(w))).slice(0, 3)].join(' ');
-      const variants = [...new Set([noPack, key, named].map(v => v.split(' ').slice(0, 8).join(' ')))];
+      const altNoPack = t.alt ? t.alt.replace(/\b\d+(?:\.\d+)?\s*(?:x\s*\d+(?:\.\d+)?\s*)?(?:kg|g|ml|l|ltr|litres?|cl|pack|pk)\b/gi, ' ').replace(/\s+/g, ' ').trim() : null;
+      const variants = [...new Set([noPack, key, named, ...(altNoPack ? [altNoPack] : [])].map(v => v.split(' ').slice(0, 8).join(' ')))];
       const seen = new Map<string, { sku?: unknown; name?: unknown }>();
-      let q = '';
       for (const v of variants) {
         const s = await governedGet(`https://storefrontgateway.dunnesstoresgrocery.com/api/stores/258/search?q=${encodeURIComponent(v)}&take=12&page=1&skip=0`);
         const found = s.status === 200 ? ((JSON.parse(s.body).items ?? []) as Array<{ sku?: unknown; name?: unknown }>) : [];
         for (const it of found) if (it.sku != null && !seen.has(String(it.sku))) seen.set(String(it.sku), it);
-        q = v;
         if (found.length) break;
       }
       const items = [...seen.values()];
-      const compatible = items.filter(it => it.sku != null && typeof it.name === 'string' && brandConfirmed(t.brand, it.name)
-        && isDunnesPackCompatible(t.canonical_name, it.name as string) && titleWordProblems(t.canonical_name, it.name as string).length === 0);
+      const fits = (ref: string, name: string) => brandConfirmed(t.brand, name) && packCompatible(ref, name) && titleWordProblems(ref, name).length === 0;
+      // The reference the candidate fits (SuperValu title first, then the identity-consistent Tesco title).
+      const refFor = (name: string) => fits(t.canonical_name, name) ? t.canonical_name : t.alt && fits(t.alt, name) ? t.alt : null;
+      const compatible = items.filter(it => it.sku != null && typeof it.name === 'string' && refFor(it.name) !== null);
       if (process.env.TRACE === '1') log({ event: 'trace', ref: t.canonical_name, variants, items: items.slice(0, 3).map(it => String(it.name)) });
       if (!compatible.length) { reason = 'no_compatible_candidate'; }
       else {
@@ -90,7 +127,7 @@ async function main() {
         const apiUrl = dunnesProductApiUrl(sku);
         const p = await governedGet(apiUrl);
         let resp: DunnesProductResponse | null = null; try { resp = p.status === 200 ? JSON.parse(p.body) : null; } catch { resp = null; }
-        const conf = confirmDunnesSku({ canonicalName: t.canonical_name, canonicalBrand: t.brand, candidateSku: sku, candidateName: String(c.name),
+        const conf = confirmDunnesSku({ canonicalName: refFor(String(c.name)) ?? t.canonical_name, canonicalBrand: t.brand, candidateSku: sku, candidateName: String(c.name),
           httpStatus: p.status, requestedUrl: apiUrl, finalUrl: p.url, response: resp, skuOwnedElsewhere: (owners ?? []).length > 0,
           otherCompatibleCandidates: compatible.length - 1 });
         if (!conf.ok) reason = conf.reasons.join(',');
