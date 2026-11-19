@@ -65,6 +65,53 @@ None is a valid repair. A Tesco price on such a record would not make an accurat
 three-store comparison, so the "192 three-store-priced" figure over-states accurately
 associated products.
 
+## 19 November 2026 — Dunnes SKU-confirmed discovery (PR #419): 6 Dunnes prices written
+
+The August Dunnes discovery pipeline stays OFF. It wrote mappings and prices
+from search listings and allowed ±5% "alternative" packs. It is replaced by an
+operator-run, SKU-bound path: `scripts/dunnes-sku-confirmed-discovery.ts`
+plus `src/lib/dunnes-sku-confirmation.ts`, which has 21 tests.
+
+- A candidate from Storefront search is accepted only after a
+  product-by-SKU API confirmation:
+  - the brand is confirmed
+  - the structured pack is compatible
+  - every reference word appears in the Dunnes title, ignoring connectives
+  - no qualifier (light, zero, free…) appears on one side only
+  - multipacks match exactly (same count and unit)
+- Evidence is stored in `retailer_identity_responses` as a captured_listing.
+  Prices are written as `dunnes_direct`.
+- Sharing a canonical record is never treated as identity evidence.
+- Yield:
+  - Canonical-name search: 0 of 175.
+  - SuperValu-title search: about 2 of 150. That loop was stopped.
+  - Focused mode `FOCUS=need_dunnes`: 4 of 22. It targets canonicals with
+    fresh SV and fresh Tesco prices and no Dunnes SKU, and requires the SV
+    and Tesco titles to be identity-consistent first. Both titles are used
+    as references, and records rejected in the last 7 days are excluded.
+    The focused cohort is now exhausted (0 targets left).
+- The 6 Dunnes SKUs written on 19 Nov, verified in `latest_prices`:
+  - 100700386 Walkers Ready Salted 6x25g
+  - 100326848 Walkers Prawn Cocktail 6x25g
+  - 100333128 Knorr Sundried Tomato & Herbs Paste 165g
+  - 100742830 Green Isle Mushy Peas 750g
+  - 100285187 Comfort Honeysuckle & Sandalwood 1.44L
+  - 100334588 Hellmann's Chunky Burger Sauce 430ml
+  Three of them (Green Isle, Comfort, Hellmann's) now have fresh prices at
+  all three retailers. These are NOT verified comparisons: 0 pairwise reviews
+  exist. Hellmann's Tesco €5.30 vs €3.50 elsewhere warrants a pack check of
+  the Tesco mapping before any review.
+- Baseline after (19 Nov ~21:30Z) versus before this phase:
+  - Tesco fresh 7d: 385 (was 387)
+  - SuperValu: 1,604 (was 1,604)
+  - Dunnes: 920 (was 911)
+  - 2+ retailers: 933 (was 930)
+  - All three: 192 (was 188)
+  - Verified exact: 0
+- Remaining Dunnes "missing only Dunnes" gaps (168): no Dunnes SKU 131,
+  shared SKU 18, stale 19. The search-based approach is exhausted for the
+  focused cohort. The rest need a different source, such as a catalogue
+  walk by category or barcode.
 ## 19 November 2026 — Tesco self-evidence first price (flag-gated, default OFF, NOT deployed)
 
 Owner-approved principle (19 Nov): a Tesco first price may be accepted without
