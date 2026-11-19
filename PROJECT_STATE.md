@@ -1,5 +1,70 @@
 # Supermarket.ie — Canonical Project State
 
+## 19 November 2026 (late) — PEER-FRESHNESS DEFECT found and fixed; 01:37Z first-price run DISABLED; targeted queue
+
+**Production finding.** The PostgREST embed `store_products?select=...,latest_prices(...)`
+relates through the canonical product, not the offer. Each offer row is returned once
+per priced offer on the product, carrying THAT other offer's `observed_at`/price
+(reproduced 19 Nov on product 2f5bb2df: the Tesco, Dunnes, SuperValu and Aldi rows
+each came back twice, with the SuperValu and Dunnes prices).
+- `tesco-apify-collection.ts` used this embed for peer ranking (`freshPeerStores`) and
+  `attachFreshPeers`. A stale Dunnes/SuperValu offer therefore counted as a FRESH peer
+  whenever any other offer on the product was fresh.
+- This weakened the "both fresh peers" first-price rule and renewal peer support.
+  Peer brand, pack and title checks were never relaxed.
+- Measured impact: of the 31 live first-price approvals (all `canonical_gap_plus_ai`),
+  only 7 have a truly fresh Dunnes AND SuperValu offer. The other 24 have fresh
+  SuperValu and a title-identical Dunnes offer whose price is more than 7 days old.
+- Action:
+  - The one-off schedule `smie-prod-tesco-first-price-20261120` (01:37Z) was set to
+    DISABLED. It was not deleted. The prior definition is saved at
+    `~/smie-private/sched-first-price-20261120.before-disable.json`.
+  - The 24 cannot be revoked from service_role, which has SELECT only and no revoke
+    RPC. With the fix they are not selectable and expire unconsumed (~22 Nov 11:10Z).
+  - The 7 run on the fixed image.
+  - The daily renewal stays on, because pausing it would lose about 70 renewals a day.
+- Fix (this PR): `loadFreshPeerOffers` reads `latest_prices` by each offer's
+  `store_product_id`. Both call sites use it. Verified read-only against production:
+  the fixed helper returns 7 of 31.
+- Other offline scripts still use the embed: `tesco-retained-review`,
+  `tesco-enrichment-proposal`, `tesco-held-enrichment-review` and untracked local
+  scripts. They are read-only, but their "fresh peer" figures are over-stated. Never
+  use that embed for per-offer freshness.
+
+**Targeted queue.** `APIFY_TARGET_IDS` (comma-separated Tesco mapping UUIDs, strict
+parse, fails closed) restricts every mode (evidence, approve, expansion, renewal) to
+those ids, in that order. Every other eligibility rule still applies, and it replaces
+the recovery-queue file for that run. This fixes the 19 Nov run where only 2 of 29
+requests reached the intended cohort.
+
+**Accuracy finding (the 241 "missing only Tesco").** A read-only diagnostic joined
+each record's canonical, Tesco mapping, latest Tesco page, pending/approval state,
+SV/Dunnes titles and the retained Tesco catalogue (7,084 items, 14–15 Nov):
+
+| class | n |
+|---|---|
+| live first-price approval | 7 |
+| historical pending-page block | 10 |
+| shared SKU (needs resolution) | 68 (+6 with a catalogue lead) |
+| temporarily unavailable | 14 |
+| wrong SKU, no catalogue candidate | 47 |
+| generic canonical, no candidate | 38 |
+| AI uncertain/rejected | 16 |
+| catalogue "replacement" lead | 18 |
+| conflict, but catalogue confirms mapping | 5 |
+| generic hold, catalogue confirms mapping | 4 |
+| no evidence / other | 8 |
+
+Most of the "replacement" leads come from a generic canonical's Tesco-derived EAN, and
+the canonical's SV and Dunnes offers are DIFFERENT products. Examples:
+- "BBQ Sauce": Chef Smokey (SV) vs Heinz Sweet (Dunnes)
+- "Bran Flakes": Kellogg's (SV) vs Dunnes Stores
+- "Curry Powder": Schwartz Medium (SV) vs Schwartz Hot (Dunnes)
+
+None is a valid repair. A Tesco price on such a record would not make an accurate
+three-store comparison, so the "192 three-store-priced" figure over-states accurately
+associated products.
+
 ## 19 November 2026 — Tesco self-evidence first price (flag-gated, default OFF, NOT deployed)
 
 Owner-approved principle (19 Nov): a Tesco first price may be accepted without

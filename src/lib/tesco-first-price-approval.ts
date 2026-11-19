@@ -159,7 +159,7 @@ export async function prepareFirstPriceApprovals(
   sb: SupabaseClient,
   opts: { limit: number; apply: boolean; assessOptions?: AssessOptions; ttlHours?: number;
     log?: (e: Record<string, unknown>) => void; scan?: number; priorityIds?: SelectionOptions['priorityIds'];
-    selfEvidence?: boolean },
+    selfEvidence?: boolean; targetIds?: string[] },
 ): Promise<ApprovalRunSummary> {
   const summary: ApprovalRunSummary = { considered: 0, noEvidence: 0, assessed: 0, approved: 0, recorded: 0, rejected: {} };
   const reject = (reason: string) => { const k = reason.split(':')[0]; summary.rejected[k] = (summary.rejected[k] ?? 0) + 1; };
@@ -167,7 +167,7 @@ export async function prepareFirstPriceApprovals(
   // Candidates already HAVE recent Apify evidence (the selector requires it) and
   // are not excluded by the 24h request window: evidence minutes old is fine.
   const candidates = await selectApifyMappings(sb, 'expansion', opts.scan ?? 1000, false,
-    { approvalCandidates: true, priorityIds: opts.priorityIds, selfEvidence: opts.selfEvidence === true });
+    { approvalCandidates: true, priorityIds: opts.priorityIds, selfEvidence: opts.selfEvidence === true, targetIds: opts.targetIds });
 
   for (const m of candidates) {
     if (summary.approved >= opts.limit) break;

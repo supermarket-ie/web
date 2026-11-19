@@ -17,8 +17,9 @@
 //   APIFY_MAX_BATCHES   = batches this invocation        (default 1)
 //   APIFY_REQUIRE_FRESHNESS = '0' to RELAX freshness (default: enforced)
 //   APIFY_FIRST_PRICE_SELF_EVIDENCE = '1' to allow Tesco self-evidence first prices (default off)
+//   APIFY_TARGET_IDS    = comma-separated Tesco mapping UUIDs: ONLY these are eligible (targeted queue)
 import { createClient } from '@supabase/supabase-js';
-import { collectTescoApify, type ApifyCollectionResult } from '../src/lib/tesco-apify-collection';
+import { collectTescoApify, parseTargetIds, type ApifyCollectionResult } from '../src/lib/tesco-apify-collection';
 import { readFileSync } from 'node:fs';
 import { planRecoveryQueue, type RecoveryPlan } from '../src/lib/tesco-recovery-queue';
 import { prepareFirstPriceApprovals } from '../src/lib/tesco-first-price-approval';
@@ -47,13 +48,15 @@ async function main() {
   // price may rest on Tesco's own source instead of two matching fresh peers. Applies to
   // evidence, approve and expansion modes; the gate, AI and single-use approval still apply.
   const selfEvidence = process.env.APIFY_FIRST_PRICE_SELF_EVIDENCE === '1';
+  const targetIds = parseTargetIds(process.env.APIFY_TARGET_IDS);
+  if (targetIds) console.log(JSON.stringify({ event: 'targeted_queue', mode, count: targetIds.length }));
   if (selfEvidence) console.log(JSON.stringify({ event: 'first_price_self_evidence_enabled', mode }));
   if (mode === 'approve') {
     // No provider request and no price write: assess retained evidence only.
     const summary = await prepareFirstPriceApprovals(sb, {
       limit: Number(process.env.APPROVAL_LIMIT ?? 50), apply: process.env.APPROVAL_APPLY === '1',
       ttlHours: Number(process.env.APPROVAL_TTL_HOURS ?? 72), priorityIds: plan?.evidencePriority,
-      selfEvidence: selfEvidence,
+      selfEvidence: selfEvidence, targetIds,
       log: (e) => console.log(JSON.stringify(e)),
     });
     console.log(JSON.stringify({ event: 'approval_summary', apply: process.env.APPROVAL_APPLY === '1', ...summary }));
@@ -189,7 +192,7 @@ async function main() {
       // + its reserve-RPC param, else reserve raises mapping_not_resolved_or_unproven).
       allowFirstPrice: process.env.APIFY_ALLOW_FIRST_PRICE === '1',
       selfEvidenceFirstPrice: selfEvidence,
-      selection: plan ? {
+      selection: targetIds ? { targetIds } : plan ? {
         priorityIds: mode === 'evidence' ? plan.evidencePriority : mode === 'expansion' ? plan.expansionPriority : undefined,
         repairTargets: mode === 'evidence' ? plan.repairEvidenceTargets : undefined,
       } : undefined,
