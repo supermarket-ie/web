@@ -41,6 +41,9 @@ revoke all on function public.prevent_tesco_pending_resolution_rewrite() from pu
 drop trigger if exists tesco_pending_resolution_immutable on public.tesco_pending_page_resolutions;
 create trigger tesco_pending_resolution_immutable before update or delete on public.tesco_pending_page_resolutions
   for each row execute function public.prevent_tesco_pending_resolution_rewrite();
+drop trigger if exists tesco_pending_resolution_no_truncate on public.tesco_pending_page_resolutions;
+create trigger tesco_pending_resolution_no_truncate before truncate on public.tesco_pending_page_resolutions
+  for each statement execute function public.prevent_tesco_pending_resolution_rewrite();
 
 alter table public.tesco_pending_page_resolutions enable row level security;
 revoke all on public.tesco_pending_page_resolutions from public, anon, authenticated, service_role;
@@ -52,10 +55,12 @@ revoke all on schema tesco_internal from public, anon, authenticated, service_ro
 create or replace function tesco_internal.resolve_historical_pending_page(
   p_page_id uuid, p_expected_requested_url text, p_expected_created_at timestamptz, p_reason text
 ) returns uuid
-language plpgsql security invoker set search_path = ''
+language plpgsql security invoker set search_path = '' set lock_timeout = '10s'
 as $function$
 declare
   v_page public.tesco_direct_collection_pages%rowtype;
+  v_supervisor text;
+  v_status text;
 begin
   if current_user <> 'postgres' or session_user <> 'postgres' then
     raise exception 'tesco_sql_bridge_identity_required';
@@ -76,9 +81,13 @@ begin
   if exists (select 1 from public.tesco_egress_pool g
     where g.lease_run_id = v_page.run_id and g.leased_until > now())
   then raise exception 'pending_page_run_holds_live_lease'; end if;
-  if exists (select 1 from public.scrape_runs r where r.id = v_page.run_id
-    and nullif(coalesce(r.error_summary, '{}')::jsonb->>'activeSupervisor', '') is not null
-    and r.status = 'running')
+  -- error_summary is text: an unreadable value fails closed with a clear reason.
+  begin
+    select r.status, nullif(coalesce(nullif(r.error_summary, ''), '{}')::jsonb->>'activeSupervisor', '')
+      into v_status, v_supervisor from public.scrape_runs r where r.id = v_page.run_id;
+  exception when others then raise exception 'pending_page_run_state_unreadable';
+  end;
+  if v_status = 'running' and v_supervisor is not null
   then raise exception 'pending_page_run_has_active_supervisor'; end if;
 
   insert into public.tesco_pending_page_resolutions

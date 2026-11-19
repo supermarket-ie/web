@@ -8,7 +8,7 @@ transactional and idempotent where stated. Do not use any other connection or cr
 |---|------|--------------|----------------|
 | 1 | `supabase/migrations/20261118120000_durable_pair_approvals.sql` | Durable pair approvals (PR #418, merged, 3 reviews). Adds identity stamping + `current_pair_review_status`. The deployed app already falls back safely without it. | No |
 | 2 | `supabase/migrations/20261120090000_tesco_pending_page_resolutions.sql` | Append-only ledger + postgres-bridge-only resolver for HISTORICAL pending Tesco pages; reserve RPC re-created with one predicate change (a resolved pending page no longer blocks). Page rows are never modified. | No |
-| 3 | `supabase/operator/20261120_resolve_9_historical_pending_tesco_pages.sql` | Records 9 explicitly named terminal dispositions (`abandoned_unknown_outcome`) in one transaction; verifies 9 / 9 / 0 before COMMIT. | No |
+| 3 | `supabase/operator/20261120_resolve_9_historical_pending_tesco_pages.sql` | Records 9 explicitly named terminal dispositions (`abandoned_unknown_outcome`) in ONE transaction (run as one script in one session). An assertion block before COMMIT rolls everything back unless 9 dispositions exist and all 9 pages are still pending and byte-identical to their snapshots. Re-running it is refused. | No |
 
 Order matters: 3 requires 2. 1 is independent.
 

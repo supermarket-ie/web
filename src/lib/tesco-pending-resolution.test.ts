@@ -95,6 +95,46 @@ describe('historical pending-page terminal resolution', () => {
     await db.exec(`update public.tesco_egress_pool set lease_run_id = '${RUN}', leased_until = now() + interval '5 minutes' where egress_key = 'apify-tesco-ie-20261108'`);
     await expect(resolve()).rejects.toThrow(/live_lease/);
   });
+  it('refuses while the run has an active supervisor; an EXPIRED lease does not block', async () => {
+    await db.exec(`update public.scrape_runs set error_summary = '{"activeSupervisor":"owner-x"}' where id = '${RUN}'`);
+    await expect(resolve()).rejects.toThrow(/active_supervisor/);
+    await db.exec(`update public.scrape_runs set error_summary = 'not json' where id = '${RUN}'`);
+    await expect(resolve()).rejects.toThrow(/run_state_unreadable/);
+    await db.exec(`update public.scrape_runs set error_summary = '{"activeSupervisor":null}' where id = '${RUN}';
+      update public.tesco_egress_pool set lease_run_id = '${RUN}', leased_until = now() - interval '1 hour' where egress_key = 'apify-tesco-ie-20261108'`);
+    await resolve();
+    expect(await n(`select count(*)::int n from public.tesco_pending_page_resolutions`)).toBe(1);
+  });
+  it('the ledger cannot be truncated, and anon/authenticated cannot read or write it', async () => {
+    await resolve();
+    await expect(db.exec(`truncate public.tesco_pending_page_resolutions`)).rejects.toThrow(/append_only/);
+    for (const role of ['anon', 'authenticated']) {
+      await db.exec(`set role ${role}`);
+      await expect(db.query(`select * from public.tesco_pending_page_resolutions`)).rejects.toThrow();
+      await db.exec(`reset role`);
+    }
+  });
+  it('the operator handoff file runs end-to-end on the 9 named pages and asserts before COMMIT', async () => {
+    const { readFileSync } = await import('node:fs');
+    const sql = readFileSync('supabase/operator/20261120_resolve_9_historical_pending_tesco_pages.sql', 'utf8');
+    const calls = [...sql.matchAll(/resolve_historical_pending_page\('([0-9a-f-]{36})'::uuid, '([^']+)',\s*'([^']+)'::timestamptz/g)];
+    expect(calls).toHaveLength(9);
+    for (const [, id, url, at] of calls) {
+      const run = crypto.randomUUID();
+      await db.query(`insert into public.scrape_runs(id, store, run_id, status, started_at, error_summary) values ($1::uuid,'tesco',$3::text,'degraded', $2::timestamptz, '{"activeSupervisor":null}')`, [run, at, `orphan-${run}`]);
+      await db.query(`insert into public.tesco_direct_collection_pages(id, run_id, egress_key, requested_url, mode, outcome, created_at)
+        values ($1,$2,'workspace-supervised-20260929',$3,'products','pending',$4::timestamptz)`, [id, run, url, at]);
+    }
+    const before = (await db.query<{ j: unknown }>(`select jsonb_agg(to_jsonb(d) order by id) j from public.tesco_direct_collection_pages d where outcome = 'pending' and id <> $1`, [PAGE])).rows[0].j;
+    await db.exec(sql);
+    expect(await n(`select count(*)::int n from public.tesco_pending_page_resolutions`)).toBe(9);
+    const after = (await db.query<{ j: unknown }>(`select jsonb_agg(to_jsonb(d) order by id) j from public.tesco_direct_collection_pages d where outcome = 'pending' and id <> $1`, [PAGE])).rows[0].j;
+    expect(after).toEqual(before);
+    // Re-running is refused as a whole (already resolved) and records nothing more.
+    await expect(db.exec(sql)).rejects.toThrow();
+    await db.exec('rollback');
+    expect(await n(`select count(*)::int n from public.tesco_pending_page_resolutions`)).toBe(9);
+  });
   it('is not callable by service_role (postgres SQL bridge only)', async () => {
     await db.exec(`set role service_role`);
     await expect(db.query(`select tesco_internal.resolve_historical_pending_page($1,$2,now(),$3)`, [PAGE, URL, REASON])).rejects.toThrow();
