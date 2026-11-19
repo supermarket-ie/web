@@ -29,7 +29,7 @@ import {
   IDENTITY_ASSESSMENT_RULE_VERSION,
   type AssessOptions,
 } from './tesco-identity-assessment';
-import { firstPriceCorroboration, reviewedCanonicalEvidenceGap, selfEvidenceFirstPriceReasons, type ReentryEvidence } from './tesco-hold-reentry';
+import { declaredPack, firstPriceCorroboration, reviewedCanonicalEvidenceGap, selfEvidenceFirstPriceReasons, type ReentryEvidence } from './tesco-hold-reentry';
 import type { ApifyProviderIdentity } from './tesco-apify-fetch';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
@@ -347,8 +347,11 @@ export async function selectApifyMappings(
     const bothPeers = !observedAt && peerStoreCount(String(r.product_id)) >= 2;
     // Flagged self-evidence cohort: never observed, manufacturer-branded
     // canonical, not own-label. Peers optional; the identity bar is unchanged.
-    const selfEvidenceCandidate = opts.selfEvidence === true && !observedAt
-      && r.is_own_brand !== true && !!canonical(r)?.brand;
+    // Cheap pre-filters so no request is spent on a record that must hold:
+    // unproven only, and the canonical name must STATE a pack.
+    const selfEvidenceCandidate = opts.selfEvidence === true && !observedAt && !proven.has(id)
+      && r.is_own_brand !== true && !!canonical(r)?.brand
+      && declaredPack(String(canonical(r)?.canonical_name ?? '')).total != null;
     const peerBasis = bothPeers || selfEvidenceCandidate;
     const hasEvidence = apifyEvidence.has(`${id}|${url}`);
     const firstPriceEligible = candidateMode ? !approvals.has(id) && peerBasis && hasEvidence

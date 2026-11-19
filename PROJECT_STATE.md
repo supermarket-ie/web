@@ -56,6 +56,26 @@ existing identity checks are not disabled.
   - a drifted live page holds and leaves the approval unconsumed
 - Deploying needs a collector image build (owner's aws-prod approval), a new
   task-def revision, and then a deliberate flagged run.
+- Independent semantic review (`semantic-review/2026-11-19-211235-pr-420.md`)
+  found no bypass and confirmed flag-off behaviour is unchanged. Fixed after
+  review:
+  - exact identity-word coverage in both directions, so an added variant such
+    as "No Added Sugar" or "Spicy" holds
+  - retailer sub-brands (Finest, Stockwell and similar) and spaced retailer
+    names are not manufacturer brands
+  - proven mappings are excluded from the cohort
+  - no request is spent where the canonical states no pack
+  OPEN OWNER DECISION: with no mapping GTIN and no canonical EAN, Tesco's own
+  stated GTIN is the only barcode evidence. Requiring an INDEPENDENT barcode
+  instead would make the path almost unusable (306 of 313 canonical EANs are
+  Tesco-sourced).
+- Measured reach (read-only, 19 Nov): 213 resolved Tesco mappings are
+  unproven, never observed, manufacturer-branded, single-SKU and have a stated
+  canonical pack.
+  - 39 have no fresh peer. Self-evidence could price them, but that adds
+    Tesco-only coverage, not three-store coverage.
+  - 174 already have both peers fresh. Self-evidence helps only where those
+    peers failed corroboration while the deterministic gate passed.
 
 Tesco "proven but expired" cohort (99 of the 241), measured 19 Nov from each
 mapping's latest page: these are NOT idle renewals.

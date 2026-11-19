@@ -96,6 +96,32 @@ describe('selfEvidenceFirstPriceReasons: positive checks only', () => {
       expect(selfEvidenceFirstPriceReasons(ev, live).some(r => r.startsWith(`peer_disagrees:${p.store}=`))).toBe(true);
     }
   });
+  it('an ADDED variant word on the Tesco page holds (titleSupport alone would tolerate it)', () => {
+    const snap = { canonical_name: 'Heinz Beanz 415g', store_product_name: 'Heinz Beanz 415g', canonical_brand: 'Heinz', store_brand: 'Heinz' };
+    for (const name of ['Heinz Beanz No Added Sugar 415G', 'Heinz Beanz Spicy 415G']) {
+      const { ev, live } = evidence({ snap, item: { name, brand_name: 'Heinz', pack_size: '415', net_contents: '415g' } });
+      expect(selfEvidenceFirstPriceReasons(ev, live).some(r => r.startsWith('source_words_unexplained:'))).toBe(true);
+      expect(independentExactIdentity(ev, live)).toBe(false);
+    }
+    const exact = evidence({ snap, item: { name: 'Heinz Beanz 415G', brand_name: 'Heinz', pack_size: '415', net_contents: '415g' } });
+    expect(selfEvidenceFirstPriceReasons(exact.ev, exact.live)).toEqual([]);
+  });
+  it('a canonical word missing from the Tesco page holds', () => {
+    const { ev, live } = evidence({ item: { name: 'Nutella Chocolate Spread 350G' } });
+    expect(selfEvidenceFirstPriceReasons(ev, live).some(r => r.startsWith('canonical_words_missing:hazelnut'))).toBe(true);
+  });
+  it('retailer own-label sub-brands and spaced retailer names are not manufacturer brands', () => {
+    for (const [brand, name] of [['Finest', 'Finest Hazelnut Chocolate Spread 350G'], ['Super Valu', 'Super Valu Hazelnut Chocolate Spread 350G'],
+      ['Stockwell', 'Stockwell Hazelnut Chocolate Spread 350G']] as const) {
+      const { ev, live } = evidence({ snap: { canonical_brand: brand, store_brand: brand, canonical_name: name, store_product_name: name },
+        item: { brand_name: brand, name } });
+      expect(selfEvidenceFirstPriceReasons(ev, live)).toContain('source_brand_not_manufacturer');
+    }
+  });
+  it('OWNER DECISION (documented): with no mapping GTIN and no canonical EAN, Tesco\'s own stated GTIN is the barcode evidence', () => {
+    const { ev, live } = evidence({ snap: { gtin: null, canonical_ean: null } });
+    expect(selfEvidenceFirstPriceReasons(ev, live)).toEqual([]);
+  });
   it('a peer that merely omits its pack size is not a contradiction', () => {
     const { ev, live } = evidence({ peers: [peer('dunnes', { store_product_name: 'Nutella Hazelnut Chocolate Spread' })] });
     expect(selfEvidenceFirstPriceReasons(ev, live)).toEqual([]);
@@ -252,6 +278,18 @@ describe('self-evidence first price end-to-end (real migrations, no peers)', () 
     expect(row?.freshness).toBe('self_evidence_plus_ai');
     expect(await n(`select count(*)::int n from public.price_observations where store_product_id = $1`, [T])).toBe(1);
     expect(await n(`select count(*)::int n from public.tesco_first_price_approvals where id = $1 and consumed_at is not null`, [approval.id])).toBe(1);
+  });
+
+  it('flag ON: no request is spent on a canonical that states no pack, or on a proven mapping', async () => {
+    await db.exec(`update public.products set canonical_name = 'Nutella Hazelnut Chocolate Spread' where id = '${TP}'`);
+    await collectTescoApify('evidence', 10, deps({ selfEvidenceFirstPrice: true }));
+    expect(fetched).not.toContain(URL);
+    await db.exec(`update public.products set canonical_name = '${NAME}' where id = '${TP}';
+      insert into public.scrape_runs(id, store, run_id, status, started_at) values ('7f000000-0000-0000-0000-0000000000ff','tesco','seed-self','success', now());
+      insert into public.scrape_product_receipts(run_id, store_product_id, outcome) values ('7f000000-0000-0000-0000-0000000000ff','${T}','success');`);
+    await collectTescoApify('evidence', 10, deps({ selfEvidenceFirstPrice: true }));
+    expect(fetched).not.toContain(URL);
+    expect(await n(`select count(*)::int n from public.price_observations where store_product_id = $1`, [T])).toBe(0);
   });
 
   it('flag ON: no approval and no price when the AI is not verified_exact', async () => {

@@ -380,7 +380,29 @@ export function firstPriceCorroboration(e: ReentryEvidence, rawSource: TescoColl
 // SELF-EVIDENCE first price: the reasons Tesco's own source does NOT establish
 // the exact canonical product on its own ([] = it does). Every check is a
 // POSITIVE agreement; absence of evidence is a reason, never a pass.
-const RETAILER_BRAND = /^(?:tesco|dunnes|supervalu)(?: |$)/;
+// Retailer names (spacing-insensitive) and known retailer own-label sub-brands.
+const RETAILER_BRAND = /^(?:tesco|dunnes|super ?valu|centra|aldi|lidl)(?: |$)/;
+const RETAILER_SUB_BRANDS = new Set([
+  'finest', 'stockwell', 'hearty food co', 'creamfields', 'eastmans', 'ms mollys', 'growers harvest',
+  'willow farms', 'boswell farms', 'woodside farms', 'rosedene farms', 'nightingale farms', 'redmere farms',
+  'suntrail farms', 'bay fishmongers', 'butchers choice', 'romano', 'h w nevills', 'fresh ideas', 'plant chef',
+  'wicked kitchen', 'simply better', 'my family favourites', 'st bernard', 'everyday essentials', 'daily basics',
+]);
+const retailerOwnBrand = (brand: string) => {
+  const b = normalized(brand.replace(/([a-z])['’]([a-z])/gi, '$1$2'));
+  return RETAILER_BRAND.test(b) || RETAILER_SUB_BRANDS.has(b);
+};
+// Identity words of a title: no brand words, pack/measure tokens or connectives,
+// with a plural "s" folded. Used for exact word coverage (stricter than titleSupport).
+const IDENTITY_STOPWORDS = new Set(['and', 'with', 'of', 'the', 'in', 'a', 'for', 'from', 'pack', 'pk', 'x']);
+function identityWords(title: string, brand: string): Set<string> {
+  const brandWords = new Set(normalized(brand).split(' '));
+  const n = normalized(title.replace(/([a-z])['’]([a-z])/gi, '$1$2')
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:x\s*\d+(?:[.,]\d+)?\s*)?(?:kg|g|ml|cl|l|ltr|litres?)\b/gi, ' '));
+  return new Set(n.split(' ').filter(w => w && !brandWords.has(w) && !IDENTITY_STOPWORDS.has(w) && !/^\d+$/.test(w))
+    .map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)
+    .map(w => w === 'yoghurt' ? 'yogurt' : w));
+}
 // A peer that simply omits its pack size is not a contradiction; every other
 // first-price peer reason (brand, variant, title, pack, count, barcode) is.
 const SELF_EVIDENCE_TOLERATED_PEER_REASONS = new Set(['peer_pack_missing']);
@@ -394,7 +416,8 @@ export function selfEvidenceFirstPriceReasons(e: ReentryEvidence, rawSource: Tes
   if (m.is_own_brand) reasons.push('own_brand');
   const brand = source.brand ?? '';
   if (!m.canonical_brand) reasons.push('canonical_brand_missing');
-  if (!normalized(brand) || RETAILER_BRAND.test(normalized(brand))) reasons.push('source_brand_not_manufacturer');
+  if (!normalized(brand) || retailerOwnBrand(brand)
+    || (m.canonical_brand != null && retailerOwnBrand(m.canonical_brand))) reasons.push('source_brand_not_manufacturer');
   else {
     if (m.canonical_brand && !sameBrand(m.canonical_brand, brand)) reasons.push('canonical_brand_conflict');
     const originalBrand = m.store_brand != null ? sameBrand(m.store_brand, brand)
@@ -427,6 +450,17 @@ export function selfEvidenceFirstPriceReasons(e: ReentryEvidence, rawSource: Tes
   if (canonicalVariantConflict(m.store_product_name, source.name)) reasons.push('mapping_variant_conflict');
   if (!titleSupport(m.canonical_name, source.name)) reasons.push('canonical_title_unsupported');
   if (!titleSupport(m.store_product_name, source.name)) reasons.push('mapping_title_unsupported');
+  // Exact word coverage (titleSupport alone tolerates an ADDED variant such as
+  // "No Added Sugar" or "Spicy"): every canonical identity word must appear on
+  // the Tesco page, and every Tesco identity word must appear in the canonical
+  // name or the original mapping title.
+  if (brand) {
+    const src = identityWords(source.name, brand), can = identityWords(m.canonical_name, brand);
+    const known = new Set([...can, ...identityWords(m.store_product_name, brand)]);
+    const missing = [...can].filter(w => !src.has(w)), extra = [...src].filter(w => !known.has(w));
+    if (missing.length) reasons.push(`canonical_words_missing:${missing.join('+')}`);
+    if (extra.length) reasons.push(`source_words_unexplained:${extra.join('+')}`);
+  }
   // Current price on the page itself.
   if (!source.available || source.currency !== 'EUR' || !(Number(source.price) > 0)) reasons.push('no_current_price');
   // A present fresh peer may not CONTRADICT the identity (it is not required).
