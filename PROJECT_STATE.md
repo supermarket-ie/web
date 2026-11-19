@@ -65,10 +65,12 @@ existing identity checks are not disabled.
     names are not manufacturer brands
   - proven mappings are excluded from the cohort
   - no request is spent where the canonical states no pack
-  OPEN OWNER DECISION: with no mapping GTIN and no canonical EAN, Tesco's own
-  stated GTIN is the only barcode evidence. Requiring an INDEPENDENT barcode
-  instead would make the path almost unusable (306 of 313 canonical EANs are
-  Tesco-sourced).
+  OWNER DECISION (20 Nov): APPROVED. Tesco's own directly captured GTIN is
+  barcode evidence for a verified Tesco-ONLY offer, with no independently
+  sourced barcode required. It does NOT establish cross-retailer equivalence,
+  and a Tesco-derived canonical EAN never counts as independent corroboration
+  (it may only agree or conflict). Every other source, SKU, brand,
+  formulation, pack, identity, duplicate and conflict check is unchanged.
 - Measured reach (read-only, 19 Nov): 213 resolved Tesco mappings are
   unproven, never observed, manufacturer-branded, single-SKU and have a stated
   canonical pack.

@@ -138,7 +138,7 @@ describe('selfEvidenceFirstPriceReasons: positive checks only', () => {
       expect(selfEvidenceFirstPriceReasons(ev, live)).toContain('source_brand_not_manufacturer');
     }
   });
-  it('OWNER DECISION (documented): with no mapping GTIN and no canonical EAN, Tesco\'s own stated GTIN is the barcode evidence', () => {
+  it('OWNER APPROVED 20 Nov: Tesco\'s own captured GTIN is barcode evidence for a Tesco-only offer (not cross-retailer equivalence)', () => {
     const { ev, live } = evidence({ snap: { gtin: null, canonical_ean: null } });
     expect(selfEvidenceFirstPriceReasons(ev, live)).toEqual([]);
   });
