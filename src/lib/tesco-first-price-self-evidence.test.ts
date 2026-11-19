@@ -106,6 +106,26 @@ describe('selfEvidenceFirstPriceReasons: positive checks only', () => {
     const exact = evidence({ snap, item: { name: 'Heinz Beanz 415G', brand_name: 'Heinz', pack_size: '415', net_contents: '415g' } });
     expect(selfEvidenceFirstPriceReasons(exact.ev, exact.live)).toEqual([]);
   });
+  it('a different percentage or numeric variant holds (bare numbers are identity)', () => {
+    const cases: Array<[string, string, string]> = [
+      ['Avonmore', 'Avonmore Milk 2% Fat 1L', 'Avonmore Milk 0% Fat 1L'],
+      ['Fage', 'Fage Total Greek Yogurt 5% 500g', 'Fage Total Greek Yogurt 0% 500G'],
+      ['Foo', 'Foo Bar 5 Grain 500g', 'Foo Bar 7 Grain 500G'],
+    ];
+    for (const [brand, canon, tesco] of cases) {
+      const isMl = /1L/.test(canon);
+      const { ev, live } = evidence({ snap: { canonical_brand: brand, store_brand: brand, canonical_name: canon, store_product_name: canon },
+        item: { brand_name: brand, name: tesco, pack_size: isMl ? '1' : '500', pack_size_unit: isMl ? 'L' : 'G', net_contents: isMl ? '1l' : '500g' } });
+      const r = selfEvidenceFirstPriceReasons(ev, live);
+      expect(r.some(x => x.startsWith('source_words_unexplained:') || x.startsWith('canonical_words_missing:'))).toBe(true);
+    }
+  });
+  it('a repeated brand word used as a variant is not stripped away', () => {
+    const name = 'Old El Paso Taco Kit 300g';
+    const { ev, live } = evidence({ snap: { canonical_brand: 'Old El Paso', store_brand: 'Old El Paso', canonical_name: name, store_product_name: name },
+      item: { brand_name: 'Old El Paso', name: 'Old El Paso Paso Taco Kit 300G', pack_size: '300', net_contents: '300g' } });
+    expect(selfEvidenceFirstPriceReasons(ev, live).some(x => x === 'source_words_unexplained:paso')).toBe(true);
+  });
   it('a canonical word missing from the Tesco page holds', () => {
     const { ev, live } = evidence({ item: { name: 'Nutella Chocolate Spread 350G' } });
     expect(selfEvidenceFirstPriceReasons(ev, live).some(r => r.startsWith('canonical_words_missing:hazelnut'))).toBe(true);

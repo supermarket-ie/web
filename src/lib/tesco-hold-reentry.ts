@@ -388,7 +388,7 @@ const RETAILER_SUB_BRANDS = new Set([
   'suntrail farms', 'bay fishmongers', 'butchers choice', 'romano', 'h w nevills', 'fresh ideas', 'plant chef',
   'wicked kitchen', 'simply better', 'my family favourites', 'st bernard', 'everyday essentials', 'daily basics',
 ]);
-const retailerOwnBrand = (brand: string) => {
+export const retailerOwnBrand = (brand: string) => {
   const b = normalized(brand.replace(/([a-z])['’]([a-z])/gi, '$1$2'));
   return RETAILER_BRAND.test(b) || RETAILER_SUB_BRANDS.has(b);
 };
@@ -396,10 +396,15 @@ const retailerOwnBrand = (brand: string) => {
 // with a plural "s" folded. Used for exact word coverage (stricter than titleSupport).
 const IDENTITY_STOPWORDS = new Set(['and', 'with', 'of', 'the', 'in', 'a', 'for', 'from', 'pack', 'pk', 'x']);
 function identityWords(title: string, brand: string): Set<string> {
-  const brandWords = new Set(normalized(brand).split(' '));
-  const n = normalized(title.replace(/([a-z])['’]([a-z])/gi, '$1$2')
+  const b = normalized(brand.replace(/([a-z])['’]([a-z])/gi, '$1$2'));
+  let n = normalized(title.replace(/([a-z])['’]([a-z])/gi, '$1$2')
     .replace(/\b\d+(?:[.,]\d+)?\s*(?:x\s*\d+(?:[.,]\d+)?\s*)?(?:kg|g|ml|cl|l|ltr|litres?)\b/gi, ' '));
-  return new Set(n.split(' ').filter(w => w && !brandWords.has(w) && !IDENTITY_STOPWORDS.has(w) && !/^\d+$/.test(w))
+  // Remove ONE brand phrase (leading if present), never every brand word, so a
+  // repeated brand word used as a variant ("Paso Paso") still counts.
+  if (b) n = ` ${n} `.replace(` ${b} `, ' ').trim();
+  // Bare numbers are KEPT: "2% Fat" vs "0% Fat" and "5 Grain" vs "7 Grain" are
+  // identity (measures were stripped above and are checked separately).
+  return new Set(n.split(' ').filter(w => w && !IDENTITY_STOPWORDS.has(w))
     .map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)
     .map(w => w === 'yoghurt' ? 'yogurt' : w));
 }
