@@ -41,7 +41,7 @@ const packCompatible = (ref: string, title: string) => {
 async function main() {
   // SV_LED=1: SuperValu-led discovery. Reference identity = the SuperValu offer's OWN title + brand (a real retailer
   // title); only canonicals with NO SKU-bearing Dunnes offer (an existing Dunnes mapping is never overwritten).
-  let targets: Array<{ product_id: string; canonical_name: string; brand: string; category?: string; alt?: string }> | null;
+  let targets: Array<{ product_id: string; canonical_name: string; brand: string; category?: string; alt?: string; existingSku?: string; ownOfferId?: string }> | null = null;
   if (process.env.SV_LED === '1') {
     const { data: sv, error: se } = await sb.from('store_products').select('product_id,store_product_name,brand,is_own_brand')
       .eq('store', 'supervalu').not('store_sku', 'is', null).not('brand', 'is', null).not('product_id', 'is', null)
@@ -83,7 +83,36 @@ async function main() {
         return [{ ...x, alt: tt }];
       }).slice(0, LIMIT);
     }
-  } else {
+  }
+  if (process.env.FOCUS === 'stale_dunnes') {
+    // STALE RENEWAL: SuperValu-led records whose EXISTING Dunnes SKU has no fresh price (latest_prices is per offer)
+    // while the SuperValu offer is fresh. Re-confirm that SKU by product API first; search for a replacement only if
+    // it no longer confirms. Identity rules (confirmDunnesSku) are unchanged.
+    const { data: sv, error: se } = await sb.from('store_products').select('product_id,store_product_name,brand,is_own_brand')
+      .eq('store', 'supervalu').not('store_sku', 'is', null).not('brand', 'is', null).not('product_id', 'is', null)
+      .order('id').range(OFFSET, OFFSET + 999);
+    if (se) throw se;
+    const ids = (sv ?? []).map(r => r.product_id as string);
+    const dun = new Map<string, { id: string; sku: string }>();
+    const freshD = new Set<string>(), freshS = new Set<string>(), tried = new Set<string>();
+    const since = new Date(Date.now() - 7 * 864e5).toISOString();
+    for (const c of chunks(ids)) {
+      const { data: d, error: de } = await sb.from('store_products').select('id,product_id,store_sku').eq('store', 'dunnes').not('store_sku', 'is', null).in('product_id', c);
+      if (de) throw de;
+      for (const o of d ?? []) dun.set(o.product_id as string, { id: o.id as string, sku: String(o.store_sku) });
+      const { data: lp, error: le } = await sb.from('latest_prices').select('canonical_product_id,store').in('store', ['dunnes', 'supervalu']).in('canonical_product_id', c);
+      if (le) throw le;
+      for (const r of lp ?? []) (r.store === 'dunnes' ? freshD : freshS).add(r.canonical_product_id as string);
+      const { data: rec, error: re } = await sb.from('dunnes_discovery_receipts').select('product_id,reason').in('product_id', c).gte('created_at', since);
+      if (re) throw re;
+      for (const r of rec ?? []) if (String(r.reason ?? '').startsWith('SKU-confirmed discovery held')) tried.add(r.product_id as string);
+    }
+    targets = (sv ?? []).filter(r => dun.has(r.product_id) && !freshD.has(r.product_id) && freshS.has(r.product_id) && !tried.has(r.product_id)
+      && r.is_own_brand !== true && !/^\s*(supervalu|signature tastes|daily basics)\b/i.test(String(r.store_product_name))
+      && /\b\d+(?:\.\d+)?\s*(?:kg|g|ml|l|cl)\b/i.test(String(r.store_product_name)))
+      .slice(0, LIMIT).map(r => ({ product_id: r.product_id as string, canonical_name: String(r.store_product_name).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(),
+        brand: String(r.brand), existingSku: dun.get(r.product_id)!.sku, ownOfferId: dun.get(r.product_id)!.id }));
+  } else if (process.env.SV_LED !== '1') {
     const { data, error } = await sb.rpc('select_dunnes_discovery_targets', { p_limit: LIMIT, p_offset: OFFSET });
     if (error) throw error;
     targets = data;
@@ -97,9 +126,34 @@ async function main() {
     if (e) throw e; runUuid = run.id;
   }
   const tally: Record<string, number> = {};
-  for (const t of eligible as Array<{ product_id: string; canonical_name: string; brand: string; alt?: string }>) {
+  for (const t of eligible as Array<{ product_id: string; canonical_name: string; brand: string; alt?: string; existingSku?: string; ownOfferId?: string }>) {
     let outcome = 'rejected', reason = '';
     try {
+      // The record's OWN Dunnes offer never counts as "owned elsewhere" (renewal / replacement of the same offer).
+      const ownedElsewhere = async (sku: string) => ((await sb.from('store_products').select('id').eq('store', 'dunnes').eq('store_sku', sku)).data ?? [])
+        .filter(o => o.id !== t.ownOfferId).length > 0;
+      if (t.existingSku) {
+        const apiUrl = dunnesProductApiUrl(t.existingSku);
+        const p = await governedGet(apiUrl);
+        let resp: DunnesProductResponse | null = null; try { resp = p.status === 200 ? JSON.parse(p.body) : null; } catch { resp = null; }
+        const conf = confirmDunnesSku({ canonicalName: t.canonical_name, canonicalBrand: t.brand, candidateSku: t.existingSku, candidateName: String(resp?.name ?? ''),
+          httpStatus: p.status, requestedUrl: apiUrl, finalUrl: p.url, response: resp, skuOwnedElsewhere: await ownedElsewhere(t.existingSku), otherCompatibleCandidates: 0 });
+        log({ event: 'existing_sku', product_id: t.product_id, sku: t.existingSku, status: p.status, title: resp?.name ?? null, ok: conf.ok, reasons: conf.reasons, price: conf.price });
+        if (conf.ok) {
+          log({ event: 'confirmed', product_id: t.product_id, canonical: t.canonical_name, sku: t.existingSku, title: resp!.name, brand: resp!.brand, pack: conf.structuredPack, price: conf.price, apply: APPLY, via: 'existing_sku' });
+          if (APPLY) {
+            const url = productUrl(t.existingSku, String(resp!.name));
+            const { error: fe } = await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'exact',
+              p_canonical_name: t.canonical_name, p_candidate_sku: t.existingSku, p_candidate_name: String(resp!.name), p_candidate_url: url, p_price: conf.price,
+              p_confidence: 1, p_pack_ratio: 1, p_reason: `sku_confirmed (existing SKU renewal) via ${apiUrl}` });
+            if (fe) throw fe;
+            await retainIdentityResponse(captureIdentityResponse({ store: 'dunnes', sku: t.existingSku, title: String(resp!.name), productUrl: url, requestedUrl: apiUrl,
+              finalUrl: p.url, contentType: p.contentType, body: p.body }), runUuid!, t.ownOfferId!);
+          }
+          tally.confirmed = (tally.confirmed ?? 0) + 1; tally.renewed_existing = (tally.renewed_existing ?? 0) + 1;
+          continue;
+        }
+      }
       // Query variants (each one governed request): name without pack, brand + key words, full name. Candidates are
       // pooled by SKU so ambiguity is judged across all variants; confirmation rules are unchanged.
       const named = normaliseDunnesName(t.canonical_name).includes(normaliseDunnesName(t.brand)) ? t.canonical_name : `${t.brand} ${t.canonical_name}`;
@@ -123,12 +177,11 @@ async function main() {
       if (!compatible.length) { reason = 'no_compatible_candidate'; }
       else {
         const c = compatible[0], sku = String(c.sku);
-        const { data: owners } = await sb.from('store_products').select('id').eq('store', 'dunnes').eq('store_sku', sku);
         const apiUrl = dunnesProductApiUrl(sku);
         const p = await governedGet(apiUrl);
         let resp: DunnesProductResponse | null = null; try { resp = p.status === 200 ? JSON.parse(p.body) : null; } catch { resp = null; }
         const conf = confirmDunnesSku({ canonicalName: refFor(String(c.name)) ?? t.canonical_name, canonicalBrand: t.brand, candidateSku: sku, candidateName: String(c.name),
-          httpStatus: p.status, requestedUrl: apiUrl, finalUrl: p.url, response: resp, skuOwnedElsewhere: (owners ?? []).length > 0,
+          httpStatus: p.status, requestedUrl: apiUrl, finalUrl: p.url, response: resp, skuOwnedElsewhere: await ownedElsewhere(sku),
           otherCompatibleCandidates: compatible.length - 1 });
         if (!conf.ok) reason = conf.reasons.join(',');
         else {
