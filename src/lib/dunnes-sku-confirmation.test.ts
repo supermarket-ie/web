@@ -42,7 +42,7 @@ describe('Dunnes SKU-bound confirmation', () => {
     expect(titleWordProblems('Barry\'s Gold Blend Tea 80 Pack', 'Barry\'s Classic Blend Tea 80 Pack')).toEqual(['title_words_missing:gold']);
   });
   it('a multipack canonical is never confirmed by a single structured size', () => {
-    expect(reasons({ canonicalName: 'Heinz Cream of Tomato Soup 4 x 400g' }).some(r => r === 'multipack_not_supported' || r === 'structured_pack_differs')).toBe(true);
+    expect(reasons({ canonicalName: 'Heinz Cream of Tomato Soup 4 x 400g' }).some(r => r === 'multipack_differs' || r === 'multipack_not_supported' || r === 'structured_pack_differs')).toBe(true);
   });
   it('helpers parse prices, sizes and brands conservatively', () => {
     expect(parseEuro('€2.50')).toBe(2.5);
@@ -54,4 +54,19 @@ describe('Dunnes SKU-bound confirmation', () => {
     expect(brandConfirmed("Jacob's", 'Jacobs')).toBe(false); // spelling variants are not silently merged
     expect(brandConfirmed('Ben & Jerry', 'Ben & Jerry')).toBe(true);
   });
+  it('recognises the SAME multipack written differently, and nothing else', async () => {
+    const { multipackOf } = await import('./dunnes-sku-confirmation');
+    expect(multipackOf('Walkers Ready Salted Crisps 6 Pack 25 g')).toEqual({ count: 6, unitAmount: 25, unit: 'g' });
+    expect(multipackOf('Walkers Ready Salted Multipack Crisps 6x25g')).toEqual({ count: 6, unitAmount: 25, unit: 'g' });
+    expect(multipackOf('Heinz Cream of Tomato Soup 400g')).toBeNull();
+    const walkers = { ...base, canonicalName: 'Walkers Ready Salted Crisps 6 Pack 25 g', canonicalBrand: 'Walkers', candidateName: 'Walkers Ready Salted Multipack Crisps 6x25g',
+      response: { ...response, name: 'Walkers Ready Salted Multipack Crisps 6x25g', brand: 'Walkers', unitsOfSize: { abbreviation: 'g', size: 150 } } };
+    expect(confirmDunnesSku(walkers).ok).toBe(true);
+    expect(confirmDunnesSku({ ...walkers, response: { ...walkers.response, unitsOfSize: { abbreviation: 'g', size: 25 } } }).ok).toBe(true);
+    expect(reasons({ ...walkers, candidateName: 'Walkers Ready Salted Multipack Crisps 12x25g', response: { ...walkers.response, name: 'Walkers Ready Salted Multipack Crisps 12x25g' } })).toContain('multipack_differs');
+    expect(reasons({ ...walkers, response: { ...walkers.response, unitsOfSize: { abbreviation: 'g', size: 300 } } })).toContain('structured_pack_differs');
+    // a multipack is never a single pack
+    expect(reasons({ ...walkers, candidateName: 'Walkers Ready Salted Crisps 150g', response: { ...walkers.response, name: 'Walkers Ready Salted Crisps 150g' } })).toContain('multipack_differs');
+  });
 });
+

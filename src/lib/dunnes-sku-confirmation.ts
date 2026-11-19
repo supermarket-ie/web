@@ -77,6 +77,21 @@ export function titleWordProblems(canonicalName: string, retailerTitle: string):
   return problems;
 }
 
+const UNIT: Record<string, [number, 'g' | 'ml']> = { g: [1, 'g'], kg: [1000, 'g'], ml: [1, 'ml'], l: [1000, 'ml'], cl: [10, 'ml'] };
+/**
+ * Multipack stated as a count of N units of M ("6 Pack 25 g", "6 x 25g", "6x25g"). Null unless BOTH a count and a
+ * per-unit measure are stated. Used only to recognise the SAME multipack written differently; never to equate a
+ * multipack with a single pack.
+ */
+export function multipackOf(title: string): { count: number; unitAmount: number; unit: 'g' | 'ml' } | null {
+  const t = title.toLowerCase().replace(/[()]/g, ' ');
+  const m = t.match(/\b(\d{1,3})\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|l|cl)\b/)
+    ?? (() => { const c = t.match(/\b(\d{1,3})\s*(?:pack|pk)\b/), s = t.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|l|cl)\b/); return c && s ? [c[0], c[1], s[1], s[2]] as unknown as RegExpMatchArray : null; })();
+  if (!m) return null;
+  const f = UNIT[m[3]]; const count = Number(m[1]), amount = Number(m[2]) * f[0];
+  return count > 1 && amount > 0 ? { count, unitAmount: Math.round(amount * 1000) / 1000, unit: f[1] } : null;
+}
+
 export function confirmDunnesSku(i: ConfirmationInput): Confirmation {
   const reasons: string[] = [];
   const r = i.response;
@@ -90,11 +105,20 @@ export function confirmDunnesSku(i: ConfirmationInput): Confirmation {
   if (r?.attributes?.OwnBrand === true || /^dunnes\b/i.test(name)) reasons.push('own_label');
   const canonicalPack = dunnesPackSignature(i.canonicalName);
   const structured = structuredPackSize(r?.unitsOfSize ?? null);
-  if (!canonicalPack.amount || !canonicalPack.unit) reasons.push('canonical_pack_unstated');
-  else if (canonicalPack.multipack || canonicalPack.count) reasons.push('multipack_not_supported');
-  else if (!structured) reasons.push('structured_pack_missing');
-  else if (structured.unit !== canonicalPack.unit || structured.amount !== canonicalPack.amount) reasons.push('structured_pack_differs');
-  if (name && !isDunnesPackCompatible(i.canonicalName, name)) reasons.push('title_pack_differs');
+  const refMulti = multipackOf(i.canonicalName), gotMulti = name ? multipackOf(name) : null;
+  if (refMulti || gotMulti) {
+    // The same multipack only: identical count and per-unit size on both titles; the structured size must be the
+    // per-unit size or the whole-pack total of THAT multipack.
+    if (!refMulti || !gotMulti || refMulti.count !== gotMulti.count || refMulti.unit !== gotMulti.unit || refMulti.unitAmount !== gotMulti.unitAmount) reasons.push('multipack_differs');
+    else if (!structured) reasons.push('structured_pack_missing');
+    else if (structured.unit !== refMulti.unit || (structured.amount !== refMulti.unitAmount && structured.amount !== Math.round(refMulti.unitAmount * refMulti.count * 1000) / 1000)) reasons.push('structured_pack_differs');
+  } else {
+    if (!canonicalPack.amount || !canonicalPack.unit) reasons.push('canonical_pack_unstated');
+    else if (canonicalPack.multipack || canonicalPack.count) reasons.push('multipack_not_supported');
+    else if (!structured) reasons.push('structured_pack_missing');
+    else if (structured.unit !== canonicalPack.unit || structured.amount !== canonicalPack.amount) reasons.push('structured_pack_differs');
+    if (name && !isDunnesPackCompatible(i.canonicalName, name)) reasons.push('title_pack_differs');
+  }
   if (name && hasDunnesVariantConflict(i.canonicalName, name)) reasons.push('variant_conflict');
   if (name) for (const pr of titleWordProblems(i.canonicalName, name)) if (!reasons.includes(pr)) reasons.push(pr);
   if (i.otherCompatibleCandidates > 0) reasons.push('ambiguous_candidates');

@@ -32,8 +32,26 @@ async function governedGet(url: string) {
 const log = (o: Record<string, unknown>) => console.log(JSON.stringify(o));
 
 async function main() {
-  const { data: targets, error } = await sb.rpc('select_dunnes_discovery_targets', { p_limit: LIMIT, p_offset: OFFSET });
-  if (error) throw error;
+  // SV_LED=1: SuperValu-led discovery. Reference identity = the SuperValu offer's OWN title + brand (a real retailer
+  // title); only canonicals with NO SKU-bearing Dunnes offer (an existing Dunnes mapping is never overwritten).
+  let targets: Array<{ product_id: string; canonical_name: string; brand: string; category?: string }> | null;
+  if (process.env.SV_LED === '1') {
+    const { data: sv, error: se } = await sb.from('store_products').select('product_id,store_product_name,brand,is_own_brand')
+      .eq('store', 'supervalu').not('store_sku', 'is', null).not('brand', 'is', null).not('product_id', 'is', null)
+      .order('id').range(OFFSET, OFFSET + LIMIT * 3 - 1);
+    if (se) throw se;
+    const ids = (sv ?? []).map(r => r.product_id as string);
+    const { data: owned, error: oe } = await sb.from('store_products').select('product_id').eq('store', 'dunnes').not('store_sku', 'is', null).in('product_id', ids);
+    if (oe) throw oe;
+    const has = new Set((owned ?? []).map(o => o.product_id));
+    targets = (sv ?? []).filter(r => !has.has(r.product_id) && r.is_own_brand !== true && !/^\s*(supervalu|signature tastes|daily basics)\b/i.test(String(r.store_product_name))
+      && /\b\d+(?:\.\d+)?\s*(?:kg|g|ml|l|cl)\b/i.test(String(r.store_product_name)))
+      .slice(0, LIMIT).map(r => ({ product_id: r.product_id as string, canonical_name: String(r.store_product_name).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(), brand: String(r.brand) }));
+  } else {
+    const { data, error } = await sb.rpc('select_dunnes_discovery_targets', { p_limit: LIMIT, p_offset: OFFSET });
+    if (error) throw error;
+    targets = data;
+  }
   const eligible = (targets ?? []).filter((t: { category?: string; canonical_name: string }) => !EXCLUDED.test(`${t.category ?? ''} ${t.canonical_name}`));
   let runUuid: string | null = null;
   if (APPLY) {
@@ -64,9 +82,7 @@ async function main() {
       const items = [...seen.values()];
       const compatible = items.filter(it => it.sku != null && typeof it.name === 'string' && brandConfirmed(t.brand, it.name)
         && isDunnesPackCompatible(t.canonical_name, it.name as string) && titleWordProblems(t.canonical_name, it.name as string).length === 0);
-      if (process.env.DEBUG === '1') log({ event: 'debug', canonical: t.canonical_name, brand: t.brand, q, top: items.slice(0, 4).map(it => ({ name: it.name,
-        brand: brandConfirmed(t.brand, it.name), pack: typeof it.name === 'string' && isDunnesPackCompatible(t.canonical_name, it.name),
-        title: typeof it.name === 'string' ? titleWordProblems(t.canonical_name, it.name) : null })) });
+      if (process.env.TRACE === '1') log({ event: 'trace', ref: t.canonical_name, variants, items: items.slice(0, 3).map(it => String(it.name)) });
       if (!compatible.length) { reason = 'no_compatible_candidate'; }
       else {
         const c = compatible[0], sku = String(c.sku);
