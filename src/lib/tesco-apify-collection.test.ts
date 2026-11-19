@@ -45,11 +45,16 @@ function makeFakeSb(opts: {
       canonical_ean: c?.ean, same_sku_canonical_names: names,
     };
   };
+  // Peer fixtures carry their OWN latest price; the collector now reads it from
+  // latest_prices by store_product_id (never via the store_products embed).
+  const peerRows = (): Row[] => (opts.peers ?? []).map((p, i): Row => ({ ...p, id: p.id ?? `peer-fixture-${i}` }));
+  const peerLatest = () => peerRows().flatMap(p => { const l = Array.isArray(p.latest_prices) ? p.latest_prices[0] : p.latest_prices as Row | null;
+    return l ? [{ store_product_id: p.id, observed_at: l.observed_at, price: l.price }] : []; });
   const table = (name: string) => {
     // attachFreshPeers queries store_products filtered to dunnes/supervalu via
     // .in('store', [...]) and resolves via await on the query (no .range). We
     // detect that by the 'store' in-filter and serve opts.peers.
-    const state = { peerQuery: false };
+    const state = { peerQuery: false, latestByOffer: false };
     const dataFor = (): Row[] => name === 'store_products' ? (state.peerQuery ? (opts.peers ?? []) : opts.mappings)
       : name === 'latest_prices' ? opts.latest
       : name === 'scrape_product_receipts' ? opts.receipts
@@ -62,11 +67,11 @@ function makeFakeSb(opts: {
     const chain = () => builder;
     builder.select = chain; builder.eq = chain; builder.not = chain; builder.gte = chain;
     builder.is = chain; builder.order = chain; builder.gt = chain;
-    builder.in = (col: string) => { if (col === 'store') state.peerQuery = true; return builder; };
+    builder.in = (col: string) => { if (col === 'store') state.peerQuery = true; if (name === 'latest_prices' && col === 'store_product_id') state.latestByOffer = true; return builder; };
     // attachFreshPeers awaits the builder directly (no .range/.limit); support
     // that by making the builder thenable, resolving to the peer rows.
     builder.then = (resolve: (v: { data: Row[]; error: null }) => unknown) =>
-      resolve({ data: state.peerQuery ? (opts.peers ?? []) : [], error: null });
+      resolve({ data: state.latestByOffer ? peerLatest() : state.peerQuery ? peerRows() : [], error: null });
     builder.limit = async () => ({ data: dataFor(), error: null });
     builder.range = async (from: number) => ({ data: from === 0 ? dataFor() : [], error: null });
     return builder;

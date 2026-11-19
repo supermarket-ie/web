@@ -51,6 +51,10 @@ export type SelectionOptions = {
   // manufacturer-branded first-price candidates WITHOUT both fresh peers. They
   // must then pass selfEvidenceFirstPriceReasons + the full gate + AI. Default off.
   selfEvidence?: boolean;
+  // TARGETED QUEUE (APIFY_TARGET_IDS): when set, ONLY these Tesco mapping ids
+  // are eligible (every other eligibility rule still applies), worked in this
+  // order. Keeps a run on an exact, reviewed cohort instead of the general queue.
+  targetIds?: string[];
 };
 
 export type ApifyMapping = {
@@ -167,7 +171,9 @@ export async function selectApifyMappings(
 ): Promise<ApifyMapping[]> {
   const candidateMode = opts.approvalCandidates === true && mode === 'expansion';
   const evidenceMode = mode === 'evidence';
-  const priorityRank = new Map((opts.priorityIds ?? []).map((id, i) => [id, i]));
+  // An explicit (even empty) target list restricts: [] matches nothing (fail closed).
+  const targetSet = opts.targetIds ? new Set(opts.targetIds) : null;
+  const priorityRank = new Map((opts.targetIds?.length ? opts.targetIds : opts.priorityIds ?? []).map((id, i) => [id, i]));
   const rankOf = (id: string) => priorityRank.get(id) ?? Number.MAX_SAFE_INTEGER;
   // Pull resolved tesco mappings with canonical identity.
   const mappings: Record<string, unknown>[] = [];
@@ -257,25 +263,9 @@ export async function selectApifyMappings(
   // identity + AI. Loaded here (across ALL eligible products, before the limit
   // slice) so the ranking is correct, not just within the sliced batch.
   const freshPeerStores = new Map<string, Set<string>>();
-  {
-    const allProductIds = [...new Set(mappings.map(r => String(r.product_id)))];
-    const nowMs = Date.now();
-    for (let i = 0; i < allProductIds.length; i += 50) {
-      const chunk = allProductIds.slice(i, i + 50);
-      const { data, error } = await sb.from('store_products')
-        .select('product_id,store,latest_prices(observed_at,price)')
-        .in('product_id', chunk).in('store', ['dunnes', 'supervalu']);
-      if (error) throw new Error(`Loading peer freshness: ${error.message}`);
-      for (const r of data ?? []) {
-        const lp = Array.isArray(r.latest_prices) ? r.latest_prices[0] : (r.latest_prices as Record<string, unknown> | null);
-        const observedAt = lp ? String((lp as Record<string, unknown>).observed_at) : null;
-        const price = lp ? Number((lp as Record<string, unknown>).price) : 0;
-        if (!observedAt || Date.parse(observedAt) <= nowMs - PEER_FRESH_DAYS * 86400_000 || !(price > 0)) continue;
-        const pid = String(r.product_id);
-        if (!freshPeerStores.has(pid)) freshPeerStores.set(pid, new Set());
-        freshPeerStores.get(pid)!.add(String(r.store));
-      }
-    }
+  for (const p of await loadFreshPeerOffers(sb, [...new Set(mappings.map(r => String(r.product_id)))])) {
+    if (!freshPeerStores.has(p.product_id)) freshPeerStores.set(p.product_id, new Set());
+    freshPeerStores.get(p.product_id)!.add(p.store);
   }
   const peerStoreCount = (productId: string) => (freshPeerStores.get(productId)?.size ?? 0);
 
@@ -333,6 +323,7 @@ export async function selectApifyMappings(
   const rows: ApifyMapping[] = [];
   for (const r of mappings) {
     const id = String(r.id);
+    if (targetSet && !targetSet.has(id)) continue;
     const sku = String(r.store_sku);
     const url = `https://www.tesco.ie/shop/en-IE/products/${sku}`;
     if (String(r.store_url) !== url) continue;
@@ -389,7 +380,7 @@ export async function selectApifyMappings(
       ...(evidenceMode ? { evidenceUrl: url, evidencePurpose: 'first_price' as const } : {}),
     });
   }
-  if (evidenceMode && opts.repairTargets?.length) {
+  if (evidenceMode && opts.repairTargets?.length && !targetSet) {
     rows.push(...await selectRepairTargets(sb, opts.repairTargets, { fresh, proven, recentUrls, apifyEvidence }));
   }
   // Renewal: oldest observation first (closest to expiry) — expiry order.
@@ -498,30 +489,48 @@ function stableStringify(v: unknown): string {
 // window used elsewhere; a stale peer is not independent evidence.
 const PEER_FRESH_DAYS = 7;
 
+// FRESH Dunnes/SuperValu peer offers for the given canonical products, each
+// with ITS OWN latest price, read from latest_prices by the offer's
+// store_product_id. Never use the PostgREST embed store_products ->
+// latest_prices for this: in production it relates through the canonical
+// product and returns EVERY offer's latest price under EACH offer (measured
+// 19 Nov 2026), so a stale Dunnes offer inherited SuperValu's or Tesco's
+// freshness and counted as a fresh peer.
+export type FreshPeerOffer = ApifyPeer & { product_id: string };
+export async function loadFreshPeerOffers(sb: SupabaseClient, productIds: string[]): Promise<FreshPeerOffer[]> {
+  const now = Date.now();
+  const offers: Record<string, unknown>[] = [];
+  for (let i = 0; i < productIds.length; i += 50) {
+    const { data, error } = await sb.from('store_products')
+      .select('id,product_id,store,store_sku,store_product_name,brand,gtin')
+      .in('product_id', productIds.slice(i, i + 50)).in('store', ['dunnes', 'supervalu']);
+    if (error) throw new Error(`Loading peers: ${error.message}`);
+    offers.push(...(data ?? []));
+  }
+  const latest = new Map<string, { observed_at: string; price: number }>();
+  const ids = offers.map(o => String(o.id));
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await sb.from('latest_prices').select('store_product_id,observed_at,price')
+      .in('store_product_id', ids.slice(i, i + 100));
+    if (error) throw new Error(`Loading peer freshness: ${error.message}`);
+    for (const l of data ?? []) latest.set(String(l.store_product_id), { observed_at: String(l.observed_at), price: Number(l.price) });
+  }
+  const out: FreshPeerOffer[] = [];
+  for (const r of offers) {
+    const lp = latest.get(String(r.id));
+    if (!lp || !lp.observed_at || Date.parse(lp.observed_at) <= now - PEER_FRESH_DAYS * 86400_000 || !(lp.price > 0)) continue;
+    out.push({ id: String(r.id), store: String(r.store), store_product_name: String(r.store_product_name ?? ''),
+      brand: (r.brand as string) ?? null, gtin: (r.gtin as string) ?? null, store_sku: String(r.store_sku ?? ''),
+      observed_at: lp.observed_at, price: lp.price, product_id: String(r.product_id) });
+  }
+  return out;
+}
+
 export async function attachFreshPeers(sb: SupabaseClient, mappings: ApifyMapping[]): Promise<void> {
   if (!mappings.length) return;
-  const productIds = [...new Set(mappings.map(m => m.product_id))];
-  const now = Date.now();
   const byProduct = new Map<string, ApifyPeer[]>();
-  for (let i = 0; i < productIds.length; i += 50) {
-    const chunk = productIds.slice(i, i + 50);
-    const { data, error } = await sb.from('store_products')
-      .select('id,product_id,store,store_sku,store_product_name,brand,gtin,latest_prices(observed_at,price)')
-      .in('product_id', chunk).in('store', ['dunnes', 'supervalu']);
-    if (error) throw new Error(`Loading peers: ${error.message}`);
-    for (const r of data ?? []) {
-      const lp = Array.isArray(r.latest_prices) ? r.latest_prices[0] : (r.latest_prices as Record<string, unknown> | null);
-      const observedAt = lp ? String((lp as Record<string, unknown>).observed_at) : null;
-      const price = lp ? Number((lp as Record<string, unknown>).price) : 0;
-      if (!observedAt || Date.parse(observedAt) <= now - PEER_FRESH_DAYS * 86400_000 || !(price > 0)) continue;
-      const pid = String(r.product_id);
-      if (!byProduct.has(pid)) byProduct.set(pid, []);
-      byProduct.get(pid)!.push({
-        id: String(r.id), store: String(r.store), store_product_name: String(r.store_product_name ?? ''),
-        brand: (r.brand as string) ?? null, gtin: (r.gtin as string) ?? null,
-        store_sku: String(r.store_sku ?? ''), observed_at: observedAt, price,
-      });
-    }
+  for (const { product_id: pid, ...peer } of await loadFreshPeerOffers(sb, [...new Set(mappings.map(m => m.product_id))])) {
+    byProduct.set(pid, [...(byProduct.get(pid) ?? []), peer]);
   }
   for (const m of mappings) {
     const all = byProduct.get(m.product_id) ?? [];
@@ -652,7 +661,7 @@ export async function collectTescoApify(
 
   const mappings = await selectApifyMappings(sb, mode, limit, deps.allowFirstPrice === true,
     { priorityIds: deps.selection?.priorityIds, repairTargets: deps.selection?.repairTargets,
-      selfEvidence: deps.selfEvidenceFirstPrice === true });
+      selfEvidence: deps.selfEvidenceFirstPrice === true, targetIds: deps.selection?.targetIds });
   const result: ApifyCollectionResult = {
     runId: '', mode, requested: 0, accepted: 0, held: 0, unavailable: 0, stopped: null, evidenceRecorded: 0, spentUsd, perProduct: [],
   };
@@ -1094,4 +1103,12 @@ export async function collectTescoApify(
   }
   result.spentUsd = spentUsd;
   return result;
+}
+
+// Targeted queue: strict UUID list (fail closed on any malformed entry).
+export function parseTargetIds(raw: string | undefined): string[] | null {
+  if (!raw || !raw.trim()) return null;
+  const ids = raw.split(',').map(x => x.trim()).filter(Boolean);
+  if (!ids.length || ids.some(x => !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(x))) throw new Error('APIFY_TARGET_IDS must be comma-separated UUIDs');
+  return [...new Set(ids)];
 }
