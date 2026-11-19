@@ -1,5 +1,35 @@
 # Supermarket.ie — Canonical Project State
 
+## 19 November 2026 — bf00c5f DEPLOYED (#416–#418); first collection tranche; one-off first-price schedule
+
+- Build 44410422414 was approved by owner authorisation (this run only).
+- Workers: `smie-prod-sqs-consumer:8`, `smie-prod-scheduled:8` on `bf00c5f-prod`.
+- Website: `smie-prod:18` on `bf00c5f-prod`.
+- Rollback: web `a9f7ace-prod`, workers `31b1f5b-prod`. Backups of the tfvars
+  are in ~/smie-private.
+- Production checks: 200 on the main pages, per-retailer labels, and the
+  matchup page shows no winner (203 shared Tesco–Dunnes products).
+- Migration 20261118120000 is NOT applied. That needs the owner's operator
+  route. Until then the app uses the 14-day ledger.
+- Tesco first-price:
+  - Evidence run: 175 pages, finished 2026-11-19 00:37Z.
+  - Approve run: 376 assessed, 31 approvals recorded. Holds: 327
+    deterministic, 12 AI uncertain, 5 AI rejected, 1 AI error.
+  - ONE-OFF SCHEDULE (outside Terraform, deletes itself after running):
+    `smie-prod-tesco-first-price-20261120`, at(2026-11-20T01:37:38Z),
+    collector :17, APIFY_MODE=expansion, APIFY_ALLOW_FIRST_PRICE=1,
+    APIFY_MAX_BATCHES=4. The approvals expire after 72 h.
+  - Growth ledger: $7.44 of $10 settled. Apify account: about $59.5 headroom
+    of $80.
+- SuperValu/Dunnes replays of the 18 Nov scheduled failures (279 / 156): 0
+  recovered. Delisted or renamed products need a remap, not a re-fetch.
+- SuperValu↔Tesco evidence batch 2: 41 of 46 valid direct captures, after one
+  operator error (parallel trigger tasks collided on second-resolution run IDs;
+  run them sequentially).
+- Dunnes August discovery pipeline: NOT run. It writes mappings and prices
+  from search listings, including ±5% "alternative" packs, which is weaker than
+  the current evidence rules. It needs confirmation via product-by-SKU first.
+
 ## 18 November 2026 — #414 workers + #413 website DEPLOYED; SuperValu capture verified; 10-pair SuperValu↔Tesco pilot evidenced (awaiting owner review)
 
 DEPLOYED (owner-authorised approval of exactly runs 44184097031 and 44197599269
