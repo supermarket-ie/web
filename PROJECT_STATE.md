@@ -23,6 +23,8 @@ of ANY age, and until now no procedure resolved one.
   2. this migration
   3. `supabase/operator/20261120_resolve_9_historical_pending_tesco_pages.sql`, which
      resolves 9 explicitly named pages in one transaction and verifies the result
+- The ledger FK is `on delete restrict`: deleting a `scrape_runs` row that owns a resolved page now fails (pages cascade from runs). Nothing deletes runs today; a future retention job must account for it.
+- Run the operator file as ONE script in ONE session (its assertion then rolls back any partial state).
 - Glade (253094431) is excluded because its SV and Dunnes offers are different products.
   The other 9 have consistent SV, Dunnes and Tesco titles, and their last completed Tesco
   page had no identity reasons. After step 3 they are re-fetched by a targeted run
