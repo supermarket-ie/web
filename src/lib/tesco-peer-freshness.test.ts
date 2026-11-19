@@ -77,7 +77,28 @@ describe('peer freshness is per offer', () => {
   });
 });
 
+describe('guard: the cross-offer embed never returns', () => {
+  // PGlite emulates the embed per offer, so it cannot reproduce the production
+  // defect. Guard at source level instead: trust code must not embed latest_prices.
+  it('no store_products -> latest_prices embed in the collector or retained review', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const p of ['src/lib/tesco-apify-collection.ts', 'src/lib/tesco-first-price-approval.ts', 'scripts/tesco-retained-review.ts']) {
+      expect(readFileSync(p, 'utf8')).not.toMatch(/latest_prices\(/);
+    }
+  });
+  it('attached peers keep the ApifyPeer shape (no product_id) and one per store', async () => {
+    const sel = await selectApifyMappings(sb, 'evidence', 10);
+    for (const m of sel) {
+      expect(new Set(m.peers.map(p => p.store)).size).toBe(m.peers.length);
+      for (const p of m.peers) expect(p).not.toHaveProperty('product_id');
+    }
+  });
+});
+
 describe('targeted queue (APIFY_TARGET_IDS)', () => {
+  it('an explicit empty target list matches nothing', async () => {
+    expect(await selectApifyMappings(sb, 'evidence', 10, false, { targetIds: [] })).toEqual([]);
+  });
   it('only the listed mapping ids are eligible; others are never requested', async () => {
     await db.exec(`update public.price_observations set observed_at = now() - interval '1 day' where store_product_id = '${D}'`);
     const sel = await selectApifyMappings(sb, 'evidence', 10, false, { targetIds: [T] });

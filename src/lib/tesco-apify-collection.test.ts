@@ -47,7 +47,7 @@ function makeFakeSb(opts: {
   };
   // Peer fixtures carry their OWN latest price; the collector now reads it from
   // latest_prices by store_product_id (never via the store_products embed).
-  const peerRows = () => (opts.peers ?? []).map((p, i) => ({ ...p, id: p.id ?? `peer-fixture-${i}` }));
+  const peerRows = (): Row[] => (opts.peers ?? []).map((p, i): Row => ({ ...p, id: p.id ?? `peer-fixture-${i}` }));
   const peerLatest = () => peerRows().flatMap(p => { const l = Array.isArray(p.latest_prices) ? p.latest_prices[0] : p.latest_prices as Row | null;
     return l ? [{ store_product_id: p.id, observed_at: l.observed_at, price: l.price }] : []; });
   const table = (name: string) => {

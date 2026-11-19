@@ -33,7 +33,7 @@ each came back twice, with the SuperValu and Dunnes prices).
 
 **Targeted queue.** `APIFY_TARGET_IDS` (comma-separated Tesco mapping UUIDs, strict
 parse, fails closed) restricts every mode (evidence, approve, expansion, renewal) to
-those ids, in that order. Every other eligibility rule still applies, and it replaces
+those ids (worked in list order, except renewal, which keeps oldest-observation order; an empty list matches nothing). Every other eligibility rule still applies, and it replaces
 the recovery-queue file for that run. This fixes the 19 Nov run where only 2 of 29
 requests reached the intended cohort.
 

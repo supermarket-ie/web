@@ -5,7 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { writeFileSync } from 'node:fs';
 import { reviewRetained, type RetainedReview } from '../src/lib/tesco-retained-review';
-import type { ApifyPeer } from '../src/lib/tesco-apify-collection';
+import { loadFreshPeerOffers, type ApifyPeer } from '../src/lib/tesco-apify-collection';
 
 const sb = createClient(process.env.SB_URL!, process.env.SB_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
 // PostgREST rows from dynamic selects (read-only reporting script).
@@ -41,20 +41,8 @@ async function main() {
   // Fresh peers (<= 7 days, priced), one per store, freshest first.
   const pids = [...new Set(pop.map(s => String(s.product_id)))];
   const peersBy = new Map<string, ApifyPeer[]>();
-  for (let i = 0; i < pids.length; i += 50) {
-    const { data, error } = await sb.from('store_products')
-      .select('id,product_id,store,store_sku,store_product_name,brand,gtin,latest_prices(observed_at,price)')
-      .in('product_id', pids.slice(i, i + 50)).in('store', ['dunnes', 'supervalu']);
-    if (error) throw new Error(error.message);
-    for (const r of data ?? []) {
-      const lp = Array.isArray(r.latest_prices) ? r.latest_prices[0] : r.latest_prices;
-      if (!lp || !(Number(lp.price) > 0) || Date.parse(lp.observed_at) <= now - 7 * 86400_000) continue;
-      const list = peersBy.get(String(r.product_id)) ?? [];
-      list.push({ id: String(r.id), store: String(r.store), store_product_name: String(r.store_product_name ?? ''), brand: r.brand ?? null,
-        gtin: r.gtin ?? null, store_sku: String(r.store_sku ?? ''), observed_at: String(lp.observed_at), price: Number(lp.price) });
-      peersBy.set(String(r.product_id), list);
-    }
-  }
+  // Per-offer freshness (never the store_products -> latest_prices embed).
+  for (const { product_id: pid, ...peer } of await loadFreshPeerOffers(sb, pids)) peersBy.set(pid, [...(peersBy.get(pid) ?? []), peer]);
   const out: RetainedReview[] = [];
   for (const s of pop) {
     const page = pageByUrl.get(String(s.store_url));

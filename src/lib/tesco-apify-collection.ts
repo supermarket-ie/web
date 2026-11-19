@@ -171,7 +171,8 @@ export async function selectApifyMappings(
 ): Promise<ApifyMapping[]> {
   const candidateMode = opts.approvalCandidates === true && mode === 'expansion';
   const evidenceMode = mode === 'evidence';
-  const targetSet = opts.targetIds?.length ? new Set(opts.targetIds) : null;
+  // An explicit (even empty) target list restricts: [] matches nothing (fail closed).
+  const targetSet = opts.targetIds ? new Set(opts.targetIds) : null;
   const priorityRank = new Map((opts.targetIds?.length ? opts.targetIds : opts.priorityIds ?? []).map((id, i) => [id, i]));
   const rankOf = (id: string) => priorityRank.get(id) ?? Number.MAX_SAFE_INTEGER;
   // Pull resolved tesco mappings with canonical identity.
