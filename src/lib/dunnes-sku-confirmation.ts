@@ -52,6 +52,9 @@ export function structuredPackSize(u: DunnesProductResponse['unitsOfSize']): { a
 }
 
 const words = (s: string) => normaliseDunnesName(s).split(' ').filter(Boolean);
+// Title words only: an apostrophe joins a word ("Flahavan's" = "Flahavans") instead of leaving a stray "s".
+// Brand confirmation keeps using words(): brand spelling variants are never merged.
+const titleWords = (s: string) => words(s.replace(/([a-z])['\u2019]([a-z])/gi, '$1$2'));
 
 /** Canonical brand stated by the response's structured brand (all brand words present, in order-insensitive form). */
 export function brandConfirmed(canonicalBrand: string, responseBrand: unknown): boolean {
@@ -70,7 +73,7 @@ export function titleWordProblems(canonicalName: string, retailerTitle: string):
   // Connectives carry no identity ("Garlic & Herb" = "Garlic and Herb"); qualifier and pack checks are unaffected.
   const CONNECTIVE = new Set(['and', 'with', 'of', 'the', 'in', 'a']);
   const keep = (w: string) => !PACK_TOKEN.test(w) && !CONNECTIVE.has(w);
-  const c = words(canonicalName).filter(keep), t = new Set(words(retailerTitle).filter(keep));
+  const c = titleWords(canonicalName).filter(keep), t = new Set(titleWords(retailerTitle).filter(keep));
   const problems: string[] = [];
   const missing = c.filter(w => !t.has(w));
   if (missing.length) problems.push(`title_words_missing:${missing.join('+')}`);
