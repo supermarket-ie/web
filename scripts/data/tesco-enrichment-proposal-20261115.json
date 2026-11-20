@@ -1,14 +1,12 @@
 {
- "generatedAt": "2026-11-15T14:00:28.418Z",
+ "generatedAt": "2026-11-15T20:56:52.805Z",
  "readOnly": true,
  "rule": "Tesco catalogue item + >=1 independent Dunnes/SuperValu offer must agree; canonical must not contradict",
  "tally": {
-  "needs_split": 38,
-  "contradicted": 4,
-  "insufficient_evidence": 15,
-  "substantiated": 3
+  "split_ready": 4,
+  "needs_split": 56
  },
- "repairsFullyUnblockedByEnrichment": 2,
+ "repairsFullyUnblockedByEnrichment": 0,
  "rows": [
   {
    "mapping_id": "5cb35a07-f9a9-478e-bc48-24048c69f7ab",
@@ -40,39 +38,109 @@
      "name": "Schwartz Cajun Seasoning (44 g)",
      "brand": "Schwartz",
      "sku": "1020899000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores Cajun Seasoning 35g",
-     "brand": null,
-     "sku": "100206328"
     }
    ],
-   "status": "needs_split",
+   "status": "split_ready",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
-   "proposed": null,
+   "proposed": {
+    "name": "Schwartz Cajun Seasoning 44g",
+    "brand": "Schwartz",
+    "pack": "44g",
+    "variant": "Cajun Seasoning"
+   },
    "splitInto": [
     {
      "brand": "Schwartz",
      "pack": "44g",
      "variant": "Cajun Seasoning",
+     "complete": true,
      "sources": [
       "tesco:proposed:257518392",
       "supervalu:peer:1020899000"
      ]
     },
     {
-     "brand": null,
+     "brand": "Dunnes Stores",
      "pack": "35g",
      "variant": "Cajun Seasoning",
+     "complete": true,
      "sources": [
       "dunnes:peer:100206328"
      ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "45g",
+     "variant": "Cajun Seasoning",
+     "complete": true,
+     "sources": [
+      "tesco:current:289081921"
+     ]
+    },
+    {
+     "brand": "READY, SET…COOK!",
+     "pack": null,
+     "variant": "Cajun Seasoning",
+     "complete": false,
+     "sources": [
+      "aldi:other:READY, SET…COOK! Cajun Seasoning"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1020899000",
+     "name": "Schwartz Cajun Seasoning (44 g)",
+     "brand": "Schwartz",
+     "brandSource": "structured",
+     "verdict": "agrees",
+     "conflicts": []
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100206328",
+     "name": "Dunnes Stores Cajun Seasoning 35g",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs Schwartz)",
+      "pack(35g vs 44g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "289081921",
+     "name": "Tesco Cajun Seasoning 45G",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs Schwartz)",
+      "pack(45g vs 44g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "READY, SET…COOK! Cajun Seasoning",
+     "name": "READY, SET…COOK! Cajun Seasoning",
+     "brand": "READY, SET…COOK!",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(READY, SET…COOK! vs Schwartz)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -103,12 +171,122 @@
     "brand": "Special K",
     "ean": "05057753031664"
    },
-   "supportingSources": [],
-   "status": "contradicted",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Finest Super Nutty Granola 500G",
+     "brand": "TESCO finest",
+     "sku": "300399973"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "canonical_brand_contradicts(Special K vs TESCO finest)"
+    "canonical_brand_contradicts(Special K vs TESCO finest)",
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO finest",
+     "pack": "500g",
+     "variant": "Super Nutty Granola",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:300399973"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "350g",
+     "variant": "Lizi's Granola High Protein Nuts & Seeds Granola",
+     "complete": false,
+     "sources": [
+      "dunnes:peer:100170344"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "360g",
+     "variant": "Bio&amp;Me Low Sugar, Naturally Gut-Loving Granola",
+     "complete": false,
+     "sources": [
+      "tesco:current:311803709"
+     ]
+    },
+    {
+     "brand": "Special K",
+     "pack": null,
+     "variant": "Granola",
+     "complete": false,
+     "sources": [
+      "supervalu:peer:1838578000"
+     ]
+    },
+    {
+     "brand": "DUNEEN",
+     "pack": null,
+     "variant": "Strawberry & Granola Strained Greek Style Yogurt",
+     "complete": false,
+     "sources": [
+      "aldi:other:DUNEEN Strawberry & Granola Strained Greek Style Yogurt"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100170344",
+     "name": "Lizi's Granola High Protein Nuts & Seeds Granola 350g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(350g vs 500g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "311803709",
+     "name": "Bio&amp;Me Low Sugar, Naturally Gut-Loving Granola 360g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(360g vs 500g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1838578000",
+     "name": "Granola",
+     "brand": "Special K",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Special K vs TESCO finest)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "DUNEEN Strawberry & Granola Strained Greek Style Yogurt",
+     "name": "DUNEEN Strawberry & Granola Strained Greek Style Yogurt",
+     "brand": "DUNEEN",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(DUNEEN vs TESCO finest)",
+      "variant_qualifier"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -139,12 +317,104 @@
     "brand": null,
     "ean": "08713807003670"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Farm Select Puro Gusto Ready To Eat Mango",
+     "brand": "FARM SELECT",
+     "sku": "315384103"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "FARM SELECT",
+     "pack": null,
+     "variant": "Puro Gusto Ready To Eat Mango",
+     "complete": false,
+     "sources": [
+      "tesco:proposed:315384103"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": null,
+     "variant": "Mango 2pk",
+     "complete": false,
+     "sources": [
+      "dunnes:peer:100835592"
+     ]
+    },
+    {
+     "brand": "NATURE'S PICK",
+     "pack": null,
+     "variant": "Mango",
+     "complete": false,
+     "sources": [
+      "aldi:other:NATURE'S PICK Mango"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100835592",
+     "name": "Dunnes Stores Mango 2pk",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs FARM SELECT)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "324441800",
+     "name": "Angel Delight Mango Jelly &amp; Passionfruit Boba Bubble 4x130g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1019647000",
+     "name": "Mango (1 Piece)",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "NATURE'S PICK Mango",
+     "name": "NATURE'S PICK Mango",
+     "brand": "NATURE'S PICK",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(NATURE'S PICK vs FARM SELECT)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": "1019647000",
+     "name": "Mango (1 Piece)"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -180,25 +450,13 @@
      "name": "John West Tuna Chunks In Spring Water 145G",
      "brand": "JOHN WEST",
      "sku": "305983187"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "John West Tuna Chunks in Spring Water 3 x 80g",
-     "brand": "John West",
-     "sku": "100765926"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "John West Tuna Steak with a Little Spring Water 3 Pack (60 g)",
-     "brand": "John West",
-     "sku": "1622617000"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -206,6 +464,7 @@
      "brand": "JOHN WEST",
      "pack": "145g",
      "variant": "Tuna Chunks In Spring Water",
+     "complete": true,
      "sources": [
       "tesco:proposed:305983187"
      ]
@@ -213,8 +472,10 @@
     {
      "brand": "John West",
      "pack": "240g",
-     "variant": "Tuna Chunks in Spring Water",
+     "variant": "Tuna Chunks In Spring Water",
+     "complete": true,
      "sources": [
+      "tesco:current:281464913",
       "dunnes:peer:100765926"
      ]
     },
@@ -222,11 +483,72 @@
      "brand": "John West",
      "pack": "60g",
      "variant": "Tuna Steak with a Little Spring Water 3 Pack",
+     "complete": true,
      "sources": [
       "supervalu:peer:1622617000"
      ]
+    },
+    {
+     "brand": "Nixe",
+     "pack": null,
+     "variant": "Tuna in Water",
+     "complete": false,
+     "sources": [
+      "lidl:other:Nixe Tuna in Water"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "281464913",
+     "name": "Tesco Tuna Chunks In Spring Water 3X80g",
+     "brand": "John West",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(240g vs 145g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100765926",
+     "name": "John West Tuna Chunks in Spring Water 3 x 80g",
+     "brand": "John West",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(240g vs 145g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1622617000",
+     "name": "John West Tuna Steak with a Little Spring Water 3 Pack (60 g)",
+     "brand": "John West",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(60g vs 145g)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Nixe Tuna in Water",
+     "brand": "Nixe",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Nixe vs JOHN WEST)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -257,12 +579,116 @@
     "brand": "barry's tea",
     "ean": "05099810552408"
    },
-   "supportingSources": [],
-   "status": "contradicted",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Barrys Gold Teabags 160 Pack 500G",
+     "brand": "BARRYS",
+     "sku": "253610046"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "canonical_brand_contradicts(barry's tea vs BARRYS)"
+    "canonical_brand_contradicts(barry's tea vs BARRYS)",
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "BARRYS",
+     "pack": "500g",
+     "variant": "Gold Teabags 160 Pack",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:253610046"
+     ]
+    },
+    {
+     "brand": "MCGRATHS",
+     "pack": null,
+     "variant": "Original Blend Irish Tea Bags 160 Pack",
+     "complete": false,
+     "sources": [
+      "aldi:other:MCGRATHS Original Blend Irish Tea Bags 160 Pack"
+     ]
+    },
+    {
+     "brand": "BARRYS",
+     "pack": "500g",
+     "variant": "Original Tea Bag 160 Pack",
+     "complete": true,
+     "sources": [
+      "tesco:current:253610173"
+     ]
+    },
+    {
+     "brand": "barry's tea",
+     "pack": "500g",
+     "variant": "Gold Blend 160 Tea Bags",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100150128"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": null,
+     "name": "Tea Bags 160 Pack",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "MCGRATHS Original Blend Irish Tea Bags 160 Pack",
+     "name": "MCGRATHS Original Blend Irish Tea Bags 160 Pack",
+     "brand": "MCGRATHS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(MCGRATHS vs BARRYS)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "253610173",
+     "name": "Barrys Original Tea Bag 160 Pack 500G",
+     "brand": "BARRYS",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100150128",
+     "name": "Barry's Tea Gold Blend 160 Tea Bags 500g",
+     "brand": "barry's tea",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(barry's tea vs BARRYS)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": null,
+     "name": "Tea Bags 160 Pack"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -291,12 +717,105 @@
     "brand": null,
     "ean": "05052909439455"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Butternut Squash 300G",
+     "brand": "TESCO",
+     "sku": "273592358"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:conflicts,supervalu:silent)"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "300g",
+     "variant": "Butternut Squash",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:273592358"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": null,
+     "variant": "Organic Butternut Squash",
+     "complete": false,
+     "sources": [
+      "dunnes:peer:100853954"
+     ]
+    },
+    {
+     "brand": "NATURE'S PICK",
+     "pack": null,
+     "variant": "Butternut Squash",
+     "complete": false,
+     "sources": [
+      "aldi:other:NATURE'S PICK Butternut Squash"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100853954",
+     "name": "Dunnes Stores Organic Butternut Squash",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)",
+      "variant_qualifier"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1027497000",
+     "name": "Butternut Squash Loose (1 Piece)",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "NATURE'S PICK Butternut Squash",
+     "name": "NATURE'S PICK Butternut Squash",
+     "brand": "NATURE'S PICK",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(NATURE'S PICK vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "277492902",
+     "name": "Tesco Butternut Squash Each",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "silent",
+     "conflicts": []
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": "1027497000",
+     "name": "Butternut Squash Loose (1 Piece)"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -333,25 +852,13 @@
      "name": "Tesco Broccoli Loose",
      "brand": "TESCO",
      "sku": "257231200"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Broccoli  (350 g)",
-     "brand": "SuperValu",
-     "sku": "1030326000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores Fresh Broccoli",
-     "brand": "Dunnes Stores",
-     "sku": "100807377"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -359,19 +866,109 @@
      "brand": "TESCO",
      "pack": null,
      "variant": "Broccoli Loose",
+     "complete": false,
      "sources": [
       "tesco:proposed:257231200"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": null,
+     "variant": "Family Pack Broccoli",
+     "complete": false,
+     "sources": [
+      "tesco:current:293687406"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "350g",
      "variant": "Broccoli",
+     "complete": true,
      "sources": [
       "supervalu:peer:1030326000"
      ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": null,
+     "variant": "Fresh Broccoli",
+     "complete": false,
+     "sources": [
+      "dunnes:peer:100807377"
+     ]
+    },
+    {
+     "brand": "NATURE'S PICK",
+     "pack": null,
+     "variant": "Broccoli",
+     "complete": false,
+     "sources": [
+      "aldi:other:NATURE'S PICK Broccoli"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "293687406",
+     "name": "Tesco Family Pack Broccoli",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1030326000",
+     "name": "SuperValu Broccoli  (350 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100807377",
+     "name": "Dunnes Stores Fresh Broccoli",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Broccoli",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "NATURE'S PICK Broccoli",
+     "name": "NATURE'S PICK Broccoli",
+     "brand": "NATURE'S PICK",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(NATURE'S PICK vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -401,12 +998,123 @@
     "brand": "McVitie's",
     "ean": "05000119003034"
    },
-   "supportingSources": [],
-   "status": "contradicted",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Custard Cream Biscuits 400G",
+     "brand": "TESCO",
+     "sku": "254921258"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "canonical_brand_contradicts(McVitie's vs TESCO)"
+    "canonical_brand_contradicts(McVitie's vs TESCO)",
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "400g",
+     "variant": "Custard Cream Biscuits",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:254921258"
+     ]
+    },
+    {
+     "brand": "McVitie's",
+     "pack": null,
+     "variant": "Custard Creams",
+     "complete": false,
+     "sources": [
+      "supervalu:peer:1902907000"
+     ]
+    },
+    {
+     "brand": "SCHAR",
+     "pack": "125g",
+     "variant": "Custard Creams",
+     "complete": true,
+     "sources": [
+      "tesco:current:277408019"
+     ]
+    },
+    {
+     "brand": "BOLANDS",
+     "pack": "150g",
+     "variant": "Custard Creams",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100288951"
+     ]
+    },
+    {
+     "brand": "BELMONT",
+     "pack": null,
+     "variant": "Custard Creams",
+     "complete": false,
+     "sources": [
+      "aldi:other:BELMONT Custard Creams"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1902907000",
+     "name": "Custard Creams",
+     "brand": "McVitie's",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(McVitie's vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "277408019",
+     "name": "Schar Custard Creams 125G",
+     "brand": "SCHAR",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SCHAR vs TESCO)",
+      "pack(125g vs 400g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100288951",
+     "name": "Bolands Custard Creams 150g",
+     "brand": "BOLANDS",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BOLANDS vs TESCO)",
+      "pack(150g vs 400g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BELMONT Custard Creams",
+     "name": "BELMONT Custard Creams",
+     "brand": "BELMONT",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BELMONT vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -451,14 +1159,126 @@
      "sku": "1004862000"
     }
    ],
-   "status": "substantiated",
-   "reasons": [],
+   "status": "split_ready",
+   "reasons": [
+    "attached_offers_are_5_different_products",
+    "a_split_out_product_lacks_brand_or_pack"
+   ],
    "proposed": {
     "name": "Schwartz Ground Black Pepper 33g",
     "brand": "Schwartz",
     "pack": "33g",
     "variant": "Ground Black Pepper"
    },
+   "splitInto": [
+    {
+     "brand": "Schwartz",
+     "pack": "33g",
+     "variant": "Ground Black Pepper Jar",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:257515124",
+      "supervalu:peer:1004862000"
+     ]
+    },
+    {
+     "brand": "Schwartz",
+     "pack": "33g",
+     "variant": "Black Pepper Ground Medium",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100111810"
+     ]
+    },
+    {
+     "brand": "Schwartz",
+     "pack": "50g",
+     "variant": "Ground Black Pepper",
+     "complete": true,
+     "sources": [
+      "tesco:current:256146389"
+     ]
+    },
+    {
+     "brand": "Kania",
+     "pack": null,
+     "variant": "Ground Black Pepper",
+     "complete": false,
+     "sources": [
+      "lidl:other:Kania Ground Black Pepper"
+     ]
+    },
+    {
+     "brand": "SPECIALLY SELECTED",
+     "pack": null,
+     "variant": "Black Pepper Crackers",
+     "complete": false,
+     "sources": [
+      "aldi:other:SPECIALLY SELECTED Black Pepper Crackers"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100111810",
+     "name": "Schwartz Black Pepper Ground Medium 33g",
+     "brand": "Schwartz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1004862000",
+     "name": "Schwartz Black Pepper Ground Jar (33 g)",
+     "brand": "Schwartz",
+     "brandSource": "structured",
+     "verdict": "agrees",
+     "conflicts": []
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "256146389",
+     "name": "Tesco Ground Black Pepper 50G",
+     "brand": "Schwartz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(50g vs 33g)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Kania Ground Black Pepper",
+     "brand": "Kania",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Kania vs Schwartz)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "SPECIALLY SELECTED Black Pepper Crackers",
+     "name": "SPECIALLY SELECTED Black Pepper Crackers",
+     "brand": "SPECIALLY SELECTED",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SPECIALLY SELECTED vs Schwartz)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -469,21 +1289,8 @@
     "category": "Food Cupboard > Cooking Ingredients > Salt & Pepper > Ground Pepper"
    },
    "canonical_ean_tesco_sourced": true,
-   "proposed_change": {
-    "table": "products",
-    "id": "109abf03-5350-40d3-bad8-3181a2d7cbf8",
-    "set": {
-     "canonical_name": "Schwartz Ground Black Pepper 33g",
-     "brand": "Schwartz"
-    },
-    "from": {
-     "canonical_name": "Black Pepper Ground",
-     "brand": "Schwartz"
-    }
-   },
-   "remaining_repair_blockers_after_enrichment": [
-    "not_proven (repair guard requires a prior receipt)"
-   ]
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
   },
   {
    "mapping_id": "a4e410a7-2d44-4fb7-a77b-9b48ce27675a",
@@ -507,25 +1314,13 @@
      "name": "Sharwood's Medium Egg Noodles 226g",
      "brand": "SHARWOOD'S",
      "sku": "315362515"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Medium Egg Noodles (250 g)",
-     "brand": null,
-     "sku": "1535861000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Blue Dragon Fine Egg Noodles 250g",
-     "brand": null,
-     "sku": "100298257"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -533,19 +1328,80 @@
      "brand": "SHARWOOD'S",
      "pack": "226g",
      "variant": "Medium Egg Noodles",
+     "complete": true,
      "sources": [
       "tesco:proposed:315362515"
      ]
     },
     {
-     "brand": null,
+     "brand": "SuperValu",
      "pack": "250g",
      "variant": "Medium Egg Noodles",
+     "complete": true,
      "sources": [
       "supervalu:peer:1535861000"
      ]
+    },
+    {
+     "brand": "Blue Dragon",
+     "pack": "250g",
+     "variant": "Fine Egg Noodles",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100298257"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": null,
+     "variant": "Medium Egg Noodles",
+     "complete": false,
+     "sources": [
+      "tesco:current:272640603"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1535861000",
+     "name": "SuperValu Medium Egg Noodles (250 g)",
+     "brand": "SuperValu",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs SHARWOOD'S)",
+      "pack(250g vs 226g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100298257",
+     "name": "Blue Dragon Fine Egg Noodles 250g",
+     "brand": "Blue Dragon",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Blue Dragon vs SHARWOOD'S)",
+      "pack(250g vs 226g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "272640603",
+     "name": "Tesco Medium Egg Noodles",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs SHARWOOD'S)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -589,14 +1445,107 @@
      "sku": "1008602002"
     }
    ],
-   "status": "substantiated",
-   "reasons": [],
+   "status": "split_ready",
+   "reasons": [
+    "attached_offers_are_4_different_products",
+    "a_split_out_product_lacks_brand_or_pack"
+   ],
    "proposed": {
     "name": "Lifeforce Muesli 750g",
     "brand": "Lifeforce",
     "pack": "750g",
     "variant": "Muesli"
    },
+   "splitInto": [
+    {
+     "brand": "LIFEFORCE",
+     "pack": "750g",
+     "variant": "Irish Muesli",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:251970492",
+      "supervalu:peer:1008602002"
+     ]
+    },
+    {
+     "brand": "Flahavan's",
+     "pack": null,
+     "variant": "Hi8 Muesli - Fruit & Nut",
+     "complete": false,
+     "sources": [
+      "tesco:current:315060999"
+     ]
+    },
+    {
+     "brand": "HARVEST MORN",
+     "pack": null,
+     "variant": "Chocolate Muesli Bars",
+     "complete": false,
+     "sources": [
+      "aldi:other:HARVEST MORN Chocolate Muesli Bars"
+     ]
+    },
+    {
+     "brand": "Flahavan's",
+     "pack": "1kg",
+     "variant": "Hi8 Muesli Original",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100673561"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1008602002",
+     "name": "Lifeforce Muesli (750 g)",
+     "brand": "Lifeforce",
+     "brandSource": "structured",
+     "verdict": "agrees",
+     "conflicts": []
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "315060999",
+     "name": "Flahavan's Hi8 Muesli - Fruit & Nut",
+     "brand": "Flahavan's",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Flahavan's vs LIFEFORCE)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "HARVEST MORN Chocolate Muesli Bars",
+     "name": "HARVEST MORN Chocolate Muesli Bars",
+     "brand": "HARVEST MORN",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(HARVEST MORN vs LIFEFORCE)",
+      "variant_qualifier"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100673561",
+     "name": "Flahavan's Hi8 Muesli Original 1kg",
+     "brand": "Flahavan's",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Flahavan's vs LIFEFORCE)",
+      "pack(1kg vs 750g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -607,19 +1556,8 @@
     "category": "Food Cupboard > Breakfast Cereals > Muesli & Granola > Muesli"
    },
    "canonical_ean_tesco_sourced": true,
-   "proposed_change": {
-    "table": "products",
-    "id": "1cca7ae6-2118-4871-be9a-d8eeb359f0ed",
-    "set": {
-     "canonical_name": "Lifeforce Muesli 750g",
-     "brand": "Lifeforce"
-    },
-    "from": {
-     "canonical_name": "Muesli",
-     "brand": "Lifeforce"
-    }
-   },
-   "remaining_repair_blockers_after_enrichment": []
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
   },
   {
    "mapping_id": "dcffd4ed-540a-4f93-aa13-ebee2cbbe6c8",
@@ -637,12 +1575,120 @@
     "brand": null,
     "ean": "05057753304027"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Tuna Steaks With A Little Brine 110g",
+     "brand": "TESCO",
+     "sku": "300991951"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:silent,supervalu:conflicts)"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "110g",
+     "variant": "Tuna Steaks With A Little Brine",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:300991951"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "110g",
+     "variant": "Tuna Steak in a Little Spring Water",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100174641"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "110g",
+     "variant": "Tuna Steaks with a Little Spring Water",
+     "complete": true,
+     "sources": [
+      "tesco:current:300992005"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": null,
+     "variant": "Tuna Steak",
+     "complete": false,
+     "sources": [
+      "supervalu:peer:1552004000"
+     ]
+    },
+    {
+     "brand": "THE FISHMONGER",
+     "pack": null,
+     "variant": "Drained & Ready to Eat Tuna Steaks in Brine",
+     "complete": false,
+     "sources": [
+      "aldi:other:THE FISHMONGER Drained & Ready to Eat Tuna Steaks in Brine"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100174641",
+     "name": "Dunnes Stores Tuna Steak in a Little Spring Water 110g",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "300992005",
+     "name": "Tesco Tuna Steaks with a Little Spring Water 110g",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1552004000",
+     "name": "Tuna Steak",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "THE FISHMONGER Drained & Ready to Eat Tuna Steaks in Brine",
+     "name": "THE FISHMONGER Drained & Ready to Eat Tuna Steaks in Brine",
+     "brand": "THE FISHMONGER",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(THE FISHMONGER vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -672,12 +1718,95 @@
     "brand": null,
     "ean": "05059512729492"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Pineapple Chunks In Juice 425G",
+     "brand": "TESCO",
+     "sku": "308859526"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:conflicts,supervalu:silent)"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "425g",
+     "variant": "Pineapple Chunks In Juice",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:308859526"
+     ]
+    },
+    {
+     "brand": "SIMPLYFRUIT",
+     "pack": "240g",
+     "variant": "Pineapple Chunks",
+     "complete": true,
+     "sources": [
+      "tesco:current:330746314"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "435g",
+     "variant": "Del Monte Gold Pineapple Chunks in Juice",
+     "complete": false,
+     "sources": [
+      "dunnes:peer:100873517"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "330746314",
+     "name": "Simplyfruit Pineapple Chunks 240G",
+     "brand": "SIMPLYFRUIT",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SIMPLYFRUIT vs TESCO)",
+      "pack(240g vs 425g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100873517",
+     "name": "Del Monte Gold Pineapple Chunks in Juice 435g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(435g vs 425g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": null,
+     "name": "Pineapple Chunks Tinned",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": null,
+     "name": "Pineapple Chunks Tinned"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -715,26 +1844,14 @@
      "name": "Tesco Mackerel in Sunflower Oil 125g",
      "brand": "TESCO",
      "sku": "253951621"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Mackerel Fillets Fish Counter (1 kg)",
-     "brand": null,
-     "sku": "1028893000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores Peppered Irish Mackerel Fillets 160g",
-     "brand": null,
-     "sku": "100820063"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Unbranded vs TESCO)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -742,19 +1859,80 @@
      "brand": "TESCO",
      "pack": "125g",
      "variant": "Mackerel in Sunflower Oil",
+     "complete": true,
      "sources": [
       "tesco:proposed:253951621"
      ]
     },
     {
+     "brand": "GOOD'S OF CORK",
+     "pack": "200g",
+     "variant": "Mackerel Fillets",
+     "complete": true,
+     "sources": [
+      "tesco:current:323647795"
+     ]
+    },
+    {
      "brand": null,
+     "pack": "1kg",
+     "variant": "Mackerel Fillets Fish Counter",
+     "complete": false,
+     "sources": [
+      "supervalu:peer:1028893000"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
      "pack": "160g",
      "variant": "Peppered Irish Mackerel Fillets",
+     "complete": true,
      "sources": [
       "dunnes:peer:100820063"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "323647795",
+     "name": "Good's of Cork Mackerel Fillets 200g",
+     "brand": "GOOD'S OF CORK",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(GOOD'S OF CORK vs TESCO)",
+      "pack(200g vs 125g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1028893000",
+     "name": "Mackerel Fillets Fish Counter (1 kg)",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(1kg vs 125g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100820063",
+     "name": "Dunnes Stores Peppered Irish Mackerel Fillets 160g",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)",
+      "pack(160g vs 125g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -783,12 +1961,105 @@
     "brand": null,
     "ean": "05018374442215"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Red Kidney Beans In Water 400G",
+     "brand": "TESCO",
+     "sku": "259061829"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(supervalu:silent,dunnes:conflicts)"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "400g",
+     "variant": "Red Kidney Beans In Water",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:259061829"
+     ]
+    },
+    {
+     "brand": "Biona Organic",
+     "pack": "400g",
+     "variant": "Red Kidney Beans",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100860771"
+     ]
+    },
+    {
+     "brand": "EVERYDAY ESSENTIALS",
+     "pack": null,
+     "variant": "Red Kidney Beans",
+     "complete": false,
+     "sources": [
+      "aldi:other:EVERYDAY ESSENTIALS Red Kidney Beans"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "297646576",
+     "name": "Red Kidney Beans 400G",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": null,
+     "name": "Red Kidney Beans 400g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100860771",
+     "name": "Biona Organic Red Kidney Beans 400g",
+     "brand": "Biona Organic",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Biona Organic vs TESCO)",
+      "variant_qualifier"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "EVERYDAY ESSENTIALS Red Kidney Beans",
+     "name": "EVERYDAY ESSENTIALS Red Kidney Beans",
+     "brand": "EVERYDAY ESSENTIALS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(EVERYDAY ESSENTIALS vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": null,
+     "name": "Red Kidney Beans 400g"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -826,26 +2097,14 @@
      "name": "Tesco Ready Salted Crisps 6X25g",
      "brand": "TESCO",
      "sku": "254926662"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Crisps Ready Salted 6 Pack",
-     "brand": null,
-     "sku": null
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Walkers Ready Salted Crisps 6 Pack (25 g)",
-     "brand": "Walkers",
-     "sku": "1430354004"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Walkers vs TESCO)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -853,17 +2112,93 @@
      "brand": "TESCO",
      "pack": "150g",
      "variant": "Ready Salted Crisps",
+     "complete": true,
      "sources": [
       "tesco:proposed:254926662"
      ]
     },
     {
      "brand": "Walkers",
+     "pack": "150g",
+     "variant": "Ready Salted Crisps Multipack",
+     "complete": true,
+     "sources": [
+      "tesco:current:254926800"
+     ]
+    },
+    {
+     "brand": "Walkers",
      "pack": "25g",
      "variant": "Ready Salted Crisps 6 Pack",
+     "complete": true,
      "sources": [
       "supervalu:peer:1430354004"
      ]
+    },
+    {
+     "brand": "SNACKRITE",
+     "pack": null,
+     "variant": "Ready Salted Potato Hoops 8 Pack",
+     "complete": false,
+     "sources": [
+      "aldi:other:SNACKRITE Ready Salted Potato Hoops 8 Pack"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "254926800",
+     "name": "Walkers Ready Salted Crisps Multipack 6x25g",
+     "brand": "Walkers",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Walkers vs TESCO)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": null,
+     "name": "Crisps Ready Salted 6 Pack",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1430354004",
+     "name": "Walkers Ready Salted Crisps 6 Pack (25 g)",
+     "brand": "Walkers",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Walkers vs TESCO)",
+      "pack(25g vs 150g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "SNACKRITE Ready Salted Potato Hoops 8 Pack",
+     "name": "SNACKRITE Ready Salted Potato Hoops 8 Pack",
+     "brand": "SNACKRITE",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SNACKRITE vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "dunnes",
+     "sku": null,
+     "name": "Crisps Ready Salted 6 Pack"
     }
    ],
    "tesco_catalogue_evidence": {
@@ -902,26 +2237,14 @@
      "name": "Tesco Mild Curry Powder 80G",
      "brand": "TESCO",
      "sku": "255770060"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Daily Basics Mild Curry Sauce (460 g)",
-     "brand": "Daily Basics",
-     "sku": "1943983000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "McDonnells Mild Curry Sauce 200g",
-     "brand": "Dunnes Stores",
-     "sku": "100278273"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Daily Basics vs TESCO)",
-    "retailers_offer_3_different_products"
+    "attached_offers_are_6_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -929,6 +2252,7 @@
      "brand": "TESCO",
      "pack": "80g",
      "variant": "Mild Curry Powder",
+     "complete": true,
      "sources": [
       "tesco:proposed:255770060"
      ]
@@ -937,19 +2261,113 @@
      "brand": "Daily Basics",
      "pack": "460g",
      "variant": "Mild Curry Sauce",
+     "complete": true,
      "sources": [
       "supervalu:peer:1943983000"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "200g",
+     "variant": "Mcdonnells Mild Curry Sauce",
+     "complete": true,
+     "sources": [
+      "tesco:current:311943382"
      ]
     },
     {
      "brand": "Dunnes Stores",
      "pack": "200g",
      "variant": "McDonnells Mild Curry Sauce",
+     "complete": true,
      "sources": [
       "dunnes:peer:100278273"
      ]
+    },
+    {
+     "brand": "Kania",
+     "pack": null,
+     "variant": "Mild Curry Sauce",
+     "complete": false,
+     "sources": [
+      "lidl:other:Kania Mild Curry Sauce"
+     ]
+    },
+    {
+     "brand": "BRAMWELLS",
+     "pack": null,
+     "variant": "Curry Sauce",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRAMWELLS Curry Sauce"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1943983000",
+     "name": "Daily Basics Mild Curry Sauce (460 g)",
+     "brand": "Daily Basics",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Daily Basics vs TESCO)",
+      "pack(460g vs 80g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "311943382",
+     "name": "Mcdonnells Mild Curry Sauce 200g",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(200g vs 80g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100278273",
+     "name": "McDonnells Mild Curry Sauce 200g",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)",
+      "pack(200g vs 80g)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Kania Mild Curry Sauce",
+     "brand": "Kania",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Kania vs TESCO)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRAMWELLS Curry Sauce",
+     "name": "BRAMWELLS Curry Sauce",
+     "brand": "BRAMWELLS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRAMWELLS vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -988,25 +2406,13 @@
      "name": "Tesco Irish Pork Sausages 227G",
      "brand": "TESCO",
      "sku": "277512644"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Clonakilty 16 Irish Pork Sausages 454g",
-     "brand": "Dunnes Stores",
-     "sku": "100746405"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Signature Tastes Irish Pork Traditional Sausages (380 g)",
-     "brand": "SuperValu",
-     "sku": "1009076000"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_6_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1014,6 +2420,7 @@
      "brand": "TESCO",
      "pack": "227g",
      "variant": "Irish Pork Sausages",
+     "complete": true,
      "sources": [
       "tesco:proposed:277512644"
      ]
@@ -1022,19 +2429,113 @@
      "brand": "Dunnes Stores",
      "pack": "454g",
      "variant": "Clonakilty 16 Irish Pork Sausages",
+     "complete": true,
      "sources": [
       "dunnes:peer:100746405"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "454g",
+     "variant": "Clonakilty Pork Sausages",
+     "complete": true,
+     "sources": [
+      "tesco:current:258108501"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "380g",
      "variant": "Signature Tastes Irish Pork Traditional Sausages",
+     "complete": true,
      "sources": [
       "supervalu:peer:1009076000"
      ]
+    },
+    {
+     "brand": "Birchwood",
+     "pack": null,
+     "variant": "Irish Pork Sausages",
+     "complete": false,
+     "sources": [
+      "lidl:other:Birchwood Irish Pork Sausages"
+     ]
+    },
+    {
+     "brand": "BRANNANS",
+     "pack": null,
+     "variant": "Irish Pork Sausages 16 Pack",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRANNANS Irish Pork Sausages 16 Pack"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100746405",
+     "name": "Clonakilty 16 Irish Pork Sausages 454g",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)",
+      "pack(454g vs 227g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "258108501",
+     "name": "Clonakilty Pork Sausages 454G",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(454g vs 227g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1009076000",
+     "name": "SuperValu Signature Tastes Irish Pork Traditional Sausages (380 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)",
+      "pack(380g vs 227g)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Birchwood Irish Pork Sausages",
+     "brand": "Birchwood",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Birchwood vs TESCO)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRANNANS Irish Pork Sausages 16 Pack",
+     "name": "BRANNANS Irish Pork Sausages 16 Pack",
+     "brand": "BRANNANS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRANNANS vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -1071,26 +2572,14 @@
      "name": "Tesco Hot Chilli Powder 50G",
      "brand": "TESCO",
      "sku": "251994596"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Schwartz Chilli Powder Mild  (38 g)",
-     "brand": "Schwartz",
-     "sku": "1020898000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Schwartz Mild Chilli Powder 38g",
-     "brand": null,
-     "sku": "100111838"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Schwartz vs TESCO)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1098,6 +2587,7 @@
      "brand": "TESCO",
      "pack": "50g",
      "variant": "Hot Chilli Powder",
+     "complete": true,
      "sources": [
       "tesco:proposed:251994596"
      ]
@@ -1106,11 +2596,84 @@
      "brand": "Schwartz",
      "pack": "38g",
      "variant": "Chilli Powder Mild",
+     "complete": true,
      "sources": [
-      "supervalu:peer:1020898000"
+      "supervalu:peer:1020898000",
+      "dunnes:peer:100111838"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "50g",
+     "variant": "Mild Chilli Powder",
+     "complete": true,
+     "sources": [
+      "tesco:current:251994901"
+     ]
+    },
+    {
+     "brand": "READY, SET…COOK!",
+     "pack": null,
+     "variant": "Chilli Powder",
+     "complete": false,
+     "sources": [
+      "aldi:other:READY, SET…COOK! Chilli Powder"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1020898000",
+     "name": "Schwartz Chilli Powder Mild  (38 g)",
+     "brand": "Schwartz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Schwartz vs TESCO)",
+      "pack(38g vs 50g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "251994901",
+     "name": "Tesco Mild Chilli Powder 50G",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100111838",
+     "name": "Schwartz Mild Chilli Powder 38g",
+     "brand": "Schwartz",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Schwartz vs TESCO)",
+      "pack(38g vs 50g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "READY, SET…COOK! Chilli Powder",
+     "name": "READY, SET…COOK! Chilli Powder",
+     "brand": "READY, SET…COOK!",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(READY, SET…COOK! vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -1139,12 +2702,120 @@
     "brand": "Alpro",
     "ean": "05411188127697"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Alpro Barista Oat Long Life Dairy Free Drink 1L",
+     "brand": "alpro",
+     "sku": "304788437"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "alpro",
+     "pack": "1L",
+     "variant": "Barista Oat Long Life Dairy Free Drink",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:304788437"
+     ]
+    },
+    {
+     "brand": "Alpro",
+     "pack": "1L",
+     "variant": "CALIFIA FARMS Extra Creamy Oat Milk",
+     "complete": true,
+     "sources": [
+      "tesco:current:322842145"
+     ]
+    },
+    {
+     "brand": "Alpro",
+     "pack": "1L",
+     "variant": "No Sugars Oat",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100322426"
+     ]
+    },
+    {
+     "brand": "Vemondo",
+     "pack": null,
+     "variant": "Oat Drink Unsweetened",
+     "complete": false,
+     "sources": [
+      "lidl:other:Vemondo Oat Drink Unsweetened"
+     ]
+    },
+    {
+     "brand": "Alpro",
+     "pack": "1L",
+     "variant": "Oat Unsweetened",
+     "complete": true,
+     "sources": [
+      "supervalu:peer:1401394001"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "322842145",
+     "name": "CALIFIA FARMS Extra Creamy Oat Milk 1L",
+     "brand": "Alpro",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100322426",
+     "name": "Alpro No Sugars Oat 1L",
+     "brand": "Alpro",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Vemondo Oat Drink Unsweetened",
+     "brand": "Vemondo",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Vemondo vs alpro)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1401394001",
+     "name": "Alpro Oat Unsweetened (1 L)",
+     "brand": "Alpro",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -1174,12 +2845,115 @@
     "brand": "TESCO",
     "ean": "00000010066140"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Red Seedless Grapes 500G",
+     "brand": "TESCO",
+     "sku": "260138854"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(supervalu:silent,dunnes:silent)"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO",
+     "pack": "500g",
+     "variant": "Red Seedless Grapes",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:260138854"
+     ]
+    },
+    {
+     "brand": "Keelings",
+     "pack": "500g",
+     "variant": "Seedless Black Grapes",
+     "complete": true,
+     "sources": [
+      "tesco:current:318069098"
+     ]
+    },
+    {
+     "brand": "SPECIALLY SELECTED",
+     "pack": null,
+     "variant": "Seedless Sable Grapes",
+     "complete": false,
+     "sources": [
+      "aldi:other:SPECIALLY SELECTED Seedless Sable Grapes"
+     ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "500g",
+     "variant": "Handpicked Seedless Mixed Grapes",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100831201"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": null,
+     "name": "Grapes Seedless 500g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "318069098",
+     "name": "Keelings Seedless Black Grapes 500g",
+     "brand": "Keelings",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Keelings vs TESCO)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "SPECIALLY SELECTED Seedless Sable Grapes",
+     "name": "SPECIALLY SELECTED Seedless Sable Grapes",
+     "brand": "SPECIALLY SELECTED",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SPECIALLY SELECTED vs TESCO)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100831201",
+     "name": "Dunnes Stores Handpicked Seedless Mixed Grapes 500g",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": null,
+     "name": "Grapes Seedless 500g"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -1216,25 +2990,12 @@
      "name": "Tesco Irish Rooster 2Kg",
      "brand": "TESCO",
      "sku": "285513101"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Irish Rooster Potatoes (2 kg)",
-     "brand": "SuperValu",
-     "sku": "1025850000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores Floury Irish Rooster Potatoes 2kg",
-     "brand": "Dunnes Stores",
-     "sku": "100817440"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -1242,6 +3003,7 @@
      "brand": "TESCO",
      "pack": "2kg",
      "variant": "Irish Rooster",
+     "complete": true,
      "sources": [
       "tesco:proposed:285513101"
      ]
@@ -1250,6 +3012,7 @@
      "brand": "SuperValu",
      "pack": "2kg",
      "variant": "Irish Rooster Potatoes",
+     "complete": true,
      "sources": [
       "supervalu:peer:1025850000"
      ]
@@ -1258,11 +3021,81 @@
      "brand": "Dunnes Stores",
      "pack": "2kg",
      "variant": "Floury Irish Rooster Potatoes",
+     "complete": true,
      "sources": [
       "dunnes:peer:100817440"
      ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "2kg",
+     "variant": "Maris Piper Potatoes",
+     "complete": true,
+     "sources": [
+      "tesco:current:300864578"
+     ]
+    },
+    {
+     "brand": "Harvest Basket",
+     "pack": "2kg",
+     "variant": "Rooster Potatoes",
+     "complete": true,
+     "sources": [
+      "lidl:other:Harvest Basket Rooster Potatoes 2kg"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1025850000",
+     "name": "SuperValu Irish Rooster Potatoes (2 kg)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100817440",
+     "name": "Dunnes Stores Floury Irish Rooster Potatoes 2kg",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "300864578",
+     "name": "Tesco Maris Piper Potatoes 2kg",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Harvest Basket Rooster Potatoes 2kg",
+     "brand": "Harvest Basket",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Harvest Basket vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -1300,25 +3133,13 @@
      "name": "McCaughey Turkeys Turkey Breast Mince 400g",
      "brand": "IGWT",
      "sku": "285859613"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Hogan's Farm Turkey Breast Mince  454g",
-     "brand": null,
-     "sku": "100301551"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Fresh Irish Turkey Breast Mince (275 g)",
-     "brand": "SuperValu",
-     "sku": "1033493000"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1326,19 +3147,80 @@
      "brand": "IGWT",
      "pack": "400g",
      "variant": "McCaughey Turkeys Turkey Breast Mince",
+     "complete": true,
      "sources": [
       "tesco:proposed:285859613"
+     ]
+    },
+    {
+     "brand": "HOGAN'S FARM",
+     "pack": "454g",
+     "variant": "Turkey Breast Mince",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100301551"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "600g",
+     "variant": "Mccagheys Turkey Breast Mince",
+     "complete": false,
+     "sources": [
+      "tesco:current:292621112"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "275g",
      "variant": "Fresh Irish Turkey Breast Mince",
+     "complete": true,
      "sources": [
       "supervalu:peer:1033493000"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100301551",
+     "name": "Hogan's Farm Turkey Breast Mince  454g",
+     "brand": "HOGAN'S FARM",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(HOGAN'S FARM vs IGWT)",
+      "pack(454g vs 400g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "292621112",
+     "name": "Mccagheys Turkey Breast Mince 600G",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(600g vs 400g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1033493000",
+     "name": "SuperValu Fresh Irish Turkey Breast Mince (275 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs IGWT)",
+      "pack(275g vs 400g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -1367,12 +3249,125 @@
     "brand": null,
     "ean": "05010024111076"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Saxa Salt 750G",
+     "brand": "SAXA",
+     "sku": "251975227"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "SAXA",
+     "pack": "750g",
+     "variant": "Salt",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:251975227"
+     ]
+    },
+    {
+     "brand": "Saxa",
+     "pack": "750g",
+     "variant": "My Family Favourites Table Salt",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100806220"
+     ]
+    },
+    {
+     "brand": "Kania",
+     "pack": null,
+     "variant": "Table Salt",
+     "complete": false,
+     "sources": [
+      "lidl:other:Kania Table Salt"
+     ]
+    },
+    {
+     "brand": "READY, SET…COOK!",
+     "pack": null,
+     "variant": "British Table Salt",
+     "complete": false,
+     "sources": [
+      "aldi:other:READY, SET…COOK! British Table Salt"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100806220",
+     "name": "Dunnes Stores My Family Favourites Table Salt 750g",
+     "brand": "Saxa",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Kania Table Salt",
+     "brand": "Kania",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Kania vs SAXA)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1037903000",
+     "name": "SuperValu Table Salt   (750 g)",
+     "brand": "Saxa",
+     "brandSource": "structured",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "313164995",
+     "name": "Dri-Pak Table Salt",
+     "brand": "Saxa",
+     "brandSource": "structured",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "READY, SET…COOK! British Table Salt",
+     "name": "READY, SET…COOK! British Table Salt",
+     "brand": "READY, SET…COOK!",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(READY, SET…COOK! vs SAXA)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": "1037903000",
+     "name": "SuperValu Table Salt   (750 g)"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -1407,25 +3402,13 @@
      "name": "Hellmann's Real Mayonnaise Squeezy 580ml",
      "brand": "HELLMANN'S",
      "sku": "314419463"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Hellmann's Real Mayonnaise (430 ml)",
-     "brand": "Hellmann's",
-     "sku": "1039871001"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Hellmann's Real Mayonnaise 430ml",
-     "brand": "Hellmanns",
-     "sku": "100742981"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1433,6 +3416,7 @@
      "brand": "HELLMANN'S",
      "pack": "580ml",
      "variant": "Real Mayonnaise Squeezy",
+     "complete": true,
      "sources": [
       "tesco:proposed:314419463"
      ]
@@ -1441,12 +3425,92 @@
      "brand": "Hellmann's",
      "pack": "430ml",
      "variant": "Real Mayonnaise",
+     "complete": true,
      "sources": [
       "supervalu:peer:1039871001",
       "dunnes:peer:100742981"
      ]
+    },
+    {
+     "brand": "Batts",
+     "pack": null,
+     "variant": "Real Mayonnaise",
+     "complete": false,
+     "sources": [
+      "lidl:other:Batts Real Mayonnaise"
+     ]
+    },
+    {
+     "brand": "BRAMWELLS",
+     "pack": null,
+     "variant": "Squeezy Real Mayonnaise",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRAMWELLS Squeezy Real Mayonnaise"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "303815811",
+     "name": "Ballymaloe Mayonnaise",
+     "brand": "Hellmanns",
+     "brandSource": "structured",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1039871001",
+     "name": "Hellmann's Real Mayonnaise (430 ml)",
+     "brand": "Hellmann's",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(430ml vs 580ml)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Batts Real Mayonnaise",
+     "brand": "Batts",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Batts vs HELLMANN'S)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRAMWELLS Squeezy Real Mayonnaise",
+     "name": "BRAMWELLS Squeezy Real Mayonnaise",
+     "brand": "BRAMWELLS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRAMWELLS vs HELLMANN'S)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100742981",
+     "name": "Hellmann's Real Mayonnaise 430ml",
+     "brand": "Hellmanns",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(430ml vs 580ml)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -1484,25 +3548,12 @@
      "name": "Tesco Creme Fraiche 300G",
      "brand": "TESCO",
      "sku": "308094779"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores Crème Fraîche 200ml",
-     "brand": null,
-     "sku": "100782436"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Crème Fraîche (200 ml)",
-     "brand": "SuperValu",
-     "sku": "1343396001"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -1510,27 +3561,80 @@
      "brand": "TESCO",
      "pack": "300g",
      "variant": "Creme Fraiche",
+     "complete": true,
      "sources": [
       "tesco:proposed:308094779"
      ]
     },
     {
-     "brand": null,
+     "brand": "Dunnes Stores",
      "pack": "200ml",
      "variant": "Crème Fraîche",
+     "complete": true,
      "sources": [
       "dunnes:peer:100782436"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "300g",
+     "variant": "50% Less Fat Creme Fraiche",
+     "complete": true,
+     "sources": [
+      "tesco:current:308093360"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "200ml",
      "variant": "Crème Fraîche",
+     "complete": true,
      "sources": [
       "supervalu:peer:1343396001"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100782436",
+     "name": "Dunnes Stores Crème Fraîche 200ml",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)",
+      "pack(200ml vs 300g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "308093360",
+     "name": "Tesco 50% Less Fat Creme Fraiche 300G",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1343396001",
+     "name": "SuperValu Crème Fraîche (200 ml)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)",
+      "pack(200ml vs 300g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -1567,26 +3671,14 @@
      "name": "Tesco Sweet & Salted Popcorn 110G",
      "brand": "TESCO",
      "sku": "280663792"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Gourmet Popcorn Sweet & Salty (80 g)",
-     "brand": "Keogh's",
-     "sku": "1388898000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Propercorn Sweet & Salty Popcorn 30g",
-     "brand": null,
-     "sku": "100820098"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Keogh's vs TESCO)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1594,6 +3686,7 @@
      "brand": "TESCO",
      "pack": "110g",
      "variant": "Sweet & Salted Popcorn",
+     "complete": true,
      "sources": [
       "tesco:proposed:280663792"
      ]
@@ -1602,11 +3695,92 @@
      "brand": "Keogh's",
      "pack": "80g",
      "variant": "Gourmet Popcorn Sweet & Salty",
+     "complete": true,
      "sources": [
       "supervalu:peer:1388898000"
      ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "110g",
+     "variant": "Sweet Popcorn",
+     "complete": true,
+     "sources": [
+      "tesco:current:268497375"
+     ]
+    },
+    {
+     "brand": "PROPERCORN",
+     "pack": "30g",
+     "variant": "Sweet & Salty Popcorn",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100820098"
+     ]
+    },
+    {
+     "brand": "SPECIALLY SELECTED",
+     "pack": null,
+     "variant": "Sweet & Salty Popcorn",
+     "complete": false,
+     "sources": [
+      "aldi:other:SPECIALLY SELECTED Sweet & Salty Popcorn"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1388898000",
+     "name": "Gourmet Popcorn Sweet & Salty (80 g)",
+     "brand": "Keogh's",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Keogh's vs TESCO)",
+      "pack(80g vs 110g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "268497375",
+     "name": "Tesco Sweet Popcorn 110G",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100820098",
+     "name": "Propercorn Sweet & Salty Popcorn 30g",
+     "brand": "PROPERCORN",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(PROPERCORN vs TESCO)",
+      "pack(30g vs 110g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "SPECIALLY SELECTED Sweet & Salty Popcorn",
+     "name": "SPECIALLY SELECTED Sweet & Salty Popcorn",
+     "brand": "SPECIALLY SELECTED",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SPECIALLY SELECTED vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -1644,26 +3818,14 @@
      "name": "Mae Ploy Blue Sweet Chilli Sauce 730Ml",
      "brand": "MAE PLOY",
      "sku": "309469243"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Thai Gold Sweet Chilli Sauce  (200 ml)",
-     "brand": "Thai Gold",
-     "sku": "1036386000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Blue Dragon Original Sweet Chilli Sauce 250ml",
-     "brand": null,
-     "sku": "100316594"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Thai Gold vs MAE PLOY)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1671,6 +3833,7 @@
      "brand": "MAE PLOY",
      "pack": "730ml",
      "variant": "Blue Sweet Chilli Sauce",
+     "complete": true,
      "sources": [
       "tesco:proposed:309469243"
      ]
@@ -1679,11 +3842,93 @@
      "brand": "Thai Gold",
      "pack": "200ml",
      "variant": "Sweet Chilli Sauce",
+     "complete": true,
      "sources": [
       "supervalu:peer:1036386000"
      ]
+    },
+    {
+     "brand": "GO TAN",
+     "pack": "640ml",
+     "variant": "Sweet Chilli Sauce Original",
+     "complete": true,
+     "sources": [
+      "tesco:current:309190911"
+     ]
+    },
+    {
+     "brand": "Blue Dragon",
+     "pack": "250ml",
+     "variant": "Original Sweet Chilli Sauce",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100316594"
+     ]
+    },
+    {
+     "brand": "ASIA SPECIALITIES",
+     "pack": null,
+     "variant": "Sweet Chilli Sauce",
+     "complete": false,
+     "sources": [
+      "aldi:other:ASIA SPECIALITIES Sweet Chilli Sauce"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1036386000",
+     "name": "Thai Gold Sweet Chilli Sauce  (200 ml)",
+     "brand": "Thai Gold",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Thai Gold vs MAE PLOY)",
+      "pack(200ml vs 730ml)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "309190911",
+     "name": "Go Tan Sweet Chilli Sauce Original 640Ml",
+     "brand": "GO TAN",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(GO TAN vs MAE PLOY)",
+      "pack(640ml vs 730ml)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100316594",
+     "name": "Blue Dragon Original Sweet Chilli Sauce 250ml",
+     "brand": "Blue Dragon",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Blue Dragon vs MAE PLOY)",
+      "pack(250ml vs 730ml)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "ASIA SPECIALITIES Sweet Chilli Sauce",
+     "name": "ASIA SPECIALITIES Sweet Chilli Sauce",
+     "brand": "ASIA SPECIALITIES",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(ASIA SPECIALITIES vs MAE PLOY)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -1713,12 +3958,93 @@
     "brand": "Oatly!",
     "ean": "07394376616228"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Oatly Barista Edition Oat Drink Long Life 1L",
+     "brand": "OATLY!",
+     "sku": "292990463"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(supervalu:silent,dunnes:silent)"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "OATLY!",
+     "pack": "1L",
+     "variant": "Oatly Barista Edition Oat Drink Long Life",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:292990463"
+     ]
+    },
+    {
+     "brand": "Oatly!",
+     "pack": "1L",
+     "variant": "Barista Edition The Original Oat Drink",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100327251"
+     ]
+    },
+    {
+     "brand": "Flahavan's",
+     "pack": "1L",
+     "variant": "Barista Oat Drink",
+     "complete": true,
+     "sources": [
+      "tesco:current:307161477"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1553785000",
+     "name": "Oat Milk Barista",
+     "brand": "Oatly!",
+     "brandSource": "structured",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100327251",
+     "name": "Oatly! Barista Edition The Original Oat Drink 1L",
+     "brand": "Oatly!",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "307161477",
+     "name": "Flahavan's Barista Oat Drink 1L",
+     "brand": "Flahavan's",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Flahavan's vs OATLY!)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": "1553785000",
+     "name": "Oat Milk Barista"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -1754,26 +4080,14 @@
      "name": "Tesco Medium Curry Powder 80G",
      "brand": "TESCO",
      "sku": "255769961"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Schwartz Hot Curry Powder 85g",
-     "brand": null,
-     "sku": "100113237"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Schwartz Medium Curry Powder (90 g)",
-     "brand": "Schwartz",
-     "sku": "1020922000"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Schwartz vs TESCO)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1781,19 +4095,101 @@
      "brand": "TESCO",
      "pack": "80g",
      "variant": "Medium Curry Powder",
+     "complete": true,
      "sources": [
       "tesco:proposed:255769961"
      ]
     },
     {
      "brand": "Schwartz",
+     "pack": "85g",
+     "variant": "Hot Curry Powder",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100113237"
+     ]
+    },
+    {
+     "brand": "Schwartz",
      "pack": "90g",
      "variant": "Medium Curry Powder",
+     "complete": true,
      "sources": [
       "supervalu:peer:1020922000"
      ]
+    },
+    {
+     "brand": "Schwartz",
+     "pack": null,
+     "variant": "Mild Curry Powder",
+     "complete": false,
+     "sources": [
+      "tesco:current:256338738"
+     ]
+    },
+    {
+     "brand": "READY, SET…COOK!",
+     "pack": null,
+     "variant": "Medium Curry Powder",
+     "complete": false,
+     "sources": [
+      "aldi:other:READY, SET…COOK! Medium Curry Powder"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100113237",
+     "name": "Schwartz Hot Curry Powder 85g",
+     "brand": "Schwartz",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Schwartz vs TESCO)",
+      "pack(85g vs 80g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1020922000",
+     "name": "Schwartz Medium Curry Powder (90 g)",
+     "brand": "Schwartz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Schwartz vs TESCO)",
+      "pack(90g vs 80g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "256338738",
+     "name": "Schwartz Mild Curry Powder",
+     "brand": "Schwartz",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Schwartz vs TESCO)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "READY, SET…COOK! Medium Curry Powder",
+     "name": "READY, SET…COOK! Medium Curry Powder",
+     "brand": "READY, SET…COOK!",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(READY, SET…COOK! vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -1829,25 +4225,13 @@
      "name": "Heinz Baked Beans In Tomato Sauce 4X415g",
      "brand": "HEINZ",
      "sku": "252004443"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Heinz Baked Beans (415 g)",
-     "brand": "Heinz",
-     "sku": "1011892000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Heinz Baked Beans 415g",
-     "brand": "Heinz",
-     "sku": "100111378"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1855,20 +4239,112 @@
      "brand": "HEINZ",
      "pack": "1660g",
      "variant": "Baked Beans In Tomato Sauce",
+     "complete": true,
      "sources": [
       "tesco:proposed:252004443"
+     ]
+    },
+    {
+     "brand": "Batts",
+     "pack": null,
+     "variant": "Baked Beans",
+     "complete": false,
+     "sources": [
+      "lidl:other:Batts Baked Beans"
+     ]
+    },
+    {
+     "brand": "Heinz",
+     "pack": "600g",
+     "variant": "Baked Beans In Tomato Sauce",
+     "complete": true,
+     "sources": [
+      "tesco:current:262229847"
      ]
     },
     {
      "brand": "Heinz",
      "pack": "415g",
      "variant": "Baked Beans",
+     "complete": true,
      "sources": [
       "supervalu:peer:1011892000",
       "dunnes:peer:100111378"
      ]
+    },
+    {
+     "brand": "BRAMWELLS",
+     "pack": null,
+     "variant": "No Added Sugar Baked Beans",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRAMWELLS No Added Sugar Baked Beans"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Batts Baked Beans",
+     "brand": "Batts",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Batts vs HEINZ)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "262229847",
+     "name": "Heinz Baked Beans In Tomato Sauce 3 X200g",
+     "brand": "Heinz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(600g vs 1660g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1011892000",
+     "name": "Heinz Baked Beans (415 g)",
+     "brand": "Heinz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(415g vs 1660g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100111378",
+     "name": "Heinz Baked Beans 415g",
+     "brand": "Heinz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(415g vs 1660g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRAMWELLS No Added Sugar Baked Beans",
+     "name": "BRAMWELLS No Added Sugar Baked Beans",
+     "brand": "BRAMWELLS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRAMWELLS vs HEINZ)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -1904,26 +4380,14 @@
      "name": "Tesco Wholegrain Mustard 180G",
      "brand": "TESCO",
      "sku": "260691779"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Lakeshore Wholegrain Mustard (205 g)",
-     "brand": "Lakeshore",
-     "sku": "1157616000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Lakeshore Wholegrain Mustard 205g",
-     "brand": null,
-     "sku": "100717998"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Lakeshore vs TESCO)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -1931,6 +4395,7 @@
      "brand": "TESCO",
      "pack": "180g",
      "variant": "Wholegrain Mustard",
+     "complete": true,
      "sources": [
       "tesco:proposed:260691779"
      ]
@@ -1939,11 +4404,85 @@
      "brand": "Lakeshore",
      "pack": "205g",
      "variant": "Wholegrain Mustard",
+     "complete": true,
      "sources": [
-      "supervalu:peer:1157616000"
+      "supervalu:peer:1157616000",
+      "dunnes:peer:100717998"
+     ]
+    },
+    {
+     "brand": "Lakeshore",
+     "pack": "205g",
+     "variant": "Plain Wholegrain Mustard",
+     "complete": true,
+     "sources": [
+      "tesco:current:263061639"
+     ]
+    },
+    {
+     "brand": "BRAMWELLS",
+     "pack": null,
+     "variant": "Wholegrain Mustard",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRAMWELLS Wholegrain Mustard"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1157616000",
+     "name": "Lakeshore Wholegrain Mustard (205 g)",
+     "brand": "Lakeshore",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Lakeshore vs TESCO)",
+      "pack(205g vs 180g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100717998",
+     "name": "Lakeshore Wholegrain Mustard 205g",
+     "brand": "Lakeshore",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Lakeshore vs TESCO)",
+      "pack(205g vs 180g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "263061639",
+     "name": "Lakeshore Plain Wholegrain Mustard 205g",
+     "brand": "Lakeshore",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Lakeshore vs TESCO)",
+      "pack(205g vs 180g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRAMWELLS Wholegrain Mustard",
+     "name": "BRAMWELLS Wholegrain Mustard",
+     "brand": "BRAMWELLS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRAMWELLS vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -1979,25 +4518,13 @@
      "name": "Tesco Italian Chopped Tomatoes 400G",
      "brand": "TESCO",
      "sku": "251825089"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Chopped Tomatoes (400 g)",
-     "brand": "SuperValu",
-     "sku": "1018383000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Mutti Finely Chopped Tomatoes 400g",
-     "brand": "Dunnes Stores",
-     "sku": "100835406"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_6_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -2005,6 +4532,7 @@
      "brand": "TESCO",
      "pack": "400g",
      "variant": "Italian Chopped Tomatoes",
+     "complete": true,
      "sources": [
       "tesco:proposed:251825089"
      ]
@@ -2013,19 +4541,111 @@
      "brand": "SuperValu",
      "pack": "400g",
      "variant": "Chopped Tomatoes",
+     "complete": true,
      "sources": [
       "supervalu:peer:1018383000"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "400g",
+     "variant": "Grower's Harvest Chopped Tomatoes",
+     "complete": true,
+     "sources": [
+      "tesco:current:299768716"
      ]
     },
     {
      "brand": "Dunnes Stores",
      "pack": "400g",
      "variant": "Mutti Finely Chopped Tomatoes",
+     "complete": true,
      "sources": [
       "dunnes:peer:100835406"
      ]
+    },
+    {
+     "brand": "Freshona",
+     "pack": "400g",
+     "variant": "Chopped Tomatoes",
+     "complete": true,
+     "sources": [
+      "lidl:other:Freshona Chopped Tomatoes 400g"
+     ]
+    },
+    {
+     "brand": "EVERYDAY ESSENTIALS",
+     "pack": null,
+     "variant": "Chopped Tomatoes in Tomato Juice",
+     "complete": false,
+     "sources": [
+      "aldi:other:EVERYDAY ESSENTIALS Chopped Tomatoes in Tomato Juice"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1018383000",
+     "name": "SuperValu Chopped Tomatoes (400 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "299768716",
+     "name": "Grower's Harvest Chopped Tomatoes 400G",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100835406",
+     "name": "Mutti Finely Chopped Tomatoes 400g",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Freshona Chopped Tomatoes 400g",
+     "brand": "Freshona",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Freshona vs TESCO)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "EVERYDAY ESSENTIALS Chopped Tomatoes in Tomato Juice",
+     "name": "EVERYDAY ESSENTIALS Chopped Tomatoes in Tomato Juice",
+     "brand": "EVERYDAY ESSENTIALS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(EVERYDAY ESSENTIALS vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -2069,14 +4689,107 @@
      "sku": "1038275000"
     }
    ],
-   "status": "substantiated",
-   "reasons": [],
+   "status": "split_ready",
+   "reasons": [
+    "attached_offers_are_4_different_products",
+    "a_split_out_product_lacks_brand_or_pack"
+   ],
    "proposed": {
     "name": "Maille Dijon Mustard 215g",
     "brand": "Maille",
     "pack": "215g",
     "variant": "Dijon Mustard"
    },
+   "splitInto": [
+    {
+     "brand": "MAILLE",
+     "pack": "215g",
+     "variant": "Dijon Original Mustard",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:250858535",
+      "supervalu:peer:1038275000"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "185g",
+     "variant": "Dijon Mustard",
+     "complete": true,
+     "sources": [
+      "tesco:current:260691710"
+     ]
+    },
+    {
+     "brand": "Lakeshore",
+     "pack": "200g",
+     "variant": "Dijon Mustard",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100173824"
+     ]
+    },
+    {
+     "brand": "BRAMWELLS",
+     "pack": null,
+     "variant": "Dijon Mustard",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRAMWELLS Dijon Mustard"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1038275000",
+     "name": "Maille Dijon Mustard (215 g)",
+     "brand": "Maille",
+     "brandSource": "structured",
+     "verdict": "agrees",
+     "conflicts": []
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "260691710",
+     "name": "Tesco Dijon Mustard 185g",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs MAILLE)",
+      "pack(185g vs 215g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100173824",
+     "name": "Lakeshore Dijon Mustard 200g",
+     "brand": "Lakeshore",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Lakeshore vs MAILLE)",
+      "pack(200g vs 215g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRAMWELLS Dijon Mustard",
+     "name": "BRAMWELLS Dijon Mustard",
+     "brand": "BRAMWELLS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRAMWELLS vs MAILLE)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -2087,19 +4800,8 @@
     "category": "Food Cupboard > Condiments, Table Sauces, Olives & Pickles > Table Sauces > Mustard"
    },
    "canonical_ean_tesco_sourced": true,
-   "proposed_change": {
-    "table": "products",
-    "id": "95000afc-bf7f-4478-a624-b098446b6799",
-    "set": {
-     "canonical_name": "Maille Dijon Mustard 215g",
-     "brand": "Maille"
-    },
-    "from": {
-     "canonical_name": "Dijon Mustard",
-     "brand": "Maille"
-    }
-   },
-   "remaining_repair_blockers_after_enrichment": []
+   "proposed_change": null,
+   "remaining_repair_blockers_after_enrichment": null
   },
   {
    "mapping_id": "1f71fbd3-d10f-4605-8281-a838270a0c43",
@@ -2124,25 +4826,13 @@
      "name": "Kellogg's Bran Flakes Breakfast Cereal 500g",
      "brand": "Kellogg's",
      "sku": "301393718"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Kellogg's Bran Flakes Cereal (750 g)",
-     "brand": "Kellogg's",
-     "sku": "1012982000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores Bran Flakes 500g",
-     "brand": null,
-     "sku": "100290477"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -2150,6 +4840,7 @@
      "brand": "Kellogg's",
      "pack": "500g",
      "variant": "Bran Flakes Breakfast Cereal",
+     "complete": true,
      "sources": [
       "tesco:proposed:301393718"
      ]
@@ -2158,11 +4849,91 @@
      "brand": "Kellogg's",
      "pack": "750g",
      "variant": "Bran Flakes Cereal",
+     "complete": true,
      "sources": [
       "supervalu:peer:1012982000"
      ]
+    },
+    {
+     "brand": "Dunnes Stores",
+     "pack": "500g",
+     "variant": "Bran Flakes",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100290477"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "750g",
+     "variant": "Bran Flakes",
+     "complete": true,
+     "sources": [
+      "tesco:current:300594937"
+     ]
+    },
+    {
+     "brand": "HARVEST MORN",
+     "pack": null,
+     "variant": "Bran Flakes",
+     "complete": false,
+     "sources": [
+      "aldi:other:HARVEST MORN Bran Flakes"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1012982000",
+     "name": "Kellogg's Bran Flakes Cereal (750 g)",
+     "brand": "Kellogg's",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(750g vs 500g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100290477",
+     "name": "Dunnes Stores Bran Flakes 500g",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs Kellogg's)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "300594937",
+     "name": "Tesco Bran Flakes 750G",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs Kellogg's)",
+      "pack(750g vs 500g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "HARVEST MORN Bran Flakes",
+     "name": "HARVEST MORN Bran Flakes",
+     "brand": "HARVEST MORN",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(HARVEST MORN vs Kellogg's)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -2198,26 +4969,13 @@
      "name": "Kerrygold Natural Cream Cheese 150g",
      "brand": "KERRYGOLD",
      "sku": "317546635"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Philadelphia Original Soft Cream Cheese (165 g)",
-     "brand": "Philadelphia",
-     "sku": "1402970001"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Philadelphia Original Soft Cream Cheese 165G",
-     "brand": null,
-     "sku": "100270059"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Philadelphia vs KERRYGOLD)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -2225,6 +4983,7 @@
      "brand": "KERRYGOLD",
      "pack": "150g",
      "variant": "Natural Cream Cheese",
+     "complete": true,
      "sources": [
       "tesco:proposed:317546635"
      ]
@@ -2233,11 +4992,65 @@
      "brand": "Philadelphia",
      "pack": "165g",
      "variant": "Original Soft Cream Cheese",
+     "complete": true,
      "sources": [
-      "supervalu:peer:1402970001"
+      "supervalu:peer:1402970001",
+      "dunnes:peer:100270059"
+     ]
+    },
+    {
+     "brand": "Philadelphia",
+     "pack": "280g",
+     "variant": "Light Low Fat Soft Cream Cheese",
+     "complete": true,
+     "sources": [
+      "tesco:current:311436216"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1402970001",
+     "name": "Philadelphia Original Soft Cream Cheese (165 g)",
+     "brand": "Philadelphia",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Philadelphia vs KERRYGOLD)",
+      "pack(165g vs 150g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100270059",
+     "name": "Philadelphia Original Soft Cream Cheese 165G",
+     "brand": "Philadelphia",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Philadelphia vs KERRYGOLD)",
+      "pack(165g vs 150g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "311436216",
+     "name": "Philadelphia Light Low Fat Soft Cream Cheese 280g",
+     "brand": "Philadelphia",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Philadelphia vs KERRYGOLD)",
+      "pack(280g vs 150g)",
+      "variant_qualifier"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -2274,25 +5087,12 @@
      "name": "Tesco Irish Medium Grated Cheddar 250G",
      "brand": "TESCO",
      "sku": "268991832"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Signature Tastes Vintage Irish White Cheddar (200 g)",
-     "brand": "SuperValu",
-     "sku": "1346851000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Charleville Select Red Cheddar 200g",
-     "brand": "Dunnes Stores",
-     "sku": "100710659"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -2300,6 +5100,7 @@
      "brand": "TESCO",
      "pack": "250g",
      "variant": "Irish Medium Grated Cheddar",
+     "complete": true,
      "sources": [
       "tesco:proposed:268991832"
      ]
@@ -2308,6 +5109,7 @@
      "brand": "SuperValu",
      "pack": "200g",
      "variant": "Signature Tastes Vintage Irish White Cheddar",
+     "complete": true,
      "sources": [
       "supervalu:peer:1346851000"
      ]
@@ -2316,11 +5118,73 @@
      "brand": "Dunnes Stores",
      "pack": "200g",
      "variant": "Charleville Select Red Cheddar",
+     "complete": true,
      "sources": [
       "dunnes:peer:100710659"
      ]
+    },
+    {
+     "brand": "Milbona",
+     "pack": "200g",
+     "variant": "Irish Cheddar",
+     "complete": true,
+     "sources": [
+      "lidl:other:Milbona Irish Cheddar 200g"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1346851000",
+     "name": "SuperValu Signature Tastes Vintage Irish White Cheddar (200 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)",
+      "pack(200g vs 250g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "264014086",
+     "name": "Applewood Smoked Cheddar Cheese",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100710659",
+     "name": "Charleville Select Red Cheddar 200g",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)",
+      "pack(200g vs 250g)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Milbona Irish Cheddar 200g",
+     "brand": "Milbona",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Milbona vs TESCO)",
+      "pack(200g vs 250g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -2358,26 +5222,13 @@
      "name": "Alpro Barista Coconut Long Life Dairy Free Drink 1L",
      "brand": "alpro",
      "sku": "307741868"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Alpro Matcha Coconut Drink, 1L",
-     "brand": null,
-     "sku": "100338466"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Okf Coconut Drink (1.5 L)",
-     "brand": "OKF",
-     "sku": "1425480000"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(OKF vs alpro)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -2385,19 +5236,79 @@
      "brand": "alpro",
      "pack": "1L",
      "variant": "Barista Coconut Long Life Dairy Free Drink",
+     "complete": true,
      "sources": [
       "tesco:proposed:307741868"
+     ]
+    },
+    {
+     "brand": "Alpro",
+     "pack": "1L",
+     "variant": "Matcha Coconut Drink,",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100338466"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "1L",
+     "variant": "Sweetened Coconut Drink",
+     "complete": true,
+     "sources": [
+      "tesco:current:300118119"
      ]
     },
     {
      "brand": "OKF",
      "pack": "1500ml",
      "variant": "Coconut Drink",
+     "complete": true,
      "sources": [
       "supervalu:peer:1425480000"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100338466",
+     "name": "Alpro Matcha Coconut Drink, 1L",
+     "brand": "Alpro",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "300118119",
+     "name": "Tesco Sweetened Coconut Drink 1L",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs alpro)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1425480000",
+     "name": "Okf Coconut Drink (1.5 L)",
+     "brand": "OKF",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(OKF vs alpro)",
+      "pack(1500ml vs 1L)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -2434,25 +5345,13 @@
      "name": "IRISH COUNTRY IRISH BEEF SIRLOIN STEAK 200g",
      "brand": "IRISH COUNTRY",
      "sku": "322649034"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores 2 Extra Matured Irish Beef Sirloin Steaks 400g",
-     "brand": null,
-     "sku": "100291087"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Fresh Irish Beef Sirloin Steak (1 kg)",
-     "brand": "SuperValu",
-     "sku": "1019164002"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -2460,27 +5359,101 @@
      "brand": "IRISH COUNTRY",
      "pack": "200g",
      "variant": "IRISH BEEF SIRLOIN STEAK",
+     "complete": true,
      "sources": [
       "tesco:proposed:322649034"
      ]
     },
     {
-     "brand": null,
+     "brand": "Dunnes Stores",
      "pack": "400g",
      "variant": "2 Extra Matured Irish Beef Sirloin Steaks",
+     "complete": true,
      "sources": [
       "dunnes:peer:100291087"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": null,
+     "variant": "Irish Beef Sirloin Steak",
+     "complete": false,
+     "sources": [
+      "tesco:current:322238768"
+     ]
+    },
+    {
+     "brand": "BUTCHERS SELECTION",
+     "pack": null,
+     "variant": "Irish Sirloin Steak",
+     "complete": false,
+     "sources": [
+      "aldi:other:BUTCHERS SELECTION Irish Sirloin Steak"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "1kg",
      "variant": "Fresh Irish Beef Sirloin Steak",
+     "complete": true,
      "sources": [
       "supervalu:peer:1019164002"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100291087",
+     "name": "Dunnes Stores 2 Extra Matured Irish Beef Sirloin Steaks 400g",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs IRISH COUNTRY)",
+      "pack(400g vs 200g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "322238768",
+     "name": "Tesco Irish Beef Sirloin Steak",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs IRISH COUNTRY)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BUTCHERS SELECTION Irish Sirloin Steak",
+     "name": "BUTCHERS SELECTION Irish Sirloin Steak",
+     "brand": "BUTCHERS SELECTION",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BUTCHERS SELECTION vs IRISH COUNTRY)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1019164002",
+     "name": "SuperValu Fresh Irish Beef Sirloin Steak (1 kg)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs IRISH COUNTRY)",
+      "pack(1kg vs 200g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -2509,12 +5482,87 @@
     "brand": "Shreddies",
     "ean": "07613287136053"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Nestle Shreddies Original Cereal 460G",
+     "brand": "SHREDDIES",
+     "sku": "308475640"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(supervalu:silent,dunnes:conflicts)"
+    "attached_offers_are_2_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "SHREDDIES",
+     "pack": "460g",
+     "variant": "Nestle Original Cereal",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:308475640"
+     ]
+    },
+    {
+     "brand": "Nestlé",
+     "pack": "630g",
+     "variant": "Shreddies Original Malted Wheats Breakfast Cereal",
+     "complete": true,
+     "sources": [
+      "tesco:current:312109194",
+      "dunnes:peer:100319681"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "312109194",
+     "name": "Nestlé Shreddies Original Malted Wheats Breakfast Cereal 630g",
+     "brand": "Nestlé",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Nestlé vs SHREDDIES)",
+      "pack(630g vs 460g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1023003003",
+     "name": "Shreddies",
+     "brand": "Shreddies",
+     "brandSource": "structured",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100319681",
+     "name": "Nestlé Shreddies Original Malted Wheats Breakfast Cereal 630g",
+     "brand": "Nestlé",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Nestlé vs SHREDDIES)",
+      "pack(630g vs 460g)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": "1023003003",
+     "name": "Shreddies"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -2542,12 +5590,120 @@
     "brand": null,
     "ean": "05053947665561"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Finest Colombian Instant Coffee 100G",
+     "brand": "TESCO finest",
+     "sku": "279458624"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "TESCO finest",
+     "pack": "100g",
+     "variant": "Colombian Instant Coffee",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:279458624"
+     ]
+    },
+    {
+     "brand": "L'OR",
+     "pack": "100g",
+     "variant": "Classique Instant Coffee",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100275216"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": "100g",
+     "variant": "Rich Roast Instant Coffee",
+     "complete": true,
+     "sources": [
+      "supervalu:peer:1258179000"
+     ]
+    },
+    {
+     "brand": "BARISSIMO",
+     "pack": null,
+     "variant": "Instant Coffee",
+     "complete": false,
+     "sources": [
+      "aldi:other:BARISSIMO Instant Coffee"
+     ]
+    },
+    {
+     "brand": "KENCO",
+     "pack": null,
+     "variant": "Smooth Instant Coffee",
+     "complete": false,
+     "sources": [
+      "tesco:current:323643868"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100275216",
+     "name": "L'OR Classique Instant Coffee 100g",
+     "brand": "L'OR",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(L'OR vs TESCO finest)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1258179000",
+     "name": "SuperValu Rich Roast Instant Coffee (100 g)",
+     "brand": "SuperValu",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO finest)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BARISSIMO Instant Coffee",
+     "name": "BARISSIMO Instant Coffee",
+     "brand": "BARISSIMO",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BARISSIMO vs TESCO finest)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "323643868",
+     "name": "Kenco Smooth Instant Coffee",
+     "brand": "KENCO",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(KENCO vs TESCO finest)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -2583,25 +5739,13 @@
      "name": "Suempol Norwegian Smoked Salmon 200G",
      "brand": "SUEMPOL",
      "sku": "299685376"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Nolan's Smoked Salmon Slices 250g",
-     "brand": null,
-     "sku": "100287618"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Smoked Salmon (100 g)",
-     "brand": "SuperValu",
-     "sku": "1028051000"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -2609,19 +5753,100 @@
      "brand": "SUEMPOL",
      "pack": "200g",
      "variant": "Norwegian Smoked Salmon",
+     "complete": true,
      "sources": [
       "tesco:proposed:299685376"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "250g",
+     "variant": "Nolan's Smoked Salmon Slices",
+     "complete": false,
+     "sources": [
+      "dunnes:peer:100287618"
+     ]
+    },
+    {
+     "brand": "Nolans",
+     "pack": null,
+     "variant": "Atlantic Smoked Salmon",
+     "complete": false,
+     "sources": [
+      "tesco:current:285332502"
+     ]
+    },
+    {
+     "brand": "SKELLIG BAY",
+     "pack": null,
+     "variant": "Smoked Salmon Slices",
+     "complete": false,
+     "sources": [
+      "aldi:other:SKELLIG BAY Smoked Salmon Slices"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "100g",
      "variant": "Smoked Salmon",
+     "complete": true,
      "sources": [
       "supervalu:peer:1028051000"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100287618",
+     "name": "Nolan's Smoked Salmon Slices 250g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(250g vs 200g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "285332502",
+     "name": "Nolans Atlantic Smoked Salmon",
+     "brand": "Nolans",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Nolans vs SUEMPOL)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "SKELLIG BAY Smoked Salmon Slices",
+     "name": "SKELLIG BAY Smoked Salmon Slices",
+     "brand": "SKELLIG BAY",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SKELLIG BAY vs SUEMPOL)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1028051000",
+     "name": "SuperValu Smoked Salmon (100 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs SUEMPOL)",
+      "pack(100g vs 200g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -2658,26 +5883,13 @@
      "name": "Go Tan Oyster Sauce 140Ml",
      "brand": "GO TAN",
      "sku": "311691137"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Blue Dragon Oyster Sauce 150ml",
-     "brand": null,
-     "sku": "100308470"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Thai Gold Oyster Sauce  (200 ml)",
-     "brand": "Thai Gold",
-     "sku": "1036385000"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Thai Gold vs GO TAN)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -2685,19 +5897,73 @@
      "brand": "GO TAN",
      "pack": "140ml",
      "variant": "Oyster Sauce",
+     "complete": true,
      "sources": [
       "tesco:proposed:311691137"
+     ]
+    },
+    {
+     "brand": "Blue Dragon",
+     "pack": "150ml",
+     "variant": "Oyster Sauce",
+     "complete": true,
+     "sources": [
+      "tesco:current:303183503",
+      "dunnes:peer:100308470"
      ]
     },
     {
      "brand": "Thai Gold",
      "pack": "200ml",
      "variant": "Oyster Sauce",
+     "complete": true,
      "sources": [
       "supervalu:peer:1036385000"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "303183503",
+     "name": "Blue Dragon Oyster Sauce 150Ml",
+     "brand": "Blue Dragon",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Blue Dragon vs GO TAN)",
+      "pack(150ml vs 140ml)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100308470",
+     "name": "Blue Dragon Oyster Sauce 150ml",
+     "brand": "Blue Dragon",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Blue Dragon vs GO TAN)",
+      "pack(150ml vs 140ml)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1036385000",
+     "name": "Thai Gold Oyster Sauce  (200 ml)",
+     "brand": "Thai Gold",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Thai Gold vs GO TAN)",
+      "pack(200ml vs 140ml)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -2736,25 +6002,13 @@
      "name": "Tesco Finest Greek Yogurt 500G",
      "brand": "TESCO finest",
      "sku": "256381115"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Greek Style Natural Yogurt (500 g)",
-     "brand": "SuperValu",
-     "sku": "1493166000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Alpro Greek Style Plain Dairy Free Yoghurt Alternative 400g",
-     "brand": "Dunnes Stores",
-     "sku": "100850693"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_6_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -2762,27 +6016,121 @@
      "brand": "TESCO finest",
      "pack": "500g",
      "variant": "Greek Yogurt",
+     "complete": true,
      "sources": [
       "tesco:proposed:256381115"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "500g",
+     "variant": "4 Greek Style Natural Yogurts",
+     "complete": true,
+     "sources": [
+      "tesco:current:309466350"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "500g",
      "variant": "Greek Style Natural Yogurt",
+     "complete": true,
      "sources": [
       "supervalu:peer:1493166000"
+     ]
+    },
+    {
+     "brand": "Milbona",
+     "pack": "500g",
+     "variant": "Greek Style Yogurt",
+     "complete": true,
+     "sources": [
+      "lidl:other:Milbona Greek Style Yogurt 500g"
      ]
     },
     {
      "brand": "Dunnes Stores",
      "pack": "400g",
      "variant": "Alpro Greek Style Plain Dairy Free Yoghurt Alternative",
+     "complete": true,
      "sources": [
       "dunnes:peer:100850693"
      ]
+    },
+    {
+     "brand": "DUNEEN",
+     "pack": null,
+     "variant": "Greek Style Natural Irish Yogurt",
+     "complete": false,
+     "sources": [
+      "aldi:other:DUNEEN Greek Style Natural Irish Yogurt"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "309466350",
+     "name": "Tesco 4 Greek Style Natural Yogurts 4X125g",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs TESCO finest)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1493166000",
+     "name": "SuperValu Greek Style Natural Yogurt (500 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO finest)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Milbona Greek Style Yogurt 500g",
+     "brand": "Milbona",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Milbona vs TESCO finest)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100850693",
+     "name": "Alpro Greek Style Plain Dairy Free Yoghurt Alternative 400g",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO finest)",
+      "pack(400g vs 500g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "DUNEEN Greek Style Natural Irish Yogurt",
+     "name": "DUNEEN Greek Style Natural Irish Yogurt",
+     "brand": "DUNEEN",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(DUNEEN vs TESCO finest)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -2820,25 +6168,12 @@
      "name": "Tesco Cranberries 200G",
      "brand": "TESCO",
      "sku": "271074203"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Shamrock Diced Mixed Fruit 200g",
-     "brand": null,
-     "sku": "100111631"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Mixed Fruit  (375 g)",
-     "brand": "SuperValu",
-     "sku": "1023682000"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -2846,19 +6181,79 @@
      "brand": "TESCO",
      "pack": "200g",
      "variant": "Cranberries",
+     "complete": true,
      "sources": [
       "tesco:proposed:271074203"
+     ]
+    },
+    {
+     "brand": "Shamrock",
+     "pack": "200g",
+     "variant": "Diced Mixed Fruit",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100111631"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "375g",
+     "variant": "Mixed Fruit",
+     "complete": true,
+     "sources": [
+      "tesco:current:256762546"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "375g",
      "variant": "Mixed Fruit",
+     "complete": true,
      "sources": [
       "supervalu:peer:1023682000"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100111631",
+     "name": "Shamrock Diced Mixed Fruit 200g",
+     "brand": "Shamrock",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Shamrock vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "256762546",
+     "name": "Tesco Mixed Fruit 375G",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(375g vs 200g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1023682000",
+     "name": "SuperValu Mixed Fruit  (375 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)",
+      "pack(375g vs 200g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -2889,12 +6284,124 @@
     "brand": "Goodall's",
     "ean": "00000096081280"
    },
-   "supportingSources": [],
-   "status": "contradicted",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Dr.Oetker Madagascan Vanilla Extract 35Ml",
+     "brand": "Dr. Oetker",
+     "sku": "278532342"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "canonical_brand_contradicts(Goodall's vs Dr. Oetker)"
+    "canonical_brand_contradicts(Goodall's vs Dr. Oetker)",
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "Dr. Oetker",
+     "pack": "35ml",
+     "variant": "Dr.Oetker Madagascan Vanilla Extract",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:278532342"
+     ]
+    },
+    {
+     "brand": "Goodall's",
+     "pack": "25ml",
+     "variant": "Natural Vanilla Extract",
+     "complete": true,
+     "sources": [
+      "supervalu:peer:1011500000"
+     ]
+    },
+    {
+     "brand": "Tesco Finest",
+     "pack": "60ml",
+     "variant": "Madagascan Vanilla Extract",
+     "complete": true,
+     "sources": [
+      "tesco:current:321676158"
+     ]
+    },
+    {
+     "brand": "Goodall's of Ireland",
+     "pack": "25ml",
+     "variant": "Vanilla Extract",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100800207"
+     ]
+    },
+    {
+     "brand": "THE PANTRY",
+     "pack": null,
+     "variant": "Madagascan Vanilla Extract",
+     "complete": false,
+     "sources": [
+      "aldi:other:THE PANTRY Madagascan Vanilla Extract"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1011500000",
+     "name": "Goodall's Natural Vanilla Extract (25 ml)",
+     "brand": "Goodall's",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Goodall's vs Dr. Oetker)",
+      "pack(25ml vs 35ml)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "321676158",
+     "name": "Tesco Finest Madagascan Vanilla Extract 60ml",
+     "brand": "Tesco Finest",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco Finest vs Dr. Oetker)",
+      "pack(60ml vs 35ml)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100800207",
+     "name": "Goodall's of Ireland Vanilla Extract 25ml",
+     "brand": "Goodall's of Ireland",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Goodall's of Ireland vs Dr. Oetker)",
+      "pack(25ml vs 35ml)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "THE PANTRY Madagascan Vanilla Extract",
+     "name": "THE PANTRY Madagascan Vanilla Extract",
+     "brand": "THE PANTRY",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(THE PANTRY vs Dr. Oetker)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -2931,26 +6438,14 @@
      "name": "Gem Baking Powder 150G",
      "brand": "GEM",
      "sku": "306804572"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Odlums Baking Powder (200 g)",
-     "brand": "Odlums",
-     "sku": "1288448000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores Baking at Home Baking Powder 200g",
-     "brand": null,
-     "sku": "100846449"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Odlums vs GEM)",
-    "retailers_offer_3_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -2958,6 +6453,7 @@
      "brand": "GEM",
      "pack": "150g",
      "variant": "Baking Powder",
+     "complete": true,
      "sources": [
       "tesco:proposed:306804572"
      ]
@@ -2966,19 +6462,92 @@
      "brand": "Odlums",
      "pack": "200g",
      "variant": "Baking Powder",
+     "complete": true,
      "sources": [
       "supervalu:peer:1288448000"
      ]
     },
     {
-     "brand": null,
+     "brand": "Dunnes Stores",
      "pack": "200g",
      "variant": "Baking at Home Baking Powder",
+     "complete": true,
      "sources": [
       "dunnes:peer:100846449"
      ]
+    },
+    {
+     "brand": "Stockwell & Co.",
+     "pack": null,
+     "variant": "Baking Powder",
+     "complete": false,
+     "sources": [
+      "tesco:current:309476129"
+     ]
+    },
+    {
+     "brand": "THE PANTRY",
+     "pack": null,
+     "variant": "Baking Powder",
+     "complete": false,
+     "sources": [
+      "aldi:other:THE PANTRY Baking Powder"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1288448000",
+     "name": "Odlums Baking Powder (200 g)",
+     "brand": "Odlums",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Odlums vs GEM)",
+      "pack(200g vs 150g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100846449",
+     "name": "Dunnes Stores Baking at Home Baking Powder 200g",
+     "brand": "Dunnes Stores",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs GEM)",
+      "pack(200g vs 150g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "309476129",
+     "name": "Stockwell & Co. Baking Powder",
+     "brand": "Stockwell & Co.",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Stockwell & Co. vs GEM)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "THE PANTRY Baking Powder",
+     "name": "THE PANTRY Baking Powder",
+     "brand": "THE PANTRY",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(THE PANTRY vs GEM)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -3007,12 +6576,95 @@
     "brand": "Meals Made Easy",
     "ean": "05057753211233"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Tesco Meals Made Easy Beef Lasagne 1Kg",
+     "brand": "MEALS MADE EASY",
+     "sku": "300771048"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:conflicts,supervalu:silent)"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "MEALS MADE EASY",
+     "pack": "1kg",
+     "variant": "Beef Lasagne",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:300771048"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "400g",
+     "variant": "Baxter & Greene Beef Lasagne",
+     "complete": false,
+     "sources": [
+      "dunnes:peer:100877000"
+     ]
+    },
+    {
+     "brand": "PATAK'S",
+     "pack": "270g",
+     "variant": "Indian Saag Aloo Ready Meal",
+     "complete": true,
+     "sources": [
+      "tesco:current:322838006"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100877000",
+     "name": "Baxter & Greene Beef Lasagne 400g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(400g vs 1kg)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "322838006",
+     "name": "Patak's Indian Saag Aloo Ready Meal 270g",
+     "brand": "PATAK'S",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(PATAK'S vs MEALS MADE EASY)",
+      "pack(270g vs 1kg)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1528494000",
+     "name": "Ready Meal Lasagne",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": "1528494000",
+     "name": "Ready Meal Lasagne"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -3050,26 +6702,14 @@
      "name": "Heinz Classic Barbecue Sauce 480G",
      "brand": "HEINZ",
      "sku": "272781689"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Chef Smokey BBQ Sauce (385 g)",
-     "brand": "Chef",
-     "sku": "1027620004"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Heinz Sweet Barbecue Sauce 500g",
-     "brand": null,
-     "sku": "100789742"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Chef vs HEINZ)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -3077,6 +6717,7 @@
      "brand": "HEINZ",
      "pack": "480g",
      "variant": "Classic Barbecue Sauce",
+     "complete": true,
      "sources": [
       "tesco:proposed:272781689"
      ]
@@ -3085,11 +6726,92 @@
      "brand": "Chef",
      "pack": "385g",
      "variant": "Smokey BBQ Sauce",
+     "complete": true,
      "sources": [
       "supervalu:peer:1027620004"
      ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "440g",
+     "variant": "Bbq Sauce",
+     "complete": true,
+     "sources": [
+      "tesco:current:305833629"
+     ]
+    },
+    {
+     "brand": "Heinz",
+     "pack": "500g",
+     "variant": "Sweet Barbecue Sauce",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100789742"
+     ]
+    },
+    {
+     "brand": "BRAMWELLS",
+     "pack": null,
+     "variant": "BBQ Sauce",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRAMWELLS BBQ Sauce"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1027620004",
+     "name": "Chef Smokey BBQ Sauce (385 g)",
+     "brand": "Chef",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Chef vs HEINZ)",
+      "pack(385g vs 480g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "305833629",
+     "name": "Tesco Bbq Sauce 440G",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs HEINZ)",
+      "pack(440g vs 480g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100789742",
+     "name": "Heinz Sweet Barbecue Sauce 500g",
+     "brand": "Heinz",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(500g vs 480g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRAMWELLS BBQ Sauce",
+     "name": "BRAMWELLS BBQ Sauce",
+     "brand": "BRAMWELLS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRAMWELLS vs HEINZ)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -3127,25 +6849,13 @@
      "name": "Tesco Roast Turkey Slices 120G X 12",
      "brand": "TESCO",
      "sku": "304696389"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Roast Chicken Slices",
-     "brand": null,
-     "sku": "100170457"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Carved Roast Chicken Slices (120 g)",
-     "brand": "SuperValu",
-     "sku": "1220535000"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -3153,17 +6863,93 @@
      "brand": "TESCO",
      "pack": "120g",
      "variant": "Roast Turkey Slices X 12",
+     "complete": true,
      "sources": [
       "tesco:proposed:304696389"
+     ]
+    },
+    {
+     "brand": "GREEN FARM",
+     "pack": "100g",
+     "variant": "Sliced Roast Chicken Breast",
+     "complete": true,
+     "sources": [
+      "tesco:current:317988083"
+     ]
+    },
+    {
+     "brand": "BRANNANS",
+     "pack": null,
+     "variant": "Roast Chicken Slices",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRANNANS Roast Chicken Slices"
      ]
     },
     {
      "brand": "SuperValu",
      "pack": "120g",
      "variant": "Carved Roast Chicken Slices",
+     "complete": true,
      "sources": [
       "supervalu:peer:1220535000"
      ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100170457",
+     "name": "Roast Chicken Slices",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "317988083",
+     "name": "Green Farm Sliced Roast Chicken Breast 100g",
+     "brand": "GREEN FARM",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(GREEN FARM vs TESCO)",
+      "pack(100g vs 120g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRANNANS Roast Chicken Slices",
+     "name": "BRANNANS Roast Chicken Slices",
+     "brand": "BRANNANS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRANNANS vs TESCO)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1220535000",
+     "name": "SuperValu Carved Roast Chicken Slices (120 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "dunnes",
+     "sku": "100170457",
+     "name": "Roast Chicken Slices"
     }
    ],
    "tesco_catalogue_evidence": {
@@ -3201,25 +6987,13 @@
      "name": "The Galway Kitchen Green Basil Pesto 140G",
      "brand": "THE GALWAY KTCHN",
      "sku": "315381849"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Antipasto Green Pesto (150 g)",
-     "brand": "SuperValu",
-     "sku": "1090068000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Biona Organic Green Pesto with Pine Kernels 120g",
-     "brand": null,
-     "sku": "100860779"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -3227,6 +7001,7 @@
      "brand": "THE GALWAY KTCHN",
      "pack": "140g",
      "variant": "The Galway Kitchen Green Basil Pesto",
+     "complete": true,
      "sources": [
       "tesco:proposed:315381849"
      ]
@@ -3235,11 +7010,93 @@
      "brand": "SuperValu",
      "pack": "150g",
      "variant": "Antipasto Green Pesto",
+     "complete": true,
      "sources": [
       "supervalu:peer:1090068000"
      ]
+    },
+    {
+     "brand": "Biona Organic",
+     "pack": "120g",
+     "variant": "Green Pesto with Pine Kernels",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100860779"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": null,
+     "variant": "Classic Green Pesto",
+     "complete": false,
+     "sources": [
+      "tesco:current:266578876"
+     ]
+    },
+    {
+     "brand": "CUCINA",
+     "pack": null,
+     "variant": "Green Pesto",
+     "complete": false,
+     "sources": [
+      "aldi:other:CUCINA Green Pesto"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1090068000",
+     "name": "SuperValu Antipasto Green Pesto (150 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs THE GALWAY KTCHN)",
+      "pack(150g vs 140g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100860779",
+     "name": "Biona Organic Green Pesto with Pine Kernels 120g",
+     "brand": "Biona Organic",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Biona Organic vs THE GALWAY KTCHN)",
+      "pack(120g vs 140g)",
+      "variant_qualifier"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "266578876",
+     "name": "Tesco Classic Green Pesto",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs THE GALWAY KTCHN)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "CUCINA Green Pesto",
+     "name": "CUCINA Green Pesto",
+     "brand": "CUCINA",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(CUCINA vs THE GALWAY KTCHN)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -3276,26 +7133,13 @@
      "name": "Tesco Garlic & Coriander Naan 2 Pack 260G",
      "brand": "TESCO",
      "sku": "266837858"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Naan Bread 2 Pack",
-     "brand": null,
-     "sku": null
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Fitzgeralds Large Authentic Naan Breads 2 Pack (260 g)",
-     "brand": "Fitzgeralds Family Bakery",
-     "sku": "1552645001"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Fitzgeralds Family Bakery vs TESCO)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_3_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -3303,6 +7147,7 @@
      "brand": "TESCO",
      "pack": "260g",
      "variant": "Garlic & Coriander Naan 2 Pack",
+     "complete": true,
      "sources": [
       "tesco:proposed:266837858"
      ]
@@ -3311,9 +7156,62 @@
      "brand": "Fitzgeralds Family Bakery",
      "pack": "260g",
      "variant": "Fitzgeralds Large Authentic Naan Breads 2 Pack",
+     "complete": true,
      "sources": [
       "supervalu:peer:1552645001"
      ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "260g",
+     "variant": "Peshwari Naan Breads 2 Pack",
+     "complete": true,
+     "sources": [
+      "tesco:current:278104918"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": null,
+     "name": "Naan Bread 2 Pack",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1552645001",
+     "name": "Fitzgeralds Large Authentic Naan Breads 2 Pack (260 g)",
+     "brand": "Fitzgeralds Family Bakery",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Fitzgeralds Family Bakery vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "278104918",
+     "name": "Tesco Peshwari Naan Breads 2 Pack 260G",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "dunnes",
+     "sku": null,
+     "name": "Naan Bread 2 Pack"
     }
    ],
    "tesco_catalogue_evidence": {
@@ -3344,12 +7242,130 @@
     "brand": "Heinz",
     "ean": "00000050457243"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Heinz Top Down Squeezy Tomato Ketchup Sauce 460G",
+     "brand": "HEINZ",
+     "sku": "250167878"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:silent,supervalu:silent)"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "HEINZ",
+     "pack": "460g",
+     "variant": "Top Down Squeezy Tomato Ketchup Sauce",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:250167878"
+     ]
+    },
+    {
+     "brand": "Heinz",
+     "pack": "460g",
+     "variant": "Tomato Ketchup",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100733918"
+     ]
+    },
+    {
+     "brand": "Heinz",
+     "pack": "460g",
+     "variant": "Tomato Ketchup Top Down",
+     "complete": true,
+     "sources": [
+      "supervalu:peer:1034656000"
+     ]
+    },
+    {
+     "brand": "Batts",
+     "pack": null,
+     "variant": "Tomato Ketchup",
+     "complete": false,
+     "sources": [
+      "lidl:other:Batts Tomato Ketchup"
+     ]
+    },
+    {
+     "brand": "BRAMWELLS",
+     "pack": null,
+     "variant": "Tomato Ketchup",
+     "complete": false,
+     "sources": [
+      "aldi:other:BRAMWELLS Tomato Ketchup"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100733918",
+     "name": "Heinz Tomato Ketchup 460g",
+     "brand": "Heinz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "254722768",
+     "name": "Heinz Top Down Squeezy Tomato Ketchup Sauce",
+     "brand": "Heinz",
+     "brandSource": "structured",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1034656000",
+     "name": "Heinz Tomato Ketchup Top Down (460 g)",
+     "brand": "Heinz",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "variant_words"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Batts Tomato Ketchup",
+     "brand": "Batts",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Batts vs HEINZ)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "BRAMWELLS Tomato Ketchup",
+     "name": "BRAMWELLS Tomato Ketchup",
+     "brand": "BRAMWELLS",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(BRAMWELLS vs HEINZ)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -3377,12 +7393,87 @@
     "brand": "Green giant",
     "ean": "05010046002017"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Green Giant Original Sweet Corn 340G",
+     "brand": "GREEN GIANT",
+     "sku": "254875197"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(supervalu:silent,dunnes:conflicts)"
+    "attached_offers_are_2_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "GREEN GIANT",
+     "pack": "340g",
+     "variant": "Original Sweet Corn",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:254875197"
+     ]
+    },
+    {
+     "brand": "Biona Organic",
+     "pack": "340g",
+     "variant": "Sweetcorn - Can",
+     "complete": true,
+     "sources": [
+      "tesco:current:322245120",
+      "dunnes:peer:100878811"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "322245120",
+     "name": "Biona Organic Sweetcorn - Can 340g",
+     "brand": "Biona Organic",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Biona Organic vs GREEN GIANT)",
+      "variant_qualifier"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": null,
+     "name": "Sweetcorn Tinned 340g",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "silent",
+     "conflicts": []
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100878811",
+     "name": "Biona Organic Sweetcorn 340g",
+     "brand": "Biona Organic",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Biona Organic vs GREEN GIANT)",
+      "variant_qualifier"
+     ]
+    }
+   ],
+   "detachForReview": [
+    {
+     "store": "supervalu",
+     "sku": null,
+     "name": "Sweetcorn Tinned 340g"
+    }
+   ],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -3421,25 +7512,13 @@
      "name": "Tesco Strawberry 227G",
      "brand": "TESCO",
      "sku": "278001994"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Strawberry Jam (454 g)",
-     "brand": "SuperValu",
-     "sku": "1764932000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Chivers Strawberry Jam 340g",
-     "brand": "Dunnes Stores",
-     "sku": "100332499"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -3447,6 +7526,7 @@
      "brand": "TESCO",
      "pack": "227g",
      "variant": "Strawberry",
+     "complete": true,
      "sources": [
       "tesco:proposed:278001994"
      ]
@@ -3455,19 +7535,92 @@
      "brand": "SuperValu",
      "pack": "454g",
      "variant": "Strawberry Jam",
+     "complete": true,
      "sources": [
       "supervalu:peer:1764932000"
+     ]
+    },
+    {
+     "brand": "Maribel",
+     "pack": null,
+     "variant": "Strawberry Jam",
+     "complete": false,
+     "sources": [
+      "lidl:other:Maribel Strawberry Jam"
+     ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "454g",
+     "variant": "Stockwell & Co Strawberry Jam",
+     "complete": true,
+     "sources": [
+      "tesco:current:299600086"
      ]
     },
     {
      "brand": "Dunnes Stores",
      "pack": "340g",
      "variant": "Chivers Strawberry Jam",
+     "complete": true,
      "sources": [
       "dunnes:peer:100332499"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1764932000",
+     "name": "SuperValu Strawberry Jam (454 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)",
+      "pack(454g vs 227g)"
+     ]
+    },
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Maribel Strawberry Jam",
+     "brand": "Maribel",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Maribel vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "299600086",
+     "name": "Stockwell & Co Strawberry Jam 454G",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(454g vs 227g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100332499",
+     "name": "Chivers Strawberry Jam 340g",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)",
+      "pack(340g vs 227g)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -3497,12 +7650,121 @@
     "brand": null,
     "ean": "05391509390521"
    },
-   "supportingSources": [],
-   "status": "insufficient_evidence",
+   "supportingSources": [
+    {
+     "store": "tesco",
+     "role": "proposed",
+     "name": "Little Chip No Peel Marmalade 454G",
+     "brand": "Fruitfield",
+     "sku": "255676120"
+    }
+   ],
+   "status": "needs_split",
    "reasons": [
-    "no_independent_retailer_confirms(dunnes:conflicts,supervalu:conflicts)"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
+   "splitInto": [
+    {
+     "brand": "Fruitfield",
+     "pack": "454g",
+     "variant": "Little Chip No Peel Marmalade",
+     "complete": true,
+     "sources": [
+      "tesco:proposed:255676120"
+     ]
+    },
+    {
+     "brand": "Bonne Maman",
+     "pack": "370g",
+     "variant": "Bitter Orange Marmalade",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100118273"
+     ]
+    },
+    {
+     "brand": null,
+     "pack": "340g",
+     "variant": "Follain Nothing But Fruit Orange Marmalade",
+     "complete": false,
+     "sources": [
+      "tesco:current:Follain Nothing But Fruit Orange Marmalade 340G"
+     ]
+    },
+    {
+     "brand": "SuperValu",
+     "pack": null,
+     "variant": "Marmalade",
+     "complete": false,
+     "sources": [
+      "supervalu:peer:1764904000"
+     ]
+    },
+    {
+     "brand": "GRÁINNE'S",
+     "pack": null,
+     "variant": "Fine Cut Breakfast Marmalade",
+     "complete": false,
+     "sources": [
+      "aldi:other:GRÁINNE'S Fine Cut Breakfast Marmalade"
+     ]
+    }
+   ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100118273",
+     "name": "Bonne Maman Bitter Orange Marmalade 370g",
+     "brand": "Bonne Maman",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Bonne Maman vs Fruitfield)",
+      "pack(370g vs 454g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": null,
+     "name": "Follain Nothing But Fruit Orange Marmalade 340G",
+     "brand": null,
+     "brandSource": "none",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(340g vs 454g)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1764904000",
+     "name": "Marmalade",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs Fruitfield)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "GRÁINNE'S Fine Cut Breakfast Marmalade",
+     "name": "GRÁINNE'S Fine Cut Breakfast Marmalade",
+     "brand": "GRÁINNE'S",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(GRÁINNE'S vs Fruitfield)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -3539,26 +7801,14 @@
      "name": "Tesco Worcester Sauce 150Ml",
      "brand": "TESCO",
      "sku": "297372202"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Goodall's of Ireland Worcestershire Sauce 125ml",
-     "brand": null,
-     "sku": "100110609"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Goodall's Worcestershire Sauce (125 ml)",
-     "brand": "Goodall's of Ireland",
-     "sku": "1011445001"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Goodall's of Ireland vs TESCO)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -3566,6 +7816,7 @@
      "brand": "TESCO",
      "pack": "150ml",
      "variant": "Worcester Sauce",
+     "complete": true,
      "sources": [
       "tesco:proposed:297372202"
      ]
@@ -3573,12 +7824,72 @@
     {
      "brand": "Goodall's of Ireland",
      "pack": "125ml",
+     "variant": "Worcestershire Sauce",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100110609"
+     ]
+    },
+    {
+     "brand": "Goodall's of Ireland",
+     "pack": "125ml",
      "variant": "Goodall's Worcestershire Sauce",
+     "complete": true,
      "sources": [
       "supervalu:peer:1011445001"
      ]
+    },
+    {
+     "brand": "Walkers",
+     "pack": null,
+     "variant": "Lea & Perrins Worcestershire Sauce Multipack Crisps",
+     "complete": false,
+     "sources": [
+      "tesco:current:318181908"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100110609",
+     "name": "Goodall's of Ireland Worcestershire Sauce 125ml",
+     "brand": "Goodall's of Ireland",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Goodall's of Ireland vs TESCO)",
+      "pack(125ml vs 150ml)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1011445001",
+     "name": "Goodall's Worcestershire Sauce (125 ml)",
+     "brand": "Goodall's of Ireland",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Goodall's of Ireland vs TESCO)",
+      "pack(125ml vs 150ml)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "318181908",
+     "name": "Walkers Lea & Perrins Worcestershire Sauce Multipack Crisps",
+     "brand": "Walkers",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Walkers vs TESCO)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -3615,26 +7926,14 @@
      "name": "Blue Dragon Teriyaki Stir Fry Sauce 120G",
      "brand": "BLUE DRAGON",
      "sku": "303126912"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "Obento Teriyaki Marinade Sauce (250 ml)",
-     "brand": "Kikkoman",
-     "sku": "1441877001"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Kikkoman Teriyaki Wok Sauce with Toasted Sesame 250ml",
-     "brand": null,
-     "sku": "100208743"
     }
    ],
    "status": "needs_split",
    "reasons": [
     "canonical_brand_contradicts(Kikkoman vs BLUE DRAGON)",
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -3642,6 +7941,7 @@
      "brand": "BLUE DRAGON",
      "pack": "120g",
      "variant": "Teriyaki Stir Fry Sauce",
+     "complete": true,
      "sources": [
       "tesco:proposed:303126912"
      ]
@@ -3650,11 +7950,93 @@
      "brand": "Kikkoman",
      "pack": "250ml",
      "variant": "Obento Teriyaki Marinade Sauce",
+     "complete": true,
      "sources": [
       "supervalu:peer:1441877001"
      ]
+    },
+    {
+     "brand": "Tesco",
+     "pack": "150ml",
+     "variant": "Teriyaki Sauce",
+     "complete": true,
+     "sources": [
+      "tesco:current:262516473"
+     ]
+    },
+    {
+     "brand": "Kikkoman",
+     "pack": "250ml",
+     "variant": "Teriyaki Wok Sauce with Toasted Sesame",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100208743"
+     ]
+    },
+    {
+     "brand": "ASIA SPECIALITIES",
+     "pack": null,
+     "variant": "Teriyaki Sauce",
+     "complete": false,
+     "sources": [
+      "aldi:other:ASIA SPECIALITIES Teriyaki Sauce"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1441877001",
+     "name": "Obento Teriyaki Marinade Sauce (250 ml)",
+     "brand": "Kikkoman",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Kikkoman vs BLUE DRAGON)",
+      "pack(250ml vs 120g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "262516473",
+     "name": "Tesco Teriyaki Sauce 150Ml",
+     "brand": "Tesco",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Tesco vs BLUE DRAGON)",
+      "pack(150ml vs 120g)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100208743",
+     "name": "Kikkoman Teriyaki Wok Sauce with Toasted Sesame 250ml",
+     "brand": "Kikkoman",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Kikkoman vs BLUE DRAGON)",
+      "pack(250ml vs 120g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "ASIA SPECIALITIES Teriyaki Sauce",
+     "name": "ASIA SPECIALITIES Teriyaki Sauce",
+     "brand": "ASIA SPECIALITIES",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(ASIA SPECIALITIES vs BLUE DRAGON)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",
@@ -3691,25 +8073,12 @@
      "name": "Tesco Fresh Milk 2 Litre",
      "brand": "TESCO",
      "sku": "250005606"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Dunnes Stores Irish Whole Milk 2 Litres",
-     "brand": "Dunnes Stores",
-     "sku": "100806905"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Fresh Irish Whole Milk (2 L)",
-     "brand": "SuperValu",
-     "sku": "1025460000"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_3_different_products"
+    "attached_offers_are_4_different_products",
+    "core_identity_not_substantiated"
    ],
    "proposed": null,
    "splitInto": [
@@ -3717,14 +8086,25 @@
      "brand": "TESCO",
      "pack": "2L",
      "variant": "Fresh Milk",
+     "complete": true,
      "sources": [
       "tesco:proposed:250005606"
+     ]
+    },
+    {
+     "brand": "Glenstal",
+     "pack": "2L",
+     "variant": "Fresh Irish Whole Milk",
+     "complete": true,
+     "sources": [
+      "lidl:other:Glenstal Fresh Irish Whole Milk 2L"
      ]
     },
     {
      "brand": "Dunnes Stores",
      "pack": "2L",
      "variant": "Irish Whole Milk",
+     "complete": true,
      "sources": [
       "dunnes:peer:100806905"
      ]
@@ -3733,11 +8113,61 @@
      "brand": "SuperValu",
      "pack": "2L",
      "variant": "Fresh Irish Whole Milk",
+     "complete": true,
      "sources": [
       "supervalu:peer:1025460000"
      ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "lidl",
+     "role": "other",
+     "sku": null,
+     "name": "Glenstal Fresh Irish Whole Milk 2L",
+     "brand": "Glenstal",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Glenstal vs TESCO)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100806905",
+     "name": "Dunnes Stores Irish Whole Milk 2 Litres",
+     "brand": "Dunnes Stores",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(Dunnes Stores vs TESCO)"
+     ]
+    },
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1025460000",
+     "name": "SuperValu Fresh Irish Whole Milk (2 L)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs TESCO)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "292769876",
+     "name": "Tesco Whole Milk",
+     "brand": "Tesco",
+     "brandSource": "structured",
+     "verdict": "silent",
+     "conflicts": []
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "1GmfEpifwr0VgEo0c",
     "captured_at": "2026-11-15T00:38:50.533Z",
@@ -3773,25 +8203,13 @@
      "name": "Blue Dragon Hoisin & Garlic Stir Fry Sauce 120G",
      "brand": "BLUE DRAGON",
      "sku": "308109574"
-    },
-    {
-     "store": "supervalu",
-     "role": "peer",
-     "name": "SuperValu Signature Tastes Hoisin Sauce (285 g)",
-     "brand": "SuperValu",
-     "sku": "1771052000"
-    },
-    {
-     "store": "dunnes",
-     "role": "peer",
-     "name": "Blue Dragon Rich Hoisin Sauce 250ml",
-     "brand": null,
-     "sku": "100320409"
     }
    ],
    "status": "needs_split",
    "reasons": [
-    "retailers_offer_2_different_products"
+    "attached_offers_are_5_different_products",
+    "core_identity_not_substantiated",
+    "a_split_out_product_lacks_brand_or_pack"
    ],
    "proposed": null,
    "splitInto": [
@@ -3799,6 +8217,7 @@
      "brand": "BLUE DRAGON",
      "pack": "120g",
      "variant": "Hoisin & Garlic Stir Fry Sauce",
+     "complete": true,
      "sources": [
       "tesco:proposed:308109574"
      ]
@@ -3807,11 +8226,91 @@
      "brand": "SuperValu",
      "pack": "285g",
      "variant": "Signature Tastes Hoisin Sauce",
+     "complete": true,
      "sources": [
       "supervalu:peer:1771052000"
      ]
+    },
+    {
+     "brand": "LEE KUM KEE",
+     "pack": null,
+     "variant": "Hoisin Sauce",
+     "complete": false,
+     "sources": [
+      "tesco:current:276731075"
+     ]
+    },
+    {
+     "brand": "Blue Dragon",
+     "pack": "250ml",
+     "variant": "Rich Hoisin Sauce",
+     "complete": true,
+     "sources": [
+      "dunnes:peer:100320409"
+     ]
+    },
+    {
+     "brand": "ASIA SPECIALITIES",
+     "pack": null,
+     "variant": "Hoisin Sauce",
+     "complete": false,
+     "sources": [
+      "aldi:other:ASIA SPECIALITIES Hoisin Sauce"
+     ]
     }
    ],
+   "offerVerdicts": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1771052000",
+     "name": "SuperValu Signature Tastes Hoisin Sauce (285 g)",
+     "brand": "SuperValu",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(SuperValu vs BLUE DRAGON)",
+      "pack(285g vs 120g)"
+     ]
+    },
+    {
+     "store": "tesco",
+     "role": "current",
+     "sku": "276731075",
+     "name": "Lee Kum Kee Hoisin Sauce",
+     "brand": "LEE KUM KEE",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(LEE KUM KEE vs BLUE DRAGON)"
+     ]
+    },
+    {
+     "store": "dunnes",
+     "role": "peer",
+     "sku": "100320409",
+     "name": "Blue Dragon Rich Hoisin Sauce 250ml",
+     "brand": "Blue Dragon",
+     "brandSource": "title",
+     "verdict": "conflicts",
+     "conflicts": [
+      "pack(250ml vs 120g)"
+     ]
+    },
+    {
+     "store": "aldi",
+     "role": "other",
+     "sku": "ASIA SPECIALITIES Hoisin Sauce",
+     "name": "ASIA SPECIALITIES Hoisin Sauce",
+     "brand": "ASIA SPECIALITIES",
+     "brandSource": "structured",
+     "verdict": "conflicts",
+     "conflicts": [
+      "brand(ASIA SPECIALITIES vs BLUE DRAGON)"
+     ]
+    }
+   ],
+   "detachForReview": [],
    "tesco_catalogue_evidence": {
     "provider_run_id": "15bOhJeCdF4evSS1I",
     "captured_at": "2026-11-15T00:24:54.220Z",

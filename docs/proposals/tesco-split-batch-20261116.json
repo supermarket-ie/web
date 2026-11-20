@@ -1,0 +1,233 @@
+{
+ "generatedAt": "2026-11-15T20:56:53.619Z",
+ "cases": [
+  {
+   "canonical_id": "014dfd6d-a376-428f-968a-abdd7eefc8f7",
+   "from": {
+    "canonical_name": "Cajun Seasoning",
+    "brand": "Schwartz"
+   },
+   "to": {
+    "canonical_name": "Schwartz Cajun Seasoning 44g",
+    "brand": "Schwartz"
+   },
+   "keep_offers": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1020899000",
+     "name": "Schwartz Cajun Seasoning (44 g)",
+     "brand": "Schwartz",
+     "brandSource": "structured",
+     "verdict": "agrees",
+     "conflicts": [],
+     "id": "fb65e4d2-1221-4ffc-9ce3-35446f2be5be"
+    }
+   ],
+   "new_products": [
+    {
+     "id": "f294755c-46af-419a-8349-ccb0c1f85e60",
+     "canonical_name": "Dunnes Stores Cajun Seasoning 35g",
+     "brand": "Dunnes Stores",
+     "complete": true,
+     "offers": [
+      {
+       "id": "ab4871c4-3cea-42fc-9a79-e4305e044e61",
+       "store": "dunnes",
+       "sku": "100206328",
+       "name": "Dunnes Stores Cajun Seasoning 35g"
+      }
+     ]
+    },
+    {
+     "id": "f262711f-0c5d-43ca-92f6-d395c97c135c",
+     "canonical_name": "Tesco Cajun Seasoning 45G",
+     "brand": "Tesco",
+     "complete": true,
+     "offers": [
+      {
+       "id": "5cb35a07-f9a9-478e-bc48-24048c69f7ab",
+       "store": "tesco",
+       "sku": "289081921",
+       "name": "Tesco Cajun Seasoning 45G"
+      }
+     ]
+    },
+    {
+     "id": "5d4b5a53-1fc1-4aaf-a4ba-568efd71f1b2",
+     "canonical_name": "READY, SET…COOK! Cajun Seasoning",
+     "brand": "READY, SET…COOK!",
+     "complete": false,
+     "offers": [
+      {
+       "id": "a62ca5fa-55d2-4940-8fcb-f38a4f27f57d",
+       "store": "aldi",
+       "sku": "READY, SET…COOK! Cajun Seasoning",
+       "name": "READY, SET…COOK! Cajun Seasoning"
+      }
+     ]
+    }
+   ],
+   "residual": null,
+   "staged_tesco_offer": {
+    "id": "7faf308a-8c95-48ab-a618-2f9e9eee1872",
+    "store_sku": "257518392",
+    "store_url": "https://www.tesco.ie/shop/en-IE/products/257518392",
+    "store_product_name": "Schwartz Cajun Seasoning 44g"
+   },
+   "blockers": []
+  },
+  {
+   "canonical_id": "1cca7ae6-2118-4871-be9a-d8eeb359f0ed",
+   "from": {
+    "canonical_name": "Muesli",
+    "brand": "Lifeforce"
+   },
+   "to": {
+    "canonical_name": "Lifeforce Muesli 750g",
+    "brand": "Lifeforce"
+   },
+   "keep_offers": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1008602002",
+     "name": "Lifeforce Muesli (750 g)",
+     "brand": "Lifeforce",
+     "brandSource": "structured",
+     "verdict": "agrees",
+     "conflicts": [],
+     "id": "10ba1cd5-c64a-449c-90b1-454406ad5347"
+    }
+   ],
+   "new_products": [
+    {
+     "id": "408253c3-82da-424c-aa01-5d5ac11f16b9",
+     "canonical_name": "Flahavan's Hi8 Muesli - Fruit & Nut",
+     "brand": "Flahavan's",
+     "complete": false,
+     "offers": [
+      {
+       "id": "41f36453-5afc-4ebe-ab45-d5327163410a",
+       "store": "tesco",
+       "sku": "315060999",
+       "name": "Flahavan's Hi8 Muesli - Fruit & Nut"
+      }
+     ]
+    },
+    {
+     "id": "52833f6d-04e8-4437-8bb4-d67771c8dae1",
+     "canonical_name": "HARVEST MORN Chocolate Muesli Bars",
+     "brand": "HARVEST MORN",
+     "complete": false,
+     "offers": [
+      {
+       "id": "ef5c7b5c-60de-4ee0-b48d-6615dfd0f1af",
+       "store": "aldi",
+       "sku": "HARVEST MORN Chocolate Muesli Bars",
+       "name": "HARVEST MORN Chocolate Muesli Bars"
+      }
+     ]
+    },
+    {
+     "id": "8c5c4ec0-a615-4426-a7f9-96c46300a557",
+     "canonical_name": "Flahavan's Hi8 Muesli Original 1kg",
+     "brand": "Flahavan's",
+     "complete": true,
+     "offers": [
+      {
+       "id": "7d80821c-7231-4e2f-b09c-36a463d1cc78",
+       "store": "dunnes",
+       "sku": "100673561",
+       "name": "Flahavan's Hi8 Muesli Original 1kg"
+      }
+     ]
+    }
+   ],
+   "residual": null,
+   "staged_tesco_offer": {
+    "id": "7e661ab9-b759-47dc-992a-50035b98ee39",
+    "store_sku": "251970492",
+    "store_url": "https://www.tesco.ie/shop/en-IE/products/251970492",
+    "store_product_name": "Lifeforce Irish Muesli 750G"
+   },
+   "blockers": []
+  },
+  {
+   "canonical_id": "95000afc-bf7f-4478-a624-b098446b6799",
+   "from": {
+    "canonical_name": "Dijon Mustard",
+    "brand": "Maille"
+   },
+   "to": {
+    "canonical_name": "Maille Dijon Mustard 215g",
+    "brand": "Maille"
+   },
+   "keep_offers": [
+    {
+     "store": "supervalu",
+     "role": "peer",
+     "sku": "1038275000",
+     "name": "Maille Dijon Mustard (215 g)",
+     "brand": "Maille",
+     "brandSource": "structured",
+     "verdict": "agrees",
+     "conflicts": [],
+     "id": "a0f35d1e-b28b-4662-b869-4aadef017c09"
+    }
+   ],
+   "new_products": [
+    {
+     "id": "09f55be6-e79d-4894-a5e2-b465343f2a16",
+     "canonical_name": "Tesco Dijon Mustard 185g",
+     "brand": "Tesco",
+     "complete": true,
+     "offers": [
+      {
+       "id": "46bf45a7-71df-44f8-98f3-db308713bc66",
+       "store": "tesco",
+       "sku": "260691710",
+       "name": "Tesco Dijon Mustard 185g"
+      }
+     ]
+    },
+    {
+     "id": "f782052a-d967-44cf-8d8c-0c4f446f1360",
+     "canonical_name": "Lakeshore Dijon Mustard 200g",
+     "brand": "Lakeshore",
+     "complete": true,
+     "offers": [
+      {
+       "id": "e5c0eece-c510-440a-9bcf-c94fcbd84780",
+       "store": "dunnes",
+       "sku": "100173824",
+       "name": "Lakeshore Dijon Mustard 200g"
+      }
+     ]
+    },
+    {
+     "id": "19ef3f2e-5d85-462d-9076-59775909c9f2",
+     "canonical_name": "BRAMWELLS Dijon Mustard",
+     "brand": "BRAMWELLS",
+     "complete": false,
+     "offers": [
+      {
+       "id": "10426a52-1d30-4b21-bcb4-177dc86fa9ad",
+       "store": "aldi",
+       "sku": "BRAMWELLS Dijon Mustard",
+       "name": "BRAMWELLS Dijon Mustard"
+      }
+     ]
+    }
+   ],
+   "residual": null,
+   "staged_tesco_offer": {
+    "id": "0f73f3fd-e3f3-40f2-8548-bad63c079d58",
+    "store_sku": "250858535",
+    "store_url": "https://www.tesco.ie/shop/en-IE/products/250858535",
+    "store_product_name": "Maille Dijon Original Mustard 215G"
+   },
+   "blockers": []
+  }
+ ]
+}

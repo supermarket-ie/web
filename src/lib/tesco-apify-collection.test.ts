@@ -59,7 +59,7 @@ function makeFakeSb(opts: {
       : name === 'latest_prices' ? opts.latest
       : name === 'scrape_product_receipts' ? opts.receipts
       : name === 'tesco_identity_verifications' ? (opts.verifications ?? [])
-      : name === 'product_barcode_provenance' ? (opts.provenance ?? [])
+      : name === 'product_barcode_provenance_live' ? (opts.provenance ?? [])
       : name === 'tesco_first_price_approvals' ? (opts.approvals ?? []).map(a => ({
         ...a, mapping_snapshot: a.mapping_snapshot === 'auto' ? snapshotFor(String(a.store_product_id)) : a.mapping_snapshot }))
       : name === 'tesco_direct_collection_pages' ? opts.recent : [];
