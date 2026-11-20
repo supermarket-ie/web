@@ -72,8 +72,12 @@ const PACK_TOKEN = /^(\d+(\.\d+)?(g|kg|ml|l|cl|ltr|x)?|x|pack|pk|portions?|g|kg|
 export function titleWordProblems(canonicalName: string, retailerTitle: string): string[] {
   // Connectives carry no identity ("Garlic & Herb" = "Garlic and Herb"); qualifier and pack checks are unaffected.
   const CONNECTIVE = new Set(['and', 'with', 'of', 'the', 'in', 'a']);
-  const keep = (w: string) => !PACK_TOKEN.test(w) && !CONNECTIVE.has(w);
-  const c = titleWords(canonicalName).filter(keep), t = new Set(titleWords(retailerTitle).filter(keep));
+  // A BARE number is a pack token only when a unit/pack word follows it ("400 g", "6 x", "4 pack"). Otherwise it is
+  // identity ("4+ Months" vs "6+ Months", "Size 4", "48 Washes") and must appear on both sides.
+  const UNIT_NEXT = /^(g|kg|ml|l|cl|ltr|x|pack|pk|portions?)$/;
+  const identity = (s: string) => titleWords(s).filter((w, i, all) =>
+    !CONNECTIVE.has(w) && !(PACK_TOKEN.test(w) && (!/^\d+(\.\d+)?$/.test(w) || UNIT_NEXT.test(all[i + 1] ?? ''))));
+  const c = identity(canonicalName), t = new Set(identity(retailerTitle));
   const problems: string[] = [];
   const missing = c.filter(w => !t.has(w));
   if (missing.length) problems.push(`title_words_missing:${missing.join('+')}`);
