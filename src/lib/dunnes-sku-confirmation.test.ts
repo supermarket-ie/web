@@ -74,3 +74,38 @@ describe('Dunnes SKU-bound confirmation', () => {
   });
 });
 
+
+import { brandCatalogueCandidates } from './dunnes-sku-confirmation';
+describe('brand catalogue walk candidates (listing data narrows; it never proves identity)', () => {
+  // Real listing shapes from the Dunnes brand-facet walk (probe, 19 Nov 2026).
+  const heinz = [
+    { sku: '100684285', name: 'Heinz Tomato Ketchup 910g', brand: 'Heinz' },
+    { sku: '100873410', name: 'Heinz Tomato Ketchup 650g', brand: 'Heinz' },
+    { sku: '100733918', name: 'Heinz Tomato Ketchup 460g', brand: 'Heinz' },
+    { sku: '100733919', name: 'Heinz Tomato Ketchup Reduced Sugar & Salt 460g', brand: 'Heinz' },
+    { sku: '100111378', name: 'Heinz Baked Beans 415g', brand: 'Heinz' },
+    { sku: '100112275', name: 'Heinz Baked Beans 4 x 415g', brand: 'Heinz' },
+    { sku: '100999999', name: 'Dunnes Stores Baked Beans 415g', brand: 'Heinz' },
+  ];
+  it('the exact pack, words and variant of the reference select exactly one SKU', () => {
+    expect(brandCatalogueCandidates('Heinz', ['Heinz Tomato Ketchup 460 g'], heinz).map(c => c.sku)).toEqual(['100733918']);
+    expect(brandCatalogueCandidates('Heinz', ['Heinz Baked Beans 415 g'], heinz).map(c => c.sku)).toEqual(['100111378']);
+  });
+  it('a one-sided qualifier, a different pack or a multipack never qualifies', () => {
+    expect(brandCatalogueCandidates('Heinz', ['Heinz Tomato Ketchup 500 g'], heinz)).toEqual([]);
+    expect(brandCatalogueCandidates('Heinz', ['Heinz Baked Beans 4 x 415g'], heinz).map(c => c.sku)).toEqual(['100112275']);
+    expect(brandCatalogueCandidates('Heinz', ['Heinz Reduced Sugar Tomato Ketchup 460 g'], heinz)).toEqual([]);
+  });
+  it('every reference must fit: a candidate fitting the SuperValu title but not the Tesco title is dropped', () => {
+    expect(brandCatalogueCandidates('Heinz', ['Heinz Tomato Ketchup 460 g', 'Heinz Tomato Ketchup Top Down 460g'], heinz)).toEqual([]);
+  });
+  it('own-label and other-brand items are excluded; duplicates collapse', () => {
+    expect(brandCatalogueCandidates('Heinz', ['Baked Beans 415 g'], heinz).map(c => c.sku)).toEqual(['100111378']);
+    expect(brandCatalogueCandidates('Kerrygold', ['Kerrygold Butter 454 g'], heinz)).toEqual([]);
+    expect(brandCatalogueCandidates('Heinz', ['Heinz Baked Beans 415 g'], [...heinz, heinz[4]]).length).toBe(1);
+  });
+  it('several fitting SKUs are all returned (the caller then holds as ambiguous)', () => {
+    const two = [...heinz, { sku: '100111379', name: 'Heinz Baked Beans 415g', brand: 'Heinz' }];
+    expect(brandCatalogueCandidates('Heinz', ['Heinz Baked Beans 415 g'], two).length).toBe(2);
+  });
+});

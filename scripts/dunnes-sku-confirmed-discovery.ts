@@ -4,14 +4,16 @@
 // structured pack, own-label, ambiguity, SKU ownership) -> only then the existing finaliser writes the mapping
 // and the SKU-bound price; the product response body is retained as evidence. Dry run unless APPLY=1.
 // Env: LIMIT (<=50), OFFSET. The August search-only acceptance pipeline is NOT used.
-import { confirmDunnesSku, dunnesProductApiUrl, titleWordProblems, brandConfirmed, multipackOf, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
-import { isDunnesPackCompatible, normaliseDunnesName } from '@/lib/dunnes-discovery';
+import { confirmDunnesSku, dunnesProductApiUrl, titleWordProblems, brandConfirmed, brandCatalogueCandidates, packCompatible,
+  type CatalogueListingItem, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
+import { normaliseDunnesName } from '@/lib/dunnes-discovery';
 import { withRetailerRequestSlot } from '@/lib/retailer-request-governor';
 import { captureIdentityResponse } from '@/lib/retailer-identity-response';
 import { retainIdentityResponse } from '@/lib/retailer-identity-retention';
 import { supabaseAdmin as sb } from '@/lib/supabase';
 
 const APPLY = process.env.APPLY === '1';
+const BRAND_WALK = process.env.FOCUS === 'brand_walk';
 const LIMIT = Math.min(50, Math.max(1, Number(process.env.LIMIT ?? 25)));
 const OFFSET = Math.max(0, Number(process.env.OFFSET ?? 0));
 const EXCLUDED = /alcohol|beer|wine|spirit|cider|lager|whiskey|vodka|gin\b|tobacco|cigar|vape|clothing|apparel/i;
@@ -31,12 +33,24 @@ async function governedGet(url: string) {
 }
 const log = (o: Record<string, unknown>) => console.log(JSON.stringify(o));
 const chunks = <T,>(xs: T[], n = 100) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
-// Pre-filter mirrors confirmDunnesSku: the same multipack (count + per-unit size) or a compatible single pack.
-const packCompatible = (ref: string, title: string) => {
-  const a = multipackOf(ref), b = multipackOf(title);
-  if (a || b) return !!a && !!b && a.count === b.count && a.unit === b.unit && a.unitAmount === b.unitAmount;
-  return isDunnesPackCompatible(ref, title);
-};
+// A brand's FULL Dunnes listing via the brand facet (q=<brand>&f=Brand:<brand>, 60 per page, <= 5 pages), cached per
+// run. Each page is one governed request. An empty query with a facet returns nothing (probed 19 Nov 2026).
+const brandCache = new Map<string, CatalogueListingItem[]>();
+async function brandListing(brand: string): Promise<CatalogueListingItem[]> {
+  const key = brand.trim().toLowerCase();
+  if (brandCache.has(key)) return brandCache.get(key)!;
+  const items: CatalogueListingItem[] = [];
+  for (let skip = 0; skip < 300; skip += 60) {
+    const s = await governedGet(`https://storefrontgateway.dunnesstoresgrocery.com/api/stores/258/search?q=${encodeURIComponent(brand)}&take=60&skip=${skip}&f=${encodeURIComponent(`Brand:${brand}`)}`);
+    if (s.status !== 200) break;
+    const j = JSON.parse(s.body) as { items?: CatalogueListingItem[]; total?: number };
+    const page = j.items ?? [];
+    items.push(...page);
+    if (page.length < 60 || items.length >= Number(j.total ?? 0)) break;
+  }
+  brandCache.set(key, items);
+  return items;
+}
 
 async function main() {
   // SV_LED=1: SuperValu-led discovery. Reference identity = the SuperValu offer's OWN title + brand (a real retailer
@@ -84,7 +98,7 @@ async function main() {
       }).slice(0, LIMIT);
     }
   }
-  if (process.env.FOCUS === 'stale_dunnes') {
+  if (process.env.FOCUS === 'stale_dunnes' || BRAND_WALK) {
     // STALE RENEWAL: SuperValu-led records whose EXISTING Dunnes SKU has no fresh price (latest_prices is per offer)
     // while the SuperValu offer is fresh. Re-confirm that SKU by product API first; search for a replacement only if
     // it no longer confirms. Identity rules (confirmDunnesSku) are unchanged.
@@ -105,13 +119,32 @@ async function main() {
       for (const r of lp ?? []) (r.store === 'dunnes' ? freshD : freshS).add(r.canonical_product_id as string);
       const { data: rec, error: re } = await sb.from('dunnes_discovery_receipts').select('product_id,reason').in('product_id', c).gte('created_at', since);
       if (re) throw re;
-      for (const r of rec ?? []) if (String(r.reason ?? '').startsWith('SKU-confirmed discovery held')) tried.add(r.product_id as string);
+      // Brand walk is a different method: only ITS own recent holds exclude a record (not name-search misses).
+      const held = BRAND_WALK ? 'SKU-confirmed discovery held: brand_walk:' : 'SKU-confirmed discovery held';
+      for (const r of rec ?? []) if (String(r.reason ?? '').startsWith(held)) tried.add(r.product_id as string);
     }
-    targets = (sv ?? []).filter(r => dun.has(r.product_id) && !freshD.has(r.product_id) && freshS.has(r.product_id) && !tried.has(r.product_id)
+    targets = (sv ?? []).filter(r => (BRAND_WALK || dun.has(r.product_id)) && !freshD.has(r.product_id) && freshS.has(r.product_id) && !tried.has(r.product_id)
       && r.is_own_brand !== true && !/^\s*(supervalu|signature tastes|daily basics)\b/i.test(String(r.store_product_name))
       && /\b\d+(?:\.\d+)?\s*(?:kg|g|ml|l|cl)\b/i.test(String(r.store_product_name)))
-      .slice(0, LIMIT).map(r => ({ product_id: r.product_id as string, canonical_name: String(r.store_product_name).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(),
-        brand: String(r.brand), existingSku: dun.get(r.product_id)!.sku, ownOfferId: dun.get(r.product_id)!.id }));
+      .map(r => ({ product_id: r.product_id as string, canonical_name: String(r.store_product_name).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(),
+        brand: String(r.brand), existingSku: dun.get(r.product_id)?.sku, ownOfferId: dun.get(r.product_id)?.id }));
+    if (BRAND_WALK) {
+      // The fresh Tesco title becomes a SECOND reference only when it agrees with the SuperValu title; an item must
+      // then fit both. Records with a fresh, consistent Tesco offer (the three-store gain) are worked first.
+      const tesco = new Map<string, string>();
+      for (const c of chunks(targets.map(x => x.product_id))) {
+        const { data: tp, error: te } = await sb.from('latest_prices').select('canonical_product_id,store_product_name').eq('store', 'tesco').in('canonical_product_id', c);
+        if (te) throw te;
+        for (const r of tp ?? []) tesco.set(r.canonical_product_id as string, String(r.store_product_name));
+      }
+      targets = targets.map(x => {
+        const tt = tesco.get(x.product_id);
+        const consistent = !!tt && brandConfirmed(x.brand, tt) && packCompatible(x.canonical_name, tt)
+          && titleWordProblems(x.canonical_name, tt).length === 0 && titleWordProblems(tt, x.canonical_name).length === 0;
+        return consistent ? { ...x, alt: tt } : x;
+      }).sort((a, b) => Number(!!b.alt) - Number(!!a.alt));
+    }
+    targets = targets.slice(0, LIMIT);
   } else if (process.env.SV_LED !== '1') {
     const { data, error } = await sb.rpc('select_dunnes_discovery_targets', { p_limit: LIMIT, p_offset: OFFSET });
     if (error) throw error;
@@ -154,6 +187,17 @@ async function main() {
           continue;
         }
       }
+      let compatible: Array<{ sku?: unknown; name?: unknown }>;
+      let refFor: (name: string) => string | null;
+      if (BRAND_WALK) {
+        // CATALOGUE route: the brand's FULL Dunnes range (brand facet), not a relevance-ranked name search. Listing
+        // data only narrows to candidates fitting EVERY reference; identity is proven by product-by-SKU below.
+        const items = await brandListing(t.brand);
+        compatible = brandCatalogueCandidates(t.brand, [t.canonical_name, ...(t.alt ? [t.alt] : [])], items);
+        refFor = () => t.canonical_name;
+        if (process.env.TRACE === '1') log({ event: 'trace', ref: t.canonical_name, alt: t.alt ?? null, brandItems: items.length, candidates: compatible.map(c => c.name) });
+        if (!items.length) reason = 'brand_not_in_dunnes_catalogue';
+      } else {
       // Query variants (each one governed request): name without pack, brand + key words, full name. Candidates are
       // pooled by SKU so ambiguity is judged across all variants; confirmation rules are unchanged.
       const named = normaliseDunnesName(t.canonical_name).includes(normaliseDunnesName(t.brand)) ? t.canonical_name : `${t.brand} ${t.canonical_name}`;
@@ -171,10 +215,12 @@ async function main() {
       const items = [...seen.values()];
       const fits = (ref: string, name: string) => brandConfirmed(t.brand, name) && packCompatible(ref, name) && titleWordProblems(ref, name).length === 0;
       // The reference the candidate fits (SuperValu title first, then the identity-consistent Tesco title).
-      const refFor = (name: string) => fits(t.canonical_name, name) ? t.canonical_name : t.alt && fits(t.alt, name) ? t.alt : null;
-      const compatible = items.filter(it => it.sku != null && typeof it.name === 'string' && refFor(it.name) !== null);
+      const searchRefFor = (name: string) => fits(t.canonical_name, name) ? t.canonical_name : t.alt && fits(t.alt, name) ? t.alt : null;
+      refFor = searchRefFor;
+      compatible = items.filter(it => it.sku != null && typeof it.name === 'string' && searchRefFor(it.name) !== null);
       if (process.env.TRACE === '1') log({ event: 'trace', ref: t.canonical_name, variants, items: items.slice(0, 3).map(it => String(it.name)) });
-      if (!compatible.length) { reason = 'no_compatible_candidate'; }
+      }
+      if (!compatible.length) { reason = reason || 'no_compatible_candidate'; }
       else {
         const c = compatible[0], sku = String(c.sku);
         const apiUrl = dunnesProductApiUrl(sku);
@@ -204,7 +250,7 @@ async function main() {
       tally[reason.split(',')[0].split(':')[0]] = (tally[reason.split(',')[0].split(':')[0]] ?? 0) + 1;
       if (APPLY && !reason.startsWith('error:')) await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'rejected',
         p_canonical_name: t.canonical_name, p_candidate_sku: null, p_candidate_name: null, p_candidate_url: null, p_price: null, p_confidence: null, p_pack_ratio: null,
-        p_reason: `SKU-confirmed discovery held: ${reason}`.slice(0, 500) });
+        p_reason: `SKU-confirmed discovery held: ${BRAND_WALK ? "brand_walk:" : ""}${reason}`.slice(0, 500) });
     } else tally.confirmed = (tally.confirmed ?? 0) + 1;
   }
   if (APPLY && runUuid) await sb.from('scrape_runs').update({ status: 'success', finished_at: new Date().toISOString() }).eq('id', runUuid).eq('status', 'running');

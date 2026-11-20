@@ -98,6 +98,37 @@ export function multipackOf(title: string): { count: number; unitAmount: number;
   return count > 1 && amount > 0 ? { count, unitAmount: Math.round(amount * 1000) / 1000, unit: f[1] } : null;
 }
 
+/** Pack pre-filter mirroring confirmDunnesSku: the SAME multipack (count + per-unit size), or a compatible single pack. */
+export function packCompatible(ref: string, title: string): boolean {
+  const a = multipackOf(ref), b = multipackOf(title);
+  if (a || b) return !!a && !!b && a.count === b.count && a.unit === b.unit && a.unitAmount === b.unitAmount;
+  return isDunnesPackCompatible(ref, title);
+}
+
+export type CatalogueListingItem = { sku?: unknown; name?: unknown; brand?: unknown };
+/**
+ * Candidates for ONE target from a brand's FULL Dunnes listing (brand-facet catalogue walk). An item qualifies only
+ * if it fits EVERY reference title supplied (the SuperValu title, plus the Tesco title when the two agree): brand
+ * stated by the listing brand or title, compatible pack (same multipack only), every reference word present, and no
+ * one-sided qualifier. Listing data never proves identity: the caller requires EXACTLY ONE candidate and then the
+ * product-by-SKU confirmation (confirmDunnesSku) before anything is written.
+ */
+export function brandCatalogueCandidates(brand: string, refs: string[], items: CatalogueListingItem[]): Array<{ sku: string; name: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ sku: string; name: string }> = [];
+  for (const it of items) {
+    if (it.sku == null || typeof it.name !== 'string' || seen.has(String(it.sku))) continue;
+    seen.add(String(it.sku));
+    const name = it.name;
+    const branded = brandConfirmed(brand, typeof it.brand === 'string' && it.brand.trim() ? it.brand : name);
+    if (!branded || /^dunnes\b/i.test(name)) continue;
+    if (refs.length && refs.every(ref => packCompatible(ref, name) && titleWordProblems(ref, name).length === 0 && !hasDunnesVariantConflict(ref, name))) {
+      out.push({ sku: String(it.sku), name });
+    }
+  }
+  return out;
+}
+
 export function confirmDunnesSku(i: ConfirmationInput): Confirmation {
   const reasons: string[] = [];
   const r = i.response;
