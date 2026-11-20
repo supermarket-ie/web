@@ -35,7 +35,9 @@ import { guestShopJourney } from '@/lib/guest-shop-journey';
 import { visibleHouseholdShops } from '@/lib/household-shop-messages';
 import { archivedConversationResumePrompt } from '@/lib/conversation-migration';
 import { takeAgentLandingHandoff } from '@/lib/agent-landing-handoff';
-import { agentMessageBlocks } from '@/lib/agent-message-format';
+import { shopperFacingAgentText } from '@/lib/agent-message-format';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { examplePrefillAction, EXAMPLE_PREFILL_EVENT, HOMEPAGE_EXAMPLE_ID } from '@/lib/homepage-example-handoff';
 
 const LEGACY_EVE_CHAT_KEY = 'sm_eve_household_chat_v1';
@@ -149,32 +151,55 @@ function messageText(message: { parts?: readonly { type: string; text?: string }
 }
 
 function FormattedAgentText({ text }: { text: string }) {
-  const blocks = agentMessageBlocks(visibleAgentText(text));
-
-  const inlineText = (value: string) => value.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-    part.startsWith('**') && part.endsWith('**')
-      ? <strong key={index}>{part.slice(2, -2)}</strong>
-      : <span key={index}>{part}</span>
-  );
+  // Strip the internal guest-clarification marker, then soften internal
+  // lookup-limit wording, before rendering the assistant text as Markdown.
+  const content = shopperFacingAgentText(visibleAgentText(text));
 
   return (
-    <div className="space-y-3">
-      {blocks.map((block, blockIndex) => block.type === 'table' ? (
-        <div key={blockIndex} className="overflow-x-auto rounded-xl border border-[#dfe5e0] bg-white">
-          <table className="w-full min-w-[360px] border-collapse text-left text-sm">
-            <thead className="bg-[#f6f8f6] text-[#26342b]">
-              <tr>{block.headers.map((header, index) => <th key={index} className="border-b border-[#dfe5e0] px-3 py-2 font-semibold">{inlineText(header)}</th>)}</tr>
-            </thead>
-            <tbody>
-              {block.rows.map((row, rowIndex) => (
-                <tr key={rowIndex} className="border-b border-[#edf0ed] last:border-0">
-                  {block.headers.map((_, cellIndex) => <td key={cellIndex} className="px-3 py-2 align-top">{inlineText(row[cellIndex] ?? '')}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : <p key={blockIndex} className="whitespace-pre-wrap">{inlineText(block.text)}</p>)}
+    <div className="space-y-3 text-sm leading-6">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => <h3 className="mt-1 text-base font-semibold text-[#26342b]">{children}</h3>,
+          h2: ({ children }) => <h3 className="mt-1 text-base font-semibold text-[#26342b]">{children}</h3>,
+          h3: ({ children }) => <h4 className="mt-1 text-[0.95rem] font-semibold text-[#26342b]">{children}</h4>,
+          h4: ({ children }) => <h5 className="mt-1 text-sm font-semibold text-[#26342b]">{children}</h5>,
+          h5: ({ children }) => <h6 className="mt-1 text-sm font-semibold text-[#26342b]">{children}</h6>,
+          h6: ({ children }) => <h6 className="mt-1 text-sm font-semibold text-[#26342b]">{children}</h6>,
+          p: ({ children }) => <p className="whitespace-pre-wrap">{children}</p>,
+          hr: () => <hr className="my-3 border-[#dfe5e0]" />,
+          ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5">{children}</ol>,
+          li: ({ children }) => <li className="whitespace-pre-wrap">{children}</li>,
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-[#397250] underline underline-offset-2">{children}</a>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-[#cdd8d0] pl-3 text-[#4a564e]">{children}</blockquote>
+          ),
+          code: ({ className, children }) => {
+            const isBlock = /language-/.test(className ?? '');
+            return isBlock
+              ? <code className="block overflow-x-auto rounded-lg bg-[#f1f3f1] p-3 font-mono text-[0.8rem] text-[#26342b]">{children}</code>
+              : <code className="rounded bg-[#f1f3f1] px-1 py-0.5 font-mono text-[0.8rem] text-[#26342b]">{children}</code>;
+          },
+          pre: ({ children }) => <pre className="overflow-x-auto">{children}</pre>,
+          table: ({ children }) => (
+            <div className="overflow-x-auto rounded-xl border border-[#dfe5e0] bg-white">
+              <table className="w-full min-w-[360px] border-collapse text-left text-sm">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead className="bg-[#f6f8f6] text-[#26342b]">{children}</thead>,
+          tbody: ({ children }) => <tbody>{children}</tbody>,
+          tr: ({ children }) => <tr className="border-b border-[#edf0ed] last:border-0">{children}</tr>,
+          th: ({ children }) => <th className="border-b border-[#dfe5e0] px-3 py-2 font-semibold">{children}</th>,
+          td: ({ children }) => <td className="px-3 py-2 align-top">{children}</td>,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }
