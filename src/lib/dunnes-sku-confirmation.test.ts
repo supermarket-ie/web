@@ -75,7 +75,19 @@ describe('Dunnes SKU-bound confirmation', () => {
 });
 
 
-import { brandCatalogueCandidates } from './dunnes-sku-confirmation';
+import { brandCatalogueCandidates, titleWordProblems as twp } from './dunnes-sku-confirmation';
+describe('bare numbers are identity unless a unit follows', () => {
+  it('a different age stage, size or wash count holds', () => {
+    expect(twp("Ella's Kitchen Pear & Apple Baby Rice 4+ Months 120 g", "Ella's Kitchen Pear + Apple Baby Rice 6+ Months 120g")).toEqual(['title_words_missing:4']);
+    expect(twp('Pampers Baby Dry Size 4 Nappies 44 Pack', 'Pampers Baby Dry Size 5 Nappies 44 Pack')).toEqual(['title_words_missing:4']);
+    expect(twp('Comfort Fresh Fabric Conditioner 31 Washes 930 ml', 'Comfort Fresh Fabric Conditioner 33 Washes 930ml')).toEqual(['title_words_missing:31']);
+  });
+  it('spaced and attached measures and multipack counts are still pack tokens', () => {
+    expect(twp('Heinz Cream of Tomato Soup 400 g', 'Heinz Cream of Tomato Soup 400g')).toEqual([]);
+    expect(twp('Walkers Ready Salted Crisps 6 x 25 g', 'Walkers Ready Salted Multipack Crisps 6x25g')).toEqual([]);
+    expect(twp("Ella's Kitchen Pear & Apple Baby Rice 6+ Months 120 g", "Ella's Kitchen Pear + Apple Baby Rice 6+ Months 120g")).toEqual([]);
+  });
+});
 describe('brand catalogue walk candidates (listing data narrows; it never proves identity)', () => {
   // Real listing shapes from the Dunnes brand-facet walk (probe, 19 Nov 2026).
   const heinz = [
