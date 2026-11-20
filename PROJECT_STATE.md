@@ -31,8 +31,13 @@ three-store-priced products: 193 (the baseline script was not affected).
 - Stale renewal (`FOCUS=stale_dunnes`) wrote 4:
   - Ecover 750ml, Comfort Sunshiny Days 930ml and Tayto Waffles 31g, each by existing-SKU re-confirmation.
   - Thai Gold Rice Noodles 400g, re-pointed from a 404 SKU to 100700535.
-- Brand walk (`FOCUS=brand_walk`, PR #423) wrote 2: Hellmann's Buffalo Ranch 430ml and Ella's Kitchen Pear & Apple
-  Baby Rice 120g.
+- Brand walk (`FOCUS=brand_walk`, PR #423) wrote 7, the last 5 under the fixed numeric rule:
+  - Hellmann's Buffalo Ranch 430ml, Blue Cheese Ranch 430ml and Ketchup 430ml
+  - Volvic Touch of Fruit Apple & Blackcurrant 1.5L, Peach & Raspberry 1.5L and Lemon & Lime 750ml
+  - Ella's Kitchen Pear & Apple Baby Rice 120g (see the decision below)
+- Tranche total: 11 Dunnes prices. 6 of those products now have fresh prices at all three retailers (Comfort
+  Sunshiny Days, Hellmann's Blue Cheese Ranch and Ketchup, the three Volvic). The window-by-window brand-walk yield
+  was 7 of about 225 targets.
 - The daily Dunnes worker renews by NAME SEARCH. It logs `no_search_results`/`no_confident_match` for SKUs that the
   product API still serves with a current price, so SKU-bound renewal is the right fix.
 - Of 47 stale targets: about 14 SKUs are delisted (404). Most others fail strict word or multipack rules: Dunnes
