@@ -1,5 +1,60 @@
 # Supermarket.ie — Canonical Project State
 
+## 20 November 2026 — Recovery tranche 1: results and corrected gap counts
+
+**Corrected cohort counts.** The 19 Nov one-gap figures (241 missing only Tesco, 168 missing only Dunnes) came from
+a selection script that used the defective `store_products -> latest_prices` embed. Re-measured per offer on the
+same 947 eligible SV-led products (20 Nov ~11:30Z):
+
+| Group | Count |
+|---|---|
+| Three-store fresh, identity-consistent | 126 |
+| Three-store fresh, identity-inconsistent (different products on one canonical) | 36 |
+| Missing only Tesco | 279 |
+| Missing only Dunnes | 146 |
+| Missing both | 359 |
+
+"Consistent" is a deterministic estimate (brand, stated pack, variant, title), not an approval. Site-wide
+three-store-priced products: 193 (the baseline script was not affected).
+
+**Production metrics** (before = 19 Nov baseline, after = 20 Nov ~11:20Z):
+
+| Metric | Before | After |
+|---|---|---|
+| Tesco fresh 7d | 385 | 383 |
+| Dunnes fresh 7d | 920 | 926 |
+| SuperValu fresh 7d | 1,604 | 1,607 |
+| Three-store priced | 192 | 193 |
+| Verified three-store comparisons | 0 | 0 (no pair reviews applied) |
+
+**Dunnes: new prices written this tranche.**
+- Stale renewal (`FOCUS=stale_dunnes`) wrote 4:
+  - Ecover 750ml, Comfort Sunshiny Days 930ml and Tayto Waffles 31g, each by existing-SKU re-confirmation.
+  - Thai Gold Rice Noodles 400g, re-pointed from a 404 SKU to 100700535.
+- Brand walk (`FOCUS=brand_walk`, PR #423) wrote 2: Hellmann's Buffalo Ranch 430ml and Ella's Kitchen Pear & Apple
+  Baby Rice 120g.
+- The daily Dunnes worker renews by NAME SEARCH. It logs `no_search_results`/`no_confident_match` for SKUs that the
+  product API still serves with a current price, so SKU-bound renewal is the right fix.
+- Of 47 stale targets: about 14 SKUs are delisted (404). Most others fail strict word or multipack rules: Dunnes
+  titles such as "Pringles 12 x 40g" at €1.10, and "Pan" vs "Bread".
+- The brand walk finds the full brand range, but most targets are genuinely not stocked by Dunnes in that exact
+  pack/variant. Window 0 yielded 2 of 150.
+- **Defect found and fixed (PR #424).** The word check dropped bare numbers, so "4+ Months" vs "6+ Months" passed.
+  All 12 Dunnes writes from 19–20 Nov were re-checked: 11 pass the fixed rule.
+- **OWNER DECISION:** Ella's Kitchen (Dunnes SKU 100777358) would now hold. It is very likely the same product
+  relabelled from 4+ to 6+ months, but that was not proven. No production data was changed.
+
+**Tesco:** 0 new prices. Everything waits on the collector image (build run 44637718671, `f1a12f6`, awaiting
+aws-prod approval). Targeted lists are prepared from a read-only replay of retained pages with correct peers:
+- 30 to collect now: proven mappings that pass the deterministic gates or were unavailable, plus the 7 valid approvals.
+- 4 to approve, AI only (no provider request).
+- 8 to collect after the pending-page migration.
+
+Known mismatches are excluded (Odlums Pancake vs Wholemeal mix; Glade).
+
+**SV–Tesco pair reviews:** a 41-pair batch-2 package (review sheet + proposed SQL, private) is ready. It needs
+migration 20261118120000 and the owner's review. Evidence is valid until about 1 Dec.
+
 ## 20 November 2026 — Historical pending-page terminal resolution (migration 20261120090000 NOT applied)
 
 Ten of the 99 "proven but expired" Tesco offers are blocked forever by `pending` pages from
