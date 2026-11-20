@@ -110,6 +110,20 @@ resource "aws_lb_target_group" "app" {
   # Drain quickly on rolling deploys/scale-in (default 300s is slow).
   deregistration_delay = 30
 
+  # REQUIRED for the Eve agent. The agent's `world-local` workflow transport keeps
+  # per-session turn state IN-PROCESS on the task that created the session. The
+  # browser flow is POST /eve/v1/session (creates the session on one task) then a
+  # separate GET /eve/v1/session/:id/stream (SSE). Without stickiness the ALB
+  # round-robins those two requests to different tasks, so the stream hits a task
+  # that doesn't own the session and returns nothing — the agent appears to hang.
+  # LB-cookie stickiness pins a client to the task that owns its session. If the
+  # workflow world later moves to a shared/durable backend, this can be relaxed.
+  stickiness {
+    enabled         = true
+    type            = "lb_cookie"
+    cookie_duration = 86400
+  }
+
   health_check {
     enabled             = true
     path                = "/terms" # static page, no DB dependency — reliable health signal
