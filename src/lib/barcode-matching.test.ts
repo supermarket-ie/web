@@ -176,3 +176,16 @@ describe('re-review 2: numbers and range words are identity-bearing', () => {
     expect(r('Heinz Tomato Ketchup 460g', 'Heinz Tomato Ketchup 460g', 'Heinz').tier).toBe('strong');
   });
 });
+
+describe('re-review 3: multipack and containers', () => {
+  const r = (t: string, h: string, b: string) => classifyBarcodeResult({ name: t, brand: b }, [{ sku: 'x', name: h, brand: b }]);
+  it('a one-sided "Multipack" without matching counts is review; with the same count on both sides it is fine', () => {
+    expect(r('Heinz Cream of Tomato Soup 400g', 'Heinz Cream of Tomato Soup Multipack 400g', 'Heinz').tier).toBe('review');
+    expect(r('Walkers Ready Salted Crisps Multipack 6x25g', 'Walkers Ready Salted Crisps 6 x 25g', 'Walkers').tier).toBe('strong');
+  });
+  it('two different containers are review; one container word appended on one side is retailer wording', () => {
+    expect(r('Ella\'s Kitchen Apples Pouch 120g', 'Ella\'s Kitchen Apples Jar 120g', "Ella's Kitchen").tier).toBe('review');
+    expect(r('Coca-Cola Zero Bottle 500ml', 'Coca-Cola Zero Can 500ml', 'Coca-Cola').tier).toBe('review');
+    expect(r('Ballygowan Still Water 500ml', 'Ballygowan Still Water Bottle 500ml', 'Ballygowan').tier).toBe('strong');
+  });
+});

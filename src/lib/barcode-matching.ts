@@ -133,7 +133,14 @@ function variantLabels(title: string, group: Array<[string, RegExp]>): Set<strin
 // Only connectives, containers and pure marketing words. Words that can name a variant or range ("original", "classic",
 // "limited edition", "fresh", "large", "family", "sharing", "single", "premium") are product words and must agree.
 const GENERIC = new Set(['and', 'with', 'the', 'of', 'in', 'for', 'a', 'pack', 'pk', 'x', 'bottle', 'bag', 'pouch', 'tub', 'jar', 'tin', 'can',
-  'multipack', 'flavour', 'flavoured', 'irish', 'new', 'piece', 'pieces', 'delicious', 'tasty', 'from', 'months', 'month', 'by']);
+  'flavour', 'irish', 'new', 'piece', 'pieces', 'delicious', 'tasty', 'from', 'months', 'month', 'by']);
+// Containers: a container word appended on ONE side is retailer wording ("Still Water Bottle (500 ml)"), but two
+// DIFFERENT containers (pouch vs jar, bottle vs can) can be different products under a confirmed pack.
+const CONTAINERS = ['bottle', 'bag', 'pouch', 'tub', 'jar', 'tin', 'can', 'carton', 'box', 'tube', 'sachet', 'pot'];
+function containerWords(title: string): Set<string> {
+  const t = identityTokens(title).map(w => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w));
+  return new Set(t.filter(w => CONTAINERS.includes(w)));
+}
 // Numbers that are NOT pack measures: percentages ("2%", "0% fat") and SPF are identity-bearing; other bare numbers
 // ("Dentastix 21", "4+ months") are compared too, except a number that is either title's pack count.
 function identityNumbers(title: string, packCounts: Array<number | null>): { qualified: string[]; bare: string[] } {
@@ -200,7 +207,12 @@ export function assessBarcodeHit(tesco: { name: string; brand: string | null }, 
   else if (diff(na.qualified, nb.qualified).length || diff(nb.qualified, na.qualified).length
     || diff(na.bare, nb.bare).length || diff(nb.bare, na.bare).length)
     review.push(`numbers:${[...na.qualified, ...na.bare].join('+')}|${[...nb.qualified, ...nb.bare].join('+')}`);
-  const wa = productWords(tesco.name, tesco.brand), wb = productWords(hit.name, hit.brand ?? tesco.brand);
+  const ca = containerWords(tesco.name), cb = containerWords(hit.name);
+  if (ca.size && cb.size && ![...ca].some(c => cb.has(c))) review.push(`container:${[...ca].join('+')}|${[...cb].join('+')}`);
+  // "Multipack" is identity-bearing unless BOTH titles state the same count (then the count already proves it).
+  const sameCount = a.count != null && a.count === b.count;
+  const words = (t: string, br: string | null) => productWords(t, br).filter(w => !(sameCount && w === 'multipack'));
+  const wa = words(tesco.name, tesco.brand), wb = words(hit.name, hit.brand ?? tesco.brand);
   const aOnly = wa.filter(w => !wb.some(x => sameWord(w, x))), bOnly = wb.filter(w => !wa.some(x => sameWord(w, x)));
   const shared = wa.length - aOnly.length;
   const agreement = wa.length && wb.length ? Math.round((shared / Math.min(wa.length, wb.length)) * 100) / 100 : 0;

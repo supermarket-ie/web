@@ -68,6 +68,8 @@ comment on table public.retailer_barcode_observations is
 
 create table if not exists public.retailer_barcode_association_reviews (
   id uuid primary key default gen_random_uuid(),
+  -- Insertion order: breaks ties between reviews with the same reviewed_at (the later decision always wins).
+  seq bigint generated always as identity,
   gtin text not null check (gtin ~ '^([0-9]{8}|[0-9]{12}|[0-9]{13})$'),
   store text not null check (store in ('dunnes', 'supervalu')),
   sku text not null,
@@ -140,7 +142,7 @@ with latest as (
 ), last_review as (
   select distinct on (r.gtin, r.store) r.gtin, r.store, r.sku, r.decision, r.reviewed_at
   from public.retailer_barcode_association_reviews r
-  order by r.gtin, r.store, r.reviewed_at desc
+  order by r.gtin, r.store, r.reviewed_at desc, r.seq desc
 )
 select l.gtin, l.gtin_kind, l.gtin_origin_store, l.gtin_origin_sku, l.gtin_origin_store_product_id,
   l.store, l.evidence_kind, l.resolved_sku, l.outcome, l.tier, l.identity_reasons, l.review_reasons, l.title_agreement,

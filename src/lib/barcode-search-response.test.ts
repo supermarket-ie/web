@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { ChallengeError, mergeFormItems, parseSearchBody, skuOf } from './barcode-search-response';
+import { describe, expect, it, vi } from 'vitest';
+// The governor module is server-only and imports the Supabase admin client; only its pure helpers are used here.
+vi.mock('server-only', () => ({}));
+vi.mock('@/lib/supabase', () => ({ supabaseAdmin: {} }));
+import { ChallengeError, classifyCaptureError, HttpStatusError, mergeFormItems, parseSearchBody, skuOf } from './barcode-search-response';
 import { classifyBarcodeResult as classifyHits, type SearchHit } from './barcode-matching';
 import type { CapturedItem } from './barcode-search-response';
 // Captured items are SearchHits once unitOfSize is read back; the analysis step does the same narrowing.
@@ -38,5 +41,19 @@ describe('barcode search response parsing (capture runner)', () => {
     expect(classifyBarcodeResult(t, mergeFormItems([f1, f2same])).tier).toBe('strong');
     expect(classifyBarcodeResult(t, mergeFormItems([f1, f2other])).outcome).toBe('ambiguous');
     expect(classifyBarcodeResult(t, mergeFormItems([f1, parseSearchBody('{"total":0,"items":[]}')])).sku).toBe('1');
+  });
+});
+
+describe('capture error classification for the retailer governor', () => {
+  it('challenge pages, 403/429/5xx and timeouts are denials; a 404 is not', () => {
+    let challenge: unknown;
+    try { parseSearchBody('<html>captcha</html>'); } catch (e) { challenge = e; }
+    expect(classifyCaptureError(challenge).reason).toBe('challenge_page');
+    expect(classifyCaptureError(new HttpStatusError(403, null)).reason).toBe('http_403');
+    expect(classifyCaptureError(new HttpStatusError(429, '30'))).toMatchObject({ reason: 'http_429', retryAfterMs: 30000 });
+    expect(classifyCaptureError(new HttpStatusError(503, null)).reason).toBe('http_503');
+    const timeout = new Error('The operation was aborted due to timeout'); timeout.name = 'TimeoutError';
+    expect(classifyCaptureError(timeout).reason).not.toBeNull();
+    expect(classifyCaptureError(new HttpStatusError(404, null)).reason).toBeNull();
   });
 });

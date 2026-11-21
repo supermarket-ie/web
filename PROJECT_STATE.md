@@ -22,7 +22,9 @@ GTIN is never independent Dunnes/SuperValu identity evidence by itself.
   - review: partial brand, pack unconfirmed, substitution, an extra product
     word on one side (incl. range words such as Original, Classic, Limited
     Edition, Fresh, Large), a variant member or a non-pack number stated on
-    one side only or differing, title agreement < 0.6
+    one side only or differing, a one-sided "Multipack" unless both
+    titles state the same count, two different containers (pouch vs jar,
+    bottle vs can), title agreement < 0.6
   - strong: none of the above — same brand, same product words, same variant
     and number statements, confirmed pack
 - `scripts/barcode-search-capture.ts`: thin ECS runner, governed by
@@ -40,7 +42,7 @@ GTIN is never independent Dunnes/SuperValu identity evidence by itself.
   provenance, Tesco source SKU, resolved SKU, endpoint, query form, evidence,
   identity outcome, last-verified time. Tier is bound to its reasons by CHECK;
   a review is bound to its observation's (gtin, store, sku) by composite FK.
-  service_role select+insert only. 39 tests (library, response parsing, PGlite).
+  service_role select+insert only. 42 tests (library, response parsing and governor classification, PGlite).
 
 **Read-only results (1,288 branded Tesco GTINs: pilot 200 + full 1,088; 445
 Tesco own-label GTINs excluded, since they cannot exist elsewhere).** Negative
@@ -49,22 +51,22 @@ resolved to different real products (exact-barcode dependence).
 
 | | Dunnes | SuperValu |
 |---|---|---|
-| strong | 286 | 262 |
-| — confirms existing mapping | 140 | 183 |
+| strong | 286 | 258 |
+| — confirms existing mapping | 140 | 179 |
 | — conflicts with existing mapping (wrong mapping found) | 43 | 47 |
 | — new relationship | 94 | 25 |
 | — SKU owned by another canonical | 9 | 7 |
-| review / held / not found | 506 / 69 / 423 | 562 / 112 / 348 |
+| review / held / not found | 506 / 69 / 423 | 566 / 112 / 348 |
 
-Rule versions 3–4 (after two further reviews): strong also requires the same
+Rule versions 3–5 (after two further reviews): strong also requires the same
 product words on both sides (Dairy Milk vs Dairy Milk Caramel is review), the
 same variant statements, and the same non-pack numbers (2% vs 1% is held).
-Strong fell from 610→286 (Dunnes) and 602→262 (SuperValu); most moved rows are
+Strong fell from 610→286 (Dunnes) and 602→258 (SuperValu); most moved rows are
 descriptive wording differences
 ("Heinz Spaghetti In Tomato Sauce" vs "Heinz Spaghetti") that a human can clear
 in review, but some are real ambiguities (River Rock vs River Rock Refresh).
 Rows sum to 1,284; 4 full-run log lines were unparseable and need re-capture.
-Strong at both retailers: 118 (58 without a fresh Tesco price; 51 already fresh
+Strong at both retailers: 117 (58 without a fresh Tesco price; 50 already fresh
 at all three). Independent validation: 30 random both-strong triples under the
 looser v2 rules were all manually confirmed as the same product (Open Food Facts
 agreed on ~13; the rest had no usable record). Strong existing-mapping

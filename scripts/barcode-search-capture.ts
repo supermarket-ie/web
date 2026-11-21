@@ -9,8 +9,8 @@
 // stops the run (exit code 2). It writes NOTHING to the database. Classification: src/lib/barcode-matching.ts.
 import { brotliDecompressSync } from 'node:zlib';
 import { createHash, randomUUID } from 'node:crypto';
-import { denialReason, parseRetryAfterMs, withRetailerRequestSlot, RetailerBlockedError } from '@/lib/retailer-request-governor';
-import { ChallengeError, mergeFormItems, parseSearchBody } from '@/lib/barcode-search-response';
+import { withRetailerRequestSlot, RetailerBlockedError } from '@/lib/retailer-request-governor';
+import { classifyCaptureError as classifyError, HttpStatusError, mergeFormItems, parseSearchBody } from '@/lib/barcode-search-response';
 
 type Store = 'dunnes' | 'supervalu';
 const GW: Record<Store, [string, string]> = {
@@ -19,13 +19,6 @@ const GW: Record<Store, [string, string]> = {
 };
 const headers = (site: string) => ({ Accept: 'application/json, text/plain, */*', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
   'x-site-host': site, 'x-site-location': 'HeadersBuilderInterceptor', 'x-correlation-id': randomUUID(), 'x-shopping-mode': '22222222-2222-2222-2222-222222222222' });
-class HttpError extends Error { constructor(readonly status: number, readonly retryAfter: string | null) { super(`HTTP ${status}`); } }
-// A 200 whose body is not the search JSON (a bot challenge / interstitial) is a DENIAL: it must reach the governor so
-// repeated challenges open the circuit breaker, exactly like a 403.
-const classifyError = (e: unknown) => e instanceof HttpError
-  ? { reason: denialReason({ status: e.status }), retryAfterMs: parseRetryAfterMs(e.retryAfter) }
-  : e instanceof ChallengeError ? { reason: 'challenge_page' }
-  : { reason: denialReason({ errorReason: e instanceof Error ? `${e.name} ${e.message}` : String(e) }) };
 
 async function searchForm(store: Store, form: string) {
   const [gw, site] = GW[store];
@@ -34,7 +27,7 @@ async function searchForm(store: Store, form: string) {
   const { body, parsed } = await withRetailerRequestSlot(store, async () => {
     const res = await fetch(endpoint, { headers: headers(site), redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(20000) });
     const text = await res.text();
-    if (res.status !== 200) throw new HttpError(res.status, res.headers.get('retry-after'));
+    if (res.status !== 200) throw new HttpStatusError(res.status, res.headers.get('retry-after'));
     return { body: text, parsed: parseSearchBody(text) };   // throws ChallengeError inside the slot => a governed denial
   }, { classifyError });
   return { form, endpoint, status: 200, total: parsed.total, items: parsed.items, sha256: createHash('sha256').update(body).digest('hex'), at };

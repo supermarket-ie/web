@@ -1,9 +1,24 @@
 // Parsing of one Dunnes/SuperValu storefront search response for barcode-led discovery (used by
-// scripts/barcode-search-capture.ts). Kept tiny and dependency-free: it is bundled into the one-off ECS runner.
+// scripts/barcode-search-capture.ts). Small on purpose: it is bundled into the one-off ECS runner, with the governor
+// left external (it is already in the deployed image).
+import { denialReason, parseRetryAfterMs, type ErrorClassification } from '@/lib/retailer-request-governor';
 
 /** A 200 whose body is not the search JSON (bot challenge / interstitial). Callers report it to the governor as a denial. */
 export class ChallengeError extends Error {
   constructor(detail: string) { super(`challenge_page ${detail}`); this.name = 'ChallengeError'; }
+}
+/** A non-200 response, with its Retry-After header. */
+export class HttpStatusError extends Error {
+  constructor(readonly status: number, readonly retryAfter: string | null) { super(`HTTP ${status}`); this.name = 'HttpStatusError'; }
+}
+/**
+ * Governor classification of a thrown capture error: 403/429/5xx, timeouts/network errors and challenge pages are
+ * denials (they count toward the circuit breaker); anything else (e.g. 404) is an error but not a denial.
+ */
+export function classifyCaptureError(e: unknown): ErrorClassification {
+  if (e instanceof HttpStatusError) return { reason: denialReason({ status: e.status }), retryAfterMs: parseRetryAfterMs(e.retryAfter) };
+  if (e instanceof ChallengeError) return { reason: 'challenge_page' };
+  return { reason: denialReason({ errorReason: e instanceof Error ? `${e.name} ${e.message}` : String(e) }) };
 }
 
 export type CapturedItem = { sku: string; name: string; brand: string | null; unitOfSize: unknown; price: unknown; available: unknown };
