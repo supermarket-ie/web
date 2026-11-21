@@ -1,5 +1,46 @@
 # Supermarket.ie — Canonical Project State
 
+## 21 November 2026 (late) — Migrations applied; 545 barcode observations stored; tranche 2; 166 pairs prepared
+
+**Migrations applied by the owner** through the ChatGPT-connected Supabase route (owner-verified;
+agent REST probes 200 at 21:50Z). Do NOT reapply because the history versions differ from the
+filenames. Mapping (by handoff order):
+
+| Source migration | Applied database version |
+| --- | --- |
+| `20261118120000_durable_pair_approvals.sql` | `20261121213903` |
+| `20261120090000_tesco_pending_page_resolutions.sql` | `20261121213914` |
+| `20261121090000_retailer_barcode_observations.sql` | `20261121213937` |
+
+`supabase/operator/20261120_resolve_9_historical_pending_tesco_pages.sql` was run in one
+transaction: 9 rows in `tesco_pending_page_resolutions`.
+
+- **Barcode evidence stored:** 545 strong observations inserted append-only (rule `barcode-v5`,
+  raw bodies hash-checked by the table). `current_barcode_associations`: Dunnes 287 active,
+  SuperValu 258 active. The DELETE probe is refused (403). No review rows were written.
+- **Tesco tranche 2** (the 8 previously pending-page mappings, rev 18, expansion + first price):
+  6 accepted, 2 held (pack exactness + AI rejected; AI uncertain).
+- **Direct product captures for pair evidence** (new `scripts/pair-evidence-capture.ts`, governed,
+  writes only `retailer_identity_responses` + identity observations, no price/mapping/review):
+  - SuperValu: 125 of 125 product pages captured as `captured_product`.
+  - Dunnes: product pages return **HTTP 403** (2 probe requests, recorded by the governor as
+    denials; stopped there). Dunnes direct page evidence is unavailable from AWS, so Dunnes pair
+    reviews are blocked; Dunnes renewals retain the product-API JSON, which is `captured_listing`
+    and does not qualify.
+  - `recordIdentityObservation` wrote nothing from the bundled task (no warning logged; cause not
+    found). The 125 observations were inserted over REST from the retained responses
+    (one SuperValu offer has two identical observations from a probe).
+- **Pair-review package (PROPOSED, private):** `proposed-pair-reviews-BARCODE1.sql` +
+  `review-sheet-BARCODE1.md` in `~/smie-private/sv-tesco-pilot-20261117/`: **166 Tesco–SuperValu
+  `exact_product` pairs**. Each pair: the SuperValu search returned exactly that SKU for the Tesco
+  GTIN, the SKU is mapped on the Tesco canonical, there is an ok/200 Tesco page and a SuperValu
+  direct capture within 12 days, and the captured titles pass the strong deterministic checks.
+  Excluded: 79 (SuperValu SKU not on the Tesco canonical; needs an association or repair first),
+  13 (no Tesco page within 12 days). Earliest evidence 13 Nov 07:47Z, so insert by about
+  27 Nov 07:00Z. The reviewer must be a human (existing control); the agent does not insert reviews.
+- **Production after** (22:20Z): Tesco fresh 7d **405**, Dunnes 960, SuperValu 1,607,
+  three-retailer priced **231**; pair reviews 0; verified exact 0.
+
 ## 21 November 2026 (night) — RELEASED f1a12f6; 16 Tesco + 21 Dunnes prices; collector pin rev 18
 
 Owner-authorised (21 Nov): merge #426, approve and deploy build 44637718671, apply the 21
