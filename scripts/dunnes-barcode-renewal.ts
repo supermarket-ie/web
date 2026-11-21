@@ -10,16 +10,18 @@
 // ATTACH mode (a target WITHOUT offer_id): the canonical has no SKU-bearing Dunnes offer and the SKU is unowned; the
 // finaliser then creates the mapping as in SKU-confirmed discovery. Applying an attach needs ALLOW_ATTACH=1 as well
 // as APPLY=1 (owner-authorised batches only). Existing mappings are never re-pointed.
-// Env: T = base64(brotli(JSON [{product_id, offer_id?, sku, ref, brand}])), APPLY, ALLOW_ATTACH.
+// Env: T = base64(brotli(JSON [{product_id, tesco_offer_id, offer_id?, sku}])), APPLY, ALLOW_ATTACH.
 import { brotliDecompressSync } from 'node:zlib';
-import { confirmDunnesSku, dunnesProductApiUrl, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
+import { brandConfirmed, confirmDunnesSku, dunnesProductApiUrl, packCompatible, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
 import { normaliseDunnesName } from '@/lib/dunnes-discovery';
 import { withRetailerRequestSlot } from '@/lib/retailer-request-governor';
 import { captureIdentityResponse } from '@/lib/retailer-identity-response';
 import { retainIdentityResponse } from '@/lib/retailer-identity-retention';
 import { supabaseAdmin as sb } from '@/lib/supabase';
 
-type Target = { product_id: string; offer_id?: string; sku: string; ref: string; brand: string };
+// The reference identity is NOT taken from the payload: it is read from the canonical's own Tesco offer (tesco_offer_id).
+type Target = { product_id: string; tesco_offer_id: string; offer_id?: string; sku: string };
+const EXCLUDED = /alcohol|beer|wine|spirit|cider|lager|whiskey|vodka|gin\b|tobacco|cigar|vape|clothing|apparel/i;
 const APPLY = process.env.APPLY === '1';
 const HEADERS = () => ({ Accept: 'application/json, text/plain, */*', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
   'x-site-host': 'https://www.dunnesstoresgrocery.com', 'x-site-location': 'HeadersBuilderInterceptor', 'x-correlation-id': crypto.randomUUID(),
@@ -38,7 +40,9 @@ async function governedGet(url: string) {
 }
 
 async function main() {
-  const list = (JSON.parse(brotliDecompressSync(Buffer.from(process.env.T ?? '', 'base64')).toString('utf8')) as Target[]).slice(0, 50);
+  const raw = JSON.parse(brotliDecompressSync(Buffer.from(process.env.T ?? '', 'base64')).toString('utf8')) as Target[];
+  const list = [...new Map(raw.map(t => [t.product_id, t])).values()].slice(0, 50);   // one target per canonical
+  if (APPLY && list.some(t => !t.offer_id) && process.env.ALLOW_ATTACH !== '1') throw new Error('attach_not_authorised: set ALLOW_ATTACH=1 for an owner-authorised attach batch');
   let runUuid: string | null = null;
   if (APPLY) {
     const { data: run, error } = await sb.from('scrape_runs').insert({ run_id: `dunnes_barcode_renewal_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`,
@@ -51,7 +55,18 @@ async function main() {
   for (const t of list) {
     try {
       const attach = !t.offer_id;
-      if (attach && APPLY && process.env.ALLOW_ATTACH !== '1') throw new Error('attach_not_authorised');
+      // Reference = the canonical's own Tesco offer (the GTIN origin). Every SuperValu offer on the same canonical must
+      // agree with it on brand and pack and must not be own-label, so a mixed canonical is never renewed or attached.
+      const { data: tos, error: te } = await sb.from('store_products').select('id,product_id,store,store_product_name,brand').eq('id', t.tesco_offer_id).maybeSingle();
+      if (te) throw te;
+      const { data: svs, error: se } = await sb.from('store_products').select('store_product_name,is_own_brand').eq('product_id', t.product_id).eq('store', 'supervalu').not('store_sku', 'is', null);
+      if (se) throw se;
+      const ref = String(tos?.store_product_name ?? ''), brand = String(tos?.brand ?? '');
+      const refProblem = !tos || tos.store !== 'tesco' || tos.product_id !== t.product_id || !ref || !brand ? 'tesco_reference_invalid'
+        : EXCLUDED.test(ref) ? 'excluded_category'
+        : (svs ?? []).some(v => v.is_own_brand === true) ? 'canonical_has_own_label_supervalu'
+        : (svs ?? []).some(v => !brandConfirmed(brand, String(v.store_product_name)) || !packCompatible(ref, String(v.store_product_name))) ? 'canonical_supervalu_conflicts' : null;
+      if (refProblem) { log({ event: 'skipped', product_id: t.product_id, reason: refProblem }); bump(refProblem); continue; }
       const { data: owners, error: we } = await sb.from('store_products').select('id').eq('store', 'dunnes').eq('store_sku', t.sku);
       if (we) throw we;
       let skip: string | null = null;
@@ -74,24 +89,25 @@ async function main() {
       const apiUrl = dunnesProductApiUrl(t.sku);
       const p = await governedGet(apiUrl);
       let resp: DunnesProductResponse | null = null; try { resp = p.status === 200 ? JSON.parse(p.body) : null; } catch { resp = null; }
-      const conf = confirmDunnesSku({ canonicalName: t.ref, canonicalBrand: t.brand, candidateSku: t.sku, candidateName: String(resp?.name ?? ''),
+      const conf = confirmDunnesSku({ canonicalName: ref, canonicalBrand: brand, candidateSku: t.sku, candidateName: String(resp?.name ?? ''),
         httpStatus: p.status, requestedUrl: apiUrl, finalUrl: p.url, response: resp,
         skuOwnedElsewhere: (owners ?? []).some(x => x.id !== t.offer_id), otherCompatibleCandidates: 0 });
-      log({ event: conf.ok ? 'confirmed' : 'held', product_id: t.product_id, sku: t.sku, ref: t.ref, title: resp?.name ?? null, status: p.status,
+      log({ event: conf.ok ? 'confirmed' : 'held', product_id: t.product_id, sku: t.sku, ref, title: resp?.name ?? null, status: p.status,
         reasons: conf.reasons, price: conf.price, pack: conf.structuredPack, apply: APPLY });
       if (!conf.ok) {
         bump('held');
         if (APPLY) await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'rejected',
-          p_canonical_name: t.ref, p_candidate_sku: null, p_candidate_name: null, p_candidate_url: null, p_price: null, p_confidence: null, p_pack_ratio: null,
+          p_canonical_name: ref, p_candidate_sku: null, p_candidate_name: null, p_candidate_url: null, p_price: null, p_confidence: null, p_pack_ratio: null,
           p_reason: `SKU-confirmed discovery held: barcode_${attach ? "attach" : "renewal"}:${conf.reasons.join(',')}`.slice(0, 500) });
         continue;
       }
       if (APPLY) {
         const url = productUrl(t.sku, String(resp!.name));
-        const { error: fe } = await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'exact',
-          p_canonical_name: t.ref, p_candidate_sku: t.sku, p_candidate_name: String(resp!.name), p_candidate_url: url, p_price: conf.price,
+        const { data: written, error: fe } = await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'exact',
+          p_canonical_name: ref, p_candidate_sku: t.sku, p_candidate_name: String(resp!.name), p_candidate_url: url, p_price: conf.price,
           p_confidence: 1, p_pack_ratio: 1, p_reason: `sku_confirmed (barcode ${attach ? "attach" : "renewal of existing SKU"}) via ${apiUrl}` });
         if (fe) throw fe;
+        if (written === false) { log({ event: 'not_written', product_id: t.product_id, sku: t.sku }); bump('not_written'); continue; }
         let offerId = t.offer_id;
         if (attach) {
           const { data: created, error: ce } = await sb.from('store_products').select('id').eq('product_id', t.product_id).eq('store', 'dunnes').eq('store_sku', t.sku).single();

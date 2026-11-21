@@ -12,7 +12,7 @@ Probed 21 Nov 17:20Z over REST (service role, read-only): **none of steps 1–4 
 | 1 | `supabase/migrations/20261118120000_durable_pair_approvals.sql` | Durable pair approvals (PR #418). Needed before ANY exact pair relationship can be approved. | No |
 | 2 | `supabase/migrations/20261120090000_tesco_pending_page_resolutions.sql` | Historical pending-page ledger (PR #422). | No |
 | 3 | `supabase/operator/20261120_resolve_9_historical_pending_tesco_pages.sql` | 9 named terminal dispositions, one transaction, one session. Requires 2. | No |
-| 4 | `supabase/migrations/20261121090000_retailer_barcode_observations.sql` | Append-only barcode-search evidence (PR #426): `retailer_barcode_observations`, `retailer_barcode_association_reviews`, view `current_barcode_associations`. Creates objects only; touches no existing table. | No |
+| 4 | `supabase/migrations/20261121090000_retailer_barcode_observations.sql` | Append-only barcode-search evidence (PR #426): `retailer_barcode_observations`, `retailer_barcode_association_reviews`, view `current_barcode_associations`. Creates objects only and alters no existing table, but `gtin_origin_store_product_id` references `store_products` with `on delete restrict`: once evidence exists, deleting that Tesco offer row is refused. | No |
 
 Steps 1–3 are unchanged from `README-20261120-handoff.md`. Step 4 is independent of 1–3 and
 should be applied only after PR #426 is approved (squash-merged), so production matches `main`.
