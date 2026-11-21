@@ -47,7 +47,28 @@ or automatic approval endpoint is created. Missing ledger/migration data
 fails closed to `unverified`. The storefront reads this ledger as comparison
 evidence only; it never writes mappings or price observations.
 
-The operator process must independently perform deterministic identity,
+### Machine approvals (migration 20261122090000, owner decision 22 Nov 2026)
+
+Routine exact relationships are approved by a versioned machine policy, not
+a human. The only machine write path is `record_machine_pair_approval`
+(SECURITY DEFINER, service_role only). It re-derives in the database the
+active barcode association (the retailer's own search resolved exactly this
+SKU for the GTIN, originating from the Tesco offer of the same record), the
+shared catalogue record, unshared SKUs and the source rows (12-day limit),
+then inserts through the unchanged ledger triggers and rejects stamped brand,
+pack, GTIN or own-label contradictions. Machine rows are explicitly
+identified (`decision_kind = 'machine'`, `reviewer = 'machine:<policy>'`,
+`policy_version`, `machine_evidence`); a human row cannot use the prefix.
+Policies live in the append-only `pair_approval_policies` (a new policy is a
+migration, i.e. a human decision). Every machine decision (approved, rejected,
+held) is appended to `machine_pair_decisions`. Durable monitoring suspends a
+machine approval exactly like a human one. Policy `barcode-exact-v1` is
+`src/lib/machine-pair-approval.ts`; a model verdict can only hold, never
+approve or override. Dunnes may bind to its SKU-bound product API
+(`captured_product_api`), because its product pages are refused from AWS.
+Humans handle policy changes and genuine exceptions only.
+
+The human operator process must independently perform deterministic identity,
 pack, barcode, variant and dietary checks and AI inference on the original
 source evidence. An AI confidence score, reconstructed metadata hash or
 catalogue title is not approval. A reviewed record must specify reasons,
