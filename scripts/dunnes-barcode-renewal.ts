@@ -1,0 +1,94 @@
+// Dunnes BARCODE RENEWAL (one-off ECS task on the worker image; dry run unless APPLY=1).
+// Renews exactly the listed EXISTING Dunnes offers whose SKU the Dunnes storefront search returned for the Tesco GTIN
+// of the SAME canonical record (barcode-led discovery, strong tier). Per target:
+//   1. re-read the offer: same id, store=dunnes, same SKU, same canonical, and no price in the last 7 days;
+//   2. one governed product-by-SKU request;
+//   3. confirmDunnesSku against the Tesco offer's own title + brand (SKU-bound URL, title, structured brand and pack,
+//      own-label, SKU ownership) -- the barcode is discovery evidence only, Dunnes' own product data must confirm;
+//   4. only then the existing finaliser writes the SKU-bound price; the product response body is retained.
+// A failed confirmation is recorded as a hold. There is NO replacement search: a different SKU is a different identity.
+// Mappings are never re-pointed. Env: T = base64(brotli(JSON [{product_id, offer_id, sku, ref, brand}])), APPLY.
+import { brotliDecompressSync } from 'node:zlib';
+import { confirmDunnesSku, dunnesProductApiUrl, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
+import { normaliseDunnesName } from '@/lib/dunnes-discovery';
+import { withRetailerRequestSlot } from '@/lib/retailer-request-governor';
+import { captureIdentityResponse } from '@/lib/retailer-identity-response';
+import { retainIdentityResponse } from '@/lib/retailer-identity-retention';
+import { supabaseAdmin as sb } from '@/lib/supabase';
+
+type Target = { product_id: string; offer_id: string; sku: string; ref: string; brand: string };
+const APPLY = process.env.APPLY === '1';
+const HEADERS = () => ({ Accept: 'application/json, text/plain, */*', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
+  'x-site-host': 'https://www.dunnesstoresgrocery.com', 'x-site-location': 'HeadersBuilderInterceptor', 'x-correlation-id': crypto.randomUUID(),
+  'x-shopping-mode': '22222222-2222-2222-2222-222222222222' });
+const productUrl = (sku: string, name: string) =>
+  `https://www.dunnesstoresgrocery.com/sm/delivery/rsid/258/product/details/${normaliseDunnesName(name).replace(/\s+/g, '-')}/${sku}`;
+const log = (o: Record<string, unknown>) => console.log(JSON.stringify(o));
+
+async function governedGet(url: string) {
+  return withRetailerRequestSlot('dunnes', async () => {
+    const res = await fetch(url, { headers: HEADERS(), redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(20000) });
+    const body = await res.text();
+    if (res.status === 403 || res.status === 429 || res.status >= 500) throw new Error(`Dunnes HTTP ${res.status}`);
+    return { status: res.status, url: res.url || url, contentType: res.headers.get('content-type') ?? '', body };
+  });
+}
+
+async function main() {
+  const list = (JSON.parse(brotliDecompressSync(Buffer.from(process.env.T ?? '', 'base64')).toString('utf8')) as Target[]).slice(0, 50);
+  let runUuid: string | null = null;
+  if (APPLY) {
+    const { data: run, error } = await sb.from('scrape_runs').insert({ run_id: `dunnes_barcode_renewal_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`,
+      store: 'dunnes', started_at: new Date().toISOString(), target_count: list.length, attempted_count: 0, fetched: 0, extracted: 0, inserted: 0,
+      unchanged_count: 0, failed: 0, retrieval_method: 'dunnes_sku_confirmed_discovery', threshold_pct: 0, status: 'running' }).select('id').single();
+    if (error) throw error; runUuid = run.id;
+  }
+  const tally: Record<string, number> = {};
+  const bump = (k: string) => { tally[k] = (tally[k] ?? 0) + 1; };
+  for (const t of list) {
+    try {
+      const { data: o, error: oe } = await sb.from('store_products').select('id,product_id,store,store_sku').eq('id', t.offer_id).maybeSingle();
+      if (oe) throw oe;
+      const { data: lp, error: le } = await sb.from('latest_prices').select('store_product_id').eq('store_product_id', t.offer_id)
+        .gte('observed_at', new Date(Date.now() - 7 * 864e5).toISOString());
+      if (le) throw le;
+      const skip = !o ? 'offer_missing' : o.store !== 'dunnes' || String(o.store_sku) !== t.sku || o.product_id !== t.product_id ? 'offer_changed'
+        : (lp ?? []).length ? 'already_fresh' : null;
+      if (skip) { log({ event: 'skipped', offer_id: t.offer_id, reason: skip }); bump(skip); continue; }
+      const { data: owners, error: we } = await sb.from('store_products').select('id').eq('store', 'dunnes').eq('store_sku', t.sku);
+      if (we) throw we;
+      const apiUrl = dunnesProductApiUrl(t.sku);
+      const p = await governedGet(apiUrl);
+      let resp: DunnesProductResponse | null = null; try { resp = p.status === 200 ? JSON.parse(p.body) : null; } catch { resp = null; }
+      const conf = confirmDunnesSku({ canonicalName: t.ref, canonicalBrand: t.brand, candidateSku: t.sku, candidateName: String(resp?.name ?? ''),
+        httpStatus: p.status, requestedUrl: apiUrl, finalUrl: p.url, response: resp,
+        skuOwnedElsewhere: (owners ?? []).some(x => x.id !== t.offer_id), otherCompatibleCandidates: 0 });
+      log({ event: conf.ok ? 'confirmed' : 'held', product_id: t.product_id, sku: t.sku, ref: t.ref, title: resp?.name ?? null, status: p.status,
+        reasons: conf.reasons, price: conf.price, pack: conf.structuredPack, apply: APPLY });
+      if (!conf.ok) {
+        bump('held');
+        if (APPLY) await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'rejected',
+          p_canonical_name: t.ref, p_candidate_sku: null, p_candidate_name: null, p_candidate_url: null, p_price: null, p_confidence: null, p_pack_ratio: null,
+          p_reason: `SKU-confirmed discovery held: barcode_renewal:${conf.reasons.join(',')}`.slice(0, 500) });
+        continue;
+      }
+      if (APPLY) {
+        const url = productUrl(t.sku, String(resp!.name));
+        const { error: fe } = await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'exact',
+          p_canonical_name: t.ref, p_candidate_sku: t.sku, p_candidate_name: String(resp!.name), p_candidate_url: url, p_price: conf.price,
+          p_confidence: 1, p_pack_ratio: 1, p_reason: `sku_confirmed (barcode renewal of existing SKU) via ${apiUrl}` });
+        if (fe) throw fe;
+        await retainIdentityResponse(captureIdentityResponse({ store: 'dunnes', sku: t.sku, title: String(resp!.name), productUrl: url, requestedUrl: apiUrl,
+          finalUrl: p.url, contentType: p.contentType, body: p.body }), runUuid!, t.offer_id);
+      }
+      bump('confirmed');
+    } catch (e) {
+      bump('error');
+      log({ event: 'error', offer_id: t.offer_id, message: e instanceof Error ? e.message.slice(0, 160) : String(e) });
+      if (/circuit|blocked|slot/i.test(String(e))) break;
+    }
+  }
+  if (APPLY && runUuid) await sb.from('scrape_runs').update({ status: 'success', finished_at: new Date().toISOString() }).eq('id', runUuid).eq('status', 'running');
+  log({ event: 'summary', apply: APPLY, targets: list.length, tally, run: runUuid });
+}
+main().catch(e => { console.error(e); process.exit(1); });
