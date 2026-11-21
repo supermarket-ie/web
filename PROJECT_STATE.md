@@ -1,5 +1,39 @@
 # Supermarket.ie — Canonical Project State
 
+## 21 November 2026 (night) — RELEASED f1a12f6; 16 Tesco + 21 Dunnes prices; collector pin rev 18
+
+Owner-authorised (21 Nov): merge #426, approve and deploy build 44637718671, apply the 21
+confirmed Dunnes attaches, resume targeted Tesco/Dunnes collection.
+
+- **#426 squash-merged** as `0036c2c` (`validate` green on head `ea886f2`).
+- **Build 44637718671 approved** (aws-prod, commit `f1a12f6`, branch `ops/image-f1a12f6`) →
+  `f1a12f6-prod` pushed 19:45Z. **Rolled out with tofu**: web `smie-prod:19`, sqs-consumer `:9`,
+  scheduled `:9`, 10 cron schedules; services stable, www 200. Rollback: `bf00c5f-prod` is still
+  in ECR; tfvars backup `~/smie-private/tfvars.before-f1a12f6.bak`.
+- **Tesco collector** `smie-prod-tesco-apify-collect:18` registered (rev 17 + image `f1a12f6-prod`,
+  nothing else changed). The daily renewal schedule is re-pinned to `:18` (this PR); before, it ran
+  `4db5a9b-prod`, which still had the peer-freshness defect.
+- **Tesco targeted runs (rev 18, `APIFY_TARGET_IDS`):**
+  - Tranche 1 (30, expansion + first price): 8 accepted, including **all 7 valid first-price
+    approvals consumed** before expiry; 18 held (8 unavailable, rest AI/identity).
+  - Wave 2 (66 = 58 both-strong barcode mappings + Tesco offers of the newly attached canonicals,
+    minus already fresh): evidence mode found 1 eligible; approve mode considered 8, approved 0;
+    expansion with first price + self-evidence: 37 requested, **8 accepted**, 29 held
+    (measureExactnessFailed/measureConflict 19, identity 6, brand 2, AI 2).
+  - The 4 AI-only approval candidates: 0 approved (2 rejected, 2 uncertain).
+  - Campaign spend about $2.44 of the $10 cap; Apify account $21.39 of $80.
+- **Dunnes attach batch 1 applied** (`ALLOW_ATTACH=1`, runs `1738bd75…`, `0ca81a26…`):
+  21 of 21 written, each verified (one Dunnes offer per SKU, on the intended canonical, fresh price).
+- **Production after** (21:29Z): Tesco fresh 7d **399** (+16), Dunnes **960** (+21),
+  SuperValu 1,607; three-retailer priced **225** (+23 since 19:21Z, +27 since 17:02Z);
+  pair reviews 0, verified exact 0.
+- **Blocked: migrations.** 20261118120000, 20261120090000 (+ 9-page operator file) and
+  20261121090000 are still NOT applied (REST probes 404 at 21:30Z). The protected operator route
+  is the owner's ChatGPT-connected Supabase integration; the agent has no DDL path (no DB
+  connection string; the local Supabase CLI login is out of scope). Until 20261118120000 is applied
+  no pair review can be recorded, so verified comparisons stay at 0; until 20261121090000 is applied
+  the 545 barcode observations cannot be stored.
+
 ## 21 November 2026 (evening) — Barcode results operationalised: 5 Dunnes prices, evidence re-captured with raw bodies
 
 **Baseline before** (21 Nov 17:02Z, `baseline.mjs`): Tesco fresh 7d 383, Dunnes 934, SuperValu 1,607;
