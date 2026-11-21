@@ -1,5 +1,149 @@
 # Supermarket.ie — Canonical Project State
 
+## 21 November 2026 (evening) — Barcode results operationalised: 5 Dunnes prices, evidence re-captured with raw bodies
+
+**Baseline before** (21 Nov 17:02Z, `baseline.mjs`): Tesco fresh 7d 383, Dunnes 934, SuperValu 1,607;
+three-retailer priced 198; pair reviews 0; verified exact 0.
+
+**Tesco release.** Build run 44637718671 is still `waiting` on the `aws-prod` environment
+(reviewer `supermarket-ie`). It builds `f1a12f6` (#422) from branch `ops/image-f1a12f6`; `validate`
+passed on that commit. Production runs `bf00c5f-prod` (web, sqs-consumer and scheduled task
+definitions). The image adds #420 (self-evidence, flag OFF), #421 (peer-freshness fix +
+`APIFY_TARGET_IDS`), #419 and #422 (tolerates the unapplied pending-page migration). `main` is
+two Dunnes-only commits ahead (#423, #424); those scripts run as bundles, so this image is enough
+for Tesco. After approval: roll out with tofu (worker + web tags), then the 7 valid first-price
+approvals (expire ~22 Nov 11:10Z) and the 58 both-strong Tesco mappings via `APIFY_TARGET_IDS`.
+
+**Dunnes barcode renewal (PRODUCTION WRITES: 5 prices).** New `scripts/dunnes-barcode-renewal.ts`
+(bundled one-off ECS task, governed): renews exactly the listed existing Dunnes offers whose SKU
+the GTIN search returned for the same canonical's Tesco GTIN. Each offer is re-read (same id,
+SKU, canonical, no 7-day price), one governed product-by-SKU request, `confirmDunnesSku` against
+the Tesco title/brand, then the existing `finalize_dunnes_discovery_product` and retained body.
+No replacement search, no re-pointing. Run `06446490-b5cd-45c6-b885-cfca3351ed0c`: 12 targets
+(Ben's excluded: its SuperValu offer is own-label rice), 5 written (Tayto Mighty Munch, Brennans Be
+Good Wholemeal, Flahavan's GF Oats, Brennans Chia 800g, Colgate Max Fresh), 7 held by unchanged
+rules (structured pack 74.6 vs 74 g, title multipack vs structured pack, SKU shared by two
+offers). 4 of the 5 are now fresh at all three retailers.
+
+**Raw evidence made durable.** Runner now emits each response body (brotli+base64) with its
+sha256. Re-captured the 427 barcodes strong at either retailer plus the 4 previously unparseable:
+431/431 captured, 0 errors, 868 bodies, all 868 hashes verified, classification unchanged for
+every previously classified barcode (0 tier/SKU changes). 545 strong observations (Dunnes 287,
+SuperValu 258) are insert-ready and pass migration 20261121090000 in PGlite as service_role.
+Raw logs: `~/smie-private/sv-tesco-pilot-20261117/bcap-recapture.log` (CloudWatch keeps 14 days).
+Migration 20261121090000 (still NOT applied) now stores `response_body` and CHECKs that it hashes
+to `response_sha256`. Operator order: `supabase/operator/README-20261121-handoff.md`
+(20261118120000, 20261120090000, the 9-page resolution, then 20261121090000). Probed 17:20Z:
+none applied.
+
+**225 association opportunities classified (read-only).** Dunnes: attach 40, attach-after-split
+54, repoint 9, split 25, duplicate-listing review 9, duplicate canonical 6, owner conflict 3.
+SuperValu: attach 2, attach-after-split 23, repoint 7, split 35, duplicate-listing review 5,
+duplicate canonical 5, owner conflict 2. "Split" cases are canonicals mixing different products
+(e.g. Gem Granulated Sugar with Complimints, TK Red Lemonade with 7Up Pink). The Dunnes attach
+batch was dry-run through the attach mode of the same script after the final review's fixes
+(reference read from the retained Tesco provider item, SuperValu brand/pack/own-label guard,
+category exclusion, dedupe, finaliser result checked): 35 targets with DB-bound Tesco evidence
+(5 of the 40 have a GTIN only from the private catalogue JSONL), 21 confirm, 7 of which would
+be new three-store products immediately. Applying needs `ALLOW_ATTACH=1` plus owner
+authorisation. Nothing written.
+
+**Pair-review readiness (117 strong at both).** 51 need an association first (Dunnes or
+SuperValu SKU not on the canonical); 66 are mapped at both but have no retained product capture
+within 13 days at Dunnes and/or SuperValu (`retailer_identity_responses`, `captured_product`); 98
+have a Tesco page within 13 days. Pair reviews also need migration 20261118120000. Readiness file:
+`~/smie-private/sv-tesco-pilot-20261117/pair-readiness-both-strong.json`.
+
+**Baseline after** (21 Nov 19:21Z): Tesco 383 (unchanged), Dunnes 939 (+5), SuperValu 1,607;
+three-retailer priced 202 (+4); pair reviews 0; verified exact 0. Costs this session: Apify $0;
+about 1,000 governed retailer requests (868 search + ~150 product-by-SKU) on 9 one-off Fargate
+tasks. Final review of #426: APPROVED (`semantic-review/2026-11-21-180411-pr-426.md`); its
+renewal-script findings are fixed.
+
+## 21 November 2026 — Barcode-led three-retailer discovery (read-only; migration 20261121090000 NOT applied; NO writes)
+
+Branch `feat/barcode-led-matching`. Tesco Apify items carry a manufacturer GTIN.
+Dunnes and SuperValu expose no barcode field, but their public storefront search
+resolves an exact GTIN to a single SKU. This is DISCOVERY evidence ("SKU found
+by GTIN search"), distinct from "GTIN returned by retailer". A Tesco-derived
+GTIN is never independent Dunnes/SuperValu identity evidence by itself.
+
+**Built (not deployed, nothing written):**
+- `src/lib/barcode-matching.ts` (pure): GS1 check digit; `normaliseGtin` rejects
+  GTIN-14 packaging indicators 1–8, variable measure 9, restricted circulation
+  (EAN-13 02/04/2x, EAN-8 0/2, UPC-A 2/4) and coupons (98/99, UPC-A 5); unpads
+  zero-padded GTIN-14 to GTIN-8/12/13; query forms EAN-13, EAN-8, UPC-A as
+  "0"+12 and 12. `assessBarcodeHit` tiers each hit:
+  - held: brand mismatch, unreconcilable pack or count, a different member of
+    a mutually exclusive variant group (sugar, fat, salted, smoked, decaf,
+    bread colour, cheese/curry strength, smooth/crunchy, still/sparkling,
+    chocolate type), different percentages/SPF on both sides (2% vs 1%,
+    SPF 30 vs 50), SKU equal to the query, any item without a SKU
+  - review: partial brand, pack unconfirmed, substitution, an extra product
+    word on one side (incl. range words such as Original, Classic, Limited
+    Edition, Fresh, Large), a variant member or a non-pack number stated on
+    one side only or differing, a one-sided "Multipack" unless both
+    titles state the same count, two different containers (pouch vs jar,
+    bottle vs can), title agreement < 0.6
+  - strong: none of the above — same brand, same product words, same variant
+    and number statements, confirmed pack
+- `scripts/barcode-search-capture.ts`: thin ECS runner, governed by
+  `withRetailerRequestSlot`; non-200 responses are errors and 200 challenge
+  pages (non-JSON / wrong shape) are governed denials, never not-found; records
+  every query form; exits 2 on a breaker stop. Parsing/merging lives in
+  `src/lib/barcode-search-response.ts` (bundled with esbuild, governor
+  external, since the deployed image predates it). Classification runs
+  locally. Raw evidence is kept in the private store, not the repo.
+- Proposed migration `20261121090000_retailer_barcode_observations.sql`
+  (NOT applied): append-only `retailer_barcode_observations` and
+  `retailer_barcode_association_reviews`, view `current_barcode_associations`
+  (active / stale_needs_reverification / suspended_sku_changed /
+  suspended_no_longer_found / needs_review / held / not_found). Records GTIN and
+  provenance, Tesco source SKU, resolved SKU, endpoint, query form, evidence,
+  identity outcome, last-verified time. Tier is bound to its reasons by CHECK;
+  a review is bound to its observation's (gtin, store, sku) by composite FK.
+  service_role select+insert only. 42 tests (library, response parsing and governor classification, PGlite).
+
+**Read-only results (1,288 branded Tesco GTINs: pilot 200 + full 1,088; 445
+Tesco own-label GTINs excluded, since they cannot exist elsewhere).** Negative
+controls: 6 own-label GTINs returned 0 at both retailers; neighbour GTINs
+resolved to different real products (exact-barcode dependence).
+
+| | Dunnes | SuperValu |
+|---|---|---|
+| strong | 286 | 258 |
+| — confirms existing mapping | 140 | 179 |
+| — conflicts with existing mapping (wrong mapping found) | 43 | 47 |
+| — new relationship | 94 | 25 |
+| — SKU owned by another canonical | 9 | 7 |
+| review / held / not found | 506 / 69 / 423 | 566 / 112 / 348 |
+
+Rule versions 3–5 (after two further reviews): strong also requires the same
+product words on both sides (Dairy Milk vs Dairy Milk Caramel is review), the
+same variant statements, and the same non-pack numbers (2% vs 1% is held).
+Strong fell from 610→286 (Dunnes) and 602→258 (SuperValu); most moved rows are
+descriptive wording differences
+("Heinz Spaghetti In Tomato Sauce" vs "Heinz Spaghetti") that a human can clear
+in review, but some are real ambiguities (River Rock vs River Rock Refresh).
+Rows sum to 1,284; 4 full-run log lines were unparseable and need re-capture.
+Strong at both retailers: 117 (58 without a fresh Tesco price; 50 already fresh
+at all three). Independent validation: 30 random both-strong triples under the
+looser v2 rules were all manually confirmed as the same product (Open Food Facts
+agreed on ~13; the rest had no usable record). Strong existing-mapping
+confirmations with a stale Dunnes price: 13 (SuperValu 0); the existing
+`stale_dunnes` renewal selects its own cohort and takes no target list, so
+renewing exactly these needs a small target-list input in a future image. Examples of wrong existing mappings: Elvive→Pantene
+or Herbal Essences, Carmex→Vaseline, Dentastix 21→4-pack, Andrex 24→4 rolls,
+Club Orange 500 ml→1.75 L, Avonmore Fresh→Light Cream, Dr Oetker 100→72 cases.
+A known retailer data error: SuperValu NIVEA Crème Soft resolves to "Clay
+Fresh" (tier review).
+
+**Not done / gated:** no associations, mapping repairs or new prices written.
+New relationships and conflicts need owner approval of the write process and
+migration 20261121090000. Tesco prices for the both-strong products need the
+pending build approval. Comparisons remain unverified until independently
+approved through the existing pair-review path.
+
 ## 20 November 2026 — Recovery tranche 1: results and corrected gap counts
 
 **Corrected cohort counts.** The 19 Nov one-gap figures (241 missing only Tesco, 168 missing only Dunnes) came from
