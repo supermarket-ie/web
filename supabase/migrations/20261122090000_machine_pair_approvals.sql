@@ -216,8 +216,11 @@ begin
   end loop;
   -- Without a Tesco side, the origin Tesco offer's own recent page must state this GTIN (for a Tesco side the
   -- stamped page identity is checked below).
+  -- Both sides' associations must come from the SAME origin Tesco offer, and that offer's page must state the GTIN.
   if a.store <> 'tesco' and b.store <> 'tesco' and not exists (
       select 1 from public.current_barcode_associations c
+      join public.current_barcode_associations c2 on c2.gtin_origin_store_product_id = c.gtin_origin_store_product_id
+        and ltrim(c2.gtin, '0') = g and c2.store = b.store and c2.resolved_sku = b.store_sku and c2.status = 'active'
       join public.store_products o on o.id = c.gtin_origin_store_product_id
       join public.tesco_direct_collection_pages p on p.requested_url = 'https://www.tesco.ie/shop/en-IE/products/' || o.store_sku
       where ltrim(c.gtin, '0') = g and c.store = a.store and c.resolved_sku = a.store_sku and c.status = 'active'
