@@ -1,5 +1,47 @@
 # Supermarket.ie — Canonical Project State
 
+## 22 November 2026 — Machine pair approvals (policy barcode-exact-v1; migration 20261122090000 NOT applied)
+
+OWNER DECISION (22 Nov): routine exact relationships are approved by a tested machine policy, not
+per-pair human review. Humans own policy changes and genuine exceptions.
+
+- **Migration `20261122090000_machine_pair_approvals.sql`:**
+  - `pair_approval_policies`: append-only, seeded with `barcode-exact-v1`. A new policy is a migration.
+  - `retailer_offer_pair_reviews` gains `decision_kind`, `policy_version` and `machine_evidence`.
+    A CHECK makes `machine` ⇔ reviewer `machine:<policy>` (no spoofing either way).
+  - `record_machine_pair_approval(...)`: SECURITY DEFINER, service_role only, the only machine
+    write path. It re-derives in the DB:
+    - an active barcode association whose origin is the Tesco offer of the same record
+    - same `product_id`, with unshared SKUs
+    - the source rows themselves, within the 12-day limit
+    It then inserts through the unchanged `validate_offer_pair_review` and stamp triggers, and
+    raises on stamped brand, pack, GTIN or own-label contradictions. A model verdict other than
+    `exact` is refused.
+  - `machine_pair_decisions`: append-only audit of approved, rejected and held decisions.
+  - Dunnes `captured_product_api` (its SKU-bound product API URL only) is accepted for binding
+    and for durable monitoring.
+  - `current_pair_review_status` is otherwise unchanged.
+- **Policy** `src/lib/machine-pair-approval.ts` (pure):
+  - rejects material contradictions
+  - holds on missing or insufficient evidence, a review-tier difference or customer-veto
+    disagreement (e.g. "4 x 28g" vs "4 Pots (112 g)")
+  - otherwise approves
+  - the model is not used in v1 and can only ever hold
+- **Runner** `scripts/machine-pair-approvals.ts`:
+  - `CAPTURE=1` takes governed captures (SuperValu page, Dunnes API) for associated offers whose
+    newest capture is older than 6 days. This keeps monitoring fresh.
+  - `APPLY=1` writes approvals and changed holds.
+  - Daily schedule `infra/terraform/pair-approvals.tf` (06:30 UTC), applied after the migration.
+- **Tests:**
+  - 27 policy tests on known wrong mappings (pack, count, brand, flavour, fat, percentage,
+    formulation, container, age stage, own-label, NIVEA data error).
+  - 13 PGlite tests on the real ledger, durable, barcode and machine migrations: binding,
+    refusals, anti-spoofing, append-only, Dunnes API, identity-change suspension.
+- **Dry run** (22 Nov, read-only, prod data): 545 associations → 410 candidates →
+  **156 Tesco–SuperValu approvable**, 23 Tesco–SuperValu held (shared SKUs, missing captures,
+  4 pack-veto disagreements). All Dunnes pairs were held for lack of a direct capture; they need
+  the migration plus API captures. 205 associations have the SKU not on the Tesco record.
+
 ## 21 November 2026 (late) — Migrations applied; 545 barcode observations stored; tranche 2; 166 pairs prepared
 
 **Migrations applied by the owner** through the ChatGPT-connected Supabase route (owner-verified;
@@ -27,9 +69,10 @@ transaction: 9 rows in `tesco_pending_page_resolutions`.
     denials; stopped there). Dunnes direct page evidence is unavailable from AWS, so Dunnes pair
     reviews are blocked; Dunnes renewals retain the product-API JSON, which is `captured_listing`
     and does not qualify.
-  - `recordIdentityObservation` wrote nothing from the bundled task (no warning logged; cause not
-    found). The 125 observations were inserted over REST from the retained responses
-    (one SuperValu offer has two identical observations from a probe).
+  - No identity observations were stored. CORRECTION (22 Nov): this is by design, not a fault:
+    `bind_identity_observation` silently stores observations only for offers already in a
+    positive pair decision. The REST re-inserts returned 201 but were likewise not stored. The
+    retained `retailer_identity_responses` are the evidence.
 - **Pair-review package (PROPOSED, private):** `proposed-pair-reviews-BARCODE1.sql` +
   `review-sheet-BARCODE1.md` in `~/smie-private/sv-tesco-pilot-20261117/`: **166 Tesco–SuperValu
   `exact_product` pairs**. Each pair: the SuperValu search returned exactly that SKU for the Tesco

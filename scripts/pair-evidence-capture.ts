@@ -8,7 +8,7 @@
 import { brotliDecompressSync } from 'node:zlib';
 import { captureIdentityResponse } from '@/lib/retailer-identity-response';
 import { recordIdentityObservation, retainIdentityResponse } from '@/lib/retailer-identity-retention';
-import { withRetailerRequestSlot } from '@/lib/retailer-request-governor';
+import { denialReason, withRetailerRequestSlot } from '@/lib/retailer-request-governor';
 import { supabaseAdmin as sb } from '@/lib/supabase';
 
 type Target = { offer_id: string; title: string };
@@ -25,7 +25,10 @@ async function governedPage(store: Store, url: string) {
     const body = await res.text();
     if (res.status === 403 || res.status === 429 || res.status >= 500) throw new Error(`${store} HTTP ${res.status}`);
     return { status: res.status, finalUrl: res.url || url, contentType: res.headers.get('content-type') ?? '', body };
-  });
+  }, { classifyError: (e: unknown) => {
+    const m = /HTTP (\d{3})/.exec(e instanceof Error ? e.message : String(e));
+    return { reason: m ? denialReason({ status: Number(m[1]) }) : denialReason({ errorReason: e instanceof Error ? `${e.name} ${e.message}` : String(e) }) };
+  } });
 }
 
 async function main() {

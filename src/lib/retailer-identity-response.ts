@@ -9,7 +9,7 @@ export type IdentityResponse = {
   store: 'supervalu' | 'dunnes'; sku: string; product_url: string;
   requested_url: string; final_url: string; retrieved_at: string;
   content_type: string; body_text: string; body_sha256: string;
-  parser_version: string; source_kind: 'captured_product' | 'captured_listing';
+  parser_version: string; source_kind: 'captured_product' | 'captured_listing' | 'captured_product_api';
   source_path: string; identity: Record<string, unknown>;
 };
 const object = (v: unknown): Record<string, unknown> | null => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null;
@@ -17,6 +17,8 @@ function label(v: unknown): string | null {
   if (typeof v === 'string') return v;
   const o = object(v); return typeof o?.name === 'string' ? o.name : null;
 }
+/** The Dunnes SKU-bound product API URL (same as dunnesProductApiUrl in dunnes-sku-confirmation). */
+export const dunnesProductApi = (sku: string) => `https://storefrontgateway.dunnesstoresgrocery.com/api/stores/258/products/${encodeURIComponent(sku)}`;
 export const responseHash = (body: string) => createHash('sha256').update(body, 'utf8').digest('hex');
 /**
  * The complete JSON object that starts at `start`, found by a string-aware balanced-brace scan (the same
@@ -88,20 +90,26 @@ export function captureIdentityResponse(args: {
   }
   if (normalise(String(merged.title ?? '')) !== normalise(args.title)) return null;
   const direct = args.requestedUrl === args.productUrl && args.finalUrl === args.productUrl;
+  // Dunnes' SKU-bound product API (the data source of its product page) is a direct capture of that SKU too.
+  const api = store === 'dunnes' && args.requestedUrl === dunnesProductApi(sku) && args.finalUrl === args.requestedUrl;
   return { store, sku, product_url: args.productUrl, requested_url: args.requestedUrl, final_url: args.finalUrl,
     retrieved_at: args.retrievedAt ?? new Date().toISOString(), content_type: args.contentType.slice(0, 120),
     body_text: body, body_sha256: responseHash(body), parser_version: RESPONSE_PARSER_VERSION,
-    source_kind: direct ? 'captured_product' : 'captured_listing', source_path: found.map(x=>x.path).join('|'), identity: merged };
+    source_kind: direct ? 'captured_product' : api ? 'captured_product_api' : 'captured_listing', source_path: found.map(x=>x.path).join('|'), identity: merged };
 }
+// Rows retained before the Dunnes product API was a recognised direct source were stored as captured_listing;
+// their reparse now says captured_product_api. They keep their stored (weaker) kind.
+const sameKind = (parsed: IdentityResponse['source_kind'], stored: IdentityResponse['source_kind']) =>
+  parsed === stored || (parsed === 'captured_product_api' && stored === 'captured_listing');
 export function evidenceFromResponse(row: IdentityResponse & { id: string }): Omit<Evidence, 'id' | 'mappingIds' | 'canonicalIds' | 'conflicts'> | null {
   if (row.body_sha256 !== responseHash(row.body_text) || !ACCEPTED_PARSER_VERSIONS.includes(row.parser_version)) return null;
   const parsed = captureIdentityResponse({ store: row.store, sku: row.sku, title: String(row.identity.title ?? ''), productUrl: row.product_url,
     requestedUrl: row.requested_url, finalUrl: row.final_url, contentType: row.content_type, body: row.body_text, retrievedAt: row.retrieved_at });
   if (parsed && row.parser_version === 'retailer-identity-response-v1') { delete parsed.identity.manufacturerProductCode; parsed.source_path = parsed.source_path.split('|')[0]; }
-  if (!parsed || parsed.source_path !== row.source_path || !isDeepStrictEqual(parsed.identity, row.identity) || parsed.source_kind !== row.source_kind) return null;
+  if (!parsed || parsed.source_path !== row.source_path || !isDeepStrictEqual(parsed.identity, row.identity) || !sameKind(parsed.source_kind, row.source_kind)) return null;
   const i = parsed.identity;
   return { store: row.store, sku: row.sku, url: row.product_url, title: String(i.title), brand: label(i.brand), manufacturer: label(i.manufacturer),
     sourceAttributes: i, gtin: label(i.gtin), description: label(i.description), ingredients: label(i.ingredients),
-    source: { kind: parsed.source_kind, ref: row.id, at: row.retrieved_at, url: row.requested_url, hash: row.body_sha256, archiveRef: `retailer_identity_responses:${row.id}` },
+    source: { kind: row.source_kind === 'captured_product_api' ? 'captured_listing' : row.source_kind, ref: row.id, at: row.retrieved_at, url: row.requested_url, hash: row.body_sha256, archiveRef: `retailer_identity_responses:${row.id}` },
     lastLiveVerifiedAt: parsed.source_kind === 'captured_product' ? row.retrieved_at : null };
 }

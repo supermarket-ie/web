@@ -27,7 +27,7 @@ const snapshotSchema = z.object({ asOf: text.datetime(), products: z.array(produ
   brandClaims:z.array(brandClaimSchema).optional(),
   retailerResponses:z.array(z.object({id:text,store:z.enum(['supervalu','dunnes']),sku:text,product_url:text,
     requested_url:text,final_url:text,retrieved_at:text,content_type:text,body_text:text,body_sha256:text,parser_version:text,
-    source_kind:z.enum(['captured_product','captured_listing']),source_path:text,identity:z.record(text,z.unknown())})).optional(),
+    source_kind:z.enum(['captured_product','captured_listing','captured_product_api']),source_path:text,identity:z.record(text,z.unknown())})).optional(),
   tesco: z.array(z.object({ product: z.object({ sku: text, url: text, name: text, brand: nullable, gtin: nullable,
     quantity: z.object({ grams: z.number().optional(), millilitres: z.number().optional(), pieces: z.number().optional() }).nullable() }),
     page_id: text, created_at: text, body_sha256: text, requested_url: text, final_url: nullable, mode: text })),

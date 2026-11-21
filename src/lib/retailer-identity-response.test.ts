@@ -19,6 +19,18 @@ describe('original retailer response retention', () => {
     expect(evidenceFromResponse({ ...r, id: 'archive', body_text: '{}' })).toBeNull();
     expect(evidenceFromResponse({ ...r, id: 'archive', identity: { ...r.identity, title: 'Wrong' } })).toBeNull();
   });
+  it('a Dunnes SKU-bound product API response is captured_product_api; any other API URL stays a listing', () => {
+    const api = `https://storefrontgateway.dunnesstoresgrocery.com/api/stores/258/products/${sku}`;
+    const body = JSON.stringify({ sku, name: title, brand: 'Brand' });
+    const r = captureIdentityResponse({ ...args, body, requestedUrl: api, finalUrl: api })!;
+    expect(r.source_kind).toBe('captured_product_api');
+    expect(captureIdentityResponse({ ...args, body, requestedUrl: `${api}0`, finalUrl: `${api}0` })?.source_kind ?? 'none').not.toBe('captured_product_api');
+    expect(captureIdentityResponse({ ...args, store: 'supervalu', productUrl: `https://shop.supervalu.ie/sm/delivery/rsid/5550/product/x-id-${sku}`, body, requestedUrl: api, finalUrl: api })).toBeNull();
+    // A row stored before this kind existed (as a listing) still verifies, keeping its weaker stored kind.
+    const legacy = { ...r, id: 'old', source_kind: 'captured_listing' as const };
+    expect(evidenceFromResponse(legacy)?.source.kind).toBe('captured_listing');
+    expect(evidenceFromResponse({ ...r, id: 'new' })?.source.kind).toBe('captured_listing');
+  });
   it('does not substitute a mapping SKU/title or accept conflicting source nodes', () => {
     expect(captureIdentityResponse({ ...args, sku: '999999' })).toBeNull();
     expect(captureIdentityResponse({ ...args, title: 'Brand Strawberry Yogurt 500g' })).toBeNull();
