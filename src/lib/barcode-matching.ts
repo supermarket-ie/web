@@ -130,9 +130,22 @@ function variantLabels(title: string, group: Array<[string, RegExp]>): Set<strin
 }
 
 // Product words for title agreement / substitution: no brand tokens, measures, numbers or generic words; plurals folded.
+// Only connectives, containers and pure marketing words. Words that can name a variant or range ("original", "classic",
+// "limited edition", "fresh", "large", "family", "sharing", "single", "premium") are product words and must agree.
 const GENERIC = new Set(['and', 'with', 'the', 'of', 'in', 'for', 'a', 'pack', 'pk', 'x', 'bottle', 'bag', 'pouch', 'tub', 'jar', 'tin', 'can',
-  'sharing', 'single', 'multipack', 'flavour', 'flavoured', 'original', 'classic', 'irish', 'real', 'pure', 'new', 'piece', 'pieces',
-  'fresh', 'large', 'family', 'premium', 'delicious', 'traditional', 'tasty', 'limited', 'edition', 'from', 'months', 'month', 'by']);
+  'multipack', 'flavour', 'flavoured', 'irish', 'new', 'piece', 'pieces', 'delicious', 'tasty', 'from', 'months', 'month', 'by']);
+// Numbers that are NOT pack measures: percentages ("2%", "0% fat") and SPF are identity-bearing; other bare numbers
+// ("Dentastix 21", "4+ months") are compared too, except a number that is either title's pack count.
+function identityNumbers(title: string, packCounts: Array<number | null>): { qualified: string[]; bare: string[] } {
+  const t = title.toLowerCase().replace(/(\d),(\d)/g, '$1.$2')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:x\s*\d+(?:\.\d+)?\s*)?(?:kg|g|ml|cl|l|ltr|litres?|litre)\b/g, ' ');
+  const qualified = [...t.matchAll(/(\d+(?:\.\d+)?)\s*%/g)].map(m => `${Number(m[1])}%`)
+    .concat([...t.matchAll(/\bspf\s*(\d+)/g)].map(m => `spf${Number(m[1])}`));
+  const rest = t.replace(/(\d+(?:\.\d+)?)\s*%/g, ' ').replace(/\bspf\s*\d+/g, ' ');
+  const counts = new Set(packCounts.filter((c): c is number => c != null).map(String));
+  const bare = [...rest.matchAll(/\b(\d+(?:\.\d+)?)\b/g)].map(m => String(Number(m[1]))).filter(n => !counts.has(n));
+  return { qualified: [...new Set(qualified)], bare: [...new Set(bare)] };
+}
 function productWords(title: string, brand: string | null): string[] {
   const brandTokens = new Set(identityTokens(brand));
   const t = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’`]/g, '')
@@ -148,10 +161,11 @@ export type HitAssessment = { conflicts: string[]; review: string[]; agreement: 
 /**
  * Deterministic assessment of ONE barcode hit against the Tesco product.
  * conflicts (=> held): different brand; both state a quantity and no whole-pack reading agrees; different counts that
- *   do not reconcile; a different member of a mutually exclusive variant group; the hit SKU equals the query.
+ *   do not reconcile; a different member of a mutually exclusive variant group; different percentages / SPF stated on
+ *   both sides; the hit SKU equals the query.
  * review (=> not strong): partial brand; no positive pack confirmation; unmatched product words on BOTH sides
  *   (substitution, e.g. Strawberry vs Raspberry) or on ONE side (extra words, e.g. Dairy Milk vs Dairy Milk Caramel);
- *   a variant-group member stated on one side only; low title agreement.
+ *   a variant-group member stated on one side only; any other non-pack number that differs; low title agreement.
  * Strong therefore requires the same product words, the same variant statements and a confirmed pack.
  */
 export function assessBarcodeHit(tesco: { name: string; brand: string | null }, hit: SearchHit, query?: string): HitAssessment {
@@ -179,6 +193,13 @@ export function assessBarcodeHit(tesco: { name: string; brand: string | null }, 
     // cannot be strong either: the unstated side may be the other member.
     if (la.size !== lb.size && (!la.size || !lb.size)) review.push(`variant_one_sided:${[...la, ...lb].join('+')}`);
   }
+  const na = identityNumbers(tesco.name, [a.count, b.count]), nb = identityNumbers(hit.name, [a.count, b.count]);
+  const diff = (x: string[], y: string[]) => x.filter(v => !y.includes(v));
+  if (na.qualified.length && nb.qualified.length && (diff(na.qualified, nb.qualified).length || diff(nb.qualified, na.qualified).length))
+    conflicts.push(`numbers:${na.qualified.join('+')}|${nb.qualified.join('+')}`);   // 2% vs 1%, SPF 30 vs SPF 50
+  else if (diff(na.qualified, nb.qualified).length || diff(nb.qualified, na.qualified).length
+    || diff(na.bare, nb.bare).length || diff(nb.bare, na.bare).length)
+    review.push(`numbers:${[...na.qualified, ...na.bare].join('+')}|${[...nb.qualified, ...nb.bare].join('+')}`);
   const wa = productWords(tesco.name, tesco.brand), wb = productWords(hit.name, hit.brand ?? tesco.brand);
   const aOnly = wa.filter(w => !wb.some(x => sameWord(w, x))), bOnly = wb.filter(w => !wa.some(x => sameWord(w, x)));
   const shared = wa.length - aOnly.length;

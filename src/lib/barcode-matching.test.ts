@@ -155,3 +155,24 @@ describe('re-review findings: a more specific title on either side is never stro
     expect(classifyBarcodeResult(t, [{ sku: '1', name: 'Heinz Baked Beans 415g', brand: 'Heinz' }, { sku: '', name: '?', brand: null }]).tier).toBe('held');
   });
 });
+
+describe('re-review 2: numbers and range words are identity-bearing', () => {
+  const r = (t: string, h: string, b: string) => classifyBarcodeResult({ name: t, brand: b }, [{ sku: 'x', name: h, brand: b }]);
+  it('different percentages or SPF on both sides are held', () => {
+    expect(r('Avonmore Milk 2% 1L', 'Avonmore Milk 1% 1L', 'Avonmore').tier).toBe('held');
+    expect(r('Yoplait Greek Style Yogurt 0% Fat 450g', 'Yoplait Greek Style Yogurt 10% Fat 450g', 'Yoplait').tier).toBe('held');
+    expect(r('Nivea Sun Protect Lotion SPF 30 200ml', 'Nivea Sun Protect Lotion SPF50 200ml', 'Nivea').tier).toBe('held');
+  });
+  it('a number stated on one side only, or differing bare numbers, are review', () => {
+    expect(r('Avonmore Milk 1L', 'Avonmore Milk 2% 1L', 'Avonmore').review.some(x => x.startsWith('numbers:'))).toBe(true);
+    expect(r('Pedigree Dentastix 21 Daily Dental Chews 540g', 'Pedigree Dentastix 28 Daily Dental Chews 540g', 'Pedigree').tier).toBe('review');
+  });
+  it('pack counts are not double-counted as identity numbers', () => {
+    expect(r('Knorr Rich Beef Stock Pot 4 x 28g', 'Knorr Rich Beef Stock 4 Pots (112 g)', 'Knorr').tier).toBe('strong');
+  });
+  it('range words such as Limited Edition, Classic, Original are product words', () => {
+    expect(r('Cadbury Dairy Milk 110g', 'Cadbury Dairy Milk Limited Edition 110g', 'Cadbury').tier).toBe('review');
+    expect(r('Heinz Tomato Ketchup 460g', 'Heinz Tomato Ketchup Classic 460g', 'Heinz').tier).toBe('review');
+    expect(r('Heinz Tomato Ketchup 460g', 'Heinz Tomato Ketchup 460g', 'Heinz').tier).toBe('strong');
+  });
+});

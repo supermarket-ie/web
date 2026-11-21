@@ -17,21 +17,30 @@ GTIN is never independent Dunnes/SuperValu identity evidence by itself.
   - held: brand mismatch, unreconcilable pack or count, a different member of
     a mutually exclusive variant group (sugar, fat, salted, smoked, decaf,
     bread colour, cheese/curry strength, smooth/crunchy, still/sparkling,
-    chocolate type), SKU equal to the query
-  - review: partial brand, pack unconfirmed, substitution, title agreement < 0.6
-  - strong: none of the above (one-sided omissions are allowed)
+    chocolate type), different percentages/SPF on both sides (2% vs 1%,
+    SPF 30 vs 50), SKU equal to the query, any item without a SKU
+  - review: partial brand, pack unconfirmed, substitution, an extra product
+    word on one side (incl. range words such as Original, Classic, Limited
+    Edition, Fresh, Large), a variant member or a non-pack number stated on
+    one side only or differing, title agreement < 0.6
+  - strong: none of the above — same brand, same product words, same variant
+    and number statements, confirmed pack
 - `scripts/barcode-search-capture.ts`: thin ECS runner, governed by
-  `withRetailerRequestSlot`; non-200/unparseable responses are errors, never
-  not-found; records every query form; exits 2 on a breaker stop. Classification
-  runs locally. Raw evidence is kept in the private store, not the repo.
+  `withRetailerRequestSlot`; non-200 responses are errors and 200 challenge
+  pages (non-JSON / wrong shape) are governed denials, never not-found; records
+  every query form; exits 2 on a breaker stop. Parsing/merging lives in
+  `src/lib/barcode-search-response.ts` (bundled with esbuild, governor
+  external, since the deployed image predates it). Classification runs
+  locally. Raw evidence is kept in the private store, not the repo.
 - Proposed migration `20261121090000_retailer_barcode_observations.sql`
   (NOT applied): append-only `retailer_barcode_observations` and
   `retailer_barcode_association_reviews`, view `current_barcode_associations`
   (active / stale_needs_reverification / suspended_sku_changed /
   suspended_no_longer_found / needs_review / held / not_found). Records GTIN and
   provenance, Tesco source SKU, resolved SKU, endpoint, query form, evidence,
-  identity outcome, last-verified time. service_role select+insert only.
-  24 tests (library + PGlite).
+  identity outcome, last-verified time. Tier is bound to its reasons by CHECK;
+  a review is bound to its observation's (gtin, store, sku) by composite FK.
+  service_role select+insert only. 39 tests (library, response parsing, PGlite).
 
 **Read-only results (1,288 branded Tesco GTINs: pilot 200 + full 1,088; 445
 Tesco own-label GTINs excluded, since they cannot exist elsewhere).** Negative
@@ -40,27 +49,26 @@ resolved to different real products (exact-barcode dependence).
 
 | | Dunnes | SuperValu |
 |---|---|---|
-| strong | 314 | 278 |
-| — confirms existing mapping | 153 | 196 |
-| — conflicts with existing mapping (wrong mapping found) | 46 | 48 |
-| — new relationship | 106 | 27 |
+| strong | 286 | 262 |
+| — confirms existing mapping | 140 | 183 |
+| — conflicts with existing mapping (wrong mapping found) | 43 | 47 |
+| — new relationship | 94 | 25 |
 | — SKU owned by another canonical | 9 | 7 |
-| review / held / not found | 478 / 69 / 423 | 546 / 112 / 348 |
+| review / held / not found | 506 / 69 / 423 | 562 / 112 / 348 |
 
-Rule version 3 (after the second review): strong also requires the same product
-words on both sides (an extra word on either side, e.g. Dairy Milk vs Dairy
-Milk Caramel, is `extra_words` review) and the same variant statements (a
-variant-group member stated on one side only is `variant_one_sided` review);
-an item without a SKU is held. This cut strong roughly in half (Dunnes 610→314,
-SuperValu 602→278); most of the moved rows are descriptive wording differences
+Rule versions 3–4 (after two further reviews): strong also requires the same
+product words on both sides (Dairy Milk vs Dairy Milk Caramel is review), the
+same variant statements, and the same non-pack numbers (2% vs 1% is held).
+Strong fell from 610→286 (Dunnes) and 602→262 (SuperValu); most moved rows are
+descriptive wording differences
 ("Heinz Spaghetti In Tomato Sauce" vs "Heinz Spaghetti") that a human can clear
 in review, but some are real ambiguities (River Rock vs River Rock Refresh).
 Rows sum to 1,284; 4 full-run log lines were unparseable and need re-capture.
-Strong at both retailers: 133 (64 without a fresh Tesco price; 57 already fresh
+Strong at both retailers: 118 (58 without a fresh Tesco price; 51 already fresh
 at all three). Independent validation: 30 random both-strong triples under the
-v2 rules were all manually confirmed as the same product (Open Food Facts
+looser v2 rules were all manually confirmed as the same product (Open Food Facts
 agreed on ~13; the rest had no usable record). Strong existing-mapping
-confirmations with a stale Dunnes price: 14 (SuperValu 0); the existing
+confirmations with a stale Dunnes price: 13 (SuperValu 0); the existing
 `stale_dunnes` renewal selects its own cohort and takes no target list, so
 renewing exactly these needs a small target-list input in a future image. Examples of wrong existing mappings: Elvive→Pantene
 or Herbal Essences, Carmex→Vaseline, Dentastix 21→4-pack, Andrex 24→4 rolls,
