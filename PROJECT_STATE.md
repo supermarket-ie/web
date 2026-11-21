@@ -1,5 +1,60 @@
 # Supermarket.ie — Canonical Project State
 
+## 20 November 2026 — Barcode investigation: retailer search resolves manufacturer GTINs (read-only, no production changes)
+
+Owner-requested, evidence-driven investigation into whether genuine manufacturer EAN/GTINs can drive matching.
+Every probe was a read-only one-off ECS task (paced 2.5 s per request). The raw logs are private
+(`~/smie-private/sv-tesco-pilot-20261117/bprobe*.log`, `barcode-test-set.json`).
+
+**Tesco: GTIN on every item.**
+- Apify catalogue items: 7,084 of 7,084 have `gtin`, 7,068 with a valid GS1 check digit. None equals the SKU or
+  TPNB (`product_id` is the SKU, `tpnb` a separate internal ID).
+- Stored provider evidence: every recent `raw_item` has `gtin`.
+- 2,037 of our 2,461 Tesco mappings have a GTIN available from retained data (2,014 with a valid check digit),
+  against 381 stored on `store_products.gtin` today. No new spend is needed.
+- Format is GTIN-14, zero-padded. About 507 are padded EAN-8s, some on loose produce or own label, which need care.
+
+**Dunnes and SuperValu expose no barcode field.** Searched in full on 30 products per retailer, every response 200:
+- the Dunnes product API `/api/stores/258/products/{sku}`
+- the SuperValu product API `/api/stores/5550/products/{sku}`
+- the full SuperValu product-page HTML (about 1.4 MB; its JSON-LD is only WebPage/OnlineStore)
+
+None contains the product's known GTIN in any form. Images are named by SKU. SuperValu `attributes.pvid` sometimes
+passes a check digit by coincidence; it is an internal ID, NOT a barcode. Dunnes product-detail HTML returns 403
+(bot protection, not bypassed).
+
+**BUT both retailers' own public storefront SEARCH indexes the manufacturer barcode**
+(`/api/stores/{id}/search?q=<EAN-13 or native EAN-8>`):
+
+| Test set | Dunnes, exactly 1 SKU | SuperValu, exactly 1 SKU |
+|---|---|---|
+| 20 national three-store products | 20 (19 equal our mapping) | 19 (all equal our mapping) |
+| 10 problem records | 8 (6 equal our mapping) | 7 |
+| 100 random branded Tesco catalogue GTINs | 45 | 47 (36 at both) |
+
+- Multiple hits: 0 in all sets.
+- Negative controls returned 0 at both retailers: 4 Tesco own-label GTINs, 3 neighbouring valid GTINs, a wrong check
+  digit, and the GTIN-14 padded form. This is an exact barcode lookup, and it needs the native length (EAN-13 as 13
+  digits; one EAN-8 resolved at SuperValu only as 8 digits).
+- The association is asserted by the retailer's OWN system, so it counts as independent first-party evidence. It is
+  not a Tesco-derived claim, although Tesco supplies the query value.
+- Barcodes exposed 3 wrong existing Dunnes mappings:
+  - Avonmore Fresh Cream mapped to "Light Cream"
+  - Frontier Sunflower Oil mapped to a Dunnes Stores own-label spray
+  - Dr Oetker 100 Baking Cases mapped to "72 Rainbow Cupcake Cases"
+
+**External sources:**
+- Open Food Facts (ODbL; 15 product reads and 10 searches per min per IP; bulk via daily export):
+  - Verifying a known barcode agreed strongly on 16 of 30 and conflicted on 1 (Pedigree: OFF "Rebuild 1000 g" vs
+    Tesco "Biscrok 500G"). 2 are non-food and live in Open Products Facts; 6 are missing.
+  - Discovery by name returned the WRONG variant ("Heinz Organic Cream of Tomato").
+  - Share-alike licensing needs legal review before any OFF data is stored.
+- Verified by GS1: 30 free web lookups a day. API/registry access needs paid GS1 member or commercial access. It
+  verifies known GTINs and does not discover them.
+
+**Ella's Kitchen (Dunnes 100777358):** OFF's barcode resolves at neither retailer, so it is inconclusive. The
+association stays HELD; no pair approval exists, and retailer prices are preserved.
+
 ## 20 November 2026 — Recovery tranche 1: results and corrected gap counts
 
 **Corrected cohort counts.** The 19 Nov one-gap figures (241 missing only Tesco, 168 missing only Dunnes) came from
