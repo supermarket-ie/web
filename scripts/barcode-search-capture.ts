@@ -7,7 +7,7 @@
 // Any non-200 response or unparseable body is recorded as an ERROR for that retailer, never as "not found".
 // 403/429/5xx/timeouts and 200 challenge pages (non-JSON / unexpected shape) are reported to the governor as denials, so its circuit breaker can open; an open breaker
 // stops the run (exit code 2). It writes NOTHING to the database. Classification: src/lib/barcode-matching.ts.
-import { brotliDecompressSync } from 'node:zlib';
+import { brotliCompressSync, brotliDecompressSync } from 'node:zlib';
 import { createHash, randomUUID } from 'node:crypto';
 import { withRetailerRequestSlot, RetailerBlockedError } from '@/lib/retailer-request-governor';
 import { classifyCaptureError as classifyError, HttpStatusError, mergeFormItems, parseSearchBody } from '@/lib/barcode-search-response';
@@ -30,7 +30,10 @@ async function searchForm(store: Store, form: string) {
     if (res.status !== 200) throw new HttpStatusError(res.status, res.headers.get('retry-after'));
     return { body: text, parsed: parseSearchBody(text) };   // throws ChallengeError inside the slot => a governed denial
   }, { classifyError });
-  return { form, endpoint, status: 200, total: parsed.total, items: parsed.items, sha256: createHash('sha256').update(body).digest('hex'), at };
+  // The raw body travels with the evidence (brotli+base64) so it can be archived and stored with the observation;
+  // sha256 is over the UTF-8 body exactly as received, which the proposed table re-verifies on insert.
+  return { form, endpoint, status: 200, total: parsed.total, items: parsed.items, sha256: createHash('sha256').update(body).digest('hex'), at,
+    body_br: brotliCompressSync(Buffer.from(body, 'utf8')).toString('base64') };
 }
 
 async function main() {

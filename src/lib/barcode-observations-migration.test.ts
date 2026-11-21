@@ -1,6 +1,7 @@
 // PGlite validation of the PROPOSED migration 20261121090000 (append-only barcode observations, reviews, current view).
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 let db: PGlite;
@@ -8,14 +9,17 @@ const T = '7b000000-0000-0000-0000-000000000001';
 const EP = { dunnes: 'https://storefrontgateway.dunnesstoresgrocery.com/api/stores/258/search', supervalu: 'https://storefrontgateway.supervalu.ie/api/stores/5550/search' };
 const obs = (over: Record<string, string> = {}) => {
   const v = { gtin: '5010034592605', store: 'dunnes', sku: '100684387', outcome: 'identity_consistent', tier: 'strong', sha: 'a'.repeat(64),
-    at: "now() - interval '1 hour'", ir: '[]', rr: '[]', ...over };
+    at: "now() - interval '1 hour'", ir: '[]', rr: '[]', ...over } as Record<string, string>;
   const noSku = v.outcome === 'not_found' || v.outcome === 'ambiguous';
+  // The stored body must hash to response_sha256; `sha` only seeds a distinct body per row.
+  const body = v.body ?? `{"total":0,"items":[],"seed":"${v.sha}"}`;
+  const sha = v.bodySha ?? createHash('sha256').update(body).digest('hex');
   return `insert into public.retailer_barcode_observations(gtin, gtin_kind, gtin_origin_store, gtin_origin_sku, gtin_origin_store_product_id, gtin_origin_evidence,
-    store, evidence_kind, query, endpoint, http_status, result_total, result_items, response_sha256, resolved_sku, outcome, tier, title_agreement, rule_version, observed_at,
+    store, evidence_kind, query, endpoint, http_status, result_total, result_items, response_sha256, response_body, resolved_sku, outcome, tier, title_agreement, rule_version, observed_at,
     identity_reasons, review_reasons)
     values ('${v.gtin}','gtin13','tesco','251698238','${T}','{"table":"tesco_apify_provider_evidence","field":"raw_item.gtin","tesco_name":"Dolmio 150g","tesco_brand":"Dolmio"}',
     '${v.store}','sku_found_by_gtin_search','${v.gtin}','${EP[v.store as 'dunnes' | 'supervalu']}?q=${v.gtin}',200,
-    ${noSku ? 0 : 1},'[]','${v.sha}',${noSku ? 'null' : `'${v.sku}'`},'${v.outcome}',${v.tier === 'null' ? 'null' : `'${v.tier}'`},0.9,'barcode-v2',${v.at},'${v.ir}','${v.rr}') returning id`;
+    ${noSku ? 0 : 1},'[]','${sha}','${body}',${noSku ? 'null' : `'${v.sku}'`},'${v.outcome}',${v.tier === 'null' ? 'null' : `'${v.tier}'`},0.9,'barcode-v2',${v.at},'${v.ir}','${v.rr}') returning id`;
 };
 const status = async () => (await db.query<{ status: string }>(`select status from public.current_barcode_associations`)).rows[0]?.status;
 beforeEach(async () => {
@@ -81,6 +85,12 @@ describe('retailer_barcode_observations (proposed)', () => {
     await expect(db.exec(obs({ sku: '5010034592605' }))).rejects.toThrow();
     await expect(db.exec(obs().replace(',"tesco_name":"Dolmio 150g"', ''))).rejects.toThrow();
     await expect(db.exec(obs().replace("'sku_found_by_gtin_search'", "'gtin_returned_by_retailer'"))).rejects.toThrow();
+  });
+  it('the raw response body is stored and must hash to response_sha256', async () => {
+    await db.exec(obs({ body: '{"total":1,"items":[{"sku":"100684387","name":"Dolmio 150g"}]}' }));
+    const r = (await db.query<{ ok: boolean }>(`select encode(sha256(convert_to(response_body,'UTF8')),'hex') = response_sha256 ok from public.retailer_barcode_observations`)).rows[0];
+    expect(r.ok).toBe(true);
+    await expect(db.exec(obs({ sha: '9'.repeat(64), bodySha: 'b'.repeat(64) }))).rejects.toThrow(/check constraint/);
   });
   it('the tier must agree with its reasons', async () => {
     await expect(db.exec(obs({ rr: '["extra_words:caramel|"]' }))).rejects.toThrow(/check constraint/);           // strong with a review reason

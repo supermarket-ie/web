@@ -1,5 +1,49 @@
 # Supermarket.ie — Canonical Project State
 
+## 21 November 2026 (evening) — Barcode results operationalised: 5 Dunnes prices, evidence re-captured with raw bodies
+
+**Baseline before** (21 Nov 17:02Z, `baseline.mjs`): Tesco fresh 7d 383, Dunnes 934, SuperValu 1,607;
+three-retailer priced 198; pair reviews 0; verified exact 0.
+
+**Tesco release.** Build run 44637718671 is still `waiting` on the `aws-prod` environment
+(reviewer `supermarket-ie`). It builds `f1a12f6` (#422) from branch `ops/image-f1a12f6`; `validate`
+passed on that commit. Production runs `bf00c5f-prod` (web, sqs-consumer and scheduled task
+definitions). The image adds #420 (self-evidence, flag OFF), #421 (peer-freshness fix +
+`APIFY_TARGET_IDS`), #419 and #422 (tolerates the unapplied pending-page migration). `main` is
+two Dunnes-only commits ahead (#423, #424); those scripts run as bundles, so this image is enough
+for Tesco. After approval: roll out with tofu (worker + web tags), then the 7 valid first-price
+approvals (expire ~22 Nov 11:10Z) and the 58 both-strong Tesco mappings via `APIFY_TARGET_IDS`.
+
+**Dunnes barcode renewal (PRODUCTION WRITES: 5 prices).** New `scripts/dunnes-barcode-renewal.ts`
+(bundled one-off ECS task, governed): renews exactly the listed existing Dunnes offers whose SKU
+the GTIN search returned for the same canonical's Tesco GTIN. Each offer is re-read (same id,
+SKU, canonical, no 7-day price), one governed product-by-SKU request, `confirmDunnesSku` against
+the Tesco title/brand, then the existing `finalize_dunnes_discovery_product` and retained body.
+No replacement search, no re-pointing. Run `06446490-b5cd-45c6-b885-cfca3351ed0c`: 12 targets
+(Ben's excluded: its SuperValu offer is own-label rice), 5 written (Tayto Mighty Munch, Brennans Be
+Good Wholemeal, Flahavan's GF Oats, Brennans Chia 800g, Colgate Max Fresh), 7 held by unchanged
+rules (structured pack 74.6 vs 74 g, title multipack vs structured pack, SKU shared by two
+offers). 4 of the 5 are now fresh at all three retailers.
+
+**Raw evidence made durable.** Runner now emits each response body (brotli+base64) with its
+sha256. Re-captured the 427 barcodes strong at either retailer plus the 4 previously unparseable:
+431/431 captured, 0 errors, 868 bodies, all 868 hashes verified, classification unchanged for
+every previously classified barcode (0 tier/SKU changes). 545 strong observations (Dunnes 287,
+SuperValu 258) are insert-ready and pass migration 20261121090000 in PGlite as service_role.
+Raw logs: `~/smie-private/sv-tesco-pilot-20261117/bcap-recapture.log` (CloudWatch keeps 14 days).
+Migration 20261121090000 (still NOT applied) now stores `response_body` and CHECKs that it hashes
+to `response_sha256`. Operator order: `supabase/operator/README-20261121-handoff.md`
+(20261118120000, 20261120090000, the 9-page resolution, then 20261121090000). Probed 17:20Z:
+none applied.
+
+**225 association opportunities classified (read-only).** Dunnes: attach 40, attach-after-split
+54, repoint 9, split 25, duplicate-listing review 9, duplicate canonical 6, owner conflict 3.
+SuperValu: attach 2, attach-after-split 23, repoint 7, split 35, duplicate-listing review 5,
+duplicate canonical 5, owner conflict 2. "Split" cases are canonicals mixing different products
+(e.g. Gem Granulated Sugar with Complimints, TK Red Lemonade with 7Up Pink). The Dunnes attach
+batch (40) was dry-run through the attach mode of the same script: 31 confirm by Dunnes product
+API. Applying attaches needs `ALLOW_ATTACH=1` plus owner authorisation. Nothing written.
+
 ## 21 November 2026 — Barcode-led three-retailer discovery (read-only; migration 20261121090000 NOT applied; NO writes)
 
 Branch `feat/barcode-led-matching`. Tesco Apify items carry a manufacturer GTIN.

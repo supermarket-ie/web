@@ -33,6 +33,10 @@ create table if not exists public.retailer_barcode_observations (
   result_items jsonb not null check (jsonb_typeof(result_items) = 'array'),
   query_forms jsonb not null default '[]'::jsonb check (jsonb_typeof(query_forms) = 'array'),
   response_sha256 text not null check (response_sha256 ~ '^[a-f0-9]{64}$'),
+  -- The retailer's raw response body, retained so the evidence can be re-verified later. It must hash to
+  -- response_sha256 (sha256 of the UTF-8 body as received), so a stored row is self-verifying.
+  response_body text not null check (octet_length(response_body) <= 262144
+    and encode(sha256(convert_to(response_body, 'UTF8')), 'hex') = response_sha256),
   -- Deterministic assessment (src/lib/barcode-matching.ts, rule_version).
   resolved_sku text,
   outcome text not null check (outcome in ('not_found', 'ambiguous', 'identity_conflict', 'identity_consistent')),

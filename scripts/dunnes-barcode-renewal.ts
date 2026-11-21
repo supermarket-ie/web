@@ -7,7 +7,10 @@
 //      own-label, SKU ownership) -- the barcode is discovery evidence only, Dunnes' own product data must confirm;
 //   4. only then the existing finaliser writes the SKU-bound price; the product response body is retained.
 // A failed confirmation is recorded as a hold. There is NO replacement search: a different SKU is a different identity.
-// Mappings are never re-pointed. Env: T = base64(brotli(JSON [{product_id, offer_id, sku, ref, brand}])), APPLY.
+// ATTACH mode (a target WITHOUT offer_id): the canonical has no SKU-bearing Dunnes offer and the SKU is unowned; the
+// finaliser then creates the mapping as in SKU-confirmed discovery. Applying an attach needs ALLOW_ATTACH=1 as well
+// as APPLY=1 (owner-authorised batches only). Existing mappings are never re-pointed.
+// Env: T = base64(brotli(JSON [{product_id, offer_id?, sku, ref, brand}])), APPLY, ALLOW_ATTACH.
 import { brotliDecompressSync } from 'node:zlib';
 import { confirmDunnesSku, dunnesProductApiUrl, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
 import { normaliseDunnesName } from '@/lib/dunnes-discovery';
@@ -16,7 +19,7 @@ import { captureIdentityResponse } from '@/lib/retailer-identity-response';
 import { retainIdentityResponse } from '@/lib/retailer-identity-retention';
 import { supabaseAdmin as sb } from '@/lib/supabase';
 
-type Target = { product_id: string; offer_id: string; sku: string; ref: string; brand: string };
+type Target = { product_id: string; offer_id?: string; sku: string; ref: string; brand: string };
 const APPLY = process.env.APPLY === '1';
 const HEADERS = () => ({ Accept: 'application/json, text/plain, */*', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
   'x-site-host': 'https://www.dunnesstoresgrocery.com', 'x-site-location': 'HeadersBuilderInterceptor', 'x-correlation-id': crypto.randomUUID(),
@@ -47,16 +50,27 @@ async function main() {
   const bump = (k: string) => { tally[k] = (tally[k] ?? 0) + 1; };
   for (const t of list) {
     try {
-      const { data: o, error: oe } = await sb.from('store_products').select('id,product_id,store,store_sku').eq('id', t.offer_id).maybeSingle();
-      if (oe) throw oe;
-      const { data: lp, error: le } = await sb.from('latest_prices').select('store_product_id').eq('store_product_id', t.offer_id)
-        .gte('observed_at', new Date(Date.now() - 7 * 864e5).toISOString());
-      if (le) throw le;
-      const skip = !o ? 'offer_missing' : o.store !== 'dunnes' || String(o.store_sku) !== t.sku || o.product_id !== t.product_id ? 'offer_changed'
-        : (lp ?? []).length ? 'already_fresh' : null;
-      if (skip) { log({ event: 'skipped', offer_id: t.offer_id, reason: skip }); bump(skip); continue; }
+      const attach = !t.offer_id;
+      if (attach && APPLY && process.env.ALLOW_ATTACH !== '1') throw new Error('attach_not_authorised');
       const { data: owners, error: we } = await sb.from('store_products').select('id').eq('store', 'dunnes').eq('store_sku', t.sku);
       if (we) throw we;
+      let skip: string | null = null;
+      if (attach) {
+        // ATTACH: the canonical must have NO SKU-bearing Dunnes offer and the SKU must be unowned (the finaliser then
+        // creates the mapping exactly as in SKU-confirmed discovery).
+        const { data: d, error: de } = await sb.from('store_products').select('id').eq('product_id', t.product_id).eq('store', 'dunnes').not('store_sku', 'is', null);
+        if (de) throw de;
+        skip = (d ?? []).length ? 'canonical_has_dunnes_offer' : (owners ?? []).length ? 'sku_owned' : null;
+      } else {
+        const { data: o, error: oe } = await sb.from('store_products').select('id,product_id,store,store_sku').eq('id', t.offer_id).maybeSingle();
+        if (oe) throw oe;
+        const { data: lp, error: le } = await sb.from('latest_prices').select('store_product_id').eq('store_product_id', t.offer_id)
+          .gte('observed_at', new Date(Date.now() - 7 * 864e5).toISOString());
+        if (le) throw le;
+        skip = !o ? 'offer_missing' : o.store !== 'dunnes' || String(o.store_sku) !== t.sku || o.product_id !== t.product_id ? 'offer_changed'
+          : (lp ?? []).length ? 'already_fresh' : null;
+      }
+      if (skip) { log({ event: 'skipped', product_id: t.product_id, offer_id: t.offer_id ?? null, reason: skip }); bump(skip); continue; }
       const apiUrl = dunnesProductApiUrl(t.sku);
       const p = await governedGet(apiUrl);
       let resp: DunnesProductResponse | null = null; try { resp = p.status === 200 ? JSON.parse(p.body) : null; } catch { resp = null; }
@@ -69,17 +83,22 @@ async function main() {
         bump('held');
         if (APPLY) await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'rejected',
           p_canonical_name: t.ref, p_candidate_sku: null, p_candidate_name: null, p_candidate_url: null, p_price: null, p_confidence: null, p_pack_ratio: null,
-          p_reason: `SKU-confirmed discovery held: barcode_renewal:${conf.reasons.join(',')}`.slice(0, 500) });
+          p_reason: `SKU-confirmed discovery held: barcode_${attach ? "attach" : "renewal"}:${conf.reasons.join(',')}`.slice(0, 500) });
         continue;
       }
       if (APPLY) {
         const url = productUrl(t.sku, String(resp!.name));
         const { error: fe } = await sb.rpc('finalize_dunnes_discovery_product', { p_run_uuid: runUuid, p_product_id: t.product_id, p_outcome: 'exact',
           p_canonical_name: t.ref, p_candidate_sku: t.sku, p_candidate_name: String(resp!.name), p_candidate_url: url, p_price: conf.price,
-          p_confidence: 1, p_pack_ratio: 1, p_reason: `sku_confirmed (barcode renewal of existing SKU) via ${apiUrl}` });
+          p_confidence: 1, p_pack_ratio: 1, p_reason: `sku_confirmed (barcode ${attach ? "attach" : "renewal of existing SKU"}) via ${apiUrl}` });
         if (fe) throw fe;
+        let offerId = t.offer_id;
+        if (attach) {
+          const { data: created, error: ce } = await sb.from('store_products').select('id').eq('product_id', t.product_id).eq('store', 'dunnes').eq('store_sku', t.sku).single();
+          if (ce) throw ce; offerId = created.id;
+        }
         await retainIdentityResponse(captureIdentityResponse({ store: 'dunnes', sku: t.sku, title: String(resp!.name), productUrl: url, requestedUrl: apiUrl,
-          finalUrl: p.url, contentType: p.contentType, body: p.body }), runUuid!, t.offer_id);
+          finalUrl: p.url, contentType: p.contentType, body: p.body }), runUuid!, offerId!);
       }
       bump('confirmed');
     } catch (e) {
