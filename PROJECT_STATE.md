@@ -1,5 +1,68 @@
 # Supermarket.ie — Canonical Project State
 
+## 21 November 2026 — Barcode-led three-retailer discovery (read-only; migration 20261121090000 NOT applied; NO writes)
+
+Branch `feat/barcode-led-matching`. Tesco Apify items carry a manufacturer GTIN.
+Dunnes and SuperValu expose no barcode field, but their public storefront search
+resolves an exact GTIN to a single SKU. This is DISCOVERY evidence ("SKU found
+by GTIN search"), distinct from "GTIN returned by retailer". A Tesco-derived
+GTIN is never independent Dunnes/SuperValu identity evidence by itself.
+
+**Built (not deployed, nothing written):**
+- `src/lib/barcode-matching.ts` (pure): GS1 check digit; `normaliseGtin` rejects
+  GTIN-14 packaging indicators 1–8, variable measure 9, restricted circulation
+  (EAN-13 02/04/2x, EAN-8 0/2, UPC-A 2/4) and coupons (98/99, UPC-A 5); unpads
+  zero-padded GTIN-14 to GTIN-8/12/13; query forms EAN-13, EAN-8, UPC-A as
+  "0"+12 and 12. `assessBarcodeHit` tiers each hit:
+  - held: brand mismatch, unreconcilable pack or count, a different member of
+    a mutually exclusive variant group (sugar, fat, salted, smoked, decaf,
+    bread colour, cheese/curry strength, smooth/crunchy, still/sparkling,
+    chocolate type), SKU equal to the query
+  - review: partial brand, pack unconfirmed, substitution, title agreement < 0.6
+  - strong: none of the above (one-sided omissions are allowed)
+- `scripts/barcode-search-capture.ts`: thin ECS runner, governed by
+  `withRetailerRequestSlot`; non-200/unparseable responses are errors, never
+  not-found; records every query form; exits 2 on a breaker stop. Classification
+  runs locally. Raw evidence is kept in the private store, not the repo.
+- Proposed migration `20261121090000_retailer_barcode_observations.sql`
+  (NOT applied): append-only `retailer_barcode_observations` and
+  `retailer_barcode_association_reviews`, view `current_barcode_associations`
+  (active / stale_needs_reverification / suspended_sku_changed /
+  suspended_no_longer_found / needs_review / held / not_found). Records GTIN and
+  provenance, Tesco source SKU, resolved SKU, endpoint, query form, evidence,
+  identity outcome, last-verified time. service_role select+insert only.
+  24 tests (library + PGlite).
+
+**Read-only results (1,288 branded Tesco GTINs: pilot 200 + full 1,088; 445
+Tesco own-label GTINs excluded, since they cannot exist elsewhere).** Negative
+controls: 6 own-label GTINs returned 0 at both retailers; neighbour GTINs
+resolved to different real products (exact-barcode dependence).
+
+| | Dunnes | SuperValu |
+|---|---|---|
+| strong | 610 | 602 |
+| — confirms existing mapping | 275 | 423 |
+| — conflicts with existing mapping (wrong mapping found) | 85 | 103 |
+| — new relationship | 231 | 59 |
+| — SKU owned by another canonical | 19 | 17 |
+| review / held / not found | 182 / 69 / 423 | 222 / 112 / 348 |
+
+Rows sum to 1,284; 4 full-run log lines were unparseable and need re-capture.
+Strong at both retailers: 412. Of those, 95 (full run) + 23 (pilot) are already
+fresh at all three. Independent validation: 30 random both-strong triples were
+all manually confirmed as the same product (Open Food Facts agreed on ~13; the
+rest had no usable record). Examples of wrong existing mappings: Elvive→Pantene
+or Herbal Essences, Carmex→Vaseline, Dentastix 21→4-pack, Andrex 24→4 rolls,
+Club Orange 500 ml→1.75 L, Avonmore Fresh→Light Cream, Dr Oetker 100→72 cases.
+A known retailer data error: SuperValu NIVEA Crème Soft resolves to "Clay
+Fresh" (tier review).
+
+**Not done / gated:** no associations, mapping repairs or new prices written.
+New relationships and conflicts need owner approval of the write process and
+migration 20261121090000. Tesco prices for the both-strong products need the
+pending build approval. Comparisons remain unverified until independently
+approved through the existing pair-review path.
+
 ## 20 November 2026 — Recovery tranche 1: results and corrected gap counts
 
 **Corrected cohort counts.** The 19 Nov one-gap figures (241 missing only Tesco, 168 missing only Dunnes) came from
