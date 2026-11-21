@@ -140,6 +140,41 @@ describe('machine pair approvals (real migrations)', () => {
     });
   });
 
+  describe('review findings', () => {
+    it('a human decision on the pair (any classification) is never overridden by the machine', async () => {
+      await association('supervalu');
+      await db.exec(`insert into public.retailer_offer_pair_reviews(left_offer_id, right_offer_id, classification, rationale, reviewer)
+        values ('${T}', '${S}', 'not_comparable', 'Owner: different products.', 'owner')`);
+      await expect(asService(async () => approve(T, S, await page(), await response('supervalu')))).rejects.toThrow(/human decision exists/);
+      expect((await db.query(`select 1 from public.retailer_offer_pair_reviews where decision_kind = 'machine'`)).rows).toHaveLength(0);
+    });
+    it('a Dunnes–SuperValu pair needs the origin Tesco page to state the GTIN', async () => {
+      await association('supervalu'); await association('dunnes');
+      const d = await response('dunnes'), s1 = await response('supervalu');
+      await expect(asService(() => approve(D, S, d, s1))).rejects.toThrow(/origin Tesco page does not state the GTIN/);
+      await page({ gtin: '5000157062680' });
+      await expect(asService(() => approve(D, S, d, s1))).rejects.toThrow(/origin Tesco page does not state the GTIN/);
+      await page();
+      await asService(() => approve(D, S, d, s1));
+      expect((await status())[0].status).toBe('active');
+    });
+    it('a Tesco page that states no GTIN cannot support a machine approval', async () => {
+      await association('supervalu');
+      await expect(asService(async () => approve(T, S, await page({ gtin: null }), await response('supervalu')))).rejects.toThrow(/does not state the GTIN/);
+    });
+    it('brand agreement is whole-word: Kerry is not Kerrygold', async () => {
+      await association('supervalu');
+      await expect(asService(async () => approve(T, S, await page({ brand: 'Kerrygold' }), await response('supervalu', { identity: { brand: 'Kerry' } })))).rejects.toThrow(/brand contradiction/);
+      await asService(async () => approve(T, S, await page({ brand: 'Heinz' }), await response('supervalu', { identity: { brand: 'Heinz Foods' } })));
+    });
+    it('an approved audit row cannot be forged for another pair', async () => {
+      await association('supervalu');
+      const id = (await asService(async () => approve(T, S, await page(), await response('supervalu')))).rows[0].id;
+      await expect(asService(() => db.exec(`insert into public.machine_pair_decisions(policy_version, left_offer_id, right_offer_id, decision, review_id)
+        values ('${POLICY}', '${T}', '${D}', 'approved', '${id}')`))).rejects.toThrow(/must reference its machine review/);
+    });
+  });
+
   describe('access control and identification', () => {
     it('service_role still cannot write the ledger directly, and anon cannot call the machine path', async () => {
       await expect(asService(() => db.exec(`insert into public.retailer_offer_pair_reviews(left_offer_id, right_offer_id, classification, rationale, reviewer)

@@ -110,3 +110,22 @@ describe('agreement with the customer-facing veto', () => {
     expect(r).toMatchObject({ decision: 'held', reasons: ['customer_veto:different_pack'] });
   });
 });
+
+describe('pairs without a Tesco side, and human precedence', () => {
+  const dunnes = (): MachineSide => ({ store: 'dunnes', offerId: 'd-offer', productId: P, sku: '100118355', skuShared: false,
+    source: { id: 'd', kind: 'captured_product_api', capturedAt: at(1), sku: '100118355', title: 'Heinz Cream Of Tomato Soup 400g', brand: 'Heinz', gtin: null },
+    association: { gtin: GTIN, status: 'active', resolvedSku: '100118355', originOfferId: T, originProductId: P } });
+  it('a Dunnes–SuperValu pair is approved only when the origin Tesco page states the GTIN', () => {
+    const [t, s] = pair();
+    expect(evaluateMachinePair(dunnes(), s, GTIN, NOW, null, t).decision).toBe('approved');
+    expect(evaluateMachinePair(dunnes(), s, GTIN, NOW, null, null)).toMatchObject({ decision: 'held', reasons: ['origin_tesco_page_does_not_state_gtin'] });
+    const [t2] = pair({ tesco: { gtin: null } });
+    expect(evaluateMachinePair(dunnes(), s, GTIN, NOW, null, t2).decision).toBe('held');
+    const [t3] = pair({ tescoSide: { offerId: 'other-tesco' } });
+    expect(evaluateMachinePair(dunnes(), s, GTIN, NOW, null, t3).decision).toBe('held');
+  });
+  it('a human decision on the pair holds it', () => {
+    const [t, s] = pair();
+    expect(evaluateMachinePair(t, s, GTIN, NOW, null, null, true)).toMatchObject({ decision: 'held', reasons: ['human_decision_exists'] });
+  });
+});

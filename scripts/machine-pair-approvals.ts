@@ -32,9 +32,15 @@ async function all(sb: SupabaseClient, build: (from: number) => PromiseLike<{ da
     if (!data || data.length < 1000) return out;
   }
 }
-async function byIds(sb: SupabaseClient, ids: string[], q: (c: string[]) => PromiseLike<{ data: Row[] | null; error: unknown }>) {
+// Every chunk is paged, so a chunk with more than 1,000 rows (e.g. many pages per URL) is never truncated.
+async function byIds(sb: SupabaseClient, ids: string[], q: (c: string[]) => { range: (a: number, b: number) => PromiseLike<{ data: Row[] | null; error: unknown }> }) {
   const out: Row[] = [];
-  for (const c of chunk([...new Set(ids)])) { const { data, error } = await q(c); if (error) throw error; out.push(...(data ?? [])); }
+  for (const c of chunk([...new Set(ids)])) for (let f = 0; ; f += 1000) {
+    const { data, error } = await q(c).range(f, f + 999);
+    if (error) throw error;
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
   return out;
 }
 
@@ -60,7 +66,12 @@ async function main() {
   const responses = await byIds(sb, offers.filter(o => o.store !== 'tesco').map(o => o.id),
     c => sb.from('retailer_identity_responses').select('id,store_product_id,sku,source_kind,retrieved_at,title:identity->>title,brand:identity->>brand,gtin:identity->>gtin')
       .in('store_product_id', c).in('source_kind', ['captured_product', 'captured_product_api']).gte('retrieved_at', since).order('retrieved_at', { ascending: false }));
-  if (CAPTURE) await captureStage();
+  // Captures are retained only with APPLY; a dry run never spends retailer requests it would discard.
+  if (CAPTURE && APPLY) await captureStage();
+  else if (CAPTURE) log({ event: 'capture_skipped', reason: 'dry run' });
+  // Pairs with any human decision: the machine never overrides or re-approves them.
+  const human = new Set((await all(sb, f => sb.from('retailer_offer_pair_reviews').select('left_offer_id,right_offer_id').eq('decision_kind', 'human')
+    .order('id').range(f, f + 999)).catch(e => { if (APPLY) throw e; return [] as Row[]; })).map(r => pairKey(r.left_offer_id, r.right_offer_id)));
   const active = new Set((await all(sb, f => sb.rpc('current_pair_review_status', { p_active_only: true }).range(f, f + 999))).map(r => pairKey(r.left_offer_id, r.right_offer_id)));
   // Before migration 20261122090000 the table is absent: a dry run still evaluates every candidate.
   const decided = await all(sb, f => sb.from('machine_pair_decisions').select('left_offer_id,right_offer_id,decision,reasons,decided_at').eq('policy_version', MACHINE_POLICY_VERSION)
@@ -83,7 +94,7 @@ async function main() {
         originProductId: tescoById.get(association.gtin_origin_store_product_id)?.product_id ?? null } : null };
   };
   // Candidate pairs.
-  type Cand = { a: MachineSide; b: MachineSide; gtin: string };
+  type Cand = { a: MachineSide; b: MachineSide; gtin: string; origin: MachineSide | null };
   const cands: Cand[] = []; const tally: Record<string, number> = {};
   const bump = (k: string) => { tally[k] = (tally[k] ?? 0) + 1; };
   const byOrigin = new Map<string, Row[]>();
@@ -95,14 +106,14 @@ async function main() {
     for (const m of mapped) if (!m.o) bump(`${m.a.store}:sku_not_on_record`);
     const sides = mapped.filter(m => m.o).map(m => side(m.o!, m.a));
     const ts = side(t, null);
-    for (const s of sides) cands.push({ a: ts, b: s, gtin: group[0].gtin });
-    if (sides.length === 2) cands.push({ a: sides[0], b: sides[1], gtin: group[0].gtin });
+    for (const s of sides) cands.push({ a: ts, b: s, gtin: group[0].gtin, origin: null });
+    if (sides.length === 2) cands.push({ a: sides[0], b: sides[1], gtin: group[0].gtin, origin: ts });
   }
   let approved = 0, written = 0;
   for (const c of cands) {
     const k = pairKey(c.a.offerId, c.b.offerId), kind = [c.a.store, c.b.store].sort().join('-');
     if (active.has(k)) { bump(`${kind}:already_active`); continue; }
-    const d = evaluateMachinePair(c.a, c.b, c.gtin, now);
+    const d = evaluateMachinePair(c.a, c.b, c.gtin, now, null, c.origin, human.has(k));
     bump(`${kind}:${d.decision}`);
     for (const r of d.reasons) bump(`reason:${r.replace(/:[^:]*$/, m => (m.length > 30 ? ':…' : m))}`);
     log({ event: 'decision', pair: kind, a: c.a.offerId, b: c.b.offerId, gtin: c.gtin, decision: d.decision, reasons: d.reasons,

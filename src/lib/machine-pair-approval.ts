@@ -48,7 +48,9 @@ const DAY = 86400000;
 export const normGtin = (g: string | null | undefined) => (g ?? '').replace(/\D/g, '').replace(/^0+/, '') || null;
 
 /** Evaluate one candidate pair against `barcode-exact-v1`. Never throws. */
-export function evaluateMachinePair(a: MachineSide, b: MachineSide, gtin: string, now = Date.now(), model: ModelVerdict = null): MachineDecision {
+export function evaluateMachinePair(a: MachineSide, b: MachineSide, gtin: string, now = Date.now(), model: ModelVerdict = null,
+  /** For a pair WITHOUT a Tesco side: the GTIN's origin Tesco offer, whose own fresh page must state the GTIN. */
+  origin: MachineSide | null = null, humanDecision = false): MachineDecision {
   const reject: string[] = [], hold: string[] = [], checks: Record<string, string> = {};
   const g = normGtin(gtin);
   const sides = [a, b];
@@ -69,6 +71,14 @@ export function evaluateMachinePair(a: MachineSide, b: MachineSide, gtin: string
     if (tesco && as.originOfferId !== tesco.offerId) hold.push(`${s.store}:association_from_other_tesco_offer`);
     if (as.originProductId && a.productId && as.originProductId !== a.productId) hold.push(`${s.store}:association_from_other_record`);
   }
+  if (!tesco) {
+    const src = origin?.store === 'tesco' ? origin.source : null;
+    const at = src ? Date.parse(src.capturedAt) : NaN;
+    if (!src || normGtin(src.gtin) !== g || !Number.isFinite(at) || now - at > MACHINE_FRESHNESS_DAYS * DAY) hold.push('origin_tesco_page_does_not_state_gtin');
+    for (const s of sides) if (origin && s.association && s.association.originOfferId !== origin.offerId) hold.push(`${s.store}:association_from_other_tesco_offer`);
+  }
+  // A human decision on the pair always takes precedence (the database refuses as well).
+  if (humanDecision) hold.push('human_decision_exists');
   checks.barcode = 'search_resolved_exact_sku';
   // Sources: present, direct, SKU-bound, fresh.
   for (const s of sides) {

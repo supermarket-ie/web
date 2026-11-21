@@ -6,7 +6,7 @@
 // database stores only for offers already in a positive pair decision). Never a price, mapping or review.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { captureIdentityResponse, dunnesProductApi, type IdentityResponse } from './retailer-identity-response';
-import { withRetailerRequestSlot } from './retailer-request-governor';
+import { denialReason, parseRetryAfterMs, withRetailerRequestSlot } from './retailer-request-governor';
 
 export type EvidenceOffer = { id: string; store: 'supervalu' | 'dunnes'; store_sku: string; store_url: string | null };
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36';
@@ -19,6 +19,11 @@ export function evidenceUrl(o: EvidenceOffer): string | null {
   return o.store === 'dunnes' ? dunnesProductApi(o.store_sku) : o.store_url;
 }
 
+/** A refused response; classified for the governor so its circuit breaker sees 403/429/5xx like any collector. */
+export class EvidenceHttpError extends Error { constructor(readonly status: number, readonly retryAfter: string | null, store: string) { super(`${store} HTTP ${status}`); } }
+export const classifyEvidenceError = (e: unknown) => e instanceof EvidenceHttpError
+  ? { reason: denialReason({ status: e.status }), retryAfterMs: parseRetryAfterMs(e.retryAfter) }
+  : { reason: denialReason({ errorReason: e instanceof Error ? `${e.name} ${e.message}` : String(e) }) };
 async function governedGet(store: EvidenceOffer['store'], url: string) {
   return withRetailerRequestSlot(store, async () => {
     const headers: Record<string, string> = store === 'dunnes'
@@ -27,9 +32,9 @@ async function governedGet(store: EvidenceOffer['store'], url: string) {
       : { Accept: 'text/html,application/xhtml+xml', 'User-Agent': UA, Referer: SITE.supervalu };
     const res = await fetch(url, { headers, redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(25000) });
     const body = await res.text();
-    if (res.status === 403 || res.status === 429 || res.status >= 500) throw new Error(`${store} HTTP ${res.status}`);
+    if (res.status === 403 || res.status === 429 || res.status >= 500) throw new EvidenceHttpError(res.status, res.headers.get('retry-after'), store);
     return { status: res.status, finalUrl: res.url || url, contentType: res.headers.get('content-type') ?? '', body };
-  });
+  }, { classifyError: classifyEvidenceError });
 }
 
 /** Fetch and parse one offer's direct evidence; null when the response does not prove the SKU and title. */

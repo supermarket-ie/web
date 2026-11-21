@@ -149,7 +149,8 @@ begin
   new.decided_at := now();
   -- An "approved" audit row can only be written by record_machine_pair_approval, inside its own transaction.
   if new.decision = 'approved' and not exists (select 1 from public.retailer_offer_pair_reviews r
-      where r.id = new.review_id and r.decision_kind = 'machine' and r.policy_version = new.policy_version) then
+      where r.id = new.review_id and r.decision_kind = 'machine' and r.policy_version = new.policy_version
+        and r.left_offer_id = new.left_offer_id and r.right_offer_id = new.right_offer_id) then
     raise exception 'approved decision must reference its machine review';
   end if;
   return new;
@@ -191,6 +192,12 @@ begin
   select id, product_id, store, store_sku into b from public.store_products where id = p_offer_b;
   if a.id is null or b.id is null or a.store = b.store then raise exception 'two offers of different retailers required'; end if;
   if a.product_id is null or a.product_id is distinct from b.product_id then raise exception 'offers are not on the same catalogue record'; end if;
+  -- A human decision on this pair (of any classification) always takes precedence: the machine never overrides
+  -- or re-approves it. Changing such a pair is a human exception.
+  if exists (select 1 from public.retailer_offer_pair_reviews h where h.decision_kind = 'human'
+      and h.left_offer_id = least(a.id::text, b.id::text)::uuid and h.right_offer_id = greatest(a.id::text, b.id::text)::uuid) then
+    raise exception 'a human decision exists for this pair';
+  end if;
   if a.store_sku is null or b.store_sku is null
      or (select count(*) from public.store_products d where d.store = a.store and d.store_sku = a.store_sku) <> 1
      or (select count(*) from public.store_products d where d.store = b.store and d.store_sku = b.store_sku) <> 1 then
@@ -207,6 +214,17 @@ begin
       raise exception 'no active barcode association for % SKU %', x.store, x.sku;
     end if;
   end loop;
+  -- Without a Tesco side, the origin Tesco offer's own recent page must state this GTIN (for a Tesco side the
+  -- stamped page identity is checked below).
+  if a.store <> 'tesco' and b.store <> 'tesco' and not exists (
+      select 1 from public.current_barcode_associations c
+      join public.store_products o on o.id = c.gtin_origin_store_product_id
+      join public.tesco_direct_collection_pages p on p.requested_url = 'https://www.tesco.ie/shop/en-IE/products/' || o.store_sku
+      where ltrim(c.gtin, '0') = g and c.store = a.store and c.resolved_sku = a.store_sku and c.status = 'active'
+        and p.outcome = 'ok' and p.http_status = 200 and p.created_at >= now() - interval '12 days'
+        and nullif(ltrim(public.tesco_page_projection(p.parsed, o.store_sku)->>'gtin', '0'), '') = g) then
+    raise exception 'origin Tesco page does not state the GTIN';
+  end if;
   -- Sources: the kind follows the offer's store; hash and capture time come from the source row itself.
   for x in select * from (values ('a', a.store, p_source_a), ('b', b.store, p_source_b)) s(which, store, src) loop
     if x.store = 'tesco' then
@@ -238,7 +256,9 @@ begin
   -- Material identity contradictions in the identities the triggers just stamped from the evidence itself.
   select left_identity, right_identity into x from public.retailer_offer_pair_reviews where id = review_id;
   if (x.left_identity->>'brand') is null or (x.right_identity->>'brand') is null
-     or not (starts_with(x.left_identity->>'brand', x.right_identity->>'brand') or starts_with(x.right_identity->>'brand', x.left_identity->>'brand')) then
+     or not (x.left_identity->>'brand' = x.right_identity->>'brand'
+             or starts_with(x.left_identity->>'brand', (x.right_identity->>'brand') || ' ')
+             or starts_with(x.right_identity->>'brand', (x.left_identity->>'brand') || ' ')) then
     raise exception 'manufacturer brand contradiction or missing';
   end if;
   if (x.left_identity->>'brand') ~ own_label or (x.right_identity->>'brand') ~ own_label
@@ -247,6 +267,9 @@ begin
   end if;
   if x.left_identity ? 'pack' and x.right_identity ? 'pack' and x.left_identity->>'pack' <> x.right_identity->>'pack' then
     raise exception 'retail pack contradiction';
+  end if;
+  if (l.store = 'tesco' and not (x.left_identity ? 'gtin')) or (r.store = 'tesco' and not (x.right_identity ? 'gtin')) then
+    raise exception 'Tesco page does not state the GTIN';
   end if;
   foreach v in array array[x.left_identity, x.right_identity] loop
     if v ? 'gtin' and v->>'gtin' <> g then raise exception 'GTIN contradiction'; end if;
