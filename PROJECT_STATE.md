@@ -40,18 +40,29 @@ resolved to different real products (exact-barcode dependence).
 
 | | Dunnes | SuperValu |
 |---|---|---|
-| strong | 610 | 602 |
-| — confirms existing mapping | 275 | 423 |
-| — conflicts with existing mapping (wrong mapping found) | 85 | 103 |
-| — new relationship | 231 | 59 |
-| — SKU owned by another canonical | 19 | 17 |
-| review / held / not found | 182 / 69 / 423 | 222 / 112 / 348 |
+| strong | 314 | 278 |
+| — confirms existing mapping | 153 | 196 |
+| — conflicts with existing mapping (wrong mapping found) | 46 | 48 |
+| — new relationship | 106 | 27 |
+| — SKU owned by another canonical | 9 | 7 |
+| review / held / not found | 478 / 69 / 423 | 546 / 112 / 348 |
 
+Rule version 3 (after the second review): strong also requires the same product
+words on both sides (an extra word on either side, e.g. Dairy Milk vs Dairy
+Milk Caramel, is `extra_words` review) and the same variant statements (a
+variant-group member stated on one side only is `variant_one_sided` review);
+an item without a SKU is held. This cut strong roughly in half (Dunnes 610→314,
+SuperValu 602→278); most of the moved rows are descriptive wording differences
+("Heinz Spaghetti In Tomato Sauce" vs "Heinz Spaghetti") that a human can clear
+in review, but some are real ambiguities (River Rock vs River Rock Refresh).
 Rows sum to 1,284; 4 full-run log lines were unparseable and need re-capture.
-Strong at both retailers: 412. Of those, 95 (full run) + 23 (pilot) are already
-fresh at all three. Independent validation: 30 random both-strong triples were
-all manually confirmed as the same product (Open Food Facts agreed on ~13; the
-rest had no usable record). Examples of wrong existing mappings: Elvive→Pantene
+Strong at both retailers: 133 (64 without a fresh Tesco price; 57 already fresh
+at all three). Independent validation: 30 random both-strong triples under the
+v2 rules were all manually confirmed as the same product (Open Food Facts
+agreed on ~13; the rest had no usable record). Strong existing-mapping
+confirmations with a stale Dunnes price: 14 (SuperValu 0); the existing
+`stale_dunnes` renewal selects its own cohort and takes no target list, so
+renewing exactly these needs a small target-list input in a future image. Examples of wrong existing mappings: Elvive→Pantene
 or Herbal Essences, Carmex→Vaseline, Dentastix 21→4-pack, Andrex 24→4 rolls,
 Club Orange 500 ml→1.75 L, Avonmore Fresh→Light Cream, Dr Oetker 100→72 cases.
 A known retailer data error: SuperValu NIVEA Crème Soft resolves to "Clay

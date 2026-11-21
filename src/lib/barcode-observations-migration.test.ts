@@ -8,13 +8,14 @@ const T = '7b000000-0000-0000-0000-000000000001';
 const EP = { dunnes: 'https://storefrontgateway.dunnesstoresgrocery.com/api/stores/258/search', supervalu: 'https://storefrontgateway.supervalu.ie/api/stores/5550/search' };
 const obs = (over: Record<string, string> = {}) => {
   const v = { gtin: '5010034592605', store: 'dunnes', sku: '100684387', outcome: 'identity_consistent', tier: 'strong', sha: 'a'.repeat(64),
-    at: "now() - interval '1 hour'", ...over };
+    at: "now() - interval '1 hour'", ir: '[]', rr: '[]', ...over };
   const noSku = v.outcome === 'not_found' || v.outcome === 'ambiguous';
   return `insert into public.retailer_barcode_observations(gtin, gtin_kind, gtin_origin_store, gtin_origin_sku, gtin_origin_store_product_id, gtin_origin_evidence,
-    store, evidence_kind, query, endpoint, http_status, result_total, result_items, response_sha256, resolved_sku, outcome, tier, title_agreement, rule_version, observed_at)
+    store, evidence_kind, query, endpoint, http_status, result_total, result_items, response_sha256, resolved_sku, outcome, tier, title_agreement, rule_version, observed_at,
+    identity_reasons, review_reasons)
     values ('${v.gtin}','gtin13','tesco','251698238','${T}','{"table":"tesco_apify_provider_evidence","field":"raw_item.gtin","tesco_name":"Dolmio 150g","tesco_brand":"Dolmio"}',
     '${v.store}','sku_found_by_gtin_search','${v.gtin}','${EP[v.store as 'dunnes' | 'supervalu']}?q=${v.gtin}',200,
-    ${noSku ? 0 : 1},'[]','${v.sha}',${noSku ? 'null' : `'${v.sku}'`},'${v.outcome}',${v.tier === 'null' ? 'null' : `'${v.tier}'`},0.9,'barcode-v2',${v.at}) returning id`;
+    ${noSku ? 0 : 1},'[]','${v.sha}',${noSku ? 'null' : `'${v.sku}'`},'${v.outcome}',${v.tier === 'null' ? 'null' : `'${v.tier}'`},0.9,'barcode-v2',${v.at},'${v.ir}','${v.rr}') returning id`;
 };
 const status = async () => (await db.query<{ status: string }>(`select status from public.current_barcode_associations`)).rows[0]?.status;
 beforeEach(async () => {
@@ -80,6 +81,23 @@ describe('retailer_barcode_observations (proposed)', () => {
     await expect(db.exec(obs({ sku: '5010034592605' }))).rejects.toThrow();
     await expect(db.exec(obs().replace(',"tesco_name":"Dolmio 150g"', ''))).rejects.toThrow();
     await expect(db.exec(obs().replace("'sku_found_by_gtin_search'", "'gtin_returned_by_retailer'"))).rejects.toThrow();
+  });
+  it('the tier must agree with its reasons', async () => {
+    await expect(db.exec(obs({ rr: '["extra_words:caramel|"]' }))).rejects.toThrow(/check constraint/);           // strong with a review reason
+    await expect(db.exec(obs({ ir: '["pack"]', sha: '1'.repeat(64) }))).rejects.toThrow(/check constraint/);      // strong with a conflict
+    await expect(db.exec(obs({ tier: 'review', sha: '2'.repeat(64) }))).rejects.toThrow(/check constraint/);      // review with no reason
+    await expect(db.exec(obs({ outcome: 'identity_conflict', tier: 'held', sha: '3'.repeat(64) }))).rejects.toThrow(/check constraint/);
+    await db.exec(obs({ tier: 'review', rr: '["extra_words:caramel|"]', sha: '4'.repeat(64) }));
+    await db.exec(obs({ outcome: 'identity_conflict', tier: 'held', ir: '["pack"]', sha: '5'.repeat(64), at: "now() - interval '2 hours'" }));
+  });
+  it('a review is bound to its observation: it cannot decide another gtin, store or SKU', async () => {
+    const id = (await db.query<{ id: string }>(obs())).rows[0].id;
+    const review = (gtin: string, store: string, sku: string) => db.exec(`insert into public.retailer_barcode_association_reviews(gtin, store, sku, decision,
+      observation_id, reviewer, reason) values ('${gtin}','${store}','${sku}','accept','${id}','owner','Relabelled SKU confirmed against the retailer page.')`);
+    await expect(review('5010034592605', 'dunnes', '100999999')).rejects.toThrow(/foreign key/);
+    await expect(review('5000000000000', 'dunnes', '100684387')).rejects.toThrow(/foreign key/);
+    await expect(review('5010034592605', 'supervalu', '100684387')).rejects.toThrow(/foreign key/);
+    await review('5010034592605', 'dunnes', '100684387');
   });
   it('service_role may only select and insert; anon/authenticated have no access', async () => {
     const q = (role: string, obj: string, p: string) => `has_table_privilege('${role}','public.${obj}','${p}')`;

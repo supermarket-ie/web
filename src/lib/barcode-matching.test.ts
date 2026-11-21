@@ -37,9 +37,11 @@ describe('barcode hit classification (discovery evidence, never approval)', () =
     expect(barcodeIdentityConflicts({ name: 'FELIX ORIGINAL Farm Selection in Jelly Wet Cat Food 12x85g', brand: 'Felix' }, { sku: 'x', name: 'Felix Farm Selection In Jelly Cat Food Pouch 12 Pack (85 g)', brand: 'Felix', unitOfSize: { abbreviation: 'kg', size: 1.02 } })).toEqual([]);
   });
   const tesco = { name: 'Dolmio Stir In Pasta Sauce Sun Dried Tomato Red Sauce 150g', brand: 'Dolmio' };
-  it('one SKU with no deterministic contradiction is identity_consistent (reworded titles are fine)', () => {
-    expect(classifyBarcodeResult(tesco, [{ sku: '100684387', name: 'Dolmio Stir In Sun Dried Tomato Pasta Sauce 150g', brand: 'Dolmio' }]))
+  it('one SKU with no deterministic contradiction is identity_consistent; word order is fine, an extra word is review', () => {
+    expect(classifyBarcodeResult(tesco, [{ sku: '100684387', name: 'Dolmio Stir In Red Sun Dried Tomato Pasta Sauce 150g', brand: 'Dolmio' }]))
       .toMatchObject({ outcome: 'identity_consistent', sku: '100684387', reasons: [], tier: 'strong' });
+    expect(classifyBarcodeResult(tesco, [{ sku: '100684387', name: 'Dolmio Stir In Sun Dried Tomato Pasta Sauce 150g', brand: 'Dolmio' }]))
+      .toMatchObject({ outcome: 'identity_consistent', tier: 'review' });
   });
   it('a different pack, count, brand or variant is identity_conflict (held)', () => {
     expect(barcodeIdentityConflicts(tesco, { sku: 'x', name: 'Dolmio Stir In Sun Dried Tomato 300g', brand: 'Dolmio' })).toContain('pack');
@@ -114,10 +116,42 @@ describe('review findings: no false-strong on substitutions, brands, packs', () 
   it('the SKU equal to the queried code is held (an internal code, not a barcode hit)', () => {
     expect(assessBarcodeHit({ name: 'X 100g', brand: 'X' }, { sku: '96189290', name: 'X 100g', brand: 'X' }, '96189290').conflicts).toContain('sku_equals_query');
   });
-  it('pilot cases that must stay strong', () => {
-    expect(tier('Twix Caramel & Milk Chocolate Biscuit Twin Bars 50g', 'Twix', 'Twix Bar (50 g)', 'Twix', { size: 50, abbreviation: 'g' })).toBe('strong');
+  it('pilot cases that stay strong: same product words, same variant statements, confirmed pack', () => {
     expect(tier('Walkers Ready Salted Crisps Multipack 6x25g', 'Walkers', 'Walkers Ready Salted Crisps 6 Pack (25 g)', 'Walkers', { size: 0.15, abbreviation: 'kg' })).toBe('strong');
-    expect(tier("L'Oreal Elvive Colour Protect Shampoo 400Ml", "L'Oreal", "L'Oréal Paris Elvive Colour Protect Shampoo, for Coloured & Highlighted Hair, 400ml", "L'Oréal Paris")).toBe('strong');
-    expect(tier('Barilla Lasagne Pasta Sheets 500g', 'Barilla', 'Barilla Lasagne (500 g)', 'Barilla', { size: 0.5, abbreviation: 'kg' })).toBe('strong');
+    expect(tier('Knorr Rich Beef Stock Pot 4 x 28g', 'Knorr', 'Knorr Rich Beef Stock 4 Pots (112 g)', 'Knorr')).toBe('strong');
+  });
+  it('descriptive extra words are review, not strong (a human confirms them; a barcode alone does not)', () => {
+    expect(tier('Twix Caramel & Milk Chocolate Biscuit Twin Bars 50g', 'Twix', 'Twix Bar (50 g)', 'Twix', { size: 50, abbreviation: 'g' })).toBe('review');
+    expect(tier("L'Oreal Elvive Colour Protect Shampoo 400Ml", "L'Oreal", "L'Oréal Paris Elvive Colour Protect Shampoo, for Coloured & Highlighted Hair, 400ml", "L'Oréal Paris")).toBe('review');
+    expect(tier('Barilla Lasagne Pasta Sheets 500g', 'Barilla', 'Barilla Lasagne (500 g)', 'Barilla', { size: 0.5, abbreviation: 'kg' })).toBe('review');
+  });
+});
+
+describe('re-review findings: a more specific title on either side is never strong', () => {
+  const tier = (t: string, tb: string, h: string, hb: string) => classifyBarcodeResult({ name: t, brand: tb }, [{ sku: 'x', name: h, brand: hb }]);
+  it('superset titles (extra product words on one side) go to review', () => {
+    for (const [t, h] of [
+      ['Cadbury Dairy Milk 110g', 'Cadbury Dairy Milk Caramel 110g'],
+      ['Cadbury Dairy Milk 110g', 'Cadbury Dairy Milk Big Taste 110g'],
+      ["Ben & Jerry's Cookie Dough Ice Cream 465ml", "Ben & Jerry's Ice Cream 465ml"],
+      ['Fairy Original Washing Up Liquid 433ml', 'Fairy Platinum Original Washing Up Liquid 433ml'],
+    ]) {
+      const r = tier(t, t.split(' ')[0] === 'Ben' ? "Ben & Jerry's" : t.split(' ')[0], h, t.split(' ')[0] === 'Ben' ? "Ben & Jerry's" : t.split(' ')[0]);
+      expect(r.tier, `${t} | ${h}`).toBe('review');
+      expect(r.review.some(x => x.startsWith('extra_words:'))).toBe(true);
+    }
+  });
+  it('a variant-group member stated on one side only goes to review', () => {
+    const beans = tier('Heinz Baked Beans 415g', 'Heinz', 'Heinz Baked Beans No Added Sugar 415g', 'Heinz');
+    expect(beans.tier).toBe('review');
+    expect(beans.review.some(x => x.startsWith('variant_one_sided:no_sugar'))).toBe(true);
+    const cheddar = tier('Kerrygold Cheddar 200g', 'Kerrygold', 'Kerrygold Mature Cheddar 200g', 'Kerrygold');
+    expect(cheddar.tier).toBe('review');
+    expect(cheddar.review.some(x => x.startsWith('variant_one_sided:mature'))).toBe(true);
+  });
+  it('an item without a SKU is held, never not_found or a clean single hit', () => {
+    const t = { name: 'Heinz Baked Beans 415g', brand: 'Heinz' };
+    expect(classifyBarcodeResult(t, [{ sku: '', name: 'Heinz Baked Beans 415g', brand: 'Heinz' }])).toMatchObject({ outcome: 'ambiguous', tier: 'held', reasons: ['hit_without_sku'] });
+    expect(classifyBarcodeResult(t, [{ sku: '1', name: 'Heinz Baked Beans 415g', brand: 'Heinz' }, { sku: '', name: '?', brand: null }]).tier).toBe('held');
   });
 });

@@ -5,7 +5,7 @@
 // line per barcode:
 //   BCAP {key, at, dunnes:{forms:[{form,endpoint,status,total,items[],sha256,at}], items[]}, supervalu:{...}}
 // Any non-200 response or unparseable body is recorded as an ERROR for that retailer, never as "not found".
-// 403/429/5xx/timeouts are reported to the governor as denials, so its circuit breaker can open; an open breaker
+// 403/429/5xx/timeouts and 200 challenge pages (non-JSON / unexpected shape) are reported to the governor as denials, so its circuit breaker can open; an open breaker
 // stops the run (exit code 2). It writes NOTHING to the database. Classification: src/lib/barcode-matching.ts.
 import { brotliDecompressSync } from 'node:zlib';
 import { createHash, randomUUID } from 'node:crypto';
@@ -20,23 +20,29 @@ const headers = (site: string) => ({ Accept: 'application/json, text/plain, */*'
   'x-site-host': site, 'x-site-location': 'HeadersBuilderInterceptor', 'x-correlation-id': randomUUID(), 'x-shopping-mode': '22222222-2222-2222-2222-222222222222' });
 type Item = { sku?: unknown; name?: unknown; brand?: unknown; unitOfSize?: unknown; price?: unknown; available?: unknown };
 class HttpError extends Error { constructor(readonly status: number, readonly retryAfter: string | null) { super(`HTTP ${status}`); } }
+// A 200 whose body is not the search JSON (a bot challenge / interstitial) is a DENIAL: it must reach the governor so
+// repeated challenges open the circuit breaker, exactly like a 403.
+class ChallengeError extends Error { constructor(detail: string) { super(`challenge_page ${detail}`); } }
 const classifyError = (e: unknown) => e instanceof HttpError
   ? { reason: denialReason({ status: e.status }), retryAfterMs: parseRetryAfterMs(e.retryAfter) }
+  : e instanceof ChallengeError ? { reason: 'challenge_page' }
   : { reason: denialReason({ errorReason: e instanceof Error ? `${e.name} ${e.message}` : String(e) }) };
 
 async function searchForm(store: Store, form: string) {
   const [gw, site] = GW[store];
   const endpoint = `${gw}/search?q=${encodeURIComponent(form)}&take=5&page=1&skip=0`;
   const at = new Date().toISOString();
-  const body = await withRetailerRequestSlot(store, async () => {
+  const { body, j } = await withRetailerRequestSlot(store, async () => {
     const res = await fetch(endpoint, { headers: headers(site), redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(20000) });
     const text = await res.text();
     if (res.status !== 200) throw new HttpError(res.status, res.headers.get('retry-after'));
-    return text;
+    let parsed: { total?: unknown; items?: Item[] };
+    try { parsed = JSON.parse(text); } catch { throw new ChallengeError('non_json_200'); }
+    if (!parsed || !Array.isArray(parsed.items)) throw new ChallengeError('unexpected_search_shape');
+    return { body: text, j: parsed };
   }, { classifyError });
-  const j = JSON.parse(body) as { total?: unknown; items?: Item[] };   // a non-JSON 200 (e.g. a challenge page) throws
-  if (!Array.isArray(j.items)) throw new Error('unexpected_search_shape');
-  const items = j.items.slice(0, 5).map(i => ({ sku: String(i.sku ?? ''), name: String(i.name ?? ''), brand: typeof i.brand === 'string' ? i.brand : null,
+  // Items are kept even without a SKU: the classifier holds an unattributable item rather than reading it as not-found.
+  const items = (j.items ?? []).slice(0, 5).map(i => ({ sku: i.sku == null ? '' : String(i.sku), name: String(i.name ?? ''), brand: typeof i.brand === 'string' ? i.brand : null,
     unitOfSize: i.unitOfSize ?? null, price: i.price ?? null, available: i.available ?? null }));
   return { form, endpoint, status: 200, total: Number(j.total ?? items.length), items, sha256: createHash('sha256').update(body).digest('hex'), at };
 }
@@ -50,7 +56,9 @@ async function main() {
       try {
         const perForm = [];
         for (const form of forms) perForm.push(await searchForm(store, form));
-        const items = [...new Map(perForm.flatMap(f => f.items).filter(i => i.sku).map(i => [i.sku, i])).values()];
+        const all = perForm.flatMap(f => f.items);
+        // One entry per SKU across forms; SKU-less items are all kept so the classifier can hold them.
+        const items = [...new Map(all.filter(i => i.sku).map(i => [i.sku, i])).values(), ...all.filter(i => !i.sku)];
         out[store] = { forms: perForm, items, total: items.length };
       } catch (e) {
         out[store] = { error: e instanceof Error ? e.message.slice(0, 120) : 'error' };

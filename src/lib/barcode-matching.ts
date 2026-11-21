@@ -150,8 +150,9 @@ export type HitAssessment = { conflicts: string[]; review: string[]; agreement: 
  * conflicts (=> held): different brand; both state a quantity and no whole-pack reading agrees; different counts that
  *   do not reconcile; a different member of a mutually exclusive variant group; the hit SKU equals the query.
  * review (=> not strong): partial brand; no positive pack confirmation; unmatched product words on BOTH sides
- *   (substitution, e.g. Strawberry vs Raspberry); low title agreement.
- * Omissions (a detail stated on one side only) are neither.
+ *   (substitution, e.g. Strawberry vs Raspberry) or on ONE side (extra words, e.g. Dairy Milk vs Dairy Milk Caramel);
+ *   a variant-group member stated on one side only; low title agreement.
+ * Strong therefore requires the same product words, the same variant statements and a confirmed pack.
  */
 export function assessBarcodeHit(tesco: { name: string; brand: string | null }, hit: SearchHit, query?: string): HitAssessment {
   const conflicts: string[] = [], review: string[] = [];
@@ -174,12 +175,17 @@ export function assessBarcodeHit(tesco: { name: string; brand: string | null }, 
   for (const g of VARIANT_GROUPS) {
     const la = variantLabels(tesco.name, g), lb = variantLabels(hit.name, g);
     if (la.size && lb.size && ![...la].some(l => lb.has(l))) { conflicts.push(`variant:${[...la].join('+')}|${[...lb].join('+')}`); break; }
+    // A member stated on ONE side only ("Baked Beans" vs "Baked Beans No Added Sugar") is not a contradiction, but it
+    // cannot be strong either: the unstated side may be the other member.
+    if (la.size !== lb.size && (!la.size || !lb.size)) review.push(`variant_one_sided:${[...la, ...lb].join('+')}`);
   }
   const wa = productWords(tesco.name, tesco.brand), wb = productWords(hit.name, hit.brand ?? tesco.brand);
   const aOnly = wa.filter(w => !wb.some(x => sameWord(w, x))), bOnly = wb.filter(w => !wa.some(x => sameWord(w, x)));
   const shared = wa.length - aOnly.length;
   const agreement = wa.length && wb.length ? Math.round((shared / Math.min(wa.length, wb.length)) * 100) / 100 : 0;
   if (aOnly.length && bOnly.length) review.push(`substitution:${aOnly.join('+')}|${bOnly.join('+')}`);
+  // One title more specific than the other ("Dairy Milk" vs "Dairy Milk Caramel"): the extra word may name a variant.
+  else if (aOnly.length || bOnly.length) review.push(`extra_words:${aOnly.join('+')}|${bOnly.join('+')}`);
   if (agreement < STRONG_TITLE_AGREEMENT) review.push(`title_agreement:${agreement}`);
   return { conflicts, review, agreement };
 }
@@ -203,7 +209,9 @@ export function evidenceTier(outcome: BarcodeOutcome, agreementOrReview: number 
 /** Classify one retailer's response(s) for one barcode. `hits` = items across ALL query forms (an SKU seen twice is one hit). */
 export function classifyBarcodeResult(tesco: { name: string; brand: string | null }, hits: SearchHit[], query?: string):
   { outcome: BarcodeOutcome; sku: string | null; reasons: string[]; review: string[]; agreement: number; tier: EvidenceTier | null } {
-  const bySku = new Map(hits.filter(h => h.sku).map(h => [h.sku, h]));
+  // An item without a SKU is a response we cannot attribute: never "not found", never one clean hit.
+  if (hits.some(h => !h.sku)) return { outcome: 'ambiguous', sku: null, reasons: ['hit_without_sku'], review: [], agreement: 0, tier: 'held' };
+  const bySku = new Map(hits.map(h => [h.sku, h]));
   if (bySku.size === 0) return { outcome: 'not_found', sku: null, reasons: [], review: [], agreement: 0, tier: null };
   if (bySku.size > 1) return { outcome: 'ambiguous', sku: null, reasons: [`skus:${[...bySku.keys()].join('+')}`], review: [], agreement: 0, tier: 'held' };
   const hit = [...bySku.values()][0];

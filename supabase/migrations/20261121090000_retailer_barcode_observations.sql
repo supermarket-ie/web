@@ -52,7 +52,14 @@ create table if not exists public.retailer_barcode_observations (
       or (outcome in ('identity_conflict', 'ambiguous') and tier = 'held')
       or (outcome = 'not_found' and tier is null)),
   check (resolved_sku is null or resolved_sku <> query),
-  unique (gtin, store, response_sha256, observed_at)
+  -- The tier must agree with the stated reasons: strong has none; review has review reasons and no conflict; a
+  -- conflict is held with its reasons.
+  check (tier is distinct from 'strong' or (identity_reasons = '[]'::jsonb and review_reasons = '[]'::jsonb)),
+  check (tier is distinct from 'review' or (identity_reasons = '[]'::jsonb and jsonb_array_length(review_reasons) > 0)),
+  check (outcome <> 'identity_conflict' or jsonb_array_length(identity_reasons) > 0),
+  unique (gtin, store, response_sha256, observed_at),
+  -- Target of the review foreign key: a review is bound to THIS observation's gtin, store and resolved SKU.
+  unique (id, gtin, store, resolved_sku)
 );
 create index if not exists retailer_barcode_obs_latest on public.retailer_barcode_observations (gtin, store, observed_at desc);
 create index if not exists retailer_barcode_obs_sku on public.retailer_barcode_observations (store, resolved_sku);
@@ -65,10 +72,14 @@ create table if not exists public.retailer_barcode_association_reviews (
   store text not null check (store in ('dunnes', 'supervalu')),
   sku text not null,
   decision text not null check (decision in ('accept', 'reject')),
-  observation_id uuid not null references public.retailer_barcode_observations(id) on delete restrict,
+  observation_id uuid not null,
   reviewer text not null check (length(trim(reviewer)) >= 2),
   reason text not null check (length(trim(reason)) >= 20),
-  reviewed_at timestamptz not null default now()
+  reviewed_at timestamptz not null default now(),
+  -- A review can only decide the (gtin, store, sku) its observation actually resolved; it cannot move another pair's
+  -- reference SKU.
+  foreign key (observation_id, gtin, store, sku)
+    references public.retailer_barcode_observations (id, gtin, store, resolved_sku) on delete restrict
 );
 comment on table public.retailer_barcode_association_reviews is
   'Append-only human decisions on a barcode-resolved SKU (accept/reject). Clears a suspension only; NOT a comparison approval.';
