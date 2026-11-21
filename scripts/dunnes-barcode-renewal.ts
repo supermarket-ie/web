@@ -10,7 +10,7 @@
 // ATTACH mode (a target WITHOUT offer_id): the canonical has no SKU-bearing Dunnes offer and the SKU is unowned; the
 // finaliser then creates the mapping as in SKU-confirmed discovery. Applying an attach needs ALLOW_ATTACH=1 as well
 // as APPLY=1 (owner-authorised batches only). Existing mappings are never re-pointed.
-// Env: T = base64(brotli(JSON [{product_id, tesco_offer_id, offer_id?, sku}])), APPLY, ALLOW_ATTACH.
+// Env: T = base64(brotli(JSON [{product_id, tesco_offer_id, tesco_evidence_id, offer_id?, sku}])), APPLY, ALLOW_ATTACH.
 import { brotliDecompressSync } from 'node:zlib';
 import { brandConfirmed, confirmDunnesSku, dunnesProductApiUrl, packCompatible, type DunnesProductResponse } from '../src/lib/dunnes-sku-confirmation';
 import { normaliseDunnesName } from '@/lib/dunnes-discovery';
@@ -19,8 +19,9 @@ import { captureIdentityResponse } from '@/lib/retailer-identity-response';
 import { retainIdentityResponse } from '@/lib/retailer-identity-retention';
 import { supabaseAdmin as sb } from '@/lib/supabase';
 
-// The reference identity is NOT taken from the payload: it is read from the canonical's own Tesco offer (tesco_offer_id).
-type Target = { product_id: string; tesco_offer_id: string; offer_id?: string; sku: string };
+// The reference identity is NOT taken from the payload: it is the retained Tesco provider item (the GTIN's origin,
+// tesco_apify_provider_evidence) of the canonical's own Tesco offer.
+type Target = { product_id: string; tesco_offer_id: string; tesco_evidence_id: string; offer_id?: string; sku: string };
 const EXCLUDED = /alcohol|beer|wine|spirit|cider|lager|whiskey|vodka|gin\b|tobacco|cigar|vape|clothing|apparel/i;
 const APPLY = process.env.APPLY === '1';
 const HEADERS = () => ({ Accept: 'application/json, text/plain, */*', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
@@ -57,12 +58,16 @@ async function main() {
       const attach = !t.offer_id;
       // Reference = the canonical's own Tesco offer (the GTIN origin). Every SuperValu offer on the same canonical must
       // agree with it on brand and pack and must not be own-label, so a mixed canonical is never renewed or attached.
-      const { data: tos, error: te } = await sb.from('store_products').select('id,product_id,store,store_product_name,brand').eq('id', t.tesco_offer_id).maybeSingle();
+      const { data: tos, error: te } = await sb.from('store_products').select('id,product_id,store,store_sku,brand').eq('id', t.tesco_offer_id).maybeSingle();
       if (te) throw te;
+      const { data: ev, error: ee } = await sb.from('tesco_apify_provider_evidence').select('id,sku,store_product_id,name:raw_item->>name,brand_name:raw_item->>brand_name')
+        .eq('id', t.tesco_evidence_id).maybeSingle();
+      if (ee) throw ee;
       const { data: svs, error: se } = await sb.from('store_products').select('store_product_name,is_own_brand').eq('product_id', t.product_id).eq('store', 'supervalu').not('store_sku', 'is', null);
       if (se) throw se;
-      const ref = String(tos?.store_product_name ?? ''), brand = String(tos?.brand ?? '');
-      const refProblem = !tos || tos.store !== 'tesco' || tos.product_id !== t.product_id || !ref || !brand ? 'tesco_reference_invalid'
+      const ref = String(ev?.name ?? ''), brand = String(ev?.brand_name || tos?.brand || '');
+      const refProblem = !tos || tos.store !== 'tesco' || tos.product_id !== t.product_id || !ev || ev.store_product_id !== tos.id
+        || String(ev.sku) !== String(tos.store_sku) || !ref || !brand ? 'tesco_reference_invalid'
         : EXCLUDED.test(ref) ? 'excluded_category'
         : (svs ?? []).some(v => v.is_own_brand === true) ? 'canonical_has_own_label_supervalu'
         : (svs ?? []).some(v => !brandConfirmed(brand, String(v.store_product_name)) || !packCompatible(ref, String(v.store_product_name))) ? 'canonical_supervalu_conflicts' : null;

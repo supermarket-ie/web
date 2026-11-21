@@ -41,8 +41,24 @@ none applied.
 SuperValu: attach 2, attach-after-split 23, repoint 7, split 35, duplicate-listing review 5,
 duplicate canonical 5, owner conflict 2. "Split" cases are canonicals mixing different products
 (e.g. Gem Granulated Sugar with Complimints, TK Red Lemonade with 7Up Pink). The Dunnes attach
-batch (40) was dry-run through the attach mode of the same script: 31 confirm by Dunnes product
-API. Applying attaches needs `ALLOW_ATTACH=1` plus owner authorisation. Nothing written.
+batch was dry-run through the attach mode of the same script after the final review's fixes
+(reference read from the retained Tesco provider item, SuperValu brand/pack/own-label guard,
+category exclusion, dedupe, finaliser result checked): 35 targets with DB-bound Tesco evidence
+(5 of the 40 have a GTIN only from the private catalogue JSONL), 21 confirm, 7 of which would
+be new three-store products immediately. Applying needs `ALLOW_ATTACH=1` plus owner
+authorisation. Nothing written.
+
+**Pair-review readiness (117 strong at both).** 51 need an association first (Dunnes or
+SuperValu SKU not on the canonical); 66 are mapped at both but have no retained product capture
+within 13 days at Dunnes and/or SuperValu (`retailer_identity_responses`, `captured_product`); 98
+have a Tesco page within 13 days. Pair reviews also need migration 20261118120000. Readiness file:
+`~/smie-private/sv-tesco-pilot-20261117/pair-readiness-both-strong.json`.
+
+**Baseline after** (21 Nov 19:21Z): Tesco 383 (unchanged), Dunnes 939 (+5), SuperValu 1,607;
+three-retailer priced 202 (+4); pair reviews 0; verified exact 0. Costs this session: Apify $0;
+about 1,000 governed retailer requests (868 search + ~150 product-by-SKU) on 9 one-off Fargate
+tasks. Final review of #426: APPROVED (`semantic-review/2026-11-21-180411-pr-426.md`); its
+renewal-script findings are fixed.
 
 ## 21 November 2026 — Barcode-led three-retailer discovery (read-only; migration 20261121090000 NOT applied; NO writes)
 
