@@ -1,5 +1,46 @@
 # Supermarket.ie — Canonical Project State
 
+## 22 November 2026 — FIRST MACHINE APPROVALS: 338 active pairs, 43 fully verified three-retailer products
+
+Migration `20261122090000_machine_pair_approvals.sql` was applied by the owner (Supabase history
+`20261122090837`; do not reapply). Agent checks:
+- the `barcode-exact-v1` policy row is present
+- the RPC refuses an unknown policy
+- `machine_pair_decisions` returns 200, and DELETE is refused (403)
+
+**Runs** (one-off tasks on the scheduled task definition, image `826376e-prod`,
+`~/smie-private/sv-tesco-pilot-20261117/run-machine.sh`):
+
+| Run | Approved | Refused or held |
+|---|---|---|
+| 1. `APPLY=1 CAPTURE=0` | **153 Tesco–SuperValu** | 3 refused by the database brand check (dry run estimated 156) |
+| 2. `APPLY=1 CAPTURE=1` | **123 Tesco–Dunnes + 47 Dunnes–SuperValu** | 1 not proven by capture |
+| 3. `APPLY=1 CAPTURE=0` | **11 Tesco–Dunnes + 6 Dunnes–SuperValu** | 2 Tesco–Dunnes refused by the database |
+
+- Run 2 took 162 governed captures (161 Dunnes product-API and SuperValu captures proven).
+- Run 3 picked up 18 pairs that run 2 held as `capture_time_invalid`. Cause: the runner
+  evaluated with its start-time clock, so captures taken earlier in the same run looked
+  future-dated. Fixed in this PR by evaluating at decision time.
+- The 3 database brand refusals are false negatives, e.g. "Jacobs" vs "Jacob's". In the database,
+  `identity_norm` turns the apostrophe into a space, giving "jacobs" vs "jacob s". Fixing it is a
+  policy change (migration); until then they stay held, which is safe.
+- **Durable status:** 338 machine approvals, all `active`.
+- **As the app classifies them** (comparison-policy over active rows, with fresh prices on both
+  sides): 275 verified priced pairs (Tesco–SuperValu 125, Tesco–Dunnes 97, Dunnes–SuperValu 53)
+  on 189 products. **43 products are fully verified at all three retailers.**
+- **Holds left after run 3:**
+  - Tesco–SuperValu 23: shared SKUs, missing Tesco captures, and pack vetoes such as
+    "4 x 28g" vs "4 Pots".
+  - Tesco–Dunnes 27 and Dunnes–SuperValu 17: shared SKUs, pack unconfirmed, and 5 with no fresh
+    origin Tesco page stating the GTIN.
+  - 205 associations have their SKU missing from the Tesco catalogue record and need
+    association or repair.
+- **Prices:**
+  - 55 Tesco offers in approved pairs have no fresh price.
+  - A targeted run found 0 eligible: they were all attempted in the last 24 hours and held by
+    existing identity checks.
+  - The daily renewal continues.
+
 ## 22 November 2026 00:10Z — #429 merged and RELEASED as 826376e; machine migration awaiting operator
 
 - **#429** was squash-merged as `826376e`, with `validate` green on the PR and on `main`. It had
