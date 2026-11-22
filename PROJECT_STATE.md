@@ -1,5 +1,30 @@
 # Supermarket.ie — Canonical Project State
 
+## 22 November 2026 16:55Z — RELEASED 3a4e82d (#431 clock fix + #432 pair support); collector rev 19
+
+- **Image and rollout.** Image `3a4e82d-prod` was built by run 45042834241 (`ops/image-3a4e82d`,
+  aws-prod approved) and rolled out with tofu:
+  - web `smie-prod:21`, sqs-consumer `:11`, scheduled task definition
+  - Tesco collector `smie-prod-tesco-apify-collect:19` (rev 18 + the new image); the daily
+    renewal is pinned to `:19` (this PR)
+  - www 200
+  - Rollback: `826376e-prod`; tfvars backup `~/smie-private/tfvars.before-3a4e82d.bak`
+- **Machine approvals run 4** (`APPLY=1 CAPTURE=1`): **+12 Tesco–Dunnes** (the batch-2 attaches
+  already carried `captured_product_api` evidence from their finalisation); 2 refused by the DB.
+  **350 active.**
+- **Tesco:**
+  - 67 Tesco offers in active pairs have no fresh price.
+  - Targeted expansion and renewal runs selected 0: every one was requested within the last 24h,
+    which the reserve exclusion blocks.
+  - They become eligible for the 03:40 UTC daily renewal, which now runs rev 19 with pair support.
+- **Production** (16:53Z):
+  - Tesco fresh 7d 400 (rolling expiry, −7 since 09:05Z)
+  - Dunnes 972 (+12)
+  - SuperValu 1,604
+  - three-retailer priced 226 (−6, Tesco expiries)
+  - app-verified priced pairs 275
+  - **fully verified three-retailer products 43**
+
 ## 22 November 2026 (afternoon) — Pair approvals as Tesco identity support; Dunnes attach batch 2; 205 associations triaged
 
 - **Tesco collector (PR #432, two reviews, APPROVED).** An ACTIVE machine-approved exact pair
