@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const calls = vi.hoisted(() => ({ since: [] as string[], result: { data: [] as unknown[] | null, error: null as unknown },
   // Default: the durable-approval migration is not applied yet (PostgREST: function not found).
   rpc: { data: null as unknown[] | null, error: { code: 'PGRST202', message: 'Could not find the function public.current_pair_review_status' } as unknown },
-  cap: 1000 /* server max-rows */ }));
+  cap: 1000 /* server max-rows */, rpcCalls: 0 }));
 vi.mock('@/lib/supabase', () => {
   const builder = {
     select: () => builder,
@@ -13,8 +13,8 @@ vi.mock('@/lib/supabase', () => {
     range: async (from: number, to: number) => calls.result.error ? calls.result
       : { data: (calls.result.data ?? []).slice(from, Math.min(to + 1, from + calls.cap)), error: null },
   };
-  return { supabaseAdmin: { from: () => builder, rpc: () => ({ range: async (from: number, to: number) => calls.rpc.error ? calls.rpc
-    : { data: (calls.rpc.data ?? []).slice(from, Math.min(to + 1, from + calls.cap)), error: null } }) } };
+  return { supabaseAdmin: { from: () => builder, rpc: () => ({ range: async (from: number, to: number) => { calls.rpcCalls++; return calls.rpc.error ? calls.rpc
+    : { data: (calls.rpc.data ?? []).slice(from, Math.min(to + 1, from + calls.cap)), error: null }; } }) } };
 });
 import { getCurrentPairReviews, resetPairReviewCache } from './comparison-reviews';
 
@@ -25,7 +25,7 @@ const row = { left_offer_id: 'a', right_offer_id: 'b', classification: 'exact_pr
 
 describe('getCurrentPairReviews', () => {
   beforeEach(() => { resetPairReviewCache(); calls.since.length = 0; calls.result = { data: [row], error: null };
-    calls.rpc = { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.current_pair_review_status' } }; calls.cap = 1000; });
+    calls.rpc = { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.current_pair_review_status' } }; calls.cap = 1000; calls.rpcCalls = 0; });
   it('limits the read to the 14-day horizon in SQL', async () => {
     expect(await getCurrentPairReviews(now)).toHaveLength(1);
     expect([...new Set(calls.since)]).toEqual(['2026-11-03T12:00:00.000Z']);
@@ -79,13 +79,30 @@ describe('getCurrentPairReviews', () => {
     const reviews = await getCurrentPairReviews(now);
     expect(reviews.map(r => r.classification)).toEqual(['not_comparable']);
   });
-  it('pages past a server row cap smaller than the page size', async () => {
-    calls.cap = 2;
-    const base = { left_offer_id: 'a', right_offer_id: 'b', classification: 'exact_product', left_source_hash: 'a'.repeat(64), right_source_hash: 'b'.repeat(64),
-      left_evidence_at: at, right_evidence_at: at, reviewed_at: at, rationale: 'r', reviewer: 'owner', status: 'active' };
-    calls.rpc = { data: [1, 2, 3, 4, 5].map(i => ({ ...base, left_offer_id: `a${i}` })), error: null };
+  const base = { left_offer_id: 'a', right_offer_id: 'b', classification: 'exact_product', left_source_hash: 'a'.repeat(64), right_source_hash: 'b'.repeat(64),
+    left_evidence_at: at, right_evidence_at: at, reviewed_at: at, rationale: 'r', reviewer: 'owner', status: 'active' };
+  it('runs the status function ONCE when every active approval fits one page', async () => {
+    calls.rpc = { data: Array.from({ length: 350 }, (_, i) => ({ ...base, left_offer_id: `a${i}` })), error: null };
     calls.result = { data: [], error: null };
-    expect(await getCurrentPairReviews(now)).toHaveLength(5);
+    expect(await getCurrentPairReviews(now)).toHaveLength(350);
+    expect(calls.rpcCalls).toBe(1);
+  });
+  it('pages past full pages (PostgREST cap = page size) without dropping any approval', async () => {
+    calls.rpc = { data: Array.from({ length: 2500 }, (_, i) => ({ ...base, left_offer_id: `a${i}` })), error: null };
+    calls.result = { data: [], error: null };
+    expect(await getCurrentPairReviews(now)).toHaveLength(2500);
+    expect(calls.rpcCalls).toBe(3);
+    resetPairReviewCache(); calls.rpcCalls = 0;
+    calls.rpc = { data: Array.from({ length: 2000 }, (_, i) => ({ ...base, left_offer_id: `a${i}` })), error: null };
+    expect(await getCurrentPairReviews(now)).toHaveLength(2000);
+    expect(calls.rpcCalls).toBe(3);   // an exact multiple ends with one empty page
+  });
+  it('concurrent callers on a cache miss share one read', async () => {
+    calls.rpc = { data: [base], error: null };
+    calls.result = { data: [], error: null };
+    const all = await Promise.all(Array.from({ length: 8 }, () => getCurrentPairReviews(now)));
+    expect(all.every(r => r.length === 1)).toBe(true);
+    expect(calls.rpcCalls).toBe(1);
   });
   it('a negative superseded by a newer (e.g. suspended) positive review does not resurface', async () => {
     calls.rpc = { data: [], error: null };
