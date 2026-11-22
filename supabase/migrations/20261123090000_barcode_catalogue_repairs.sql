@@ -9,8 +9,10 @@
 --   2. attach_barcode_supervalu_offer: the SuperValu counterpart of the Dunnes SKU-confirmed attach. Creates the
 --      SuperValu offer that SuperValu's own search resolved for the GTIN, on the Tesco offer's record, bound to a
 --      direct SKU-bound SuperValu product-page capture retained in the same transaction.
--- catalogue_repairs records every repair with full before-state (append-only). The deterministic and identity
--- decisions are src/lib/barcode-catalogue-repair.ts (policy barcode-repair-v1).
+-- catalogue_repairs records every repair with full before-state (append-only). The database enforces the barcode,
+-- ownership, binding and structural rules; the identity judgements (every remaining offer contradicts the Tesco
+-- product; the captured page agrees strongly; the record's other offers do not contradict) are made by
+-- src/lib/barcode-catalogue-repair.ts (policy barcode-repair-v1) before calling.
 
 create table public.catalogue_repairs (
   id uuid primary key default gen_random_uuid(),
@@ -38,32 +40,44 @@ revoke all on public.catalogue_repairs from public, anon, authenticated, service
 grant select on public.catalogue_repairs to service_role;
 revoke all on function public.prevent_catalogue_repair_rewrite() from public, anon, authenticated, service_role;
 
--- An active strong barcode association: GTIN origin = this Tesco offer, at this store.
+-- An active strong barcode association: GTIN origin = this Tesco offer AS IT IS NOW (same SKU as observed), at
+-- this store.
 create function public.barcode_association_sku(p_tesco_offer uuid, p_gtin text, p_store text) returns text
 language sql stable security definer set search_path = '' as $$
   select c.resolved_sku from public.current_barcode_associations c
+  join public.store_products t on t.id = c.gtin_origin_store_product_id and t.store = 'tesco' and t.store_sku = c.gtin_origin_sku
   where c.gtin_origin_store_product_id = p_tesco_offer and ltrim(c.gtin, '0') = ltrim(p_gtin, '0')
     and c.store = p_store and c.status = 'active'
   limit 1
 $$;
+-- The Tesco product name and brand recorded with the barcode evidence (never caller-supplied).
+create function public.barcode_origin_identity(p_tesco_offer uuid, p_gtin text) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('name', o.gtin_origin_evidence->>'tesco_name', 'brand', o.gtin_origin_evidence->>'tesco_brand')
+  from public.retailer_barcode_observations o
+  where o.gtin_origin_store_product_id = p_tesco_offer and ltrim(o.gtin, '0') = ltrim(p_gtin, '0') and o.tier = 'strong'
+  order by o.observed_at desc limit 1
+$$;
+revoke all on function public.barcode_origin_identity(uuid, text) from public, anon, authenticated, service_role;
 revoke all on function public.barcode_association_sku(uuid, text, text) from public, anon, authenticated, service_role;
 
 -- 1. Split a mixed record ----------------------------------------------------------------------------------------
 create function public.apply_barcode_regroup(p_policy_version text, p_tesco_offer uuid, p_gtin text, p_offers uuid[],
-  p_canonical_name text, p_checks jsonb, p_reason text)
+  p_checks jsonb, p_reason text)
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare
   t record; c record; o record; n uuid; repair uuid; evidence_of_mix boolean := false;
   members uuid[] := array[p_tesco_offer] || coalesce(p_offers, '{}');
-  before jsonb;
+  before jsonb; origin jsonb;
 begin
-  if p_gtin !~ '^[0-9]{8,14}$' or length(trim(coalesce(p_canonical_name, ''))) < 6 or length(trim(coalesce(p_reason, ''))) < 40
-     or jsonb_typeof(p_checks) is distinct from 'object' then
-    raise exception 'regroup needs a GTIN, a canonical name, a reason and checks';
+  if p_gtin !~ '^[0-9]{8,14}$' or length(trim(coalesce(p_reason, ''))) < 40 or jsonb_typeof(p_checks) is distinct from 'object' then
+    raise exception 'regroup needs a GTIN, a reason and checks';
   end if;
   select id, product_id, store, store_sku into t from public.store_products where id = p_tesco_offer for update;
   if t.id is null or t.store <> 'tesco' or t.product_id is null then raise exception 'not a Tesco offer on a record'; end if;
-  select id, canonical_name, category, default_unit, default_quantity into c from public.products where id = t.product_id;
+  select id, canonical_name, category, default_unit, default_quantity into c from public.products where id = t.product_id for update;
+  origin := public.barcode_origin_identity(t.id, p_gtin);
+  if length(trim(coalesce(origin->>'name', ''))) < 6 then raise exception 'no Tesco identity recorded with the barcode evidence'; end if;
   -- Every member: on the same record, one per store, unshared SKU; non-Tesco members are exactly the SKU their
   -- retailer's own search resolved for this GTIN from this Tesco offer.
   if (select count(distinct store) from public.store_products where id = any(members)) <> cardinality(members)
@@ -82,6 +96,10 @@ begin
   -- Independent evidence that the record is mixed: a remaining offer whose own retailer resolved ANOTHER SKU.
   for o in select id, store, store_sku from public.store_products where product_id = t.product_id and not (id = any(members)) loop
     if o.store = 'tesco' then raise exception 'another Tesco offer remains on the record; not a clean split'; end if;
+    -- A second listing at a member's retailer is ambiguous (duplicate listing or a different product): never split it.
+    if exists (select 1 from public.store_products m where m.id = any(members) and m.store = o.store) then
+      raise exception 'a remaining offer shares a retailer with a member';
+    end if;
     if public.barcode_association_sku(t.id, p_gtin, o.store) is not null
        and o.store_sku is not null and public.barcode_association_sku(t.id, p_gtin, o.store) <> o.store_sku then evidence_of_mix := true; end if;
   end loop;
@@ -96,15 +114,15 @@ begin
   end if;
   select jsonb_build_object('record', to_jsonb(p.*), 'offers', (select jsonb_agg(to_jsonb(s.*)) from public.store_products s where s.product_id = t.product_id))
     into before from public.products p where p.id = t.product_id;
-  insert into public.products(canonical_name, category, default_unit, default_quantity)
-    values (trim(p_canonical_name), c.category, c.default_unit, c.default_quantity) returning id into n;
+  insert into public.products(canonical_name, category, default_unit, default_quantity, brand)
+    values (trim(origin->>'name'), c.category, c.default_unit, c.default_quantity, nullif(trim(coalesce(origin->>'brand', '')), '')) returning id into n;
   update public.store_products set product_id = n where id = any(members);
   insert into public.catalogue_repairs(policy_version, kind, gtin, tesco_offer_id, from_product_id, to_product_id, moved_offer_ids, before_state, checks, reason)
     values (p_policy_version, 'regroup', ltrim(p_gtin, '0'), t.id, t.product_id, n, members, before, p_checks, p_reason) returning id into repair;
   return repair;
 end $$;
-revoke all on function public.apply_barcode_regroup(text, uuid, text, uuid[], text, jsonb, text) from public, anon, authenticated;
-grant execute on function public.apply_barcode_regroup(text, uuid, text, uuid[], text, jsonb, text) to service_role;
+revoke all on function public.apply_barcode_regroup(text, uuid, text, uuid[], jsonb, text) from public, anon, authenticated;
+grant execute on function public.apply_barcode_regroup(text, uuid, text, uuid[], jsonb, text) to service_role;
 
 -- 2. SuperValu attach --------------------------------------------------------------------------------------------
 create function public.attach_barcode_supervalu_offer(p_policy_version text, p_tesco_offer uuid, p_gtin text,
@@ -119,25 +137,30 @@ begin
   if p_url !~ ('^https://shop\.supervalu\.ie/sm/delivery/rsid/5550/product/[a-z0-9-]+-id-' || p_sku || '$') then
     raise exception 'not a SuperValu product URL for this SKU';
   end if;
-  select id, product_id, store into t from public.store_products where id = p_tesco_offer;
+  perform pg_advisory_xact_lock(hashtext('barcode-attach-supervalu:' || p_sku));
+  select id, product_id, store into t from public.store_products where id = p_tesco_offer for update;
   if t.id is null or t.store <> 'tesco' or t.product_id is null then raise exception 'not a Tesco offer on a record'; end if;
+  perform 1 from public.products where id = t.product_id for update;
   if public.barcode_association_sku(t.id, p_gtin, 'supervalu') is distinct from p_sku then
     raise exception 'SuperValu did not resolve this SKU for the GTIN';
   end if;
   if exists (select 1 from public.store_products where store = 'supervalu' and store_sku = p_sku) then raise exception 'SKU already owned'; end if;
-  if exists (select 1 from public.store_products where product_id = t.product_id and store = 'supervalu' and store_sku is not null) then
+  if exists (select 1 from public.store_products where product_id = t.product_id and store = 'supervalu') then
     raise exception 'record already has a SuperValu offer';
   end if;
   -- The direct capture: SuperValu's own product page for this SKU, fetched at exactly this URL, recently.
   if p_response->>'sku' is distinct from p_sku or p_response->>'product_url' is distinct from p_url
      or p_response->>'requested_url' is distinct from p_url or p_response->>'final_url' is distinct from p_url
      or p_response->>'source_kind' is distinct from 'captured_product' or p_response->>'store' is distinct from 'supervalu'
+     or p_response->>'retrieved_at' is null or p_response->>'parser_version' is distinct from 'retailer-identity-response-v3'
+     or p_response->'identity'->>'title' is distinct from p_name
+     or nullif(trim(coalesce(p_response->'identity'->>'brand', '')), '') is distinct from nullif(trim(coalesce(p_brand, '')), '')
      or (p_response->>'retrieved_at')::timestamptz < now() - interval '1 day' or (p_response->>'retrieved_at')::timestamptz > now() + interval '5 minutes'
      or length(coalesce(p_response->>'body_text', '')) = 0 or length(coalesce(p_response->'identity'->>'title', '')) = 0 then
     raise exception 'direct SuperValu capture missing or not bound to this SKU';
   end if;
   insert into public.store_products(product_id, store, store_sku, store_url, store_product_name, brand, is_own_brand, url_status)
-    values (t.product_id, 'supervalu', p_sku, p_url, trim(p_name), nullif(trim(coalesce(p_brand, '')), ''), false, 'resolved') returning id into offer;
+    values (t.product_id, 'supervalu', p_sku, p_url, p_name, nullif(trim(coalesce(p_brand, '')), ''), false, 'resolved') returning id into offer;
   insert into public.scrape_runs(run_id, store, started_at, finished_at, target_count, attempted_count, fetched, extracted, inserted, unchanged_count, failed,
       retrieval_method, threshold_pct, status)
     values ('barcode_attach_supervalu_' || to_char(now(), 'YYYYMMDDHH24MISSMS'), 'supervalu', now(), now(), 1, 1, 1, 1, 0, 0, 0, 'vercel_direct_product_page', 0, 'success')

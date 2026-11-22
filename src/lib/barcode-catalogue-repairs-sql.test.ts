@@ -19,9 +19,9 @@ async function association(store: 'supervalu' | 'dunnes', sku: string) {
     $4, 'sku_found_by_gtin_search', $1, $5, 200, 1, '[]', $6, $7, $8, 'identity_consistent', 'strong', 1, 'barcode-v5', now() - interval '2 hours')`,
     [GTIN, TSKU, T, store, `${ep}?q=${GTIN}`, createHash('sha256').update(body).digest('hex'), body, sku]);
 }
-const regroup = (offers: string[], name = 'Heinz Cream Of Tomato Soup 400G') => db.query<{ id: string }>(
-  `select public.apply_barcode_regroup($1, $2, $3, $4::uuid[], $5, '{"remainder":"conflict"}'::jsonb, 'Barcode-proven split of a mixed canonical record (test reason text).') id`,
-  [POLICY, T, GTIN, `{${offers.join(',')}}`, name]);
+const regroup = (offers: string[]) => db.query<{ id: string }>(
+  `select public.apply_barcode_regroup($1, $2, $3, $4::uuid[], '{"remainder":"conflict"}'::jsonb, 'Barcode-proven split of a mixed canonical record (test reason text).') id`,
+  [POLICY, T, GTIN, `{${offers.join(',')}}`]);
 const resp = (o: Record<string, unknown> = {}) => JSON.stringify({ store: 'supervalu', sku: S1SKU, product_url: SURL(S1SKU), requested_url: SURL(S1SKU), final_url: SURL(S1SKU),
   source_kind: 'captured_product', retrieved_at: new Date().toISOString(), content_type: 'text/html', body_text: '<html>page</html>', parser_version: 'retailer-identity-response-v3',
   source_path: 'script[1]', identity: { title: 'Heinz Cream of Tomato Soup (400 g)', brand: 'Heinz' }, ...o });
@@ -38,7 +38,7 @@ beforeEach(async () => {
     grant usage on schema public to anon, authenticated, service_role;
     alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
     alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
-    create table public.products (id uuid primary key default gen_random_uuid(), canonical_name text not null, category text, default_unit text, default_quantity text);
+    create table public.products (id uuid primary key default gen_random_uuid(), canonical_name text not null, category text, default_unit text, default_quantity text, brand text);
     create table public.store_products (id uuid primary key default gen_random_uuid(), product_id uuid references public.products(id), store text, store_sku text, store_url text,
       store_product_name text, brand text, is_own_brand boolean, url_status text);
     create table public.scrape_runs (id uuid primary key default gen_random_uuid(), run_id text, store text, started_at timestamptz, finished_at timestamptz, target_count int,
@@ -69,6 +69,16 @@ describe('barcode regroup (split a mixed record)', () => {
     expect(rep).toMatchObject({ kind: 'regroup', from_product_id: P, to_product_id: moved[0], n: 'Complimints Sugar Free Strawberry' });
     expect((await db.query<{ canonical_name: string }>(`select canonical_name from public.products where id = $1`, [moved[0]])).rows[0].canonical_name).toBe('Heinz Cream Of Tomato Soup 400G');
     await expect(db.exec(`delete from public.catalogue_repairs`)).rejects.toThrow(/append-only/);
+  });
+  it('refuses a remaining second listing at a member retailer, a re-pointed Tesco offer, and calls from browser roles', async () => {
+    await association('supervalu', S1SKU); await association('dunnes', DSKU);
+    await db.exec(`insert into public.store_products(product_id, store, store_sku, store_url, store_product_name, url_status) values ('${P}', 'dunnes', '100000777', 'u', 'Other Dunnes listing', 'resolved')`);
+    await expect(asService(() => regroup([D1]))).rejects.toThrow(/shares a retailer with a member/);
+    await db.exec(`delete from public.store_products where store_sku = '100000777'; update public.store_products set store_sku = '258000000' where id = '${T}'`);
+    await expect(asService(() => regroup([D1]))).rejects.toThrow(/not the SKU its retailer resolved|no independent evidence|no Tesco identity/);
+    const priv = (await db.query<{ a: boolean; u: boolean }>(`select has_function_privilege('anon', 'public.apply_barcode_regroup(text,uuid,text,uuid[],jsonb,text)', 'execute') a,
+      has_function_privilege('authenticated', 'public.attach_barcode_supervalu_offer(text,uuid,text,text,text,text,text,jsonb,jsonb,text)', 'execute') u`)).rows[0];
+    expect(priv).toEqual({ a: false, u: false });
   });
   it('refuses without independent evidence the record is mixed (no remaining offer resolved otherwise)', async () => {
     await association('dunnes', DSKU);   // SuperValu never resolved anything: S2 is not contradicted by its own retailer
@@ -108,6 +118,8 @@ describe('SuperValu attach', () => {
     await expect(asService(() => attach({ url: 'https://shop.supervalu.ie/sm/delivery/rsid/5550/product/x-id-1012345000' }))).rejects.toThrow(/product URL/);
     await expect(asService(() => attach({ response: resp({ requested_url: 'https://shop.supervalu.ie/search?q=x' }) }))).rejects.toThrow(/not bound/);
     await expect(asService(() => attach({ response: resp({ retrieved_at: new Date(Date.now() - 3 * 864e5).toISOString() }) }))).rejects.toThrow(/not bound/);
+    await expect(asService(() => attach({ response: resp({ identity: { title: 'Something Else (400 g)', brand: 'Heinz' } }) }))).rejects.toThrow(/not bound/);
+    await expect(asService(() => attach({ response: resp({ parser_version: 'v0' }) }))).rejects.toThrow(/not bound/);
     expect((await db.query(`select 1 from public.store_products where store_sku = '${S1SKU}'`)).rows).toHaveLength(0);
   });
 });

@@ -62,3 +62,16 @@ describe('SKU-less placeholder offers', () => {
     expect(p).toMatchObject({ action: 'none', reasons: ['no_barcode_evidence_of_mix'] });
   });
 });
+
+describe('review fixes', () => {
+  it('an offer of another retailer (Aldi) that matches the Tesco product is never stranded', () => {
+    const p = planRegroup({ gtin: 'g', tesco, record: [T, { id: 'd', store: 'dunnes', sku: '9', name: 'Complimints 20g', brand: 'Complimints' },
+      { id: 'a', store: 'aldi', sku: null, name: 'Gem Granulated Sugar 500g', brand: 'Gem' }], resolved: { dunnes: '100' }, shared: new Set() });
+    expect(p).toMatchObject({ action: 'held', reasons: ['remainder_not_contradicted:aldi'] });
+  });
+  it('holds when the record name describes the Tesco product (the remaining offers would keep a wrong name)', () => {
+    const p = planRegroup({ gtin: 'g', tesco, canonicalName: 'Gem Granulated Sugar 500g', record: [T, { id: 'd', store: 'dunnes', sku: '9', name: 'Complimints 20g', brand: 'Complimints' }],
+      resolved: { dunnes: '100' }, shared: new Set() });
+    expect(p.reasons).toContain('canonical_describes_tesco_side');
+  });
+});

@@ -3,7 +3,7 @@
 //   1. regroup: split a mixed record (src/lib/barcode-catalogue-repair.ts planRegroup -> apply_barcode_regroup)
 //   2. SuperValu attach: one governed direct capture of the SuperValu product page SuperValu's own search resolved,
 //      then planSupervaluAttach -> attach_barcode_supervalu_offer (offer + retained capture in one transaction)
-// Every decision is logged; the database re-checks the evidence and refuses anything weaker. Prices are then
+// Every decision is logged; the database re-checks barcode, ownership and binding; identity judgements are the policy's. Prices are then
 // collected by the existing daily SuperValu refresh; the machine pair-approval run handles matching.
 // Env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, APPLY, LIMIT (repairs of each kind per run).
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -39,7 +39,7 @@ async function main() {
   const tesco = new Map((await byIds(assoc.map(a => a.gtin_origin_store_product_id), c => sb.from('store_products').select('id,product_id,store,store_sku').in('id', c))).map(o => [o.id, o]));
   const loadRecords = async () => {
     const prods = [...new Set([...tesco.values()].map(t => t.product_id).filter(Boolean))];
-    return byIds(prods, c => sb.from('store_products').select('id,product_id,store,store_sku,store_product_name,brand').in('product_id', c).in('store', ['tesco', 'dunnes', 'supervalu']));
+    return byIds(prods, c => sb.from('store_products').select('id,product_id,store,store_sku,store_product_name,brand').in('product_id', c));
   };
   const skuShared = async (offers: Row[]) => {
     const shared = new Set<string>();
@@ -57,6 +57,8 @@ async function main() {
 
   // 1. Regroup.
   let records = await loadRecords();
+  const names = new Map((await byIds([...new Set([...tesco.values()].map(t => t.product_id).filter(Boolean))],
+    c => sb.from('products').select('id,canonical_name').in('id', c))).map(p => [p.id, String(p.canonical_name ?? '')]));
   let shared = await skuShared(records);
   let regrouped = 0;
   for (const [key, g] of groups) {
@@ -65,13 +67,13 @@ async function main() {
     if (!t?.product_id || !ref) { bump('regroup:no_reference'); continue; }
     const resolved: Partial<Record<'dunnes' | 'supervalu', string>> = {};
     for (const a of g) resolved[a.store as 'dunnes' | 'supervalu'] = String(a.resolved_sku);
-    const plan = planRegroup({ gtin: g[0].gtin, tesco: { id: t.id, ...ref }, record: records.filter(o => o.product_id === t.product_id).map(toOffer), resolved, shared });
+    const plan = planRegroup({ gtin: g[0].gtin, tesco: { id: t.id, ...ref }, canonicalName: names.get(t.product_id), record: records.filter(o => o.product_id === t.product_id).map(toOffer), resolved, shared });
     bump(`regroup:${plan.action}${plan.reasons.length ? ':' + plan.reasons[0].split(':')[0] : ''}`);
     if (plan.action !== 'regroup') continue;
     log({ event: 'regroup_planned', tesco: t.id, gtin: g[0].gtin, title: ref.title, members: plan.members, checks: plan.checks, apply: APPLY });
     if (!APPLY || regrouped >= LIMIT) continue;
     const { data, error } = await sb.rpc('apply_barcode_regroup', { p_policy_version: REPAIR_POLICY_VERSION, p_tesco_offer: t.id, p_gtin: g[0].gtin,
-      p_offers: plan.members, p_canonical_name: ref.title, p_checks: plan.checks,
+      p_offers: plan.members, p_checks: plan.checks,
       p_reason: `Policy ${REPAIR_POLICY_VERSION}: GTIN ${g[0].gtin} resolved other SKUs for the remaining offers, which contradict "${ref.title}".` });
     if (error) { bump('regroup:db_refused'); log({ event: 'regroup_refused', tesco: t.id, message: error.message }); continue; }
     regrouped++; log({ event: 'regrouped', tesco: t.id, repair: data });
@@ -90,7 +92,7 @@ async function main() {
     const ref = t && tescoRef(t.id, g[0].gtin);
     if (!a || !t?.product_id || !ref) continue;
     const record = records.filter(o => o.product_id === t.product_id).map(toOffer);
-    if (record.some(o => o.store === 'supervalu' && o.sku)) continue;   // has an offer: regroup/repair territory, not attach
+    if (record.some(o => o.store === 'supervalu')) continue;   // has an offer: regroup/repair territory, not attach
     const sku = String(a.resolved_sku);
     const owned = (await sb.from('store_products').select('id').eq('store', 'supervalu').eq('store_sku', sku)).data?.length ?? 0;
     const title = (obs.find(x => x.gtin === g[0].gtin && x.store === 'supervalu' && String(x.resolved_sku) === sku)?.result_items ?? [])
@@ -98,7 +100,7 @@ async function main() {
     if (owned || !title) { bump(owned ? 'attach:sku_owned' : 'attach:no_title'); continue; }
     const pre = planSupervaluAttach({ gtin: g[0].gtin, tesco: { id: t.id, ...ref }, record, sku, skuOwned: false, capture: { title, brand: null, sku } });
     if (pre.reasons.some(r => !r.startsWith('identity_review') && r !== 'no_direct_capture' && !r.startsWith('identity:brand'))) { bump(`attach:held:${pre.reasons[0]}`); continue; }
-    if (!APPLY || attached >= LIMIT) { bump('attach:candidate'); continue; }
+    if (!APPLY || attached >= LIMIT || captures >= LIMIT) { bump('attach:candidate'); continue; }
     const url = supervaluProductUrl(title, sku);
     let resp = null;
     try { captures++; resp = await captureOfferEvidence({ id: 'new', store: 'supervalu', store_sku: sku, store_url: url }, title); }

@@ -10,11 +10,13 @@ import { assessBarcodeHit } from './barcode-matching';
 import { isOwnLabel } from './comparison-policy';
 
 export const REPAIR_POLICY_VERSION = 'barcode-repair-v1';
-export type RecordOffer = { id: string; store: 'tesco' | 'dunnes' | 'supervalu'; sku: string | null; name: string; brand: string | null };
+export type RecordOffer = { id: string; store: string; sku: string | null; name: string; brand: string | null };
 export type RegroupInput = {
   gtin: string;
   tesco: { id: string; title: string; brand: string | null };
-  /** Every offer on the Tesco offer's record, including the Tesco offer itself. */
+  /** The record's current canonical name. */
+  canonicalName?: string;
+  /** Every offer on the Tesco offer's record (ALL retailers), including the Tesco offer itself. */
   record: RecordOffer[];
   /** SKU each retailer's own search resolved for the GTIN (active associations from this Tesco offer). */
   resolved: Partial<Record<'dunnes' | 'supervalu', string>>;
@@ -42,7 +44,11 @@ export function planRegroup(i: RegroupInput): Plan {
   // Independent evidence of a mix: the retailer's own search resolved ANOTHER SKU than a remaining offer.
   const evidenced = remainder.filter(o => o.store !== 'tesco' && !!o.sku && i.resolved[o.store as 'dunnes' | 'supervalu'] && i.resolved[o.store as 'dunnes' | 'supervalu'] !== o.sku);
   if (!evidenced.length) return { action: 'none', members: [], reasons: ['no_barcode_evidence_of_mix'], checks: {} };
+  // Every remaining offer, of ANY retailer (Aldi included), must contradict the Tesco product: none is stranded.
   for (const o of remainder) if (!contradicts(i.tesco, o)) reasons.push(`remainder_not_contradicted:${o.store}`);
+  // The Tesco side moves to a new record. If the record's own name describes the Tesco product, the remaining
+  // offers would keep a name that is not theirs: hold instead.
+  if (i.canonicalName && agrees(i.tesco, i.canonicalName, null)) reasons.push('canonical_describes_tesco_side');
   for (const m of members) if (!agrees(i.tesco, m.name, m.brand)) reasons.push(`member_not_strong:${m.store}`);
   for (const o of [i.tesco.id, ...members.map(m => m.id)]) if (i.shared.has(o)) reasons.push('member_sku_shared');
   if (!i.tesco.title.trim() || i.tesco.title.trim().length < 6) reasons.push('tesco_title_missing');
@@ -59,7 +65,7 @@ export type AttachInput = {
 };
 export function planSupervaluAttach(i: AttachInput): { attach: boolean; reasons: string[] } {
   const reasons: string[] = [];
-  if (i.record.some(o => o.store === 'supervalu' && o.sku)) reasons.push('record_has_supervalu_offer');
+  if (i.record.some(o => o.store === 'supervalu')) reasons.push('record_has_supervalu_offer');
   if (i.skuOwned) reasons.push('sku_owned');
   if (!i.capture) reasons.push('no_direct_capture');
   else {
