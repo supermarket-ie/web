@@ -1,5 +1,33 @@
 # Supermarket.ie — Canonical Project State
 
+## 22 November 2026 (night) — Product-detail performance hotfix (migration 20261123120000 NOT applied)
+
+**Finding** (owner measurement, confirmed by the agent over REST). `current_pair_review_status(now(), true)`
+takes 5.2–5.8 s for 350 active reviews; the owner measured ~1.47 M shared-buffer hits.
+- The app paged until an EMPTY page, so every cache miss ran the function twice (~11 s).
+- Concurrent cache misses each ran their own read.
+- Product pages (ISR, `revalidate` 1800) measured 1.3 s / **12.3–14.7 s** on misses and 0.04 s
+  when cached.
+
+**Causes in SQL:**
+- `retailer_identity_responses` has no `store_product_id` index, so every side scanned the table.
+- One global `observed` set was filtered by correlated subqueries per side (three times each).
+
+**Fix:**
+- Migration `20261123120000_pair_status_performance.sql`:
+  - indexes `retailer_identity_responses(store_product_id, retrieved_at desc)` and
+    `store_products(store, store_sku)`
+  - the same status rules evaluated in one per-side LATERAL aggregate over index-backed evidence
+  - return type and grants unchanged
+  - `src/lib/pair-status-performance-sql.test.ts` proves the output is byte-identical to the
+    previous definition across 24 records × 5 evaluation times × both filters (every status covered)
+  - the durable and machine suites also run on it
+- `src/lib/comparison-reviews.ts`:
+  - paging stops at the first short page; the page size (1000) equals the measured PostgREST
+    `max_rows` (1000)
+  - concurrent cache misses share one in-flight read
+  - the 60 s TTL, fail-closed behaviour and validation are unchanged
+
 ## 22 November 2026 (evening) — Automated barcode catalogue repairs (migration 20261123090000 NOT applied)
 
 PR #434 (two reviews: NEEDS_CHANGES, then APPROVED) adds policy `barcode-repair-v1`:

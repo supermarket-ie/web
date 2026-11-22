@@ -57,7 +57,7 @@ beforeEach(async () => {
     create table public.tesco_direct_collection_pages (id uuid primary key default gen_random_uuid(), requested_url text, final_url text,
       outcome text, http_status int, body_sha256 text, parsed jsonb, created_at timestamptz default now());`);
   for (const m of ['20261011113227_retailer_identity_responses', '20261103141000_offer_comparison_review_ledger', '20261118120000_durable_pair_approvals',
-    '20261121090000_retailer_barcode_observations', '20261122090000_machine_pair_approvals']) await db.exec(readFileSync(`supabase/migrations/${m}.sql`, 'utf8'));
+    '20261121090000_retailer_barcode_observations', '20261122090000_machine_pair_approvals', '20261123120000_pair_status_performance']) await db.exec(readFileSync(`supabase/migrations/${m}.sql`, 'utf8'));
   await db.exec(`insert into public.store_products values
     ('${T}', '${P}', 'tesco', '${TSKU}', '${TURL}', 'Heinz Cream Of Tomato Soup 400G'),
     ('${S}', '${P}', 'supervalu', '${SSKU}', '${SURL}', 'Heinz Cream of Tomato Soup (400 g)'),

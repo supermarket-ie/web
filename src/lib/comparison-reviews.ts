@@ -4,7 +4,11 @@ import { validPairReview, type PairReview } from './comparison-policy';
 const HORIZON_MS = 14 * 86400000;
 /** Reviews change only through the protected postgres insert, so a short process-local cache is safe. */
 const CACHE_TTL_MS = 60_000;
+/** Page size of the durable status read; equals PostgREST's server row cap (max_rows). */
+export const DURABLE_PAGE = 1000;
 let cached: { at: number; reviews: PairReview[] } | null = null;
+// Concurrent renders on a cache miss share ONE read instead of each running the status function.
+let inflight: Promise<PairReview[]> | null = null;
 let warned = false;
 
 /**
@@ -24,15 +28,16 @@ const isMissingFunction = (error: { code?: string } | null) => !!error && (error
 
 /** Durable approvals: only pairs the database reports ACTIVE (unchanged SKU + identity, evidence <= 14 days). */
 async function readDurable(): Promise<PairReview[] | null> {
-  // ACTIVE rows only, paged past PostgREST's row cap so no approval is silently dropped.
-  // Pages until an empty page, so a server row cap below the page size can never silently truncate.
+  // ACTIVE rows only, paged past PostgREST's row cap so no approval is silently dropped. Each page re-runs the
+  // status function, so paging stops at the first SHORT page: PAGE equals the server cap (Supabase max_rows =
+  // 1000, measured 22 Nov 2026), so a short page is the end. A page of exactly PAGE rows always fetches the next.
   const rows: DurableStatusRow[] = [];
   for (let from = 0; ;) {
-    const { data, error } = await supabaseAdmin.rpc('current_pair_review_status', { p_active_only: true }).range(from, from + 999);
+    const { data, error } = await supabaseAdmin.rpc('current_pair_review_status', { p_active_only: true }).range(from, from + DURABLE_PAGE - 1);
     if (isMissingFunction(error)) return null; // migration not applied yet: use the 14-day ledger read
     if (error) throw error;
-    if (!data?.length) break;
-    rows.push(...(data as DurableStatusRow[]));
+    rows.push(...((data ?? []) as DurableStatusRow[]));
+    if (!data || data.length < DURABLE_PAGE) break;
     from += data.length;
   }
   return rows
@@ -78,6 +83,10 @@ async function readLedger(now: number): Promise<PairReview[]> {
  */
 export async function getCurrentPairReviews(now = Date.now()): Promise<PairReview[]> {
   if (cached && now - cached.at < CACHE_TTL_MS) return cached.reviews.filter(review => validPairReview(review, now));
+  if (!inflight) inflight = loadReviews(now).finally(() => { inflight = null; });
+  return (await inflight).filter(review => validPairReview(review, now));
+}
+async function loadReviews(now: number): Promise<PairReview[]> {
   try {
     const durable = await readDurable();
     // Durable positives (monitored) PLUS recent negative decisions from the ledger exactly as before, so a
@@ -85,7 +94,7 @@ export async function getCurrentPairReviews(now = Date.now()): Promise<PairRevie
     const reviews = durable ? [...durable, ...latestNegatives(await readLedger(now))] : await readLedger(now);
     cached = { at: now, reviews };
     warned = false;
-    return reviews.filter(review => validPairReview(review, now));
+    return reviews;
   } catch (error) {
     // Price availability is separate from pairwise equivalence. Failure must
     // not invent approved edges, and must never downgrade latest_prices.
@@ -101,4 +110,4 @@ export async function getCurrentPairReviews(now = Date.now()): Promise<PairRevie
   }
 }
 /** Test hook: clear the process-local cache. */
-export function resetPairReviewCache() { cached = null; warned = false; }
+export function resetPairReviewCache() { cached = null; warned = false; inflight = null; }
