@@ -17,6 +17,11 @@ function makeFakeSb(opts: {
   approvals?: Row[];
   // product_barcode_provenance rows (independently sourced barcodes).
   provenance?: Row[];
+  // Machine pair reviews (retailer_offer_pair_reviews rows) + which are ACTIVE in current_pair_review_status.
+  pairReviews?: Array<Row & { active?: boolean }>;
+  // store_products rows for the pairs' other offers (id, product_id); default: each on canonical 'p1'.
+  pairOffers?: Row[];
+  pairStatusError?: string;
   finaliseError?: string; // force apify_finalise_tesco_page to return an RPC error
   finaliseResult?: (args: Row) => { finalised: boolean };
   reserveResult?: (args: Row) => { data: unknown; error: { message: string } | null };
@@ -54,12 +59,13 @@ function makeFakeSb(opts: {
     // attachFreshPeers queries store_products filtered to dunnes/supervalu via
     // .in('store', [...]) and resolves via await on the query (no .range). We
     // detect that by the 'store' in-filter and serve opts.peers.
-    const state = { peerQuery: false, latestByOffer: false };
+    const state = { peerQuery: false, latestByOffer: false, byIds: null as string[] | null };
     const dataFor = (): Row[] => name === 'store_products' ? (state.peerQuery ? (opts.peers ?? []) : opts.mappings)
       : name === 'latest_prices' ? opts.latest
       : name === 'scrape_product_receipts' ? opts.receipts
       : name === 'tesco_identity_verifications' ? (opts.verifications ?? [])
       : name === 'product_barcode_provenance' ? (opts.provenance ?? [])
+      : name === 'retailer_offer_pair_reviews' ? (opts.pairReviews ?? [])
       : name === 'tesco_first_price_approvals' ? (opts.approvals ?? []).map(a => ({
         ...a, mapping_snapshot: a.mapping_snapshot === 'auto' ? snapshotFor(String(a.store_product_id)) : a.mapping_snapshot }))
       : name === 'tesco_direct_collection_pages' ? opts.recent : [];
@@ -67,18 +73,22 @@ function makeFakeSb(opts: {
     const chain = () => builder;
     builder.select = chain; builder.eq = chain; builder.not = chain; builder.gte = chain;
     builder.is = chain; builder.order = chain; builder.gt = chain;
-    builder.in = (col: string) => { if (col === 'store') state.peerQuery = true; if (name === 'latest_prices' && col === 'store_product_id') state.latestByOffer = true; return builder; };
+    builder.in = (col: string, vals?: unknown[]) => { if (name === 'store_products' && col === 'id') state.byIds = (vals ?? []).map(String); if (col === 'store') state.peerQuery = true; if (name === 'latest_prices' && col === 'store_product_id') state.latestByOffer = true; return builder; };
     // attachFreshPeers awaits the builder directly (no .range/.limit); support
     // that by making the builder thenable, resolving to the peer rows.
     builder.then = (resolve: (v: { data: Row[]; error: null }) => unknown) =>
-      resolve({ data: state.latestByOffer ? peerLatest() : state.peerQuery ? peerRows() : [], error: null });
+      resolve({ data: state.byIds ? pairOfferRows().filter(o => state.byIds!.includes(String(o.id)))
+        : state.latestByOffer ? peerLatest() : state.peerQuery ? peerRows() : [], error: null });
     builder.limit = async () => ({ data: dataFor(), error: null });
     builder.range = async (from: number) => ({ data: from === 0 ? dataFor() : [], error: null });
     return builder;
   };
-  const sb = {
-    from: (name: string) => table(name),
-    rpc: async (fn: string, args: Row) => {
+  const pairOfferRows = (): Row[] => opts.pairOffers ?? [...new Set((opts.pairReviews ?? []).flatMap(r => [r.left_offer_id, r.right_offer_id]))].map(id => ({ id, product_id: 'p1' }));
+  // Durable status: one row per ACTIVE pair (the real function returns only the latest review's status).
+  const pairStatus = () => ({ range: async (from: number) => opts.pairStatusError ? { data: null, error: { message: opts.pairStatusError } }
+    : ({ data: from === 0 ? [...new Map((opts.pairReviews ?? []).filter(r => r.active !== false)
+      .map(r => [`${r.left_offer_id}|${r.right_offer_id}`, { left_offer_id: r.left_offer_id, right_offer_id: r.right_offer_id, status: 'active' }])).values()] : [], error: null }) });
+  const rpcAsync = async (fn: string, args: Row) => {
       calls.push({ fn, args });
       if (fn === 'apify_begin_tesco_run') return { data: { runId: 'run-1', leaseToken: 'tok-1' }, error: null };
       if (fn === 'apify_mapping_snapshot') {
@@ -126,6 +136,12 @@ function makeFakeSb(opts: {
       }
       if (fn === 'apify_close_tesco_run') return { data: { leaseReleased: true }, error: null };
       return { data: null, error: null };
+  };
+  const sb = {
+    from: (name: string) => table(name),
+    rpc: (fn: string, args: Row) => {
+      if (fn === 'current_pair_review_status') { calls.push({ fn, args }); return pairStatus(); }
+      return rpcAsync(fn, args);
     },
   } as unknown as SupabaseClient;
   return { sb, calls, budgetState };
@@ -230,6 +246,68 @@ describe('collectTescoApify — identity + AI inference acceptance path', () => 
     const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { assessOptions: { runModel: aiRunner('verified_exact') as never } }));
     expect(res.accepted).toBe(0);
     expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(false);
+  });
+
+  // An ACTIVE machine-approved exact pair (barcode-exact-v1) is DB-verified barcode support for its Tesco side,
+  // used only while the live page carries the same SKU + GTIN, and never without the AI verdict.
+  const pair = (over: Row = {}) => ({ id: 'rev-1', left_offer_id: '11111111-1111-1111-1111-111111111111', right_offer_id: 'sv-offer',
+    left_sku: '254877356', right_sku: '1017371000', classification: 'exact_product', decision_kind: 'machine',
+    reviewed_at: '2026-11-22T10:00:00Z', created_at: '2026-11-22T10:00:00Z', machine_evidence: { gtin: '5000119309228' }, ...over });
+  const run = async (o: Partial<Parameters<typeof makeFakeSb>[0]>, live = item(), verdict = 'verified_exact') => {
+    const fx = fixtures(); const events: Row[] = [];
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: [], ...o });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(live), { assessOptions: { runModel: aiRunner(verdict) as never }, log: (e: Row) => events.push(e) }));
+    return { res, calls, events };
+  };
+  it('pair support is withheld when superseded, moved, contradictory or unreadable', async () => {
+    // A later comparable_alternative review of the same pair supersedes the machine exact row.
+    expect((await run({ pairReviews: [pair(), pair({ id: 'rev-2', classification: 'comparable_alternative', decision_kind: 'human', reviewed_at: '2026-11-22T11:00:00Z' })] })).res.accepted).toBe(0);
+    // The other offer has moved to another canonical product.
+    expect((await run({ pairReviews: [pair()], pairOffers: [{ id: 'sv-offer', product_id: 'p9' }] })).res.accepted).toBe(0);
+    // Two active pairs of this Tesco offer state different GTINs.
+    expect((await run({ pairReviews: [pair(), pair({ id: 'rev-3', right_offer_id: 'dn-offer', machine_evidence: { gtin: '5000000000002' } })] })).res.accepted).toBe(0);
+    // The durable status read fails.
+    expect((await run({ pairReviews: [pair()], pairStatusError: 'boom' })).res.accepted).toBe(0);
+    // Control: the same fixture with a valid single pair accepts.
+    expect((await run({ pairReviews: [pair()] })).res.accepted).toBe(1);
+  });
+  it('a live GTIN that differs from the pair approval records verified_pair_identity_changed and never reopens anything', async () => {
+    const { res, calls, events } = await run({ pairReviews: [pair({ machine_evidence: { gtin: '5000119309235' } })] });
+    expect(res.accepted).toBe(0);
+    expect(JSON.stringify(events)).toContain('verified_pair_identity_changed');
+    expect(calls.some(c => c.fn === 'apify_reopen_verified_link')).toBe(false);
+  });
+  it('ACCEPTS with an active machine pair approval as barcode support (AI still agrees), where the EAN alone is held', async () => {
+    const fx = fixtures();
+    const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: [], pairReviews: [pair()] });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { assessOptions: { runModel: aiRunner('verified_exact') as never } }));
+    expect(res.accepted).toBe(1);
+    expect(calls.some(c => c.fn === 'apify_finalise_tesco_page')).toBe(true);
+  });
+  it('the pair approval never replaces the AI: an uncertain or rejected verdict still holds', async () => {
+    for (const verdict of ['uncertain', 'rejected']) {
+      const fx = fixtures();
+      const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: [], pairReviews: [pair()] });
+      const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item()), { assessOptions: { runModel: aiRunner(verdict) as never } }));
+      expect(res.accepted).toBe(0);
+    }
+  });
+  it('a suspended pair, a pair for another SKU, or a live GTIN that differs from the approval gives no support', async () => {
+    for (const [reviews, live] of [[[pair({ active: false })], item()], [[pair({ left_sku: '999999999' })], item()],
+      [[pair({ machine_evidence: { gtin: '5000000000002' } })], item()]] as const) {
+      const fx = fixtures();
+      const { sb, calls } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: [], pairReviews: [...reviews] });
+      const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(live), { assessOptions: { runModel: aiRunner('verified_exact') as never } }));
+      expect(res.accepted).toBe(0);
+      expect(calls.some(c => c.fn === 'apify_reopen_verified_link')).toBe(false);   // a pair is never "reopened" here
+    }
+  });
+  it('a pair approval never overrides a deterministic barcode conflict', async () => {
+    const fx = fixtures();
+    const { sb } = makeFakeSb({ mappings: fx.mappings, latest: fx.latest, receipts: fx.receipts, recent: fx.recent, provenance: [],
+      pairReviews: [pair({ machine_evidence: { gtin: '5099999999999' } })] });
+    const res = await collectTescoApify('renewal', 10, baseDeps(sb, okFetch(item({ gtin: '05099999999999' })), { assessOptions: { runModel: aiRunner('verified_exact') as never } }));
+    expect(res.accepted).toBe(0);
   });
 
   it('a provenance row for a DIFFERENT barcode does not make the canonical EAN independent', async () => {

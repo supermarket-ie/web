@@ -1,5 +1,46 @@
 # Supermarket.ie — Canonical Project State
 
+## 22 November 2026 (afternoon) — Pair approvals as Tesco identity support; Dunnes attach batch 2; 205 associations triaged
+
+- **Tesco collector (PR #432, two reviews, APPROVED).** An ACTIVE machine-approved exact pair
+  (`barcode-exact-v1`) now acts as DB-verified barcode support for its Tesco side, exactly like a
+  catalogue link. It applies only when:
+  - the pair's latest review is a machine `exact_product`
+  - the other offer is still on the mapping's canonical record
+  - every active pair of that Tesco offer states the same GTIN
+  - the live page carries the same SKU and GTIN; otherwise the collector records
+    `verified_pair_identity_changed` and never reopens anything
+
+  The AI `verified_exact` verdict and every deterministic conflict check are unchanged and still
+  required. First prices keep the two-peer floor. INTENDED (owner, 22 Nov: "fix eligible identity
+  problems"): proven mappings held only by a canonical-description gap can now reach the
+  AI-gated gap route with pair support instead of peers.
+- **The 55 approved-but-unpriced Tesco offers:**
+  - 21 proven offers held by canonical gaps (`measureExactnessFailed` 16, "candidate does not
+    establish full exact canonical identity" 5). This change targets them.
+  - 6 proven `ai_uncertain`, 5 unavailable, 4 genuine conflicts.
+  - 19 first-price offers (14 never eligible, 5 held). They need a first-price approval and
+    two fresh peers, which is unchanged policy.
+- **205 barcode associations not on the Tesco record:**
+
+  | Category | Dunnes | SuperValu |
+  |---|---|---|
+  | Attach-ready | 73 | 25 |
+  | Record has another SKU | 44 | 47 |
+  | SKU is on another record | 9 | 2 |
+  | Both | 0 | 5 |
+
+  - Dunnes attach batch 2, guarded `dunnes-barcode-renewal` attach mode run from the deployed
+    image: 59 targets with a DB-bound Tesco reference. **12 attached** (mapping + SKU-bound price).
+    Held: 36 `canonical_supervalu_conflicts` (a canonical mixing products, needs a split),
+    9 `confirmDunnesSku` holds, 2 excluded category.
+  - SuperValu attach: there is no existing guarded SuperValu association-creation path
+    (`finalize_store_scrape_product` only refreshes mapped offers), so the 25 are held.
+  - Re-point and duplicate cases (107): genuine catalogue conflicts, held.
+- **Dunnes renewals:** 4 stale associated Dunnes offers were retried and held again by
+  unchanged rules (multipack in title vs structured pack, mixed canonical). The daily Dunnes
+  worker continues.
+
 ## 22 November 2026 — FIRST MACHINE APPROVALS: 338 active pairs, 43 fully verified three-retailer products
 
 Migration `20261122090000_machine_pair_approvals.sql` was applied by the owner (Supabase history

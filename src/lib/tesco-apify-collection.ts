@@ -103,7 +103,10 @@ export type ApifyMapping = {
   canonicalEanIndependent?: boolean;
 };
 
-export type VerifiedLink = { id: string; sku: string; gtin: string; identityFingerprint: string; mappingSnapshot?: unknown };
+// kind 'pair': an ACTIVE machine-approved exact pair review (policy barcode-exact-v1) binding this Tesco SKU to a
+// Dunnes/SuperValu offer through the GTIN the Tesco page itself stated. It contributes its barcode exactly like a
+// catalogue link (only while the live page carries the same SKU + GTIN); the AI verdict is still required.
+export type VerifiedLink = { id: string; sku: string; gtin: string; identityFingerprint: string; mappingSnapshot?: unknown; kind?: 'catalogue' | 'pair' };
 
 export type FirstPriceApproval = { id: string; identityFingerprint: string };
 
@@ -323,6 +326,67 @@ export async function selectApifyMappings(
     if ((data ?? []).length < 1000) break;
   }
 
+  // Active machine-approved exact pair reviews (migration 20261122090000) as barcode links for their Tesco side.
+  // Counted only when: durable status says the pair is ACTIVE; the pair's LATEST review is a machine exact_product
+  // (a later human or comparable_alternative review supersedes it); the other offer is still on this mapping's
+  // canonical product; and every such pair of the Tesco offer states the SAME GTIN (contradictory pairs give none).
+  // Any read error = no pair support (fail closed), logged once.
+  type PairLink = { link: VerifiedLink; otherOffer: string };
+  const pairLinks = new Map<string, PairLink[]>();
+  const otherProduct = new Map<string, string>();
+  try {
+    const active = new Set<string>();
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await sb.rpc('current_pair_review_status', { p_active_only: true }).range(offset, offset + 999);
+      if (error) throw error;
+      for (const r of (data ?? []) as Record<string, unknown>[]) if (r.status === 'active') active.add(`${r.left_offer_id}|${r.right_offer_id}`);
+      if ((data ?? []).length < 1000) break;
+    }
+    const latest = new Map<string, Record<string, unknown>>();
+    if (active.size) for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await sb.from('retailer_offer_pair_reviews')
+        .select('id,left_offer_id,right_offer_id,left_sku,right_sku,classification,decision_kind,machine_evidence,reviewed_at,created_at')
+        .order('id').range(offset, offset + 999);
+      if (error) throw error;
+      for (const r of (data ?? []) as Record<string, unknown>[]) {
+        const k = `${r.left_offer_id}|${r.right_offer_id}`;
+        if (!active.has(k)) continue;
+        const old = latest.get(k);
+        const t = (v: unknown) => Date.parse(String(v));
+        const newer = !old || t(r.reviewed_at) > t(old.reviewed_at)
+          || (t(r.reviewed_at) === t(old.reviewed_at) && (t(r.created_at) > t(old.created_at)
+            || (t(r.created_at) === t(old.created_at) && String(r.id) > String(old.id))));
+        if (newer) latest.set(k, r);
+      }
+      if ((data ?? []).length < 1000) break;
+    }
+    for (const r of latest.values()) {
+      const gtin = String((r.machine_evidence as Record<string, unknown> | null)?.gtin ?? '');
+      if (r.decision_kind !== 'machine' || r.classification !== 'exact_product' || !/^\d{8,14}$/.test(gtin)) continue;
+      const sides = [[r.left_offer_id, r.left_sku, r.right_offer_id], [r.right_offer_id, r.right_sku, r.left_offer_id]] as const;
+      for (const [offer, sku, other] of sides) if (offer && sku && other) {
+        const list = pairLinks.get(String(offer)) ?? [];
+        list.push({ link: { id: `pair:${r.id}`, sku: String(sku), gtin, identityFingerprint: '', kind: 'pair' }, otherOffer: String(other) });
+        pairLinks.set(String(offer), list);
+      }
+    }
+    const others = [...new Set([...pairLinks.values()].flat().map(p => p.otherOffer))];
+    for (let i = 0; i < others.length; i += 100) {
+      const { data, error } = await sb.from('store_products').select('id,product_id').in('id', others.slice(i, i + 100));
+      if (error) throw error;
+      for (const o of (data ?? []) as Record<string, unknown>[]) if (o.product_id) otherProduct.set(String(o.id), String(o.product_id));
+    }
+  } catch (e) {
+    pairLinks.clear();
+    console.warn('[tesco-apify] pair-approval support unavailable; collecting without it', { message: e instanceof Error ? e.message : String(e) });
+  }
+  // The pair link for one Tesco mapping, or null (no pair, another SKU, a moved offer, or contradictory GTINs).
+  const pairLinkFor = (id: string, sku: string, productId: string): VerifiedLink | null => {
+    const list = (pairLinks.get(id) ?? []).filter(p => p.link.sku === sku && otherProduct.get(p.otherOffer) === productId);
+    const gtins = new Set(list.map(p => p.link.gtin.replace(/^0+/, '')));
+    return list.length && gtins.size === 1 ? list[0].link : null;
+  };
+
   // Independently sourced barcodes (product_barcode_provenance, migration
   // 20261115120000). Missing table = none: canonical EANs are then Tesco-sourced.
   const provenance = new Set<string>();
@@ -389,7 +453,7 @@ export async function selectApifyMappings(
       peers: [],      // filled below from fresh Dunnes/SuperValu peers
       firstPrice: firstPriceEligible,  // an unproven expansion first-price candidate
       approval: approval && firstPriceEligible ? { id: approval.id, identityFingerprint: approval.identityFingerprint } : null,
-      link: links.get(id)?.sku === sku ? links.get(id)! : null,
+      link: links.get(id)?.sku === sku ? links.get(id)! : pairLinkFor(id, sku, String(r.product_id)),
       canonicalEanIndependent: !!c?.ean && provenance.has(`${r.product_id}|${String(c.ean).replace(/^0+/, '')}`),
       ...(evidenceMode ? { evidenceUrl: url, evidencePurpose: 'first_price' as const } : {}),
     });
@@ -871,7 +935,10 @@ export async function collectTescoApify(
           || stableStringify(m.link.mappingSnapshot) === stableStringify(boundSnapshot);
         const same = snapshotSame && product.sku === m.link.sku && (product.gtin ?? '').replace(/^0+/, '') === m.link.gtin.replace(/^0+/, '');
         if (same) linkBarcode = m.link.gtin;
-        else {
+        else if (m.link.kind === 'pair') {
+          // The pair approval's own durable monitoring suspends it; the collector only stops using it.
+          reasons.push('verified_pair_identity_changed');
+        } else {
           reasons.push('verified_link_identity_changed');
           await rpc(sb, 'apify_reopen_verified_link', { p_link_id: m.link.id,
             p_reason: snapshotSame ? `live identity changed: sku ${product.sku} gtin ${product.gtin ?? 'none'}`
