@@ -352,9 +352,10 @@ export async function selectApifyMappings(
         const k = `${r.left_offer_id}|${r.right_offer_id}`;
         if (!active.has(k)) continue;
         const old = latest.get(k);
-        const newer = !old || String(r.reviewed_at) > String(old.reviewed_at)
-          || (String(r.reviewed_at) === String(old.reviewed_at) && (String(r.created_at) > String(old.created_at)
-            || (String(r.created_at) === String(old.created_at) && String(r.id) > String(old.id))));
+        const t = (v: unknown) => Date.parse(String(v));
+        const newer = !old || t(r.reviewed_at) > t(old.reviewed_at)
+          || (t(r.reviewed_at) === t(old.reviewed_at) && (t(r.created_at) > t(old.created_at)
+            || (t(r.created_at) === t(old.created_at) && String(r.id) > String(old.id))));
         if (newer) latest.set(k, r);
       }
       if ((data ?? []).length < 1000) break;
