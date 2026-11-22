@@ -1,5 +1,30 @@
 # Supermarket.ie — Canonical Project State
 
+## 22 November 2026 (evening) — Automated barcode catalogue repairs (migration 20261123090000 NOT applied)
+
+PR #434 (two reviews: NEEDS_CHANGES, then APPROVED) adds policy `barcode-repair-v1`:
+- **Regroup (split a mixed record).** The Tesco origin offer and the offers its GTIN resolved on the
+  same record move to a NEW record. Name and brand come from the barcode evidence.
+  - Conditions: at least one remaining SKU-bearing offer whose own retailer resolved a different
+    SKU; every remaining offer of any retailer (including Aldi) contradicts the Tesco product; no
+    second listing at a member's retailer; no positive pair decision across the groups; and the
+    record's name does not describe the Tesco side.
+  - History is kept: `catalogue_repairs` holds the before-state and is append-only. Nothing is
+    deleted, and prices and evidence stay with their offers.
+- **SuperValu attach.** The SuperValu SKU that SuperValu's own search resolved is attached to a
+  record that has no SuperValu row. It is bound in the same transaction to a direct SKU-bound
+  page capture whose identity agrees strongly with the Tesco product.
+  - The daily SuperValu refresh then prices it; machine approval matches it.
+- **Runner:** `scripts/barcode-catalogue-repairs.ts`. Handoff:
+  `supabase/operator/README-20261123-handoff.md`.
+- **Dry run on production** (22 Nov): 428 origin groups.
+  - **56 regroups planned.** The 21 sampled splits were all genuine mixes: Elvive vs
+    Pantene/Herbal Essences, Chef Salad Cream 440g vs 315g, TK Red Lemonade vs 7Up Pink, Schwartz
+    Mild vs Hot/Medium.
+  - Held: 24 remaining offers not contradicted, 3 records whose name describes the Tesco side,
+    4 shared SKUs, 2 members not strong.
+  - 4 SuperValu attach candidates.
+
 ## 22 November 2026 16:55Z — RELEASED 3a4e82d (#431 clock fix + #432 pair support); collector rev 19
 
 - **Image and rollout.** Image `3a4e82d-prod` was built by run 45042834241 (`ops/image-3a4e82d`,
