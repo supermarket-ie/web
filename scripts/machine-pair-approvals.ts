@@ -113,7 +113,8 @@ async function main() {
   for (const c of cands) {
     const k = pairKey(c.a.offerId, c.b.offerId), kind = [c.a.store, c.b.store].sort().join('-');
     if (active.has(k)) { bump(`${kind}:already_active`); continue; }
-    const d = evaluateMachinePair(c.a, c.b, c.gtin, now, null, c.origin, human.has(k));
+    // Evaluated at decision time: captures taken earlier in this run must not look future-dated.
+    const d = evaluateMachinePair(c.a, c.b, c.gtin, Date.now(), null, c.origin, human.has(k));
     bump(`${kind}:${d.decision}`);
     for (const r of d.reasons) bump(`reason:${r.replace(/:[^:]*$/, m => (m.length > 30 ? ':…' : m))}`);
     log({ event: 'decision', pair: kind, a: c.a.offerId, b: c.b.offerId, gtin: c.gtin, decision: d.decision, reasons: d.reasons,
