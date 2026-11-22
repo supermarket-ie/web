@@ -35,8 +35,25 @@ const getProductRecords = unstable_cache(async (): Promise<CatalogueRecord[]> =>
 }, ['public-product-records-v1'], { revalidate: 1800 });
 
 // Metadata, page content and discovery all use the same identities and guarded prices.
-// Reapply freshness at render time rather than caching a derived eligibility decision.
-export const getProductCatalogue = cache(async () => {
+// The built catalogue is shared across requests for at most CATALOGUE_TTL_MS (60 s, the pair-review cache TTL;
+// prices are cached 10 min upstream), so freshness and verification are re-evaluated at least every minute.
+// Concurrent renders share ONE in-flight build instead of each rebuilding the whole catalogue on one vCPU.
+// A failed build is never cached.
+export const CATALOGUE_TTL_MS = 60_000;
+type Catalogue = ReturnType<typeof buildProductCatalogue>;
+let built: { at: number; catalogue: Catalogue } | null = null;
+let building: Promise<Catalogue> | null = null;
+async function buildCatalogue(): Promise<Catalogue> {
   const [records, prices, reviews] = await Promise.all([getProductRecords(), getAllLatestPrices(), getCurrentPairReviews()]);
-  return buildProductCatalogue(records, prices, Date.now(), reviews);
+  const at = Date.now();
+  const catalogue = buildProductCatalogue(records, prices, at, reviews);
+  built = { at, catalogue };
+  return catalogue;
+}
+export const getProductCatalogue = cache(async (): Promise<Catalogue> => {
+  if (built && Date.now() - built.at < CATALOGUE_TTL_MS) return built.catalogue;
+  if (!building) building = buildCatalogue().finally(() => { building = null; });
+  return building;
 });
+/** Test hook: clear the process-local catalogue cache. */
+export function resetProductCatalogueCache() { built = null; building = null; }

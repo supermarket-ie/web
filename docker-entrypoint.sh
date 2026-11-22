@@ -41,7 +41,9 @@ EVE_PID=$!
 sleep 2
 
 echo "[entrypoint] starting Next.js on 0.0.0.0:${WEB_PORT}"
-node node_modules/.bin/next start --hostname 0.0.0.0 --port "${WEB_PORT}" &
+# The ALB idle timeout is 60 s, so Next must keep idle connections open LONGER. Otherwise the ALB reuses a socket
+# Node already closed and returns 502 (seen at a low rate all day on 22 Nov 2026).
+node node_modules/.bin/next start --hostname 0.0.0.0 --port "${WEB_PORT}" --keepAliveTimeout 65000 &
 NEXT_PID=$!
 
 # Portable supervisor: poll both children; if either dies, stop the container.
