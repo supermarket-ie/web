@@ -1,5 +1,58 @@
 # Supermarket.ie — Canonical Project State
 
+## 22 November 2026 23:10Z — Performance fixed; first automated catalogue repairs; released 05dafb3
+
+**Migrations applied by the owner** (do not reapply; history version ≠ filename):
+
+| Migration | Supabase history version |
+|---|---|
+| `20261123090000_barcode_catalogue_repairs.sql` | `20261122181219` |
+| `20261123120000_pair_status_performance.sql` | `20261122220410` |
+
+**Performance:**
+- `current_pair_review_status` went from 5.2–5.8 s to about 1.0–1.1 s. The owner measured buffer
+  hits falling from 1.47 M to about 24 k.
+- PR #436 (`05dafb3-prod`):
+  - one catalogue build is shared across requests (60 s TTL, in-flight dedupe, failures not
+    cached)
+  - `next start --keepAliveTimeout 65000`, above the ALB's 60 s idle timeout, for the
+    low-rate ELB 502s
+- Cold renders had queued on the single vCPU, reaching 99% CPU. After the deploy, on fresh
+  tasks: the first request (the catalogue build) 4.1 s, then 11 never-opened product pages at
+  about 0.1 s each, all 200.
+- Released `05dafb3-prod` (web `smie-prod`, sqs-consumer, scheduled task). Rollback:
+  `113ab04-prod`; tfvars backup in `~/smie-private`. The Tesco collector stays on rev 19
+  (`3a4e82d-prod`); its code is unchanged.
+
+**Repairs** (`scripts/barcode-catalogue-repairs.ts`, `APPLY=1`, policy `barcode-repair-v1`):
+- **56 mixed records split** and **36 SuperValu offers attached**. Each attach has its
+  `captured_product` evidence (36/36), and every moved offer is on its new record.
+- Held: 24 where a remaining offer is not contradicted, 4 shared SKUs, 3 records whose name
+  describes the Tesco side, 2 members not strong.
+- All 350 prior approvals stayed `active`.
+
+**After the repairs:**
+- Dunnes attach (guarded, `ALLOW_ATTACH`): 74 targets, **28 attached** with SKU-bound prices.
+  Held: 33 `canonical_supervalu_conflicts`, 11 by `confirmDunnesSku`, 2 excluded category.
+- Machine approvals (`APPLY=1 CAPTURE=1`): **+77** (Tesco–SuperValu 38, Tesco–Dunnes 30,
+  Dunnes–SuperValu 9); 7 refused by the DB; **427 active**.
+- Tesco expansion (first price + self-evidence) over 119 Tesco offers in active pairs or on
+  repaired records without a fresh price: 34 requested, **14 accepted** (5 via the pair-supported
+  gap route), 20 held. Renewal selected 0 because of the 24 h exclusion.
+- The 36 new SuperValu offers are priced by the 05:20 UTC SuperValu refresh. They were
+  deliberately not re-scraped off-schedule.
+
+**Production** (22 Nov 22:22Z → 23:08Z):
+
+| Measure | 22:22Z | 23:08Z |
+|---|---|---|
+| Tesco fresh 7d | 400 | 414 |
+| Dunnes fresh 7d | 972 | 1,000 |
+| Three-retailer priced | 226 | 231 |
+| Active approvals | 350 | 427 |
+| App-verified priced pairs | 275 | 295 |
+| Fully verified three-retailer products | 43 | 47 |
+
 ## 22 November 2026 (night) — Product-detail performance hotfix (migration 20261123120000 NOT applied)
 
 **Finding** (owner measurement, confirmed by the agent over REST). `current_pair_review_status(now(), true)`
