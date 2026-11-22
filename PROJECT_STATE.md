@@ -1,5 +1,27 @@
 # Supermarket.ie — Canonical Project State
 
+## 22 November 2026 00:10Z — #429 merged and RELEASED as 826376e; machine migration awaiting operator
+
+- **#429** was squash-merged as `826376e`, with `validate` green on the PR and on `main`. It had
+  two semantic reviews: NEEDS_CHANGES, then APPROVED after fixes:
+  - human decisions take precedence
+  - capture denials reach the governor
+  - a Dunnes–SuperValu pair needs one shared origin, and its Tesco page must state the GTIN
+  - brand comparison is whole-word
+  - the audit row is bound to its pair
+  - reads are paged
+- **Image `826376e-prod`:** built by run 44962936190. Branch `ops/image-826376e` was needed
+  because aws-prod only allows `ops/image-*` branches. The aws-prod deployment was approved.
+  - Rolled out with tofu: web `smie-prod:20`, sqs-consumer `:10`, scheduled task.
+  - Schedule `smie-prod-machine-pair-approvals-daily` (06:30 UTC) ENABLED. Until migration
+    20261122090000 is applied, the run fails closed at its first audit-table read, before any
+    capture or write.
+  - Rollback: `f1a12f6-prod` (tfvars backup `~/smie-private/tfvars.before-826376e.bak`).
+- **Migration 20261122090000 NOT applied** (probe 404 at 00:00Z). It needs the owner's operator
+  route; see `supabase/operator/README-20261122-handoff.md`.
+- **Tesco wave 3** (178 barcode-origin Tesco offers without a fresh price; expansion + first price
+  + self-evidence): 108 requested, **2 accepted**, 106 held. Collector `freshTotal` 407.
+
 ## 22 November 2026 — Machine pair approvals (policy barcode-exact-v1; migration 20261122090000 NOT applied)
 
 OWNER DECISION (22 Nov): routine exact relationships are approved by a tested machine policy, not
