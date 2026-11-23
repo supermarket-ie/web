@@ -38,7 +38,7 @@ describe('daily full-inventory producers', () => {
         headers: { authorization: 'Bearer test-secret' },
       }));
       expect(response.status).toBe(200);
-      expect(selector).toHaveBeenCalledWith(2500, undefined, undefined);
+      expect(selector).toHaveBeenCalledWith(2500, undefined, undefined, false);
       expect(await response.json()).toMatchObject({ target_count: count, run_scope: 'scheduled_full' });
       const queued = mock.send.mock.calls.flatMap((call) => call[1].products);
       expect(queued).toEqual(products);
