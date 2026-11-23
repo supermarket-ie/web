@@ -56,6 +56,8 @@ export function planOnboarding(i: {
 // Unmapped departments return null and the product is held: a category is required and never guessed.
 const CATEGORY_RULES: Array<[RegExp, string]> = [
   [/pet|dog|cat food|cat treat/i, 'Pet Care'],
+  [/ice cream|ice lollies|lollies|frozen/i, 'Frozen'],
+  [/crisps|nuts|popcorn|chocolate|sweets|biscuits|cereal bars|crackers|rice cakes|breadsticks|snacks/i, 'Snacks'],
   [/baby|toddler/i, 'Baby'],
   [/stock cubes|stock pots|^stock/i, 'Stock'],
   [/oils? & cooking fats|cooking oil/i, 'Oils'],
@@ -67,8 +69,6 @@ const CATEGORY_RULES: Array<[RegExp, string]> = [
   [/tins, cans|tinned|baked beans|pulses/i, 'Tinned'],
   [/condiments|table sauces|mayonnaise|pickles|cooking sauces|world foods|packet sauces|gravy|easy meals/i, 'Condiments'],
   [/tea|coffee|soft drinks|juice|water|squash|drinks/i, 'Beverages'],
-  [/crisps|nuts|popcorn|chocolate|sweets|biscuits|cereal bars|crackers|rice cakes|snacks/i, 'Snacks'],
-  [/frozen/i, 'Frozen'],
   [/dairy alternative|plant based milk/i, 'Dairy Alternatives'],
   [/milk|cheese|yogurt|yoghurt|butter|cream|dairy/i, 'Dairy'],
   [/bakery|bread|rolls|wraps/i, 'Bakery'],

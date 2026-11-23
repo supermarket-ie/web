@@ -47,3 +47,13 @@ describe('onboarding category', () => {
     expect(onboardingCategory('Something Unknown', 'Unknown')).toBeNull();
   });
 });
+
+describe('onboarding category regressions', () => {
+  it('crackers / rice cakes are Snacks, ice cream is Frozen', () => {
+    expect(onboardingCategory('Crackers, Rice Cakes & Breadsticks', 'Crackers')).toBe('Snacks');
+    expect(onboardingCategory('Biscuits & Cereal Bars', 'Rice Cakes')).toBe('Snacks');
+    expect(onboardingCategory('Ice Cream', 'Ice Cream Sticks & Cones')).toBe('Frozen');
+    expect(onboardingCategory('Frozen Food', 'Ice Cream Tubs')).toBe('Frozen');
+    expect(onboardingCategory('Dried Pasta, Rice, Noodles & Cous Cous', 'Rice')).toBe('Pasta & Rice');
+  });
+});

@@ -1,5 +1,22 @@
 # Supermarket.ie — Canonical Project State
 
+## 23 November 2026 — Onboarding apply failed safely; legacy Tesco mismatch detach (migrations 20261124120000 + 20261124130000 NOT applied)
+
+- **Onboarding first `APPLY=1`** (after 20261124090000 was applied as history `20261123103204`): all 730
+  creations refused with 23502 (`products.category` NOT NULL). Nothing written. Fix is #442 (migration
+  `20261124120000`, category from a deterministic Tesco department/aisle map; unmapped is held, never
+  guessed). Dry run after the fix: 730 to create, 699 with a category; held 49 target already has a
+  Tesco offer, 31 no category, 7 contradictions, 2 mixed. Category rule order fixed (Pet Care, Frozen
+  ice cream, Snacks crackers/rice cakes before Pasta & Rice).
+- **Legacy mismatches (345 genuine_mismatch), separate path:** migration `20261124130000_tesco_mismatch_detach.sql`
+  adds `detach_tesco_offer`; policy `tesco-detach-v1` (`src/lib/tesco-mismatch-detach.ts`), runner
+  `scripts/tesco-mismatch-detach.ts`. A detach needs a MATERIAL contradiction (measure, pack, brand,
+  variant, formulation, product type), a branded offer and a retained-page GTIN. Own-label is held.
+  The detached offer's price still goes through first-price evidence, AI and approval. Dry run: 191
+  planned; held 88 own-label, 34 no category, 32 no retained identity.
+- **Handoff:** `supabase/operator/README-20261124c-handoff.md` (apply 20261124120000, then 20261124130000).
+- **Capture loop:** 3,450+ of 4,558 catalogue GTINs captured.
+
 ## 23 November 2026 10:30Z — Catalogue expansion: barcode-led Tesco onboarding (migration 20261124090000 NOT applied)
 
 **New inventory.** The retained Tesco catalogue sample (15 Nov, `~/smie-private/tesco-catalogue`) has 7,084 unique
