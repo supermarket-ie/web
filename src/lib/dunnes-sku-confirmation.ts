@@ -54,7 +54,11 @@ export function structuredPackSize(u: DunnesProductResponse['unitsOfSize']): { a
 const words = (s: string) => normaliseDunnesName(s).split(' ').filter(Boolean);
 // Title words only: an apostrophe joins a word ("Flahavan's" = "Flahavans") instead of leaving a stray "s".
 // Brand confirmation keeps using words(): brand spelling variants are never merged.
-const titleWords = (s: string) => words(s.replace(/([a-z])['\u2019]([a-z])/gi, '$1$2'));
+// Measures ("3X80g", "4 x 26 g", "23.7g") are removed first: they are checked by the pack rules, and splitting them
+// ("3x80g" as one word, "23.7g" as "23" + "7g") made a notation difference look like a missing identity word.
+const titleWords = (s: string) => words(s.replace(/([a-z])['\u2019]([a-z])/gi, '$1$2')
+  .replace(/\b\d{1,3}\s*[x×]\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|l|cl)\b/gi, ' ')
+  .replace(/\b\d+\.\d+\s*(?:kg|g|ml|l|cl)\b/gi, ' '));
 
 /** Canonical brand stated by the response's structured brand (all brand words present, in order-insensitive form). */
 export function brandConfirmed(canonicalBrand: string, responseBrand: unknown): boolean {
@@ -71,7 +75,8 @@ const PACK_TOKEN = /^(\d+(\.\d+)?(g|kg|ml|l|cl|ltr|x)?|x|pack|pk|portions?|g|kg|
 /** Every canonical word appears in the retailer title, and no qualifier is stated on one side only. */
 export function titleWordProblems(canonicalName: string, retailerTitle: string): string[] {
   // Connectives carry no identity ("Garlic & Herb" = "Garlic and Herb"); qualifier and pack checks are unaffected.
-  const CONNECTIVE = new Set(['and', 'with', 'of', 'the', 'in', 'a']);
+  // "Jar" is packaging wording only ("Hellmann's Real Mayonnaise Jar 400g" = "Hellmann's Real Mayonnaise 400g").
+  const CONNECTIVE = new Set(['and', 'with', 'of', 'the', 'in', 'a', 'jar']);
   // A BARE number is a pack token only when a unit/pack word follows it ("400 g", "6 x", "4 pack"). Otherwise it is
   // identity ("4+ Months" vs "6+ Months", "Size 4", "48 Washes") and must appear on both sides.
   const UNIT_NEXT = /^(g|kg|ml|l|cl|ltr|x|pack|pk|portions?)$/;
@@ -100,6 +105,23 @@ export function multipackOf(title: string): { count: number; unitAmount: number;
   if (!m) return null;
   const f = UNIT[m[3]]; const count = Number(m[1]), amount = Number(m[2]) * f[0];
   return count > 1 && amount > 0 ? { count, unitAmount: Math.round(amount * 1000) / 1000, unit: f[1] } : null;
+}
+
+/**
+ * The reference multipack ("6x24g") written by Dunnes as "6 Pack" with no measure, or as "7 Pack Multipack 165.9g"
+ * (whole-pack total): the title must state the SAME count as "N Pack", any measure in the title must be the whole-pack
+ * total, and Dunnes' STRUCTURED size must equal that total exactly. A different count or total never qualifies.
+ */
+function sameMultipackByCountAndTotal(ref: { count: number; unitAmount: number; unit: 'g' | 'ml' }, title: string,
+  structured: { amount: number; unit: 'g' | 'ml' } | null): boolean {
+  const total = Math.round(ref.unitAmount * ref.count * 1000) / 1000;
+  const t = title.toLowerCase().replace(/[()]/g, ' ');
+  const c = t.match(/\b(\d{1,3})\s*(?:pack|pk)\b/);
+  if (!c || Number(c[1]) !== ref.count || /\b\d{1,3}\s*x\s*\d/.test(t)) return false;
+  const measures = [...t.matchAll(/\b(\d+(?:\.\d+)?)\s*(kg|g|ml|l|cl)\b/g)];
+  if (measures.length > 1) return false;
+  if (measures.length === 1) { const f = UNIT[measures[0][2]]; if (f[1] !== ref.unit || Math.round(Number(measures[0][1]) * f[0] * 1000) / 1000 !== total) return false; }
+  return !!structured && structured.unit === ref.unit && structured.amount === total;
 }
 
 /** Pack pre-filter mirroring confirmDunnesSku: the SAME multipack (count + per-unit size), or a compatible single pack. */
@@ -150,7 +172,8 @@ export function confirmDunnesSku(i: ConfirmationInput): Confirmation {
   if (refMulti || gotMulti) {
     // The same multipack only: identical count and per-unit size on both titles; the structured size must be the
     // per-unit size or the whole-pack total of THAT multipack.
-    if (!refMulti || !gotMulti || refMulti.count !== gotMulti.count || refMulti.unit !== gotMulti.unit || refMulti.unitAmount !== gotMulti.unitAmount) reasons.push('multipack_differs');
+    if (refMulti && sameMultipackByCountAndTotal(refMulti, name, structured)) { /* same multipack, stated as "N Pack" + total */ }
+    else if (!refMulti || !gotMulti || refMulti.count !== gotMulti.count || refMulti.unit !== gotMulti.unit || refMulti.unitAmount !== gotMulti.unitAmount) reasons.push('multipack_differs');
     else if (!structured) reasons.push('structured_pack_missing');
     else if (structured.unit !== refMulti.unit || (structured.amount !== refMulti.unitAmount && structured.amount !== Math.round(refMulti.unitAmount * refMulti.count * 1000) / 1000)) reasons.push('structured_pack_differs');
   } else {

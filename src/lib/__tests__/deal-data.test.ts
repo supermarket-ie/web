@@ -243,6 +243,29 @@ describe('retailer recovery safeguards', () => {
     })).toBe(false);
   });
 
+  it('accepts a different multipack notation of the same count and total on the SKU-bound page only', () => {
+    const mapping = (canonicalName: string, storeSku = '1027876000') => ({
+      storeProductId: 'mapping-1', canonicalName, storeProductName: canonicalName,
+      storeUrl: 'https://shop.supervalu.ie/product/x', storeSku, previousPrice: null,
+    });
+    const page = (name: string, sku = '1027876000') => ({ name, sku, price: 4, wasPrice: null, onPromotion: false });
+    // per-unit convention ("4 Pack (90 g)") and total convention ("4 Snap Pots (800 g)", "8 Pots (224 g)")
+    expect(isDirectMappingCompatible(mapping('Glenisk Organic Kids Yogurt - Strawberry 4 x 90g'), page('Glenisk Organic Kids Strawberry Yogurt 4 Pack (90 g)'))).toBe(true);
+    expect(isDirectMappingCompatible(mapping('Heinz Baked Beans Snap Pots 4 x 200g'), page('Heinz Baked Beans 4 Snap Pots (800 g)'))).toBe(true);
+    expect(isDirectMappingCompatible(mapping('Knorr Beef Stock Pot 8 X 28G'), page('Knorr Beef Stock 8 Pots (224 g)'))).toBe(true);
+    // a different count or total is still a pack conflict
+    expect(isDirectMappingCompatible(mapping('Knorr Beef Stock Pot 8 X 28G'), page('Knorr Beef Stock 4 Pots (112 g)'))).toBe(false);
+    expect(isDirectMappingCompatible(mapping('Batchelors Baked Beans 4 X 420G'), page('Batchelors Baked Beans 6 Pack (225 g)'))).toBe(false);
+    expect(isDirectMappingCompatible(mapping('Batchelors Baked Beans 4 X 420G'), page('Batchelors Baked Beans 4 Pack (225 g)'))).toBe(false);
+    // a bare total equals a multipack's count x per-unit, never its "(Q g) is the total" reading
+    expect(isDirectMappingCompatible(mapping('Yakult Balance 8 X 65Ml'), page('Yakult Balance (520 ml)'))).toBe(true);
+    expect(isDirectMappingCompatible(mapping('Oreo White Chocolate Covered Cookies 246G'), page('Oreo White Chocolate Covered Cookies 6 Pack (41 g)'))).toBe(true);
+    expect(isDirectMappingCompatible(mapping('Oreo White Chocolate Covered Cookies 41G'), page('Oreo White Chocolate Covered Cookies 6 Pack (41 g)'))).toBe(false);
+    expect(isDirectMappingCompatible(mapping('Cadbury Dairy Milk Chocolate Bar Multipack 7 Pack 7 x 27.2g'), page('Cadbury Dairy Milk Chocolate Bar 7 Pack  (27.2 g)'))).toBe(true);
+    // not the mapping's own SKU: the notation allowance does not apply
+    expect(isDirectMappingCompatible(mapping('Heinz Baked Beans Snap Pots 4 x 200g', ''), page('Heinz Baked Beans 4 Snap Pots (800 g)'))).toBe(false);
+  });
+
   it('uses retailer stopwords and simple inflections without accepting a wrong food type', () => {
     const celeryProduct = {
       storeProductId: 'mapping-1',

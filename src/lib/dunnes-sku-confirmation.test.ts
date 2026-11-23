@@ -72,6 +72,27 @@ describe('Dunnes SKU-bound confirmation', () => {
     // a multipack is never a single pack
     expect(reasons({ ...walkers, candidateName: 'Walkers Ready Salted Crisps 150g', response: { ...walkers.response, name: 'Walkers Ready Salted Crisps 150g' } })).toContain('multipack_differs');
   });
+  it('a multipack Dunnes states as "N Pack" (+ whole-pack total) is the same pack only when the structured total agrees', () => {
+    const hula = (name: string, size: number) => ({ ...base, canonicalName: 'Hula Hoops BBQ Beef Multipack Crisps 6x24g', canonicalBrand: 'Hula Hoops', candidateName: name,
+      response: { ...response, name, brand: 'Hula Hoops', unitsOfSize: { abbreviation: 'g', size } } });
+    expect(confirmDunnesSku(hula('Hula Hoops BBQ Beef Multipack Crisps 6 Pack', 144)).reasons).toEqual([]);
+    expect(confirmDunnesSku(hula('Hula Hoops BBQ Beef Multipack Crisps 6 Pack 144g', 144)).reasons).toEqual([]);
+    expect(reasons(hula('Hula Hoops BBQ Beef Multipack Crisps 6 Pack', 150))).toContain('multipack_differs');
+    expect(reasons(hula('Hula Hoops BBQ Beef Multipack Crisps 5 Pack', 144))).toContain('multipack_differs');
+    expect(reasons(hula('Hula Hoops BBQ Beef Multipack Crisps 6 Pack 150g', 144))).toContain('multipack_differs');
+    const wispa = { ...base, canonicalName: 'Cadbury Wispa Chocolate Bar Multipack 7 Pack 7 x 23.7g', canonicalBrand: 'Cadbury',
+      candidateName: 'Cadbury Wispa Chocolate Bar Multipack 7 Pack Multipack 165.9g',
+      response: { ...response, name: 'Cadbury Wispa Chocolate Bar Multipack 7 Pack Multipack 165.9g', brand: 'Cadbury', unitsOfSize: { abbreviation: 'g', size: 165.9 } } };
+    expect(confirmDunnesSku(wispa).reasons).toEqual([]);
+  });
+  it('measure notation and packaging wording are not identity words', async () => {
+    const { titleWordProblems } = await import('./dunnes-sku-confirmation');
+    expect(titleWordProblems('John West Tuna Chunks In Brine 3X80g', 'John West Tuna Chunks in Brine 3 x 80g')).toEqual([]);
+    expect(titleWordProblems('Knorr Organic Vegetable Stock Pot 4x26g', 'Knorr  Stock Pot Organic Vegetable 4 x 26 g ')).toEqual([]);
+    expect(titleWordProblems("Hellmann's Real Mayonnaise Jar 400g", "Hellmann's Real Mayonnaise 400g")).toEqual([]);
+    // identity words still count
+    expect(titleWordProblems('Knorr Organic Vegetable Stock Pot 4x26g', 'Knorr Stock Pot Vegetable 4 x 26 g')).not.toEqual([]);
+  });
 });
 
 

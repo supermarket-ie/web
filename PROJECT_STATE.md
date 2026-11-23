@@ -1,5 +1,29 @@
 # Supermarket.ie — Canonical Project State
 
+## 23 November 2026 17:40Z — Onboarded catalogue: production run and three identity-notation fixes
+
+Production results (both migrations applied, `20261123124508` and `20261123152530`):
+
+- **Onboarding:** 875 new catalogue products (`catalogue_repairs` kind `onboard_tesco`). Held: 70 no category, 55 target already has a Tesco offer, 7 contradictions, 2 mixed. 1 was refused by the database.
+- **SuperValu:** 438 offers attached by barcode repair. The targeted `missing=1` refresh priced 386.
+  - 52 failed with `no_confident_remap`. Cause: the direct-page pack check read "4 x 90g" (Tesco) and "4 Pack (90 g)" or "4 Snap Pots (800 g)" (SuperValu) as different packs.
+- **Dunnes:** attach on the 645 records with a strong Dunnes barcode hit is running in tranches. The renewal script processes at most 50 targets per run.
+  - First 71 attempted: 54 confirmed and priced.
+  - Held: `title_words_missing` for "3X80g" vs "3 x 80g", "Jar" and "23.7g"; `multipack_differs` for "6x24g" vs "6 Pack" with a 144g structured size; genuine pack differences.
+  - The `failed` Dunnes `missing=1` run (129 legacy offers) was all identity holds: 88 `no_confident_match` on generic canonical records, 41 `no_search_results`. None were network failures.
+- **Legacy mismatches:** 181 Tesco offers detached. 10 refused because a positive pair decision involves the offer; they are left for review.
+- **Tesco evidence:** 1,056 offers (875 onboarded + 181 detached), 6 tranches of 190, one lease at a time. Tranche 1: 190 of 190 usable.
+  - Approvals: 0 of 190 (174 `ai_uncertain`).
+  - Cause: `independentExactIdentity` compared the recorded mapping GTIN to Tesco's GTIN as strings. Onboarding records "5000237130612"; Tesco states "05000237130612". The model said `verified_exact`, but the deterministic gate failed.
+  - Local dry run with the fix: 7 of 8 approve on the self-evidence route.
+- **24-hour restriction:** applies per URL, from that URL's own evidence request. Approval needs no request and runs as soon as each tranche lands; approvals last 72 hours. First-price expansion can start 24 hours after each tranche's evidence.
+
+The fix PR (all equality-preserving, tested):
+
+1. **Tesco:** compare the mapping GTIN with `sameBarcode`, so leading zeros don't matter and any other difference still fails.
+2. **SuperValu:** on the mapping's own SKU-bound page only, accept the same count and total in a different multipack notation. A bare total matches only count × per-unit, so "41g" is never "6 Pack (41 g)". Replay: 51 of 52 recover; the one held is g vs ml. 0 of 67 older generic failures change.
+3. **Dunnes:** measures are removed before the title-word check, and "jar" is packaging wording. "N Pack" (plus any whole-pack total) equals the reference multipack only when the count matches and Dunnes' structured size equals count × per-unit exactly.
+
 ## 23 November 2026 — Onboarding apply failed safely; legacy Tesco mismatch detach (migrations 20261124120000 + 20261124130000 NOT applied)
 
 - **Onboarding first `APPLY=1`** (after 20261124090000 was applied as history `20261123103204`): all 730

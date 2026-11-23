@@ -161,6 +161,13 @@ describe('independentExactIdentity with and without the self-evidence flag', () 
     const contra = evidence({ peers: [peer('dunnes', { store_product_name: 'Nutella Hazelnut Chocolate Spread 750g' })] });
     expect(independentExactIdentity(contra.ev, contra.live)).toBe(false);
   });
+  it('a recorded mapping GTIN matches Tesco\'s zero-padded GTIN; a different GTIN still fails', () => {
+    // Onboarding records the GTIN without leading zeros; Tesco states it padded to 14 digits.
+    const padded = evidence({ snap: { gtin: GTIN }, item: { gtin: `0${GTIN}` } });
+    expect(independentExactIdentity(padded.ev, padded.live)).toBe(true);
+    const other = evidence({ snap: { gtin: '8000500310434' } });
+    expect(independentExactIdentity(other.ev, other.live)).toBe(false);
+  });
   it('the flag can never apply to a proven mapping envelope', () => {
     const { ev } = evidence({ proven: true });
     expect(ev.selfEvidenceFirstPrice).toBeUndefined();

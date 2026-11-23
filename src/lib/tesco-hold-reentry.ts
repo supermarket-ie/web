@@ -498,7 +498,9 @@ export function independentExactIdentity(e: ReentryEvidence, live?: TescoCollect
     || e.peers.some(p => !p.observed_at || !p.store_product_name || !(Number(p.price) > 0))
     || source.sku !== m.store_sku || source.url !== m.store_url
     || !source.name || !source.brand || !source.quantity
-    || (m.gtin != null && m.gtin !== source.gtin)
+    // Same GTIN regardless of leading-zero padding ("5000237130612" recorded vs Tesco's "05000237130612"); any
+    // other difference, or a recorded GTIN the page does not state, is still a conflict.
+    || (m.gtin != null && !sameBarcode(m.gtin, source.gtin))
     || (m.canonical_ean != null && !sameBarcode(m.canonical_ean,source.gtin))
     || (m.store_brand != null && !sameBrand(m.store_brand, source.brand))
     || (m.canonical_brand != null && !sameBrand(m.canonical_brand, source.brand))
