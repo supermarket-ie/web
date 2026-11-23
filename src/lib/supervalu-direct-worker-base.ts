@@ -143,6 +143,35 @@ function isSizeCompatible(canonical: string, candidate: string) {
   return Math.max(a.qty, b.qty) / Math.min(a.qty, b.qty) <= 1.1;
 }
 
+// Multipack notations that state the SAME pack differently: "4 x 90g" (Tesco) vs "4 Pack (90 g)" (SuperValu, per unit)
+// vs "4 Snap Pots (800 g)" / "8 Pots (224 g)" (SuperValu, total). Returns every {count, total} reading of a name;
+// a SuperValu "N <word> (Q g)" title is read both ways because SuperValu uses both conventions.
+const MULTI_WORD = '(?:pack|pk|multipack|pots?|cans?|tins?|bottles?|bars?|pouches?|cartons?|tubs?|pieces?|sachets?|cups?|cubes?)';
+// A name stating only a total ("Yakult Balance (520 ml)", "Oreo ... 246G") has count null: it is equivalent to a
+// multipack reading with the same total. At least one side must be a multipack (two plain totals use isSizeCompatible).
+function multipackReadings(name: string): Array<{ count: number | null; total: number; unit: string; totalStated?: boolean }> {
+  const n = decodeHtml(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9.\s×]/g, ' ').replace(/\s+/g, ' ').trim();
+  const norm = (q: number, u: string) => u === 'kg' ? { q: q * 1000, u: 'g' } : u === 'l' ? { q: q * 1000, u: 'ml' } : u === 'cl' ? { q: q * 10, u: 'ml' } : { q, u };
+  const x = n.match(/(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/);
+  if (x) { const { q, u } = norm(Number(x[2]), x[3]); return [{ count: Number(x[1]), total: Number(x[1]) * q, unit: u }]; }
+  const p = n.match(new RegExp(`\\b(\\d+)\\s+(?:[a-z]+\\s+){0,2}?${MULTI_WORD}\\s+(\\d+(?:\\.\\d+)?)\\s*(g|kg|ml|l|cl)\\b`));
+  if (p) { const c = Number(p[1]); const { q, u } = norm(Number(p[2]), p[3]); if (c > 1) return [{ count: c, total: c * q, unit: u }, { count: c, total: q, unit: u, totalStated: true }]; }
+  const s = [...n.matchAll(/(\d+(?:\.\d+)?)\s*(g|kg|ml|l|cl)\b/g)];
+  if (s.length === 1) { const { q, u } = norm(Number(s[0][1]), s[0][2]); return [{ count: null, total: q, unit: u }]; }
+  return [];
+}
+function isMultipackEquivalent(a: string, b: string) {
+  const ra = multipackReadings(a), rb = multipackReadings(b);
+  return ra.some(x => rb.some(y => {
+    if (x.unit !== y.unit || Math.max(x.total, y.total) / Math.min(x.total, y.total) > 1.02) return false;
+    if (x.count !== null && y.count !== null) return x.count === y.count;
+    // A bare total only matches a multipack's count x per-unit reading, never the "(Q g) is the total" reading:
+    // "Oreo 41g" (one bar) must not equal "Oreo 6 Pack (41 g)".
+    const multi = x.count !== null ? x : y.count !== null ? y : null;
+    return Boolean(multi && !multi.totalStated);
+  }));
+}
+
 const RETAILER_FILLER_WORDS = new Set([
   'supervalu', 'storefront', 'signature', 'taste', 'fresh', 'irish', 'original',
 ]);
@@ -162,8 +191,8 @@ function nameWords(value: string) {
     .filter((word) => word.length > 2 && !RETAILER_FILLER_WORDS.has(word));
 }
 
-function isNameCompatible(expected: string, candidate: string) {
-  if (!isSizeCompatible(expected, candidate)) return false;
+function isNameCompatible(expected: string, candidate: string, sizeOk: (a: string, b: string) => boolean = isSizeCompatible) {
+  if (!sizeOk(expected, candidate)) return false;
   const cn = normaliseName(expected);
   const ca = normaliseName(candidate);
   if (cn === ca) return true;
@@ -188,12 +217,16 @@ function isNameCompatible(expected: string, candidate: string) {
 
 export function isDirectMappingCompatible(product: SupervaluQueueProduct, candidate: Candidate) {
   if (product.storeSku && candidate.sku && product.storeSku !== candidate.sku) return false;
-  if (!isSizeCompatible(product.canonicalName, candidate.name)) return false;
+  // Only for the SKU-bound page of this very mapping (same retailer SKU): a different multipack NOTATION of the same
+  // count and total is not a pack conflict. Counts or totals that differ still fail; search remaps never use this.
+  const skuBound = Boolean(product.storeSku && candidate.sku && product.storeSku === candidate.sku);
+  const sizeOk = (a: string, b: string) => isSizeCompatible(a, b) || (skuBound && isMultipackEquivalent(a, b));
+  if (!sizeOk(product.canonicalName, candidate.name)) return false;
   // Existing resolved product URLs should primarily agree with the retailer name.
   // Canonical names can intentionally be generic (e.g. "White Pan Bread Standard")
   // while retailer titles include a brand and merchandising wording.
-  return isNameCompatible(product.storeProductName, candidate.name)
-    || isNameCompatible(product.canonicalName, candidate.name);
+  return isNameCompatible(product.storeProductName, candidate.name, sizeOk)
+    || isNameCompatible(product.canonicalName, candidate.name, sizeOk);
 }
 
 function findProductJsonLd(value: unknown): Record<string, unknown> | null {
