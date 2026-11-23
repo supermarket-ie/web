@@ -1,5 +1,43 @@
 # Supermarket.ie — Canonical Project State
 
+## 23 November 2026 21:35Z — Onboarded catalogue converted to prices (release 39ab6d3, #444/#445)
+
+**Production, measured 21:34Z** (fresh within 7 days):
+
+| Metric | 11:21Z | 16:26Z | 21:34Z |
+|---|---:|---:|---:|
+| Tesco fresh | 416 | 416 | **449** |
+| Dunnes fresh | 1,001 | 1,013 | **1,538** |
+| SuperValu fresh | 1,643 | 2,029 | **2,079** |
+| Total fresh | 3,060 | 3,458 | **4,066** |
+| Products at 2+ retailers | 968 | — | **1,135** |
+| Products at all three | 242 | 242 | 242 |
+| Active machine approvals | 427 | 427 | **1,512** |
+| Verified priced pairs (app policy) | — | — | 481 (371 products) |
+| Fully verified three-store | 55 | 55 | 55 |
+
+- **875 onboarded records:** 805 now have a fresh price at one retailer or more (SuperValu 433, Dunnes 537). 165 are priced at BOTH SuperValu and Dunnes and need only their Tesco first price to become three-store.
+- **Release 39ab6d3 (#444):**
+  - Web, sqs-consumer and scheduled tasks run 39ab6d3.
+  - Tesco collector revision `smie-prod-tesco-apify-collect:20`; daily renewal pinned to it in #445 (applied).
+  - Fixes: GTIN zero-padding in `independentExactIdentity`, and multipack notation in the SKU-bound SuperValu and Dunnes checks.
+- **SuperValu:** 438 attached, 386 priced in the `missing=1` refresh. 51 of the 52 failures were re-queued on the new image; 50 priced. The one still held is "125g" vs "125 ml".
+  - The run's other 244 failures are legacy generic records or delisted pages: 123 `no_confident_remap`, 120 `empty_product_state`. They are correctly held.
+  - Private helper `sv-ids-call.mts` queues exactly the listed offers through the existing queue path.
+- **Dunnes:** 537 attaches priced out of 645 strong hits (`dunnes_barcode_renewal_*` runs, 15 runs). 22 notation holds were retried on the new image; 13 confirmed.
+  - `scripts/dunnes-barcode-renewal.ts` processes at most 50 targets per run.
+  - The `failed` legacy `missing=1` run (129 offers) was identity holds only, no network failures.
+- **Tesco evidence:** 1,056 offers, 6 tranches. 875 of the onboarded offers recorded evidence. The detached offers were not eligible for evidence: they already had retained evidence, or a success receipt.
+- **Tesco approvals:** 174, 176, 169 and 116 (tranches 1, 2, 3 and 5), plus 31 detached. About 89% approve; holds are pack, peer-brand and deterministic.
+- **Tesco detached first prices:** a run made now gave 33 Tesco prices from 110 requests.
+  - 60 are held as "deterministic gate did not confirm". These are proven detached records with no peer. Self-evidence applies only to unproven offers, so that boundary is kept. They need SuperValu or Dunnes peers attached to their new records, which is not built yet; that is the next step.
+- **24-hour rule:** applies per URL. One-off EventBridge `at()` schedules run the first-price expansion for each tranche 24 hours after its own evidence. They are outside Terraform and delete themselves after running.
+  - Tranches 1–5: `smie-prod-tesco-firstprice-t1..t5-20261124` at 16:35, 17:35, 18:35, 19:35 and 20:35Z on 24 Nov.
+  - Machine pair approvals: `smie-prod-machine-pairs-after-firstprice-20261124` at 21:45Z.
+- **Spend:** Apify account usage went from $22.33 to $24.15 ($1.82 this round). The growth ledger had about $39.96 of its $50 cap remaining. Bedrock inference was not measured.
+- **Performance:** `current_pair_review_status` takes about 4 s per 1,000-row page with 1,512 active approvals (about 1 s at 427). The app caches it for 60 s. Not yet a failure; an index or SQL optimisation is a follow-up.
+  - Note: a PostgREST `Range` header is ignored on POST RPC calls; page with `?offset=&limit=`.
+
 ## 23 November 2026 17:40Z — Onboarded catalogue: production run and three identity-notation fixes
 
 Production results (both migrations applied, `20261123124508` and `20261123152530`):
