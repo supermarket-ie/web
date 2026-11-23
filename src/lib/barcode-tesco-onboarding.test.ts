@@ -56,4 +56,21 @@ describe('onboarding category regressions', () => {
     expect(onboardingCategory('Frozen Food', 'Ice Cream Tubs')).toBe('Frozen');
     expect(onboardingCategory('Dried Pasta, Rice, Noodles & Cous Cous', 'Rice')).toBe('Pasta & Rice');
   });
+  it('previously unmapped fresh departments map deterministically; desserts, mixed free-from and non-grocery stay held', () => {
+    expect(onboardingCategory('Fresh Meat & Poultry', 'Sausages')).toBe('Meat');
+    expect(onboardingCategory('Fresh Meat & Poultry', 'Pudding')).toBe('Meat');
+    expect(onboardingCategory('Cooked Meats, Antipasti & Dips', 'Ham')).toBe('Meat');
+    expect(onboardingCategory('Fresh Vegetables', 'Broccoli & Cauliflower')).toBe('Vegetables');
+    expect(onboardingCategory('Fresh Fruit', 'Apples & Pears')).toBe('Fruit');
+    expect(onboardingCategory('Chilled Fish & Sea Food', 'Salmon & Trout')).toBe('Fish');
+    expect(onboardingCategory('Ready Meals', 'Better & Low Calorie Ready Meals')).toBe('Chilled');
+    expect(onboardingCategory('Fresh Salad, Coleslaw & Sandwich Fillers ', 'Houmous & Dips')).toBe('Chilled');
+    expect(onboardingCategory('Christmas Treats', 'Selection Boxes')).toBe('Snacks');
+    expect(onboardingCategory('Free From', 'Snack, Cereal & Protein Bars')).toBe('Snacks');
+    expect(onboardingCategory('Free From', 'Cereal')).toBe('Breakfast');
+    expect(onboardingCategory('Free From', 'Sauces & Stuffing')).toBe('Condiments');
+    for (const [d, a] of [['Desserts', 'Single Serve Dessert Pots'], ['Desserts', 'Sharing Desserts & Puddings'], ['Desserts', 'Jelly'],
+      ['Free From', 'Gluten Free'], ['Kitchen & Dining', 'Kitchen Utensils & Food Preparation'], ['Kitchen & Dining', 'Oven & Bakeware']])
+      expect(onboardingCategory(d, a)).toBeNull();
+  });
 });

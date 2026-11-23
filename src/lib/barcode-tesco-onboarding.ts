@@ -74,6 +74,16 @@ const CATEGORY_RULES: Array<[RegExp, string]> = [
   [/bakery|bread|rolls|wraps/i, 'Bakery'],
   [/household|cleaning|laundry|toilet|kitchen roll/i, 'Household'],
   [/toiletries|health & beauty|shampoo|toothpaste|shower/i, 'Personal Care'],
+  // Added 24 Nov 2026 for departments that were held as unmapped. Appended LAST, so every text that matched before
+  // keeps its category. Desserts, mixed "Gluten Free" aisles and Home & Living (non-grocery) stay unmapped (held).
+  [/fresh meat & poultry|cooked meats/i, 'Meat'],
+  [/fresh vegetables/i, 'Vegetables'],
+  [/fresh fruit/i, 'Fruit'],
+  [/chilled fish/i, 'Fish'],
+  [/ready meals|chilled soup|sandwiches|salad pots|houmous|coleslaw|pies, pasties|quiches/i, 'Chilled'],
+  [/selection boxes|advent calendars|protein bars/i, 'Snacks'],
+  [/^cereal \|/i, 'Breakfast'],
+  [/^sauces & stuffing \|/i, 'Condiments'],
 ];
 export function onboardingCategory(department: string | null | undefined, aisle: string | null | undefined): string | null {
   const text = `${aisle ?? ''} | ${department ?? ''}`;
