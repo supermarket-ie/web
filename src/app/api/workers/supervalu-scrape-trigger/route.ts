@@ -46,8 +46,10 @@ export async function GET(request: Request): Promise<Response> {
   const staggerSeconds = parsePositiveInt(process.env.SUPERVALU_VERCEL_BATCH_STAGGER_SECONDS ?? null, 2, 120);
   const query = url.searchParams.get('q')?.trim() || undefined;
   const failureRunId = parseUuid(url.searchParams.get('failure_run'));
+  // missing=1: EXPANSION run — only offers without a trusted current price (renewals stay on scheduled_full).
+  const missingOnly = url.searchParams.get('missing') === '1';
   if (failureRunId === null) return Response.json({ error: 'failure_run must be a UUID' }, { status: 400 });
-  const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit, query: query ?? failureRunId });
+  const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit, query: query ?? failureRunId ?? (missingOnly ? 'missing_only' : undefined) });
   if (!resolvedScope.scope) return Response.json({ error: resolvedScope.error }, { status: 400 });
 
   // Direct-page evidence retention (~1.5 MB per page, immutable table) only for small, explicitly filtered
@@ -61,7 +63,7 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: `evidence=1 requires scope=targeted_validation, a q or failure_run filter and limit <= ${EVIDENCE_RUN_MAX}` }, { status: 400 });
   }
 
-  const products = (await selectSupervaluProducts(limit, query, failureRunId))
+  const products = (await selectSupervaluProducts(limit, query, failureRunId, missingOnly))
     .map(product => (evidence ? { ...product, captureEvidence: true } : product));
   if (products.length === 0) return Response.json({ status: 'no_products', queued: 0 });
 

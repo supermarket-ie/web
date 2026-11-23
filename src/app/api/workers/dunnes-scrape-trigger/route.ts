@@ -44,11 +44,13 @@ export async function GET(request: Request): Promise<Response> {
   const staggerSeconds = parsePositiveInt(process.env.DUNNES_VERCEL_BATCH_STAGGER_SECONDS ?? null, 3, 120);
   const query = url.searchParams.get('q')?.trim() || undefined;
   const failureRunId = parseUuid(url.searchParams.get('failure_run'));
+  // missing=1: EXPANSION run — only offers without a trusted current price (renewals stay on scheduled_full).
+  const missingOnly = url.searchParams.get('missing') === '1';
   if (failureRunId === null) return Response.json({ error: 'failure_run must be a UUID' }, { status: 400 });
-  const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit, query: query ?? failureRunId });
+  const resolvedScope = resolveRetailerRunScope({ requested: url.searchParams.get('scope'), limit, query: query ?? failureRunId ?? (missingOnly ? 'missing_only' : undefined) });
   if (!resolvedScope.scope) return Response.json({ error: resolvedScope.error }, { status: 400 });
 
-  const products = await selectDunnesProducts(limit, query, failureRunId);
+  const products = await selectDunnesProducts(limit, query, failureRunId, missingOnly);
   if (products.length === 0) return Response.json({ status: 'no_products', queued: 0 });
 
   const runId = `vercel_dunnes_${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;

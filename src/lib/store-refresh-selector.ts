@@ -15,8 +15,22 @@ export type StoreRefreshRow = {
 export async function selectStoreProductsForRefresh(
   store: RefreshStore,
   limit: number,
-  options: { productUrlOnly?: boolean; query?: string; failureRunId?: string } = {},
+  options: { productUrlOnly?: boolean; query?: string; failureRunId?: string; missingOnly?: boolean } = {},
 ): Promise<StoreRefreshRow[]> {
+  // EXPANSION selection: the SQL priority order over the WHOLE eligible inventory, keeping only offers with no
+  // trusted current price (no latest_prices row, i.e. none in the last 7 days), up to `limit`. Renewals of
+  // already-fresh offers stay on the scheduled_full maintenance run.
+  if (options.missingOnly) {
+    const all = await selectStoreProductsForRefresh(store, 2500, { ...options, missingOnly: false });
+    const fresh = new Set<string>();
+    const ids = all.map(r => r.store_product_id);
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error } = await supabaseAdmin.from('latest_prices').select('store_product_id').in('store_product_id', ids.slice(i, i + 200));
+      if (error) throw new Error(`Failed reading ${store} current prices for expansion selection: ${error.message}`);
+      for (const r of data ?? []) fresh.add(String(r.store_product_id));
+    }
+    return all.filter(r => !fresh.has(r.store_product_id)).slice(0, Math.max(1, Math.floor(limit)));
+  }
   let failureProductIds: Set<string> | null = null;
   if (options.failureRunId) {
     failureProductIds = new Set<string>();

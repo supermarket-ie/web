@@ -86,3 +86,18 @@ describe('complete retailer refresh selection', () => {
     expect(ranges).toEqual([[0, 499], [500, 999], [1000, 1499]]);
   });
 });
+
+describe('expansion selection (missingOnly)', () => {
+  it('keeps the priority order but only offers without a trusted current price, up to the limit', async () => {
+    serve(rows(10));
+    const fresh = new Set(['product-0', 'product-2', 'product-3', 'product-7']);
+    mock.from.mockImplementation(() => ({ select: () => ({ in: async (_c: string, ids: string[]) => ({ data: ids.filter(i => fresh.has(i)).map(store_product_id => ({ store_product_id })), error: null }) }) }));
+    const result = await selectStoreProductsForRefresh('dunnes', 4, { productUrlOnly: true, missingOnly: true });
+    expect(result.map(r => r.store_product_id)).toEqual(['product-1', 'product-4', 'product-5', 'product-6']);
+  });
+  it('fails closed when current prices cannot be read (no run is queued)', async () => {
+    serve(rows(3));
+    mock.from.mockImplementation(() => ({ select: () => ({ in: async () => ({ data: null, error: { message: 'down' } }) }) }));
+    await expect(selectStoreProductsForRefresh('supervalu', 3, { missingOnly: true })).rejects.toThrow(/current prices/);
+  });
+});

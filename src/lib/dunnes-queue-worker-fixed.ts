@@ -5,11 +5,12 @@ import type { DunnesQueueProduct } from './dunnes-queue-worker-base';
 
 const STORE = 'dunnes';
 
-export async function selectDunnesProducts(limit: number, query?: string, failureRunId?: string): Promise<DunnesQueueProduct[]> {
+export async function selectDunnesProducts(limit: number, query?: string, failureRunId?: string, missingOnly = false): Promise<DunnesQueueProduct[]> {
   const rows = await selectStoreProductsForRefresh(STORE, limit, {
     productUrlOnly: true,
     query,
     failureRunId,
+    missingOnly,
   });
 
   return rows.map((row) => ({
