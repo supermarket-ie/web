@@ -18,11 +18,13 @@
 //   APIFY_REQUIRE_FRESHNESS = '0' to RELAX freshness (default: enforced)
 //   APIFY_FIRST_PRICE_SELF_EVIDENCE = '1' to allow Tesco self-evidence first prices (default off)
 //   APIFY_TARGET_IDS    = comma-separated Tesco mapping UUIDs: ONLY these are eligible (targeted queue)
+//   APIFY_LEASE_WAIT_MINUTES = wait up to N minutes (max 360) for the collector lease instead of failing (default 0)
 import { createClient } from '@supabase/supabase-js';
 import { collectTescoApify, parseTargetIds, type ApifyCollectionResult } from '../src/lib/tesco-apify-collection';
 import { readFileSync } from 'node:fs';
 import { planRecoveryQueue, type RecoveryPlan } from '../src/lib/tesco-recovery-queue';
 import { prepareFirstPriceApprovals } from '../src/lib/tesco-first-price-approval';
+import { withApifyLeaseWait } from '../src/lib/tesco-apify-lease-wait';
 import { apifyUsageHeadroom, createApifyRunClient, createApifyFetchPage, reconcileCampaignSpendUsd, confirmedTerminalChargeUsd, type ApifyProviderIdentity } from '../src/lib/tesco-apify-fetch';
 
 function env(name: string, fallback?: string): string {
@@ -74,6 +76,7 @@ async function main() {
   const maxBatches = Number(process.env.APIFY_MAX_BATCHES ?? 1);
   // Freshness is ENFORCED by default (fail closed); only '0' relaxes it.
   const requireFreshness = process.env.APIFY_REQUIRE_FRESHNESS !== '0';
+  const leaseWaitMinutes = Math.max(0, Math.min(360, Number(process.env.APIFY_LEASE_WAIT_MINUTES ?? 0) || 0));
 
   // The per-run provider ceiling is the PER-REQUEST RESERVATION amount, passed
   // through on each call (fetchApify(url, maxChargeUsd)). We also set a client
@@ -185,7 +188,9 @@ async function main() {
   for (let b = 0; b < maxBatches; b += 1) {
     if (b > 0) { await logProviderSpend(`before_batch_${b}`); await reconcileOutstandingReservations(`before_batch_${b}`);
       if (!(await providerHeadroomOk(`before_batch_${b}`))) break; }
-    const result = await collectTescoApify(mode, limit, {
+    // APIFY_LEASE_WAIT_MINUTES (default 0 = fail fast as before): a timed run waits for the single collector lease
+    // instead of losing its tranche; only the begin-run refusal is retried (no request precedes it).
+    const result = await withApifyLeaseWait(() => collectTescoApify(mode, limit, {
       sb, fetchApify, campaign, budgetUsd, perRequestUsd,
       // APIFY_ALLOW_FIRST_PRICE='1' admits unproven expansion mappings with both
       // fresh peers to the first-price path (needs the 20261113090000 migration
@@ -197,7 +202,7 @@ async function main() {
         repairTargets: mode === 'evidence' ? plan.repairEvidenceTargets : undefined,
       } : undefined,
       log: (e) => console.log(JSON.stringify(e)),
-    });
+    }), { waitMs: leaseWaitMinutes * 60_000, log: (e) => console.log(JSON.stringify({ ...e, batch: b })) });
     batches.push(result);
     console.log(JSON.stringify({ event: 'batch_done', batch: b, runId: result.runId,
       requested: result.requested, accepted: result.accepted, held: result.held,

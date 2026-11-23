@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { validPairReview, type PairReview } from './comparison-policy';
+import { readPairStatusRows } from './pair-status-read';
 
 const HORIZON_MS = 14 * 86400000;
 /** Reviews change only through the protected postgres insert, so a short process-local cache is safe. */
@@ -23,23 +24,14 @@ type DurableStatusRow = {
   left_source_hash: string; right_source_hash: string; left_evidence_at: string | null; right_evidence_at: string | null;
   reviewed_at: string; rationale: string; reviewer: string; status: string;
 };
-// Only "function does not exist" means the migration is not applied; every other error fails closed.
-const isMissingFunction = (error: { code?: string } | null) => !!error && (error.code === 'PGRST202' || error.code === '42883');
 
 /** Durable approvals: only pairs the database reports ACTIVE (unchanged SKU + identity, evidence <= 14 days). */
 async function readDurable(): Promise<PairReview[] | null> {
-  // ACTIVE rows only, paged past PostgREST's row cap so no approval is silently dropped. Each page re-runs the
-  // status function, so paging stops at the first SHORT page: PAGE equals the server cap (Supabase max_rows =
-  // 1000, measured 22 Nov 2026), so a short page is the end. A page of exactly PAGE rows always fetches the next.
-  const rows: DurableStatusRow[] = [];
-  for (let from = 0; ;) {
-    const { data, error } = await supabaseAdmin.rpc('current_pair_review_status', { p_active_only: true }).range(from, from + DURABLE_PAGE - 1);
-    if (isMissingFunction(error)) return null; // migration not applied yet: use the 14-day ledger read
-    if (error) throw error;
-    rows.push(...((data ?? []) as DurableStatusRow[]));
-    if (!data || data.length < DURABLE_PAGE) break;
-    from += data.length;
-  }
+  // ACTIVE rows only. Paged fallback (pre-20261125090000): each page re-runs the status function and paging stops at
+  // the first SHORT page (PAGE = server cap, Supabase max_rows = 1000), so no approval is silently dropped.
+  // One execution via current_pair_review_status_json (20261125090000); paged fallback until it is applied.
+  const rows = await readPairStatusRows<DurableStatusRow>(supabaseAdmin, true);
+  if (rows === null) return null; // migration not applied yet: use the 14-day ledger read
   return rows
     .filter(row => row.status === 'active' && row.left_evidence_at && row.right_evidence_at)
     .map(row => ({ left_offer_id: row.left_offer_id, right_offer_id: row.right_offer_id, classification: row.classification,

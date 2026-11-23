@@ -65,6 +65,26 @@ describe('current_pair_review_status hotfix is behaviour-identical', () => {
     for (const s of ['suspended_sku_changed', 'suspended_no_recent_evidence', 'expired_needs_review']) expect(before).toContain(s);
     await db.exec(readFileSync('supabase/migrations/20261123120000_pair_status_performance.sql', 'utf8'));
     expect(await snapshot()).toBe(before);
+    // 20261125090000: narrow latest-review sort (identical rows) + the single-read jsonb wrapper (identical rows).
+    await db.exec(readFileSync('supabase/migrations/20261125090000_pair_status_single_read.sql', 'utf8'));
+    expect(await snapshot()).toBe(before);
+    for (const days of [0, 3, 9, 15, 400]) for (const active of [false, true]) {
+      // Decode the jsonb rows back to the function's column types and compare as multisets, both directions.
+      const r = (await db.query<{ total: number; json_n: number; diff: number }>(`
+        with t as (select now() + make_interval(secs => $1::float8 * 86400) as at),
+        s as (select * from public.current_pair_review_status((select at from t), $2)),
+        j as (select x.* from jsonb_to_recordset(public.current_pair_review_status_json((select at from t), $2)) as x(
+          left_offer_id uuid, right_offer_id uuid, classification text, left_source_hash text, right_source_hash text,
+          left_evidence_at timestamptz, right_evidence_at timestamptz, reviewed_at timestamptz, rationale text, reviewer text, status text))
+        select (select count(*) from s)::int total, (select count(*) from j)::int json_n,
+          ((select count(*) from (select * from s except all select * from j) a) + (select count(*) from (select * from j except all select * from s) b))::int diff`, [days, active])).rows[0];
+      expect(r.json_n).toBe(r.total);
+      expect(r.diff).toBe(0);
+    }
+    const grants = (await db.query<{ a: boolean; u: boolean; s: boolean }>(`select has_function_privilege('anon', 'public.current_pair_review_status_json(timestamptz,boolean)', 'execute') a,
+      has_function_privilege('authenticated', 'public.current_pair_review_status_json(timestamptz,boolean)', 'execute') u,
+      has_function_privilege('service_role', 'public.current_pair_review_status_json(timestamptz,boolean)', 'execute') s`)).rows[0];
+    expect(grants).toEqual({ a: false, u: false, s: true });
     await db.close();
   }, 60000);
 });

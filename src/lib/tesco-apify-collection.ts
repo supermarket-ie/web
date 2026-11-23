@@ -31,6 +31,7 @@ import {
 } from './tesco-identity-assessment';
 import { declaredPack, retailerOwnBrand, firstPriceCorroboration, reviewedCanonicalEvidenceGap, selfEvidenceFirstPriceReasons, type ReentryEvidence } from './tesco-hold-reentry';
 import type { ApifyProviderIdentity } from './tesco-apify-fetch';
+import { readPairStatusRows } from './pair-status-read';
 
 export const APIFY_GATE = 'apify-tesco-ie-20261108';
 
@@ -336,12 +337,10 @@ export async function selectApifyMappings(
   const otherProduct = new Map<string, string>();
   try {
     const active = new Set<string>();
-    for (let offset = 0; ; offset += 1000) {
-      const { data, error } = await sb.rpc('current_pair_review_status', { p_active_only: true }).range(offset, offset + 999);
-      if (error) throw error;
-      for (const r of (data ?? []) as Record<string, unknown>[]) if (r.status === 'active') active.add(`${r.left_offer_id}|${r.right_offer_id}`);
-      if ((data ?? []).length < 1000) break;
-    }
+    // One execution via the jsonb wrapper when applied (20261125090000), else the paged read.
+    const statusRows = await readPairStatusRows(sb, true);
+    if (statusRows === null) throw new Error('current_pair_review_status missing');
+    for (const r of statusRows) if (r.status === 'active') active.add(`${r.left_offer_id}|${r.right_offer_id}`);
     const latest = new Map<string, Record<string, unknown>>();
     if (active.size) for (let offset = 0; ; offset += 1000) {
       const { data, error } = await sb.from('retailer_offer_pair_reviews')

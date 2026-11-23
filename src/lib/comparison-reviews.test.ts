@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const calls = vi.hoisted(() => ({ since: [] as string[], result: { data: [] as unknown[] | null, error: null as unknown },
   // Default: the durable-approval migration is not applied yet (PostgREST: function not found).
   rpc: { data: null as unknown[] | null, error: { code: 'PGRST202', message: 'Could not find the function public.current_pair_review_status' } as unknown },
-  cap: 1000 /* server max-rows */, rpcCalls: 0 }));
+  cap: 1000 /* server max-rows */, rpcCalls: 0,
+  // Single-read wrapper (20261125090000); default: not applied yet, so the paged read is used.
+  json: { data: null as unknown, error: { code: 'PGRST202', message: 'Could not find the function public.current_pair_review_status_json' } as unknown }, jsonCalls: 0 }));
 vi.mock('@/lib/supabase', () => {
   const builder = {
     select: () => builder,
@@ -13,7 +15,8 @@ vi.mock('@/lib/supabase', () => {
     range: async (from: number, to: number) => calls.result.error ? calls.result
       : { data: (calls.result.data ?? []).slice(from, Math.min(to + 1, from + calls.cap)), error: null },
   };
-  return { supabaseAdmin: { from: () => builder, rpc: () => ({ range: async (from: number, to: number) => { calls.rpcCalls++; return calls.rpc.error ? calls.rpc
+  return { supabaseAdmin: { from: () => builder, rpc: (fn: string) => fn === 'current_pair_review_status_json'
+    ? (calls.jsonCalls++, Promise.resolve(calls.json)) : ({ range: async (from: number, to: number) => { calls.rpcCalls++; return calls.rpc.error ? calls.rpc
     : { data: (calls.rpc.data ?? []).slice(from, Math.min(to + 1, from + calls.cap)), error: null }; } }) } };
 });
 import { getCurrentPairReviews, resetPairReviewCache } from './comparison-reviews';
@@ -25,7 +28,25 @@ const row = { left_offer_id: 'a', right_offer_id: 'b', classification: 'exact_pr
 
 describe('getCurrentPairReviews', () => {
   beforeEach(() => { resetPairReviewCache(); calls.since.length = 0; calls.result = { data: [row], error: null };
-    calls.rpc = { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.current_pair_review_status' } }; calls.cap = 1000; calls.rpcCalls = 0; });
+    calls.rpc = { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.current_pair_review_status' } }; calls.cap = 1000; calls.rpcCalls = 0;
+    calls.json = { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.current_pair_review_status_json' } }; calls.jsonCalls = 0; });
+  it('single read: with the jsonb wrapper applied, every row comes from ONE execution (no paged calls)', async () => {
+    const base = { left_offer_id: 'a', right_offer_id: 'b', classification: 'exact_product', left_source_hash: 'a'.repeat(64), right_source_hash: 'b'.repeat(64),
+      left_evidence_at: at, right_evidence_at: at, reviewed_at: at, rationale: 'r', reviewer: 'owner', status: 'active' };
+    calls.json = { data: Array.from({ length: 2500 }, (_, i) => ({ ...base, left_offer_id: `a${i}` })), error: null };
+    const reviews = await getCurrentPairReviews(now);
+    expect(reviews.filter(r => r.monitored)).toHaveLength(2500);
+    expect(calls.jsonCalls).toBe(1);
+    expect(calls.rpcCalls).toBe(0);
+  });
+  it('single read errors other than a missing function fail closed (no silent fallback)', async () => {
+    calls.json = { data: null, error: { code: '57014', message: 'statement timeout' } };
+    calls.rpc = { data: [], error: null };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await getCurrentPairReviews(now)).toEqual([]);
+    expect(calls.rpcCalls).toBe(0);
+    warn.mockRestore();
+  });
   it('limits the read to the 14-day horizon in SQL', async () => {
     expect(await getCurrentPairReviews(now)).toHaveLength(1);
     expect([...new Set(calls.since)]).toEqual(['2026-11-03T12:00:00.000Z']);
