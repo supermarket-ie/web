@@ -1,5 +1,45 @@
 # Supermarket.ie — Canonical Project State
 
+## 23 November 2026 00:35Z — Large collection campaign, tranche 1: eligible inventory exhausted under current safeguards
+
+**Collection** (all existing routes, governors and identity checks):
+
+| Retailer | Route | Requests | New prices | Refreshed | Failed |
+|---|---|---|---|---|---|
+| SuperValu | trigger route in-process, `limit=500&scope=targeted_validation` (priority selector) | 500 targets, 795 fetches | 36 | 216 | 248 |
+| Dunnes | trigger route in-process, `limit=700&scope=targeted_validation` | 700 targets, 1,082 fetches | 0 | 553 | 147 |
+| Tesco | expansion with first price + self-evidence, untargeted (peer-ranked) | 175 | 2 | — | 173 held |
+
+- **SuperValu:** run `340077f9`. The 36 new prices include 35 of the 36 barcode-attached offers.
+  Failures: 124 `no_confident_remap`, 123 `empty_product_state` (delisted), all non-retryable.
+- **Dunnes:** run `c6b50fb8`. Failures: 96 `no_confident_match`, 51 `no_search_results`.
+- **Tesco:** expansion was stopped deliberately after 7 batches at 2/175 accepted. Holds:
+  measure/description gaps 69, AI uncertain/rejected 26, unavailable 15, brand/formulation/
+  variant/pack conflicts 27. Spend was $0.28; the `tesco-apify-20261108` campaign has $1.77 of
+  its $10 cap left.
+- **Exhausted cohorts (0 targets):**
+  - Dunnes SV-led discovery (`FOCUS=need_dunnes`, offsets 0/1000/2000)
+  - SKU-bound stale renewal (`FOCUS=stale_dunnes`): all tried within 7 days
+  - Tesco renewal: none due
+  - Tesco pair targets: inside the 24 h window until about 16:45Z
+- **Machine approvals:** 0 new (427 active). With the new SuperValu prices, app-verified priced
+  pairs went 295 → **318** and fully verified three-retailer products 47 → **55**.
+
+**Production** (22:22Z 22 Nov → 00:34Z 23 Nov):
+
+| Measure | Before | After |
+|---|---|---|
+| Tesco fresh 7d | 400 | 416 |
+| Dunnes fresh 7d | 972 | 1,000 |
+| SuperValu fresh 7d | 1,604 | 1,640 |
+| 2+ retailers | 961 (22:22Z) | 967 |
+| Three-retailer priced | 226 | 241 |
+| Fully verified three-retailer products | 43 | 55 |
+
+**Remaining backlog** (usable mappings without a 7-day price): Tesco 1,360, Dunnes 118,
+SuperValu 231. Almost all are identity-held or delisted. Growing Tesco further needs catalogue
+repair of generic and mixed records (beyond the barcode-resolvable set), not more requests.
+
 ## 22 November 2026 23:10Z — Performance fixed; first automated catalogue repairs; released 05dafb3
 
 **Migrations applied by the owner** (do not reapply; history version ≠ filename):
