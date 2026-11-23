@@ -1,5 +1,14 @@
 # Supermarket.ie — Canonical Project State
 
+## 23 November 2026 22:05Z — First-price reliability + pair-status single read (migration 20261125090000 NOT applied)
+
+- **Collector lease wait:** `APIFY_LEASE_WAIT_MINUTES` (default 0, max 360) in `scripts/tesco-apify-collect.ts` via `src/lib/tesco-apify-lease-wait.ts`.
+  - Only the begin-run refusal `apify_begin_tesco_run: apify_gate_unavailable` is retried. It is the first write of a batch, so no reservation, request or page precedes it.
+  - Timed first-price runs now wait for the single lease instead of losing their tranche.
+- **Pair status:** `src/lib/pair-status-read.ts` reads `current_pair_review_status_json` in ONE execution. It falls back to the paged read until the migration is applied. Both the app (`comparison-reviews.ts`) and the collector selector use it.
+  - Migration `20261125090000_pair_status_single_read.sql` also narrows the latest-review sort to key columns. Output is identical (equivalence test).
+  - Handoff: `supabase/operator/README-20261125-handoff.md`.
+
 ## 23 November 2026 21:35Z — Onboarded catalogue converted to prices (release 39ab6d3, #444/#445)
 
 **Production, measured 21:34Z** (fresh within 7 days):

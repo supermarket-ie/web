@@ -141,6 +141,8 @@ function makeFakeSb(opts: {
     from: (name: string) => table(name),
     rpc: (fn: string, args: Row) => {
       if (fn === 'current_pair_review_status') { calls.push({ fn, args }); return pairStatus(); }
+      // Single-read wrapper not applied in this fixture: the paged read is exercised.
+      if (fn === 'current_pair_review_status_json') return Promise.resolve({ data: null, error: { code: 'PGRST202', message: 'not found' } });
       return rpcAsync(fn, args);
     },
   } as unknown as SupabaseClient;
