@@ -51,3 +51,32 @@ export function planOnboarding(i: {
   }
   return reasons.length ? { action: 'held', target: targets[0], reasons: [...new Set(reasons)] } : { action: 'attach', target: targets[0], reasons: [] };
 }
+
+// Catalogue category of a NEW record from Tesco's own department / aisle (first matching rule wins).
+// Unmapped departments return null and the product is held: a category is required and never guessed.
+const CATEGORY_RULES: Array<[RegExp, string]> = [
+  [/pet|dog|cat food|cat treat/i, 'Pet Care'],
+  [/baby|toddler/i, 'Baby'],
+  [/stock cubes|stock pots|^stock/i, 'Stock'],
+  [/oils? & cooking fats|cooking oil/i, 'Oils'],
+  [/seasoning|herbs|spices|salt & pepper/i, 'Seasoning'],
+  [/home baking|flour|cake decorating|baking/i, 'Baking'],
+  [/jams|spreads|peanut|nut butter|honey/i, 'Spreads'],
+  [/breakfast cereals|porridge|muesli|granola/i, 'Breakfast'],
+  [/pasta|rice|noodles|cous cous/i, 'Pasta & Rice'],
+  [/tins, cans|tinned|baked beans|pulses/i, 'Tinned'],
+  [/condiments|table sauces|mayonnaise|pickles|cooking sauces|world foods|packet sauces|gravy|easy meals/i, 'Condiments'],
+  [/tea|coffee|soft drinks|juice|water|squash|drinks/i, 'Beverages'],
+  [/crisps|nuts|popcorn|chocolate|sweets|biscuits|cereal bars|crackers|rice cakes|snacks/i, 'Snacks'],
+  [/frozen/i, 'Frozen'],
+  [/dairy alternative|plant based milk/i, 'Dairy Alternatives'],
+  [/milk|cheese|yogurt|yoghurt|butter|cream|dairy/i, 'Dairy'],
+  [/bakery|bread|rolls|wraps/i, 'Bakery'],
+  [/household|cleaning|laundry|toilet|kitchen roll/i, 'Household'],
+  [/toiletries|health & beauty|shampoo|toothpaste|shower/i, 'Personal Care'],
+];
+export function onboardingCategory(department: string | null | undefined, aisle: string | null | undefined): string | null {
+  const text = `${aisle ?? ''} | ${department ?? ''}`;
+  for (const [re, cat] of CATEGORY_RULES) if (re.test(text)) return cat;
+  return null;
+}

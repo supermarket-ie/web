@@ -14,9 +14,9 @@ const obs = (o: Record<string, unknown> = {}) => {
     response_sha256: createHash('sha256').update(body).digest('hex'), resolved_sku: SSKU, outcome: 'identity_consistent', tier: 'strong', title_agreement: 1, rule_version: 'barcode-v5',
     observed_at: new Date(Date.now() - 3600e3).toISOString(), ...o };
 };
-const onboard = (target: string | null, observations: unknown[], sku = TSKU, name = 'Heinz Cream Of Tomato Soup 400G') => db.query<{ id: string }>(
+const onboard = (target: string | null, observations: unknown[], sku = TSKU, name = 'Heinz Cream Of Tomato Soup 400G', category: string | null = 'Tinned') => db.query<{ id: string }>(
   `select public.onboard_barcode_tesco_offer('barcode-onboard-v1', $1, $2, 'Heinz', $3, $4, $5::jsonb, '{"identity":"strong"}'::jsonb,
-    'Tesco catalogue SKU whose GTIN SuperValu resolved to exactly one SKU (test reason).') id`, [sku, name, GTIN, target, JSON.stringify(observations)]);
+    'Tesco catalogue SKU whose GTIN SuperValu resolved to exactly one SKU (test reason).', $6) id`, [sku, name, GTIN, target, JSON.stringify(observations), category]);
 const asService = async <R,>(f: () => Promise<R>) => { await db.exec('set role service_role'); try { return await f(); } finally { await db.exec('reset role'); } };
 
 beforeEach(async () => {
@@ -26,7 +26,7 @@ beforeEach(async () => {
     grant usage on schema public to anon, authenticated, service_role;
     alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
     alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
-    create table public.products (id uuid primary key default gen_random_uuid(), canonical_name text not null, category text, default_unit text, default_quantity text, brand text);
+    create table public.products (id uuid primary key default gen_random_uuid(), canonical_name text not null, category text not null, default_unit text, default_quantity text, brand text);
     create table public.store_products (id uuid primary key default gen_random_uuid(), product_id uuid references public.products(id), store text, store_sku text, store_url text,
       store_product_name text, brand text, is_own_brand boolean, url_status text, gtin text);
     create table public.scrape_runs (id uuid primary key default gen_random_uuid(), run_id text, store text, started_at timestamptz, finished_at timestamptz, target_count int,
@@ -34,9 +34,9 @@ beforeEach(async () => {
     create table public.tesco_direct_collection_pages (id uuid primary key default gen_random_uuid(), requested_url text, final_url text,
       outcome text, http_status int, body_sha256 text, parsed jsonb, created_at timestamptz default now());`);
   for (const m of ['20261011113227_retailer_identity_responses', '20261103141000_offer_comparison_review_ledger', '20261118120000_durable_pair_approvals',
-    '20261121090000_retailer_barcode_observations', '20261122090000_machine_pair_approvals', '20261123090000_barcode_catalogue_repairs', '20261124090000_barcode_tesco_onboarding'])
+    '20261121090000_retailer_barcode_observations', '20261122090000_machine_pair_approvals', '20261123090000_barcode_catalogue_repairs', '20261124090000_barcode_tesco_onboarding', '20261124120000_barcode_tesco_onboarding_category'])
     await db.exec(readFileSync(`supabase/migrations/${m}.sql`, 'utf8'));
-  await db.exec(`insert into public.products(id, canonical_name) values ('${P}', 'Heinz Cream of Tomato Soup 400g');
+  await db.exec(`insert into public.products(id, canonical_name, category) values ('${P}', 'Heinz Cream of Tomato Soup 400g', 'Tinned');
     insert into public.store_products(id, product_id, store, store_sku, store_url, store_product_name, url_status) values ('${S}', '${P}', 'supervalu', '${SSKU}', 'u', 'Heinz Cream of Tomato Soup (400 g)', 'resolved');`);
 });
 afterEach(async () => { await db.close(); });
@@ -58,7 +58,7 @@ describe('onboard_barcode_tesco_offer', () => {
     await asService(() => onboard(P, [obs()]));
     await expect(asService(() => onboard(P, [obs()]))).rejects.toThrow(/already in the catalogue/);
     await expect(asService(() => onboard(null, [obs({ gtin_origin_sku: '300000002' })], '300000002'))).rejects.toThrow(/belongs to another record/);
-    await db.exec(`insert into public.products(id, canonical_name) values ('7f000000-0000-0000-0000-0000000000c2', 'Other')`);
+    await db.exec(`insert into public.products(id, canonical_name, category) values ('7f000000-0000-0000-0000-0000000000c2', 'Other', 'Snacks')`);
     await expect(asService(() => onboard('7f000000-0000-0000-0000-0000000000c2', [obs({ resolved_sku: '1099999000', gtin_origin_sku: '300000003' })], '300000003'))).rejects.toThrow(/owns none/);
     await expect(asService(() => onboard(null, [obs({ resolved_sku: '1099999001', gtin_origin_sku: '300000004', observed_at: new Date(Date.now() - 5 * 864e5).toISOString() })], '300000004'))).rejects.toThrow(/recent strong/);
     await expect(asService(() => onboard(null, [obs({ resolved_sku: '1099999002', gtin_origin_sku: '300000005', tier: 'review' })], '300000005'))).rejects.toThrow(/recent strong/);
@@ -68,8 +68,17 @@ describe('onboard_barcode_tesco_offer', () => {
     expect((await db.query(`select 1 from public.store_products where store = 'tesco'`)).rows).toHaveLength(1);
   });
   it('browser roles cannot call it', async () => {
-    const r = (await db.query<{ a: boolean; u: boolean }>(`select has_function_privilege('anon', 'public.onboard_barcode_tesco_offer(text,text,text,text,text,uuid,jsonb,jsonb,text)', 'execute') a,
-      has_function_privilege('authenticated', 'public.onboard_barcode_tesco_offer(text,text,text,text,text,uuid,jsonb,jsonb,text)', 'execute') u`)).rows[0];
+    const r = (await db.query<{ a: boolean; u: boolean }>(`select has_function_privilege('anon', 'public.onboard_barcode_tesco_offer(text,text,text,text,text,uuid,jsonb,jsonb,text,text)', 'execute') a,
+      has_function_privilege('authenticated', 'public.onboard_barcode_tesco_offer(text,text,text,text,text,uuid,jsonb,jsonb,text,text)', 'execute') u`)).rows[0];
     expect(r).toEqual({ a: false, u: false });
+  });
+});
+
+describe('onboarding category (fix 20261124120000)', () => {
+  it('a new record needs a catalogue category; the created record carries it', async () => {
+    await expect(asService(() => onboard(null, [obs({ resolved_sku: '1099999010', gtin_origin_sku: '300000010' })], '300000010', 'Heinz Cream Of Tomato Soup 400G', null))).rejects.toThrow(/catalogue category/);
+    await expect(asService(() => onboard(null, [obs({ resolved_sku: '1099999011', gtin_origin_sku: '300000011' })], '300000011', 'Heinz Cream Of Tomato Soup 400G', 'Wine'))).rejects.toThrow(/catalogue category/);
+    const offer = (await asService(() => onboard(null, [obs({ resolved_sku: '1099999012', gtin_origin_sku: '300000012' })], '300000012'))).rows[0].id;
+    expect((await db.query<{ category: string }>(`select p.category from public.store_products s join public.products p on p.id = s.product_id where s.id = $1`, [offer])).rows[0].category).toBe('Tinned');
   });
 });

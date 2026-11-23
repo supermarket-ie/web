@@ -33,3 +33,17 @@ describe('barcode-onboard-v1', () => {
     expect(planOnboarding({ tesco, hits: [sv], owners, record: rec([base], 'Heinz Cream of Tomato Soup 600g') }).reasons).toContain('target_name_contradicts');
   });
 });
+
+import { onboardingCategory } from './barcode-tesco-onboarding';
+describe('onboarding category', () => {
+  it('maps Tesco department / aisle to the site categories and never guesses', () => {
+    expect(onboardingCategory('Cooking Ingredients', 'Stock Cubes & Pots')).toBe('Stock');
+    expect(onboardingCategory('Cooking Ingredients', 'Seasoning, Herbs & Spices')).toBe('Seasoning');
+    expect(onboardingCategory('Crisps, Nuts and Popcorn', 'Sharing Crisps')).toBe('Snacks');
+    expect(onboardingCategory('Tins, Cans & Packets', 'Tinned Fish & Seafood')).toBe('Tinned');
+    expect(onboardingCategory('Coffee', 'Ground Coffee')).toBe('Beverages');
+    expect(onboardingCategory('Breakfast Cereals', 'Porridge & Oats')).toBe('Breakfast');
+    expect(onboardingCategory('Dried Pasta, Rice, Noodles & Cous Cous', 'Rice')).toBe('Pasta & Rice');
+    expect(onboardingCategory('Something Unknown', 'Unknown')).toBeNull();
+  });
+});

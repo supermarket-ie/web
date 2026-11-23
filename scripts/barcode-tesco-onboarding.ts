@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { brotliDecompressSync } from 'node:zlib';
 import { classifyBarcodeResult, normaliseGtin, type SearchHit } from '../src/lib/barcode-matching';
-import { ONBOARD_POLICY_VERSION, planOnboarding, type Owner, type StrongHit } from '../src/lib/barcode-tesco-onboarding';
+import { ONBOARD_POLICY_VERSION, onboardingCategory, planOnboarding, type Owner, type StrongHit } from '../src/lib/barcode-tesco-onboarding';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const APPLY = process.env.APPLY === '1';
@@ -71,6 +71,8 @@ async function main() {
         .map(o => ({ store: o.store, sku: o.store_sku ? String(o.store_sku) : null, name: String(o.store_product_name ?? ''), brand: o.brand ?? null })) } : null });
     bump(`plan:${plan.action}${plan.reasons.length ? ':' + plan.reasons[0].split(':')[0] : ''}`);
     if (plan.action === 'held') continue;
+    const category = plan.target ? null : onboardingCategory(p.c.department, p.c.aisle);
+    if (!plan.target && !category) { bump('plan:held:no_category'); continue; }
     log({ event: 'planned', action: plan.action, tesco: p.c.sku, name: p.c.name, hits: p.hits.map(h => `${h.store}:${h.sku}`), target: plan.target });
     if (!APPLY) continue;
     const observations = p.hits.map(h => {
@@ -84,6 +86,7 @@ async function main() {
     const r = await fetch(`${process.env.SB_URL}/rest/v1/rpc/onboard_barcode_tesco_offer`, { method: 'POST', headers: H, body: JSON.stringify({
       p_policy_version: ONBOARD_POLICY_VERSION, p_tesco_sku: String(p.c.sku), p_tesco_name: p.c.name, p_tesco_brand: p.c.brand, p_gtin: p.c.gtin,
       p_target_product: plan.target, p_observations: observations, p_checks: { hits: p.hits.map(h => `${h.store}:strong`), plan: plan.action },
+      p_category: category,
       p_reason: `Policy ${ONBOARD_POLICY_VERSION}: ${p.hits.map(h => h.store).join('+')} search resolved GTIN ${p.c.gtin} to one strong SKU for Tesco "${p.c.name}".` }) });
     if (!r.ok) { bump('db_refused'); log({ event: 'refused', tesco: p.c.sku, status: r.status, message: (await r.text()).slice(0, 200) }); continue; }
     done++; bump(`onboarded:${plan.action}`);
