@@ -1,5 +1,65 @@
 # Supermarket.ie — Canonical Project State
 
+## 23 November 2026 10:30Z — Catalogue expansion: barcode-led Tesco onboarding (migration 20261124090000 NOT applied)
+
+**New inventory.** The retained Tesco catalogue sample (15 Nov, `~/smie-private/tesco-catalogue`) has 7,084 unique
+SKUs:
+
+| Group | SKUs |
+|---|---|
+| **Branded, GTIN-bearing grocery SKUs NOT in our catalogue** | **4,558** |
+| Already mapped | 908 |
+| Own-label / unbranded | 1,546 |
+| Excluded categories | 68 |
+| Bad or restricted GTIN | 4 |
+
+- **Capture.** A READ-ONLY governed barcode capture of all 4,558 GTINs at Dunnes and SuperValu is
+  running (`catalogue-capture-loop.sh`, resumable; logs in `catcap/`).
+- **Dry-run yield on the first 1,350:**
+  - **395 new cross-retailer records** planned (Tesco + Dunnes and/or SuperValu, strong tier).
+    Samples: Splenda Granulated 125g and McVitie's Digestive 315g at both retailers.
+  - Held: 28 targets that already have a different Tesco offer, 5 with a contradicting offer.
+  - Extrapolated: about 1,300 new products.
+
+**PR #440** (merged, released as `fcdfbc6-prod`):
+- **Migration `20261124090000_barcode_tesco_onboarding.sql`:** `onboard_barcode_tesco_offer`
+  (SECURITY DEFINER, service_role only). It creates the Tesco offer on the one record owning the
+  resolved SKUs, or on a new record named from Tesco's title. Strong, recent, hash-checked
+  observations are bound in the same transaction. It refuses shared SKUs, SKUs owned by another
+  record, a target that already has a Tesco offer, and own-label. No price is written.
+- **Policy** `barcode-onboard-v1` (`src/lib/barcode-tesco-onboarding.ts`) and runner
+  `scripts/barcode-tesco-onboarding.ts`.
+- **Expansion-first refresh:** `missing=1` on the SuperValu/Dunnes trigger routes selects only
+  offers with no trusted current price, in the SQL priority order. The daily `scheduled_full` is
+  unchanged (tested). First runs selected SuperValu 244 and Dunnes 129, against 500/700
+  mostly-fresh before. They are mostly delisted (early attempts all failed).
+- **Review.** The semantic reviewer failed twice (tool stall/abort). The key risks were checked
+  directly; see the PR. Full suite 1,594 passed.
+- **Handoff:** `supabase/operator/README-20261124-handoff.md`.
+
+**Tesco backlog** (retained review, read-only, 1,319 of 1,363 classified):
+
+| Class | Proven | No receipt |
+|---|---|---|
+| needs_evidence | 566 | 310 |
+| genuine_mismatch | 166 | 179 |
+| catalogue_gap | 50 | 6 |
+| exact_match | 41 | 1 |
+
+The mismatches are Tesco SKUs mapped to a different product. Their fix is to re-home the Tesco
+offer, not to retry.
+
+**Pipeline after migration apply:**
+1. onboarding `APPLY=1`
+2. `barcode-catalogue-repairs` (its SuperValu attach stage covers the new records)
+3. Tesco `APIFY_MODE=evidence` (self-evidence) for onboarded SKUs
+4. Dunnes attach (`dunnes-barcode-renewal` attach mode, Tesco reference from that evidence)
+5. SuperValu `missing=1` refresh
+6. Tesco approve and expansion (first price)
+7. machine approvals
+
+Tesco expansion ceiling: $50 (owner, 23 Nov).
+
 ## 23 November 2026 00:35Z — Large collection campaign, tranche 1: eligible inventory exhausted under current safeguards
 
 **Collection** (all existing routes, governors and identity checks):
