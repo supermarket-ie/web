@@ -1,5 +1,58 @@
 # Supermarket.ie — Canonical Project State
 
+## 23 November 2026 22:50Z — Tesco first-price waves for 24 Nov (release 6ecf530, #447/#448)
+
+**Production at 22:45Z:**
+
+| Metric | Value |
+|---|---:|
+| Tesco fresh | 449 |
+| Dunnes fresh | 1,568 |
+| SuperValu fresh | 2,100 |
+| Total fresh | **4,117** |
+| Products at 2+ retailers | 1,143 |
+| Products at all three | 242 |
+| Active approvals | 1,512 |
+| Fully verified three-store | 55 (measured 21:34Z) |
+
+Apify account $24.23 of $80; growth ledger about $39.9 of $50 left.
+
+**Release 6ecf530:**
+- Web, sqs-consumer and scheduled tasks run 6ecf530 (scheduled task def revision 17).
+- Collector `smie-prod-tesco-apify-collect:21` adds `APIFY_LEASE_WAIT_MINUTES`.
+- The pair-status single read falls back to paging until migration `20261125090000` is applied by the owner (handoff `README-20261125-handoff.md`).
+
+**First-price plan** (`~/smie-private/.../firstprice-plan.mjs`, read-only):
+- Onboarded offers: 785 have a live, snapshot-valid approval (150 of them priority, i.e. priced at both SuperValu and Dunnes). 90 have no approval (held on identity).
+- Earliest approval expiry is 26 Nov 18:17Z.
+- Waves are built from each offer's OWN last page time + 24h + 5 min, with priority offers first in each wave file. Never sort the id files.
+
+**One-off schedules** (`ActionAfterCompletion NONE`, so they stay until completion is verified with `verify-firstprice.mjs`, then are deleted by hand). All use rev 21 with `APIFY_LEASE_WAIT_MINUTES=240`, so a wave that finds the lease busy waits instead of failing. Scheduler retries are 3.
+
+| Schedule | Time (UTC) | Offers |
+|---|---|---|
+| `smie-prod-tesco-firstprice-w1-20261124` | 24 Nov 16:40 | 185 |
+| `smie-prod-tesco-firstprice-w2-20261124` | 24 Nov 17:32 | 185 |
+| `smie-prod-tesco-firstprice-w3-20261124` | 24 Nov 18:26 | 185 |
+| `smie-prod-tesco-firstprice-w4-20261124` | 24 Nov 19:23 | 185 |
+| `smie-prod-tesco-firstprice-w5-20261124` | 24 Nov 19:36 | 45 |
+| `smie-prod-tesco-firstprice-w6-20261124` | 24 Nov 22:50 | 43 new onboarded, 38 approved |
+| `smie-prod-tesco-firstprice-c1..c5-20261124` | 24 Nov 22:05–22:25 | catch-ups for waves 1–5 |
+| `smie-prod-tesco-firstprice-c6-20261125` | 25 Nov 00:30 | catch-up for wave 6 |
+| `smie-prod-machine-pairs-20261124T21`, `smie-prod-machine-pairs-20261125T00` | 24 Nov 21:15, 25 Nov 00:15 | machine pair approvals |
+
+- A catch-up re-selects only offers still eligible: approved, unpriced, and not requested in the last 24h. A missed wave is therefore recovered, and an attempted URL is never re-requested within 24h.
+- The machine-pair schedules use `smie-prod-scheduled:17`. Do NOT run a terraform/tofu rollout before 25 Nov 00:20Z: it deregisters :17.
+
+**Other changes:**
+- **Categories (#448):** 43 more products onboarded (42 new records, 1 attach); 918 onboarded in total.
+  - SuperValu attach +21, queued for price through `sv-ids-call.mts`, which without `FAILURE_RUN` uses missing-only selection.
+  - Dunnes attach for 30 of them is running.
+  - Evidence recorded for all 43; 38 approved.
+- **Detached legacy offers (179 with a GTIN):** retailer barcode search capture.
+  - Strong: Dunnes 12 (10 unowned → 7 attached and priced, 3 held; 2 owned by another record, held because re-homing is not built). SuperValu 3 (1 unowned, 2 already on the record).
+  - Review tier: Dunnes 88, SuperValu 94. Wording differences only (e.g. "Sun-Ripened" vs "Sundried", extra descriptive words). Barcode policy needs review or an AI-reviewed route before these associate. Not built.
+
 ## 23 November 2026 22:05Z — First-price reliability + pair-status single read (migration 20261125090000 NOT applied)
 
 - **Collector lease wait:** `APIFY_LEASE_WAIT_MINUTES` (default 0, max 360) in `scripts/tesco-apify-collect.ts` via `src/lib/tesco-apify-lease-wait.ts`.
