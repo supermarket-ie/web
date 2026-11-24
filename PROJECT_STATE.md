@@ -1,5 +1,49 @@
 # Supermarket.ie — Canonical Project State
 
+## 24 November 2026 22:50Z — Tesco first-price waves complete; review-tier and pair-status PRs merged (migrations 20261126090000 + 20261127090000 NOT applied)
+
+**Production at 22:25Z:**
+
+| Metric | 07:41Z | 22:25Z |
+|---|---:|---:|
+| Tesco fresh | 446 | **1,196** |
+| SuperValu fresh | 2,100 | 2,100 |
+| Dunnes fresh | 1,566 | 1,647 |
+| Total fresh | 4,112 | **4,943** |
+| Products at 2+ retailers | 1,137 | 1,696 |
+| Products at all three | 242 | **435** |
+| Verified priced pairs | — | 1,296 (892 products) |
+| Fully verified three-store | 55 | **202** |
+| Active approvals | 1,557 | 1,558 |
+
+**First-price waves** (`verify-firstprice.mjs`): 750 Tesco first prices from 785 requests, 35 held on identity, 0 unattempted.
+
+| Wave | Accepted | Held |
+|---|---:|---:|
+| w1 | 168 | 17 (1 unavailable) |
+| w2 | 180 | 5 |
+| w3 | 172 | 13 |
+| w4 | 185 | 0 |
+| w5 | 45 | 0 |
+
+- The lease wait worked: w2 and w3 waited behind w1 and w2 instead of failing.
+- Catch-ups c1–c4 found nothing eligible, which is correct.
+- Schedules w1–w5 and c1–c4 were deleted after verification.
+- Still pending: c5 (22:25), w6 (22:50; 43 offers, 38 approved), c6 (25 Nov 00:30), and machine pairs at 25 Nov 00:15. Rollout freeze until 25 Nov 00:20Z.
+
+**Review-tier Dunnes:** 81 attached and priced (`barcode-review-ai-v1`, #451/#452). Their machine pairing needs migration 20261126090000.
+
+**#453 (migration `20261126090000_barcode_review_acceptances.sql`, handoff `README-20261126-handoff.md`):**
+- Adds an append-only AI-acceptance store, a basis-aware `current_machine_associations` view, and policy `barcode-review-ai-v1`.
+- `barcode-exact-v1` is unchanged: it uses basis strong only.
+- Runner: `scripts/barcode-review-accept.ts`. After apply: record the 81 acceptances, then run machine pairs.
+- SuperValu review tier (270 candidates) is still not built; it needs a review-aware SuperValu attach.
+
+**#454 (migration `20261127090000_pair_status_side_cache.sql`, handoff `README-20261127-handoff.md`):**
+- From the production plan: 3,118 side evaluations at about 2 ms each, re-derived on every read.
+- The fix is an incrementally maintained per-side evidence cache, folded from a global `recorded_at` watermark, with an equivalence test and mutation checks.
+- PGlite: repeat read 24 ms vs 634 ms exact. NOT a production figure: the owner benchmarks the SECOND call after apply.
+
 ## 23 November 2026 22:50Z — Tesco first-price waves for 24 Nov (release 6ecf530, #447/#448)
 
 **Production at 22:45Z:**
