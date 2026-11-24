@@ -117,17 +117,19 @@ async function main() {
           try { for (const it of (JSON.parse(r.body)?.items ?? []) as Array<{ sku?: unknown }>) if (it?.sku != null) skus.push(String(it.sku)); } catch { /* no items */ }
         }
         const text = `${String(resp?.description ?? '')} ${typeof (resp as Record<string, unknown> | null)?.ingredients === 'string' ? (resp as Record<string, string>).ingredients : ''}`;
-        const pre = reviewPrecheck({ confirmationReasons: conf.reasons, barcodeSearch: { gtin: g.ok ? g.retail : '', skus: g.ok ? skus : [] }, sku: t.sku, retailerText: text });
+        const pre = reviewPrecheck({ confirmationReasons: conf.reasons, barcodeSearch: { gtin: g.ok ? g.retail : '', skus: g.ok ? skus : [] }, sku: t.sku, retailerText: text,
+          tescoName: ref, retailerName: String(resp?.name ?? '') });
         let ai: ReviewAssessment | null = null;
-        // A strict confirmation pass needs only the fresh barcode binding; the AI is consulted for wording-only holds.
-        if (pre.eligible && !conf.ok) {
+        // Review tier means the barcode classifier saw wording differences the strict confirmation may not (it does not
+        // check words the RETAILER adds), so the AI is ALWAYS required for a review target.
+        if (pre.eligible) {
           try {
             ai = await assessReviewIdentity({ tesco: { name: ref, brand, gtin: g.ok ? g.retail : '', quantity: ev?.net_contents ?? null },
               retailer: { store: 'dunnes', sku: t.sku, name: String(resp?.name ?? ''), brand: typeof resp?.brand === 'string' ? resp.brand : null,
                 size: conf.structuredPack, description: String(resp?.description ?? ''), ingredients: text } });
           } catch (e) { log({ event: 'review_ai_error', product_id: t.product_id, message: e instanceof Error ? e.message.slice(0, 160) : String(e) }); }
         }
-        const d = conf.ok ? { accept: pre.eligible, reasons: pre.reasons } : decideReview(pre, ai);
+        const d = decideReview(pre, ai);
         review = { accepted: d.accept, reasons: d.reasons, ai };
         log({ event: d.accept ? 'review_accepted' : 'review_held', policy: REVIEW_POLICY_VERSION, product_id: t.product_id, sku: t.sku, ref,
           title: resp?.name ?? null, confirmation: conf.reasons, reasons: d.reasons, ai: ai ? { decision: ai.decision, facts: ai.facts, rationale: ai.rationale } : null });
