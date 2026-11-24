@@ -68,6 +68,9 @@ describe('current_pair_review_status hotfix is behaviour-identical', () => {
     // 20261125090000: narrow latest-review sort (identical rows) + the single-read jsonb wrapper (identical rows).
     await db.exec(readFileSync('supabase/migrations/20261125090000_pair_status_single_read.sql', 'utf8'));
     expect(await snapshot()).toBe(before);
+    // 20261125120000: side verdicts pre-aggregated per pair, unordered core + ordered wrapper (identical rows and order).
+    await db.exec(readFileSync('supabase/migrations/20261125120000_pair_status_pre_aggregate.sql', 'utf8'));
+    expect(await snapshot()).toBe(before);
     for (const days of [0, 3, 9, 15, 400]) for (const active of [false, true]) {
       // Decode the jsonb rows back to the function's column types and compare as multisets, both directions.
       const r = (await db.query<{ total: number; json_n: number; diff: number }>(`
