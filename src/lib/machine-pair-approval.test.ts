@@ -129,3 +129,33 @@ describe('pairs without a Tesco side, and human precedence', () => {
     expect(evaluateMachinePair(t, s, GTIN, NOW, null, null, true)).toMatchObject({ decision: 'held', reasons: ['human_decision_exists'] });
   });
 });
+
+describe('review-tier basis (policy barcode-review-ai-v1)', () => {
+  const review = (t: ReturnType<typeof tesco>, s: ReturnType<typeof sv>) => run(pair({ tesco: t, sv: s, assoc: { basis: 'ai_review' } }));
+  it('strong basis keeps the exact policy: a wording-only difference still HOLDS', () => {
+    const d = run(pair({ tesco: tesco('Heinz Cream Of Tomato Soup 400G'), sv: sv('Heinz Cream of Tomato Soup Big Tin (400 g)'), assoc: { basis: 'strong' } }));
+    expect(d.policy).toBe('barcode-exact-v1');
+    expect(d.decision).toBe('held');
+  });
+  it('ai_review basis waives ONLY wording-only notes and records the review policy', () => {
+    const d = review(tesco('Heinz Cream Of Tomato Soup 400G'), sv('Heinz Cream of Tomato Soup Big Tin (400 g)'));
+    expect(d).toMatchObject({ decision: 'approved', policy: 'barcode-review-ai-v1' });
+    expect(d.checks.association_basis).toBe('ai_review');
+  });
+  it('ai_review basis never waives pack, count, brand, variant, number or container differences', () => {
+    for (const [t, s] of [
+      [tesco('Club Orange Bottle 500ml'), sv('Club Orange Bottle (1.75 L)')],
+      [tesco('Andrex Classic Clean Toilet Tissue 24 Rolls'), sv('Andrex Classic Clean Toilet Tissue 4 Rolls')],
+      [tesco('Carmex Original Lip Balm 10g'), sv('Vaseline Original Lip Therapy (10 g)')],
+      [tesco('Kerrygold Mild Cheddar 200g'), sv('Kerrygold Mature Cheddar (200 g)')],
+      [tesco('Heinz Baked Beans 415g'), sv('Heinz Baked Beans No Added Sugar (415 g)')],
+      [tesco("Ella's Kitchen Apples Pouch 120g", "Ella's Kitchen"), sv("Ella's Kitchen Apples Jar (120 g)", "Ella's Kitchen")],
+    ] as const) expect(review(t, s).decision).not.toBe('approved');
+  });
+  it('ai_review basis still needs an active association, direct fresh sources and no human decision', () => {
+    expect(run(pair({ assoc: { basis: 'ai_review', status: 'suspended_observation_changed' } })).decision).toBe('held');
+    expect(run(pair({ assoc: null })).decision).toBe('held');
+    const [t, s] = pair({ assoc: { basis: 'ai_review' } });
+    expect(evaluateMachinePair(t, s, GTIN, NOW, null, null, true).decision).toBe('held');
+  });
+});

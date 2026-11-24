@@ -19,6 +19,8 @@ import { assessBarcodeHit } from './barcode-matching';
 import { deterministicDifference, isOwnLabel } from './comparison-policy';
 
 export const MACHINE_POLICY_VERSION = 'barcode-exact-v1';
+/** Pairs with an AI-accepted REVIEW-tier barcode association (migration 20261126090000). Strong pairs never use it. */
+export const MACHINE_REVIEW_POLICY_VERSION = 'barcode-review-ai-v1';
 export const MACHINE_FRESHNESS_DAYS = 12;
 
 export type MachineSide = {
@@ -39,10 +41,11 @@ export type MachineSide = {
     gtin: string | null;
   } | null;
   /** Barcode association for a non-Tesco side (current_barcode_associations), null when none. */
-  association?: { gtin: string; status: string; resolvedSku: string; originOfferId: string; originProductId: string | null } | null;
+  association?: { gtin: string; status: string; resolvedSku: string; originOfferId: string; originProductId: string | null;
+    /** 'strong' (current_barcode_associations) or 'ai_review' (an AI-accepted review-tier association). */ basis?: 'strong' | 'ai_review' } | null;
 };
 export type ModelVerdict = { verdict: 'exact' | 'different' | 'uncertain'; model: string; rationale?: string } | null;
-export type MachineDecision = { decision: 'approved' | 'rejected' | 'held'; reasons: string[]; checks: Record<string, string> };
+export type MachineDecision = { decision: 'approved' | 'rejected' | 'held'; reasons: string[]; checks: Record<string, string>; policy: string };
 
 const DAY = 86400000;
 export const normGtin = (g: string | null | undefined) => (g ?? '').replace(/\D/g, '').replace(/^0+/, '') || null;
@@ -54,6 +57,11 @@ export function evaluateMachinePair(a: MachineSide, b: MachineSide, gtin: string
   const reject: string[] = [], hold: string[] = [], checks: Record<string, string> = {};
   const g = normGtin(gtin);
   const sides = [a, b];
+  // A side whose association is an AI-accepted review-tier one is evaluated under the review policy: ONLY wording-only
+  // review notes (extra_words, substitution) are waived, because the acceptance already required the AI and the deterministic
+  // blockers. Every contradiction, pack/number/brand review note, customer veto and own-label rule still applies.
+  const reviewBasis = sides.some(s => s.association?.basis === 'ai_review');
+  const WORDING_ONLY = /^(extra_words|substitution):/;
   if (!g) hold.push('gtin_missing');
   if (a.store === b.store) reject.push('same_retailer');
   // Binding.
@@ -102,7 +110,7 @@ export function evaluateMachinePair(a: MachineSide, b: MachineSide, gtin: string
     for (const [x, y] of [[a.source, b.source], [b.source, a.source]] as const) {
       const r = assessBarcodeHit({ name: x.title, brand: x.brand }, { sku: y.sku, name: y.title, brand: y.brand });
       for (const c of r.conflicts) reject.push(`identity:${c}`);
-      for (const c of r.review) hold.push(`identity_review:${c}`);
+      for (const c of r.review) { if (reviewBasis && WORDING_ONLY.test(c)) continue; hold.push(`identity_review:${c}`); }
     }
     const veto = deterministicDifference(a.source.title, b.source.title);
     // The customer-facing veto disagreeing with a strong assessment is a rule disagreement: never approve (the
@@ -114,8 +122,10 @@ export function evaluateMachinePair(a: MachineSide, b: MachineSide, gtin: string
   // Model: may hold, never approve or override.
   if (model && model.verdict !== 'exact') hold.push(`model_${model.verdict}`);
   checks.model = model ? `${model.model}:${model.verdict}` : 'not_used';
+  checks.association_basis = reviewBasis ? 'ai_review' : 'strong';
+  const policy = reviewBasis ? MACHINE_REVIEW_POLICY_VERSION : MACHINE_POLICY_VERSION;
   const uniq = (xs: string[]) => [...new Set(xs)];
-  if (reject.length) return { decision: 'rejected', reasons: uniq(reject), checks };
-  if (hold.length) return { decision: 'held', reasons: uniq(hold), checks };
-  return { decision: 'approved', reasons: [], checks };
+  if (reject.length) return { decision: 'rejected', reasons: uniq(reject), checks, policy };
+  if (hold.length) return { decision: 'held', reasons: uniq(hold), checks, policy };
+  return { decision: 'approved', reasons: [], checks, policy };
 }
