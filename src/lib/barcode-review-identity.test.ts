@@ -7,7 +7,7 @@ const exact: ReviewAssessment = { decision: 'verified_exact', rationale: 'Same b
   facts: { brand_matches: true, product_type_matches: true, flavour_formulation_matches: true, variant_matches: true, quantity_matches: true, pack_count_matches: true, age_stage_matches: true } };
 const barcode = (skus = [sku]) => ({ gtin: '5391508910138', skus });
 const pre = (reasons: string[], over: Partial<Parameters<typeof reviewPrecheck>[0]> = {}) =>
-  reviewPrecheck({ confirmationReasons: reasons, barcodeSearch: barcode(), sku, retailerText: '', ...over });
+  reviewPrecheck({ confirmationReasons: reasons, barcodeSearch: barcode(), sku, retailerText: '', tescoName: 'Ballygowan Hint of Fruit Summer Fruits 750ml', retailerName: 'Ballygowan Hint of Fruit Summer Fruits 750ml', ...over });
 
 // Real confirmation outcomes from a SKU-bound Dunnes response, so the precheck sees exactly what production sees.
 const response = (name: string, size = 750, unit = 'ml') => ({ sku, name, brand: 'Ballygowan', price: '€1.50', available: true,
@@ -27,6 +27,15 @@ describe('review-tier barcode identity (barcode-review-ai-v1)', () => {
     expect(p.eligible).toBe(true);
     const flavour = pre(['title_words_missing:strawberry'], { retailerText: 'Greek style yogurt with <b>Strawberry</b> compote' });
     expect(flavour.eligible).toBe(true);
+  });
+  it('NEGATIVE: a material word only the RETAILER title states holds (strict confirmation does not check retailer extras)', () => {
+    const r = confirm('Old El Paso Gluten Free Fajita Kit 462G', 'Old El Paso Gluten Free Fajita Kit Smoky BBQ 462g', 462, 'g');
+    const p = pre(r, { tescoName: 'Old El Paso Gluten Free Fajita Kit 462G', retailerName: 'Old El Paso Gluten Free Fajita Kit Smoky BBQ 462g' });
+    expect(p.reasons).toEqual(expect.arrayContaining(['material_word_extra:smoky', 'material_word_extra:bbq']));
+    expect(decideReview(p, exact).accept).toBe(false);
+    expect(pre([], { tescoName: 'Frontier Foods Organic Coconut Milk 400Ml', retailerName: 'Frontier Foods Full Organic Coconut Milk 400ml' }).reasons).toContain('material_word_extra:full');
+    // non-material retailer wording is fine
+    expect(pre([], { tescoName: 'Tayto Crisps Cheese & Onion 12 X 25G', retailerName: 'Tayto Cheese & Onion Flavour Potato Crisps 12 x 25g' }).eligible).toBe(true);
   });
   it('NEGATIVE: a barcode alone never equates products (no, ambiguous or other SKU in the fresh search)', () => {
     expect(pre(['title_words_missing:still'], { barcodeSearch: barcode([]) }).reasons).toContain('barcode_not_found');

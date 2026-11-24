@@ -25,9 +25,10 @@ const MATERIAL_WORDS = new Set([
   'strawberry', 'raspberry', 'blueberry', 'cherry', 'vanilla', 'chocolate', 'caramel', 'toffee', 'mint', 'orange', 'lemon', 'lime',
   'apple', 'banana', 'mango', 'peach', 'pineapple', 'coconut', 'hazelnut', 'almond', 'peanut', 'honey', 'cinnamon', 'ginger',
   'cheese', 'cheddar', 'onion', 'garlic', 'chilli', 'chili', 'pepper', 'tomato', 'bbq', 'barbecue', 'chicken', 'beef', 'pork', 'ham',
-  'bacon', 'prawn', 'salt', 'salted', 'vinegar', 'sweet', 'sour', 'spicy', 'hot', 'mild', 'smoked', 'herb', 'basil', 'curry', 'mushroom',
+  'bacon', 'prawn', 'salt', 'salted', 'vinegar', 'sweet', 'sour', 'spicy', 'hot', 'mild', 'smoked', 'smoky', 'herb', 'basil', 'curry', 'mushroom',
+  'cranberry', 'berry', 'berries', 'fruit', 'fruits', 'nut', 'nuts', 'seed', 'seeds', 'butter', 'cream', 'yogurt', 'mayo', 'sriracha', 'jalapeno',
   // formulation / variant
-  'light', 'lite', 'low', 'reduced', 'free', 'zero', 'diet', 'decaf', 'organic', 'original', 'classic', 'extra', 'max', 'plus', 'gold',
+  'light', 'lite', 'low', 'reduced', 'free', 'zero', 'diet', 'decaf', 'organic', 'original', 'classic', 'extra', 'max', 'plus', 'gold', 'full',
   'sugar', 'fat', 'lactose', 'gluten', 'vegan', 'vegetarian', 'wholemeal', 'whole', 'semi', 'skimmed', 'white', 'brown', 'dark',
   'unsalted', 'unsweetened', 'sensitive', 'protein', 'fibre', 'fiber', 'caffeine', 'sparkling', 'still', 'concentrate', 'squash',
   'bio', 'non', 'scented', 'unscented', 'fragrance', 'fresh', 'frozen', 'chilled', 'instant', 'ground', 'beans', 'pods', 'capsules',
@@ -41,6 +42,8 @@ export type ReviewInput = {
   barcodeSearch: { gtin: string; skus: string[] };   // fresh governed search for the GTIN (all forms)
   sku: string;
   retailerText: string;                // the retailer's own SKU-bound description + ingredients (plain text)
+  tescoName: string;                   // Tesco's own title (the barcode origin)
+  retailerName: string;                // the retailer's SKU-bound title
 };
 export type ReviewPrecheck = { eligible: boolean; reasons: string[]; missing: string[] };
 
@@ -61,6 +64,14 @@ export function reviewPrecheck(i: ReviewInput): ReviewPrecheck {
     if (stated.has(w) || stated.has(singular)) continue;   // the retailer's own product data states it
     if (/\d/.test(w)) reasons.push(`numeric_word_missing:${w}`);
     else if (MATERIAL_WORDS.has(w) || MATERIAL_WORDS.has(singular)) reasons.push(`material_word_missing:${w}`);
+  }
+  // The other direction: a material word in the RETAILER title that Tesco's title does not state ("Fajita Kit" vs
+  // "Fajita Kit Smoky BBQ", "Coconut Milk" vs "Full ... Coconut Milk") holds -- Tesco offers no description to confirm it.
+  const tescoWords = new Set(plain(i.tescoName).split(' ').flatMap(w => [w, w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w]));
+  for (const w of new Set(plain(i.retailerName).split(' '))) {
+    const singular = w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w;
+    if (!w || tescoWords.has(w) || tescoWords.has(singular)) continue;
+    if (MATERIAL_WORDS.has(w) || MATERIAL_WORDS.has(singular)) reasons.push(`material_word_extra:${w}`);
   }
   return { eligible: reasons.length === 0, reasons, missing };
 }
