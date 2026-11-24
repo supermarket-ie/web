@@ -11,7 +11,7 @@
 // Env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, APPLY, LIMIT (approvals per run), CAPTURE, CAPTURE_LIMIT.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { captureOfferEvidence, closeEvidenceRuns, retainEvidence, type EvidenceOffer } from '../src/lib/pair-evidence';
-import { evaluateMachinePair, MACHINE_FRESHNESS_DAYS, MACHINE_POLICY_VERSION, type MachineSide } from '../src/lib/machine-pair-approval';
+import { evaluateMachinePair, MACHINE_FRESHNESS_DAYS, MACHINE_POLICY_VERSION, MACHINE_REVIEW_POLICY_VERSION, type MachineSide } from '../src/lib/machine-pair-approval';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const APPLY = process.env.APPLY === '1';
@@ -47,8 +47,19 @@ async function byIds(sb: SupabaseClient, ids: string[], q: (c: string[]) => { ra
 async function main() {
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const now = Date.now(), since = new Date(now - MACHINE_FRESHNESS_DAYS * 86400000).toISOString();
-  const assoc = await all(sb, f => sb.from('current_barcode_associations').select('gtin,store,resolved_sku,status,gtin_origin_store_product_id')
-    .in('store', ['dunnes', 'supervalu']).order('gtin').order('store').range(f, f + 999));
+  // current_machine_associations (migration 20261126090000) = strong associations + AI-accepted review-tier ones, with a basis.
+  // Before it is applied, only the strong view exists and every association has basis 'strong'.
+  const merged = await all(sb, f => sb.from('current_machine_associations').select('gtin,store,resolved_sku,status,gtin_origin_store_product_id,basis')
+    .in('store', ['dunnes', 'supervalu']).order('gtin').order('store').order('basis').range(f, f + 999)).catch(() => null);
+  const assocAll = merged ?? (await all(sb, f => sb.from('current_barcode_associations').select('gtin,store,resolved_sku,status,gtin_origin_store_product_id')
+    .in('store', ['dunnes', 'supervalu']).order('gtin').order('store').range(f, f + 999))).map(a => ({ ...a, basis: 'strong' }));
+  // One association per (origin Tesco offer, GTIN, store): an ACTIVE one wins (an AI-accepted review association sits beside the
+  // strong view's 'needs_review' row for the same observation, which is not usable).
+  const assoc = [...assocAll.reduce((m, a) => {
+    const k = `${a.gtin_origin_store_product_id}|${a.gtin}|${a.store}`, old = m.get(k);
+    if (!old || (old.status !== 'active' && a.status === 'active')) m.set(k, a);
+    return m;
+  }, new Map<string, Row>()).values()];
   const tescoOffers = await byIds(sb, assoc.map(a => a.gtin_origin_store_product_id), c => sb.from('store_products').select('id,product_id,store,store_sku').in('id', c));
   const tescoById = new Map(tescoOffers.map(o => [o.id, o]));
   const products = [...new Set(tescoOffers.map(o => o.product_id).filter(Boolean))];
@@ -74,7 +85,7 @@ async function main() {
     .order('id').range(f, f + 999)).catch(e => { if (APPLY) throw e; return [] as Row[]; })).map(r => pairKey(r.left_offer_id, r.right_offer_id)));
   const active = new Set((await all(sb, f => sb.rpc('current_pair_review_status', { p_active_only: true }).range(f, f + 999))).map(r => pairKey(r.left_offer_id, r.right_offer_id)));
   // Before migration 20261122090000 the table is absent: a dry run still evaluates every candidate.
-  const decided = await all(sb, f => sb.from('machine_pair_decisions').select('left_offer_id,right_offer_id,decision,reasons,decided_at').eq('policy_version', MACHINE_POLICY_VERSION)
+  const decided = await all(sb, f => sb.from('machine_pair_decisions').select('left_offer_id,right_offer_id,decision,reasons,decided_at,policy_version').in('policy_version', [MACHINE_POLICY_VERSION, MACHINE_REVIEW_POLICY_VERSION])
     .order('decided_at', { ascending: false }).range(f, f + 999)).catch(e => { if (APPLY) throw e; return [] as Row[]; });
   const lastDecision = new Map<string, Row>();
   for (const d of decided) { const k = pairKey(d.left_offer_id, d.right_offer_id); if (!lastDecision.has(k)) lastDecision.set(k, d); }
@@ -90,7 +101,7 @@ async function main() {
       if (r) source = { id: r.id, kind: r.source_kind, capturedAt: r.retrieved_at, sku: String(r.sku), title: String(r.title ?? ''), brand: r.brand ?? null, gtin: r.gtin ?? null };
     }
     return { store: o.store, offerId: o.id, productId: o.product_id ?? null, sku: String(o.store_sku ?? ''), skuShared: (skuCount.get(`${o.store}:${o.store_sku}`) ?? 0) !== 1, source,
-      association: association ? { gtin: association.gtin, status: association.status, resolvedSku: String(association.resolved_sku), originOfferId: association.gtin_origin_store_product_id,
+      association: association ? { gtin: association.gtin, status: association.status, resolvedSku: String(association.resolved_sku), originOfferId: association.gtin_origin_store_product_id, basis: association.basis === 'ai_review' ? 'ai_review' : 'strong',
         originProductId: tescoById.get(association.gtin_origin_store_product_id)?.product_id ?? null } : null };
   };
   // Candidate pairs.
@@ -115,6 +126,7 @@ async function main() {
     if (active.has(k)) { bump(`${kind}:already_active`); continue; }
     // Evaluated at decision time: captures taken earlier in this run must not look future-dated.
     const d = evaluateMachinePair(c.a, c.b, c.gtin, Date.now(), null, c.origin, human.has(k));
+    const policy = d.policy;
     bump(`${kind}:${d.decision}`);
     for (const r of d.reasons) bump(`reason:${r.replace(/:[^:]*$/, m => (m.length > 30 ? ':…' : m))}`);
     log({ event: 'decision', pair: kind, a: c.a.offerId, b: c.b.offerId, gtin: c.gtin, decision: d.decision, reasons: d.reasons,
@@ -122,19 +134,19 @@ async function main() {
     if (!APPLY) { if (d.decision === 'approved') approved++; continue; }
     if (d.decision === 'approved') {
       if (approved >= LIMIT) continue;
-      const { data, error } = await sb.rpc('record_machine_pair_approval', { p_policy_version: MACHINE_POLICY_VERSION, p_offer_a: c.a.offerId, p_offer_b: c.b.offerId,
+      const { data, error } = await sb.rpc('record_machine_pair_approval', { p_policy_version: policy, p_offer_a: c.a.offerId, p_offer_b: c.b.offerId,
         p_source_a: c.a.source!.id, p_source_b: c.b.source!.id, p_gtin: c.gtin, p_checks: d.checks,
-        p_rationale: `Machine policy ${MACHINE_POLICY_VERSION}: GTIN ${c.gtin} resolved to this exact SKU by the retailer's own search; same catalogue record; fresh direct captures; "${c.a.source!.title}" = "${c.b.source!.title}" on brand, pack, variant and formulation.`.slice(0, 900),
+        p_rationale: `Machine policy ${policy}: GTIN ${c.gtin} resolved to this exact SKU by the retailer's own search; same catalogue record; fresh direct captures; "${c.a.source!.title}" = "${c.b.source!.title}" on brand, pack, variant and formulation.`.slice(0, 900),
         p_model_assessment: { source: 'none', verdict: 'none' } });
-      if (error) { bump(`${kind}:db_refused`); log({ event: 'db_refused', pair: kind, a: c.a.offerId, b: c.b.offerId, message: error.message }); await recordHold(c, ['db_refused:' + error.message.slice(0, 120)], 'held'); continue; }
+      if (error) { bump(`${kind}:db_refused`); log({ event: 'db_refused', pair: kind, a: c.a.offerId, b: c.b.offerId, message: error.message }); await recordHold(c, ['db_refused:' + error.message.slice(0, 120)], 'held', policy); continue; }
       approved++; log({ event: 'approved', pair: kind, review_id: data });
-    } else await recordHold(c, d.reasons, d.decision);
+    } else await recordHold(c, d.reasons, d.decision, policy);
   }
-  async function recordHold(c: Cand, reasons: string[], decision: string) {
+  async function recordHold(c: Cand, reasons: string[], decision: string, policy: string) {
     const [l, r] = c.a.offerId < c.b.offerId ? [c.a.offerId, c.b.offerId] : [c.b.offerId, c.a.offerId];
     const last = lastDecision.get(pairKey(l, r));
-    if (last && last.decision === decision && JSON.stringify(last.reasons) === JSON.stringify(reasons)) return;
-    const { error } = await sb.from('machine_pair_decisions').insert({ policy_version: MACHINE_POLICY_VERSION, left_offer_id: l, right_offer_id: r, gtin: c.gtin.replace(/^0+/, ''),
+    if (last && last.policy_version === policy && last.decision === decision && JSON.stringify(last.reasons) === JSON.stringify(reasons)) return;
+    const { error } = await sb.from('machine_pair_decisions').insert({ policy_version: policy, left_offer_id: l, right_offer_id: r, gtin: c.gtin.replace(/^0+/, ''),
       decision, reasons, evidence: { sources: [c.a.source?.id ?? null, c.b.source?.id ?? null] } });
     if (error) log({ event: 'decision_not_recorded', message: error.message }); else written++;
   }
