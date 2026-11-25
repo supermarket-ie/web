@@ -45,7 +45,8 @@ async function main() {
     if (cls.tier !== 'review' || String(cls.sku) !== String(t.sku)) { bump(`not_review_of_this_sku:${cls.tier ?? cls.outcome}`); continue; }
     const [offer] = await get(`store_products?select=id,product_id,store_sku&store=eq.${store}&store_sku=eq.${t.sku}&product_id=eq.${t.product_id}`);
     if (!offer) { bump('offer_not_attached'); continue; }
-    const [resp] = await get(`retailer_identity_responses?select=id,retrieved_at&store_product_id=eq.${offer.id}&order=retrieved_at.desc&limit=1`);
+    // SKU-bound captures only (product page / Dunnes product API); a later search-listing capture of the daily refresh is never evidence.
+    const [resp] = await get(`retailer_identity_responses?select=id,retrieved_at&store_product_id=eq.${offer.id}&source_kind=in.(captured_product,captured_product_api)&order=retrieved_at.desc&limit=1`);
     if (!resp) { bump('no_sku_bound_capture'); continue; }
     const ai = ev.ai; const structuralOk = (ev.confirmation as string[]).every(r => r.startsWith('title_words_missing:'));
     if (!ai || ai.decision !== 'verified_exact' || !structuralOk) { bump('review_record_not_acceptable'); continue; }
