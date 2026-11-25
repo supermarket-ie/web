@@ -1,5 +1,40 @@
 # Supermarket.ie — Canonical Project State
 
+## 25 November 2026 23:30Z — Review-tier matching live; SuperValu review attach awaiting migration 20261128090000; catalogue SWR; name corrections
+
+**Release a9baaf0** (#456, #457, #458):
+- Web, sqs-consumer and scheduled tasks run a9baaf0.
+- Collector rev 22 (6979b32) is the daily renewal pin (applied with tofu).
+- One-off review task family `smie-prod-oneoff-review:3` (7aceea8, task role `smie-prod-task` for Bedrock).
+
+**Dunnes review-tier:**
+- 79 of 81 AI acceptances active via `scripts/barcode-review-accept.ts` (#456: SKU-bound captures only; a later search-LISTING capture was correctly refused).
+- Machine matching: +121 approvals (Dunnes–Tesco 68 passed, 1 refused = 67; Dunnes–SuperValu 54; SuperValu–Tesco 16 passed, all refused on brand). 1,678 active.
+- Fully verified three-store: 206 → 248.
+
+**SuperValu review-tier (#457):**
+- Migration `20261128090000_supervalu_review_attach.sql` NOT applied (handoff `README-20261128-handoff.md`). Runner `scripts/supervalu-review-attach.ts` via `run-svrev.sh` (private).
+- Dry run on the first 60 of 270: 35 would attach. Held: 11 structural, 5 material word missing, 4 retailer-only material word, 1 numeric, 3 AI, 1 barcode not found.
+
+**Overnight 24→25 Nov (verified):**
+- w6 accepted 35 of 38 (3 held). c5 and c6 found 0 eligible. Machine pairs at 21:16 and 00:16 added 0.
+- All one-off firstprice and machine-pair schedules deleted after verification.
+
+**Performance (normal traffic):**
+- `current_pair_review_status_json` takes about 0.5 s (cache).
+- Product pages took about 50 ms, but one request per minute waited 5.7–10.8 s for the 60-second catalogue rebuild. #458 serves the previous build during ONE background rebuild, with a max-stale bound of 10 min. After the release, 1 slow request in 16 samples, possibly a new task's first build; re-check.
+
+**Names (#458):**
+- `scripts/catalogue-name-quality.ts` over 3,616 products: 4 brand typos, 1 duplicate pair, 549 upper-case units, 258 brand not stated, 11 all-caps, 2 whitespace.
+- Applied the 4 corrections in `CANONICAL_NAME_CORRECTIONS` (Batchelore→Batchelors, Clonakility→Clonakilty, Odlum→Odlums, Dr. Oekter→Dr. Oetker). Old URLs permanently redirect once the 30-min product-record cache expires.
+- Retailer source names are unchanged.
+- The possible duplicate "Batchelor Curried Beans 400G" / "Batchelors Curried Beans 400g" is reported, not merged.
+
+**Three-store gaps:**
+- 1,274 two-store products. The third offer exists for Tesco 494, Dunnes 15, SuperValu 4; 761 have no third offer.
+- Tesco evidence tranches gt-tr-aa..ac (494) are running (rev 22, lease wait). They need approval and first-price expansion 24h after each tranche.
+- SuperValu and Dunnes `missing=1` runs were started at 23:20Z.
+
 ## 24 November 2026 22:50Z — Tesco first-price waves complete; review-tier and pair-status PRs merged (migrations 20261126090000 + 20261127090000 NOT applied)
 
 **Production at 22:25Z:**
