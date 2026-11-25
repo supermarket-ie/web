@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
@@ -12,6 +12,7 @@ import { COMPARISON_LABELS } from '@/lib/comparison-policy';
 import { catalogueCategory } from '@/lib/catalogue-categories';
 import { WEEKLY_STORES, WEEKLY_STORE_NAMES } from '@/lib/weekly-shop';
 import { supabaseAdmin } from '@/lib/supabase';
+import { correctedNameForSlug } from '@/lib/catalogue-name-quality';
 
 export const revalidate = 1800;
 export const dynamicParams = true;
@@ -74,7 +75,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const { slug } = await params;
   const catalogue = await getProductCatalogue();
   const product = catalogue.find(item => item.slug === slug);
-  if (!product) notFound();
+  if (!product) {
+    // A corrected canonical name keeps its old URL: redirect permanently to the corrected product's URL.
+    const corrected = correctedNameForSlug(slug);
+    const target = corrected ? catalogue.find(item => item.name === corrected) : undefined;
+    if (target) permanentRedirect(`/browse/${target.slug}`);
+    notFound();
+  }
   const category = catalogueCategory(product.category);
   const prices = catalogueOffers(product);
   const related = catalogue.filter(item => item.id !== product.id && item.category === product.category && item.updatedAt).slice(0, 6);
