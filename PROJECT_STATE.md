@@ -1,5 +1,30 @@
 # Supermarket.ie — Canonical Project State
 
+## Workspace location (operational)
+
+- **Since 28 Nov 2026 the working copy is at** `/Users/paulkinlay/Library/CloudStorage/Dropbox/Documents (Selective Sync Conflict)/Projects/web`.
+  The old `/Users/paulkinlay/Dropbox/Mac/Documents/Projects/web` no longer exists, and shell calls that default to it hang. Quote the path: it contains spaces and parentheses.
+- Private operator helpers (never committed): `~/smie-private/sv-tesco-pilot-20261117/`.
+
+## 28 November 2026 — SuperValu review-tier tranche complete (migration 20261128090000 applied as 20261126082028)
+
+- `scripts/supervalu-review-attach.ts`, 5 batches over 270 candidates: **120 attached** (35, 22, 31, 18, 14), each with an active AI acceptance (basis `ai_review`).
+- Held 150, all identity holds; none were retried:
+
+| Reason | Count |
+|---|---:|
+| Structural (brand, pack or variant conflict, or non-wording review note) | 77 |
+| Retailer-only material word | 20 |
+| Material word missing | 16 |
+| AI uncertain | 11 |
+| Barcode no longer a review-tier resolution of the SKU | 15 |
+| AI rejected | 5 |
+| AI unavailable | 3 |
+| Numeric word missing | 3 |
+
+- Targeted price collection (`sv-ids-call.mts`, run `vercel_supervalu_20261128112030`): **120 of 120 priced, 0 failed**. 86 of those records already had fresh Tesco and Dunnes prices.
+- **Production defect fixed in this PR:** `scripts/machine-pair-approvals.ts` paged the uncached `current_pair_review_status`, which now exceeds the statement timeout (57014). The daily `machine-pair-approvals` run failed on 26 and 28 Nov (it succeeded on the 27th). It now reads `current_pair_review_status_json` once.
+
 ## 25 November 2026 23:30Z — Review-tier matching live; SuperValu review attach awaiting migration 20261128090000; catalogue SWR; name corrections
 
 **Release a9baaf0** (#456, #457, #458):
