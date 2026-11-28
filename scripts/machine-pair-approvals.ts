@@ -11,6 +11,7 @@
 // Env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, APPLY, LIMIT (approvals per run), CAPTURE, CAPTURE_LIMIT.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { captureOfferEvidence, closeEvidenceRuns, retainEvidence, type EvidenceOffer } from '../src/lib/pair-evidence';
+import { readPairStatusRows } from '../src/lib/pair-status-read';
 import { evaluateMachinePair, MACHINE_FRESHNESS_DAYS, MACHINE_POLICY_VERSION, MACHINE_REVIEW_POLICY_VERSION, type MachineSide } from '../src/lib/machine-pair-approval';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -83,7 +84,11 @@ async function main() {
   // Pairs with any human decision: the machine never overrides or re-approves them.
   const human = new Set((await all(sb, f => sb.from('retailer_offer_pair_reviews').select('left_offer_id,right_offer_id').eq('decision_kind', 'human')
     .order('id').range(f, f + 999)).catch(e => { if (APPLY) throw e; return [] as Row[]; })).map(r => pairKey(r.left_offer_id, r.right_offer_id)));
-  const active = new Set((await all(sb, f => sb.rpc('current_pair_review_status', { p_active_only: true }).range(f, f + 999))).map(r => pairKey(r.left_offer_id, r.right_offer_id)));
+  // One execution of the cached status read (current_pair_review_status_json, side cache 20261127090000). Paging the
+  // uncached current_pair_review_status re-runs the full evaluation per page and now exceeds the statement timeout.
+  const statusRows = await readPairStatusRows<Row>(sb, true);
+  if (statusRows === null) throw new Error('current_pair_review_status missing');
+  const active = new Set(statusRows.filter(r => r.status === 'active').map(r => pairKey(r.left_offer_id, r.right_offer_id)));
   // Before migration 20261122090000 the table is absent: a dry run still evaluates every candidate.
   const decided = await all(sb, f => sb.from('machine_pair_decisions').select('left_offer_id,right_offer_id,decision,reasons,decided_at,policy_version').in('policy_version', [MACHINE_POLICY_VERSION, MACHINE_REVIEW_POLICY_VERSION])
     .order('decided_at', { ascending: false }).range(f, f + 999)).catch(e => { if (APPLY) throw e; return [] as Row[]; });
